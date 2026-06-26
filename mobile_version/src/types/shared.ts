@@ -50,6 +50,8 @@ export enum UIActionType {
     HidePhoneText = 'HidePhoneText',
     /** Open the phone's recents/history (call log + chat) view. */
     ShowPhoneHistory = 'ShowPhoneHistory',
+    /** Open the phone's Contacts app (roster with per-contact Call / Message). */
+    ShowPhoneContacts = 'ShowPhoneContacts',
     ReturnToGame = 'ReturnToGame',
     ReturnToPreviousScreen = 'ReturnToPreviousScreen',
     QuitToTitle = 'QuitToTitle',
@@ -135,6 +137,7 @@ export interface HidePhoneAction extends BaseUIAction { type: UIActionType.HideP
 export interface ShowPhoneTextAction extends BaseUIAction { type: UIActionType.ShowPhoneText; }
 export interface HidePhoneTextAction extends BaseUIAction { type: UIActionType.HidePhoneText; }
 export interface ShowPhoneHistoryAction extends BaseUIAction { type: UIActionType.ShowPhoneHistory; }
+export interface ShowPhoneContactsAction extends BaseUIAction { type: UIActionType.ShowPhoneContacts; }
 export interface CycleLayerAssetAction extends BaseUIAction { type: UIActionType.CycleLayerAsset; characterId: VNID; layerId: VNID; variableId: VNID; direction: 'next' | 'prev'; }
 export interface ToggleScreenAction extends BaseUIAction { type: UIActionType.ToggleScreen; targetScreenId: VNID; }
 export interface OpenURLAction extends BaseUIAction { type: UIActionType.OpenURL; url: string; newTab?: boolean; }
@@ -154,4 +157,4 @@ export interface SellItemAction extends BaseUIAction { type: UIActionType.SellIt
 export interface BuySelectedItemAction extends BaseUIAction { type: UIActionType.BuySelectedItem; collectionId: VNID; }
 export interface SellSelectedItemAction extends BaseUIAction { type: UIActionType.SellSelectedItem; collectionId: VNID; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction;

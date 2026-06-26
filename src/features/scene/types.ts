@@ -196,6 +196,9 @@ export interface SetBackgroundCommand extends BaseCommand {
     duration: number; // in seconds
     /** Loop the video while shown (additive; SetBackground reads the asset's loop flag when unset). */
     loop?: boolean;
+    /** Play only a slice of a video background (seconds). Overrides the asset's default trim. */
+    trimStart?: number;
+    trimEnd?: number;
     /**
      * When true, this background is ADDED as its own persistent plane (keyed by command id)
      * at its `layer`/`parallaxDepth` instead of replacing the base background. Lets authors
@@ -287,8 +290,8 @@ export interface ChoiceOption {
     width?: number;
     height?: number;
     // ── Per-option appearance overrides (any layout). Unset → global project.ui.choice* style. ──
-    image?: { type: 'image' | 'video'; id: VNID } | null;
-    hoverImage?: { type: 'image' | 'video'; id: VNID } | null;
+    image?: { type: 'image' | 'video'; id: VNID; trimStart?: number; trimEnd?: number } | null;
+    hoverImage?: { type: 'image' | 'video'; id: VNID; trimStart?: number; trimEnd?: number } | null;
     backgroundColor?: string;
     hoverBackgroundColor?: string;
     textColor?: string;
@@ -395,6 +398,10 @@ export interface PlayMovieCommand extends BaseCommand {
     type: CommandType.PlayMovie;
     videoId: VNID;
     waitsForCompletion: boolean;
+    /** Play only a slice of the source video (seconds) — reuse one long video as many clips.
+     *  Overrides the asset's default trim. With `loop`, the slice loops; else it holds the end. */
+    trimStart?: number;
+    trimEnd?: number;
     /** How the movie is displayed: 'fullscreen' = opaque black overlay, 'overlay' = transparent layer over stage */
     displayMode?: 'fullscreen' | 'overlay';
     /** Whether the movie loops continuously */
@@ -618,6 +625,9 @@ export interface ShowTextCommand extends BaseCommand {
 export interface ShowImageCommand extends BaseCommand {
     type: CommandType.ShowImage;
     imageId: VNID;
+    /** Play only a slice of a video (seconds). Overrides the asset's default trim. */
+    trimStart?: number;
+    trimEnd?: number;
     x: number;
     y: number;
     width: number;
@@ -668,8 +678,8 @@ export interface ShowButtonCommand extends BaseCommand {
     borderRadius?: number; // pixels
     opacity?: number; // 0-1, default 1
     // Images (optional)
-    image?: { type: 'image' | 'video', id: VNID } | null;
-    hoverImage?: { type: 'image' | 'video', id: VNID } | null;
+    image?: { type: 'image' | 'video', id: VNID, trimStart?: number, trimEnd?: number } | null;
+    hoverImage?: { type: 'image' | 'video', id: VNID, trimStart?: number, trimEnd?: number } | null;
     // Actions
     onClick: VNUIAction;
     actions?: VNUIAction[]; // Multiple actions support
@@ -714,8 +724,8 @@ export interface ShowItemCommand extends BaseCommand {
     anchorY?: number; // 0-1, default 0.5
     opacity?: number; // 0-1, default 1
     /** Optional visual override; defaults to the item's registry icon. */
-    image?: { type: 'image' | 'video', id: VNID } | null;
-    hoverImage?: { type: 'image' | 'video', id: VNID } | null;
+    image?: { type: 'image' | 'video', id: VNID, trimStart?: number, trimEnd?: number } | null;
+    hoverImage?: { type: 'image' | 'video', id: VNID, trimStart?: number, trimEnd?: number } | null;
     rotation?: number;
     flipX?: boolean;
     flipY?: boolean;
@@ -778,6 +788,9 @@ export interface CreditRollCommand extends BaseCommand {
 export interface CreditMedia {
     /** Asset ID referencing an image or video */
     assetId: VNID | null;
+    /** Play only a slice of a video (seconds). Overrides the asset's default trim. */
+    trimStart?: number;
+    trimEnd?: number;
     /** X position as percentage (0-100) */
     x: number;
     /** Y position as percentage (0-100) */
@@ -804,6 +817,9 @@ export interface CreditMedia {
 export interface CreditBackground {
     /** Asset ID referencing a background or image */
     assetId: VNID | null;
+    /** Play only a slice of a video (seconds). Overrides the asset's default trim. */
+    trimStart?: number;
+    trimEnd?: number;
     /** How long this slide is displayed (seconds) */
     displayDuration: number;
     /** Transition to use when switching TO this slide */

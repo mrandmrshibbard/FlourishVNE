@@ -11,7 +11,7 @@ import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react'
 import { RangeInput, ColorInput } from './ui/Form';
 import { CollapsibleSection } from './ui/CollapsibleSection';
 import { VNProject } from '../types/project';
-import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings, VNConfirmVariantStyle, QuickMenuButtonKey, QuickMenuButtonConfig, QuickMenuCustomButton, PhoneButtonConfig } from '../features/ui/types';
+import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings, VNConfirmVariantStyle, QuickMenuButtonKey, QuickMenuButtonConfig, QuickMenuCustomButton, PhoneButtonConfig, PhoneContact } from '../features/ui/types';
 import { PHONE_GLYPHS, PHONE_ICON_KEYS } from '../features/ui/phoneIcons';
 import { VNID } from '../types';
 import { useProject } from '../contexts/ProjectContext';
@@ -25,6 +25,8 @@ import TextboxThemeManager from './ui/TextboxThemeManager';
 import DialogueReactiveStatesEditor from './ui/DialogueReactiveStatesEditor';
 import QuickMenuReactiveStatesEditor from './ui/QuickMenuReactiveStatesEditor';
 import ActionEditor from './menu-editor/ActionEditor';
+import ConditionsEditor from './ui/ConditionsEditor';
+import { PhonePortraitPicker } from './inspector/CommandGroupFields';
 import { UIActionType, VNUIAction } from '../types/shared';
 import {
     ChatBubbleIcon, BookmarkSquareIcon, SparklesIcon, PencilIcon,
@@ -574,10 +576,13 @@ const confirmVariantLabel = (v: ConfirmVariant, t: any): string =>
 /** Live canvas preview of the themed in-game phone (static sample). Mirrors the runtime PhonePanel.
  *  Rendered inside a ResizableDraggable (which owns position + size + scale), so it just fills its
  *  parent — every change to project.ui.phone* re-renders it live. */
-const PhonePreview: React.FC<{ ui: VNProjectUI; project: VNProject; hideFreeButtons?: boolean }> = ({ ui, project, hideFreeButtons }) => {
+const PhonePreview: React.FC<{ ui: VNProjectUI; project: VNProject; hideFreeButtons?: boolean; view?: 'chat' | 'contacts' }> = ({ ui, project, hideFreeButtons, view }) => {
     const allAssets = { ...project.images, ...project.backgrounds } as Record<string, any>;
     const url = (a?: { id: string } | null) => a?.id ? (allAssets[a.id]?.imageUrl || null) : null;
     const shellImg = url(ui.phoneShellImage as any);
+    const wallpaperImg = url(ui.phoneWallpaperImage as any);
+    const contactAvatarEm = ui.phoneContactAvatarSize ?? 2.4;
+    const chatAvatarEm = ui.phoneChatAvatarSize ?? 2.2;
     const sample = (Object.values(project.characters) as any[])[0];
     const buttons = (ui.phoneButtons || []).filter(b => b.show !== false);
     const bezel = ui.phoneBezelWidth ?? 8;
@@ -588,6 +593,28 @@ const PhonePreview: React.FC<{ ui: VNProjectUI; project: VNProject; hideFreeButt
     // changes reflect on the canvas instead of being pinned to a hardcoded value.
     const chatFontPx = ui.phoneFont?.fontSize ?? 12;
     const chatFontSize = `calc(var(--font-scale,1) * ${chatFontPx}px)`;
+    const vidUrl = (a?: { id: string } | null) => a?.id ? ((project.videos as any)?.[a.id]?.videoUrl || null) : null;
+    const wallpaperVid = (ui.phoneWallpaperImage as any)?.type === 'video' ? vidUrl(ui.phoneWallpaperImage as any) : null;
+    const contactsRegion = ui.phoneContactsRegion;
+    const contactRows = (ui.phoneContacts || []).length === 0
+        ? <div style={{ opacity: 0.5, fontSize: 'calc(var(--font-scale,1) * 11px)', textAlign: 'center', marginTop: 8 }}>No contacts yet</div>
+        : (ui.phoneContacts || []).map(c => {
+            const ch = (project.characters as any)[c.characterId];
+            const av = url(c.avatar?.customImage as any) || ch?.baseImageUrl;
+            return (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 10, background: ui.phoneContactRowColor || ui.phoneHistoryRowColor || 'rgba(255,255,255,0.05)', color: ui.phoneContactTextColor || ui.phoneHistoryTextColor || '#fff' }}>
+                    {ui.phoneShowAvatars !== false && av && <img src={av} alt="" style={{ width: `${contactAvatarEm}em`, height: `${contactAvatarEm}em`, borderRadius: '9999px', objectFit: ui.phoneContactAvatarFit || 'cover', flexShrink: 0 }} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: chatFontSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...(ui.phoneContactNameFont ? fontToStyle(ui.phoneContactNameFont) : {}) }}>{c.displayName || ch?.name || 'Unknown'}</div>
+                        {c.statusText && <div style={{ fontSize: 'calc(var(--font-scale,1) * 9px)', opacity: 0.7, ...(ui.phoneContactStatusFont ? fontToStyle(ui.phoneContactStatusFont) : {}) }}>{c.statusText}</div>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                        {!c.hideCall && <span style={{ padding: '2px 6px', borderRadius: 9999, background: ui.phoneCallAcceptColor || '#22c55e', fontSize: 'calc(var(--font-scale,1) * 9px)' }}>📞</span>}
+                        {!c.hideMessage && <span style={{ padding: '2px 6px', borderRadius: 9999, background: ui.phoneOutgoingBubbleColor || '#2f6bff', fontSize: 'calc(var(--font-scale,1) * 9px)' }}>💬</span>}
+                    </div>
+                </div>
+            );
+        });
     return (
         <div style={{
             position: 'relative', width: '100%', height: '100%', pointerEvents: 'none',
@@ -600,7 +627,14 @@ const PhonePreview: React.FC<{ ui: VNProjectUI; project: VNProject; hideFreeButt
             flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative',
             borderRadius: `calc(var(--font-scale,1) * ${screenRadius}px)`, border: `1px solid ${ui.phoneScreenBorderColor || 'rgba(255,255,255,0.12)'}`,
             background: ui.phoneScreenColor || '#0b0d12', ...(ui.phoneFont ? fontToStyle(ui.phoneFont) : {}),
+            ...(wallpaperImg && !wallpaperVid ? { backgroundImage: `url(${wallpaperImg})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+            ...(wallpaperVid ? { isolation: 'isolate' } : {}),
         }}>
+            {wallpaperVid && (
+                <video autoPlay loop muted playsInline key={wallpaperVid} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1, pointerEvents: 'none' }}>
+                    <source src={wallpaperVid} />
+                </video>
+            )}
             {ui.phoneShowStatusBar !== false && (() => {
                 const sBars = Math.max(1, Math.min(8, ui.phoneSignalBars ?? 4));
                 const sColor = ui.phoneSignalColor || ui.phoneStatusIconColor || '#fff';
@@ -628,16 +662,27 @@ const PhonePreview: React.FC<{ ui: VNProjectUI; project: VNProject; hideFreeButt
             })()}
             {ui.phoneHeaderText && <div style={{ padding: '2px 14px', ...(ui.phoneTitleFont ? fontToStyle(ui.phoneTitleFont) : { fontWeight: 700, color: '#fff' }) }}>{ui.phoneHeaderText}</div>}
             <div style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden' }}>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
-                    {ui.phoneShowAvatars !== false && sample?.baseImageUrl && <img src={sample.baseImageUrl} alt="" style={{ width: '2em', height: '2em', borderRadius: '9999px', objectFit: 'cover' }} />}
-                    <div style={{ padding: '6px 10px', borderRadius: 14, fontSize: chatFontSize, background: ui.phoneIncomingBubbleColor || '#2a2f3a', color: ui.phoneBubbleTextColor || '#fff' }}>alo tudo bom, onde vc esta?</div>
-                </div>
-                <div style={{ alignSelf: 'flex-end', padding: '6px 10px', borderRadius: 14, fontSize: chatFontSize, background: ui.phoneOutgoingBubbleColor || '#2f6bff', color: ui.phoneBubbleTextColor || '#fff' }}>a caminho!</div>
+                {view === 'contacts' ? (
+                    contactsRegion ? null : contactRows
+                ) : (
+                    <>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+                            {ui.phoneShowAvatars !== false && sample?.baseImageUrl && <img src={sample.baseImageUrl} alt="" style={{ width: `${chatAvatarEm}em`, height: `${chatAvatarEm}em`, borderRadius: '9999px', objectFit: ui.phoneChatAvatarFit || 'cover' }} />}
+                            <div style={{ padding: '6px 10px', borderRadius: 14, fontSize: chatFontSize, background: ui.phoneIncomingBubbleColor || '#2a2f3a', color: ui.phoneBubbleTextColor || '#fff' }}>alo tudo bom, onde vc esta?</div>
+                        </div>
+                        <div style={{ alignSelf: 'flex-end', padding: '6px 10px', borderRadius: 14, fontSize: chatFontSize, background: ui.phoneOutgoingBubbleColor || '#2f6bff', color: ui.phoneBubbleTextColor || '#fff' }}>a caminho!</div>
+                    </>
+                )}
             </div>
+            {view === 'contacts' && contactsRegion && (
+                <div style={{ position: 'absolute', left: `${contactsRegion.x}%`, top: `${contactsRegion.y}%`, width: `${contactsRegion.width}%`, height: `${contactsRegion.height}%`, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 6px', zIndex: 2 }}>
+                    {contactRows}
+                </div>
+            )}
             {!hideFreeButtons && ui.phoneButtonLayout === 'free' && buttons.map(b => { const ci = url(b.iconImage as any); return (
-                <div key={b.id} style={{ position: 'absolute', left: `${b.x ?? 8}%`, top: `${b.y ?? 12}%`, width: `${b.width ?? 14}%`, height: `${b.height ?? 14}%`, containerType: 'size', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4cqmin', color: ui.phoneButtonIconColor || '#cbd5e1', zIndex: 5 } as React.CSSProperties}>
-                    {ci ? <img src={ci} alt="" style={{ width: '64cqmin', height: '64cqmin', objectFit: 'contain' }} /> : <span style={{ fontSize: '58cqmin', lineHeight: 1 }}>{(b.builtinIcon && PHONE_GLYPHS[b.builtinIcon]) || '●'}</span>}
-                    {b.label && <span style={{ fontSize: '20cqmin', lineHeight: 1, whiteSpace: 'nowrap' }}>{b.label}</span>}
+                <div key={b.id} style={{ position: 'absolute', left: `${b.x ?? 8}%`, top: `${b.y ?? 12}%`, width: `${b.width ?? 14}%`, height: `${b.height ?? 14}%`, containerType: 'size', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1cqmin', color: ui.phoneButtonIconColor || '#cbd5e1', zIndex: 5 } as React.CSSProperties}>
+                    {ci ? <img src={ci} alt="" style={{ width: '82cqmin', height: '82cqmin', objectFit: 'contain' }} /> : <span style={{ fontSize: '74cqmin', lineHeight: 1 }}>{(b.builtinIcon && PHONE_GLYPHS[b.builtinIcon]) || '●'}</span>}
+                    {b.label && <span style={{ fontSize: '18cqmin', lineHeight: 1, whiteSpace: 'nowrap' }}>{b.label}</span>}
                 </div>
             ); })}
             {ui.phoneButtonLayout !== 'free' && buttons.length > 0 && (
@@ -704,7 +749,7 @@ const PhoneBadgePreview: React.FC<{ ui: VNProjectUI; fill?: boolean }> = ({ ui, 
 };
 
 /** Canvas preview of the full-screen incoming-call screen (mirrors the runtime modal call). */
-const PhoneCallPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
+const PhoneCallPreview: React.FC<{ ui: VNProjectUI; project: VNProject; hidePortrait?: boolean }> = ({ ui, project, hidePortrait }) => {
     const sample = (Object.values(project.characters) as any[])[0];
     const allAssets = { ...project.images, ...project.backgrounds } as Record<string, any>;
     const bgImg = ui.phoneCallBgImage?.id ? (allAssets[ui.phoneCallBgImage.id]?.imageUrl || null) : null;
@@ -712,9 +757,11 @@ const PhoneCallPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ u
     const circle = (color: string) => ({ width: '3em', height: '3em', borderRadius: '9999px', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3em' } as React.CSSProperties);
     return (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, pointerEvents: 'none', color: '#fff', background: bgImg ? `url(${bgImg}) center/cover no-repeat` : (ui.phoneCallBgColor || 'rgba(8,10,14,0.96)') }}>
-            <div style={{ width: '20%', aspectRatio: '1', borderRadius: shape === 'circle' ? '9999px' : '16px', overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
-                {sample?.baseImageUrl && <img src={sample.baseImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+            {!hidePortrait && (
+            <div style={{ width: `${ui.phoneCallPortraitSize ?? 22}%`, aspectRatio: '1', borderRadius: shape === 'circle' ? '9999px' : '16px', overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
+                {sample?.baseImageUrl && <img src={sample.baseImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: ui.phoneCallPortraitFit || 'cover', objectPosition: ui.phoneCallPortraitPosition || 'center' }} />}
             </div>
+            )}
             <div style={{ ...(ui.phoneCallNameFont ? fontToStyle(ui.phoneCallNameFont) : { fontSize: '1.5em', fontWeight: 700 }) }}>{sample?.name || 'Marte'}</div>
             <div style={{ opacity: 0.7, fontSize: '0.9em' }}>Incoming call…</div>
             <div style={{ display: 'flex', gap: 48 }}>
@@ -724,6 +771,25 @@ const PhoneCallPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ u
         </div>
     );
 };
+
+// Picker for an image OR video background ref (wallpaper / chat backgrounds). The stored `type`
+// is derived from whether the chosen id lives in project.videos.
+const PhoneBgSelect: React.FC<{ project: VNProject; cls: string; value?: { type: 'image' | 'video'; id: VNID } | null; onChange: (v: { type: 'image' | 'video'; id: VNID } | null) => void }> = ({ project, cls, value, onChange }) => (
+    <select className={cls} value={value?.id || ''} onChange={e => {
+        const id = e.target.value;
+        if (!id) { onChange(null); return; }
+        const isVid = !!(project.videos as any)?.[id];
+        onChange({ type: isVid ? 'video' : 'image', id: id as VNID });
+    }}>
+        <option value="">None</option>
+        <optgroup label="Images">
+            {(Object.values(project.images || {}) as any[]).map(im => <option key={im.id} value={im.id}>{im.name || im.id}</option>)}
+        </optgroup>
+        <optgroup label="Videos">
+            {(Object.values((project as any).videos || {}) as any[]).map(v => <option key={v.id} value={v.id}>{v.name || v.id}</option>)}
+        </optgroup>
+    </select>
+);
 
 const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject; variant?: ConfirmVariant }> = ({ ui, project, variant = 'quit' }) => {
     const { t } = useTranslation('ui');
@@ -1776,6 +1842,7 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                             <option value="square">Rounded square</option>
                         </select>
                     </Field>
+                    <FontEditor label="Caller name font" font={(ui.phoneCallNameFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneCallNameFont: { ...((ui.phoneCallNameFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
                     <hr className="border-[var(--border-subtle)] my-2" />
                     <div className="grid grid-cols-2 gap-2">
                         <Field label="Accept label"><input className={inputCls} value={ui.phoneCallAcceptLabel ?? ''} placeholder="Accept" onChange={e => onUpdate({ phoneCallAcceptLabel: e.target.value })} /></Field>
@@ -1806,6 +1873,102 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         <ColorField label="Row color" value={ui.phoneHistoryRowColor ?? '#ffffff10'} onChange={v => onUpdate({ phoneHistoryRowColor: v })} />
                         <ColorField label="Row text" value={ui.phoneHistoryTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneHistoryTextColor: v })} />
                     </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Contacts">
+                    <p className="text-[10px] text-[var(--text-muted)] mb-1">The Contacts app — open it with a phone button using the "Show Phone Contacts" action. Each contact offers Call + Message. Switch the canvas to the <b>Contacts</b> view to drag/resize the list area.</p>
+                    {ui.phoneContactsRegion && (
+                        <button className="mb-1 text-[10px] px-2 py-1 rounded bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] hover:bg-white/10" onClick={() => onUpdate({ phoneContactsRegion: undefined })}>Reset list to fill the screen</button>
+                    )}
+                    <Field label="Header"><input className={inputCls} value={ui.phoneContactsHeader ?? ''} placeholder="Contacts" onChange={e => onUpdate({ phoneContactsHeader: e.target.value || undefined })} /></Field>
+                    <div className="grid grid-cols-2 gap-2">
+                        <ColorField label="Row color" value={ui.phoneContactRowColor ?? '#ffffff10'} onChange={v => onUpdate({ phoneContactRowColor: v })} />
+                        <ColorField label="Row text" value={ui.phoneContactTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneContactTextColor: v })} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <Field label="Call button label"><input className={inputCls} value={ui.phoneContactCallLabel ?? ''} placeholder="Call" onChange={e => onUpdate({ phoneContactCallLabel: e.target.value || undefined })} /></Field>
+                        <Field label="Message button label"><input className={inputCls} value={ui.phoneContactMessageLabel ?? ''} placeholder="Message" onChange={e => onUpdate({ phoneContactMessageLabel: e.target.value || undefined })} /></Field>
+                    </div>
+                    <FontEditor label="Contact name font" font={(ui.phoneContactNameFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneContactNameFont: { ...((ui.phoneContactNameFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
+                    <FontEditor label="Contact status font" font={(ui.phoneContactStatusFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneContactStatusFont: { ...((ui.phoneContactStatusFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
+                    <div className="mt-2 flex flex-col gap-2">
+                        {(ui.phoneContacts || []).map((c, i) => {
+                            const update = (patch: Partial<PhoneContact>) => onUpdate({ phoneContacts: (ui.phoneContacts || []).map((x, idx) => idx === i ? { ...x, ...patch } : x) });
+                            return (
+                                <div key={c.id} className="rounded border border-[var(--border-subtle)] p-2 flex flex-col gap-2" style={{ background: 'var(--bg-primary)' }}>
+                                    <div className="flex items-center gap-2">
+                                        <select className={inputCls + ' flex-1'} value={c.characterId || ''} onChange={e => update({ characterId: e.target.value as VNID })}>
+                                            <option value="">— pick a character —</option>
+                                            {(Object.values(project.characters) as any[]).map(ch => <option key={ch.id} value={ch.id}>{ch.name}</option>)}
+                                        </select>
+                                        <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]"><input type="checkbox" checked={!!c.pinned} onChange={e => update({ pinned: e.target.checked || undefined })} />Pin</label>
+                                        <button onClick={() => onUpdate({ phoneContacts: (ui.phoneContacts || []).filter((_, idx) => idx !== i) })} className="text-red-400 hover:text-red-300 text-xs px-1" title="Remove">✕</button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Field label="Name (optional)"><input className={inputCls} value={c.displayName ?? ''} placeholder="(character name)" onChange={e => update({ displayName: e.target.value || undefined })} /></Field>
+                                        <Field label="Status line"><input className={inputCls} value={c.statusText ?? ''} placeholder="e.g. Affection: {mia_love}" onChange={e => update({ statusText: e.target.value || undefined })} /></Field>
+                                    </div>
+                                    <div className="flex gap-3 text-[10px] text-[var(--text-secondary)]">
+                                        <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.hideCall} onChange={e => update({ hideCall: e.target.checked || undefined })} />Hide Call</label>
+                                        <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.hideMessage} onChange={e => update({ hideMessage: e.target.checked || undefined })} />Hide Message</label>
+                                    </div>
+                                    {c.characterId && <PhonePortraitPicker senderId={c.characterId} value={c.avatar} onChange={v => update({ avatar: v })} project={project} t={t} />}
+                                    <Field label="Chat background (this thread)">
+                                        <PhoneBgSelect project={project} cls={inputCls} value={c.chatBackground} onChange={v => update({ chatBackground: v })} />
+                                    </Field>
+                                    <div>
+                                        <div className="text-[10px] text-[var(--text-muted)] mb-0.5">When "Call" is tapped (after the Calling… screen)</div>
+                                        <ActionEditor action={c.callAction ?? { type: UIActionType.None } as VNUIAction} onActionChange={(a) => update({ callAction: a.type === UIActionType.None ? undefined : a })} />
+                                    </div>
+                                    <ConditionsEditor conditions={c.conditions} project={project} onChange={cond => update({ conditions: cond && cond.length ? cond : undefined })} collapsible title="Unlock conditions" />
+                                </div>
+                            );
+                        })}
+                        <button onClick={() => onUpdate({ phoneContacts: [...(ui.phoneContacts || []), { id: `pc-${Date.now()}` as VNID, characterId: '' as VNID }] })} className="text-xs px-2 py-1 rounded border border-dashed border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]">+ Add contact</button>
+                    </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Sounds & background">
+                    <Field label="Open sound">
+                        <select className={inputCls} value={ui.phoneOpenSoundId || ''} onChange={e => onUpdate({ phoneOpenSoundId: (e.target.value || undefined) as any })}>
+                            <option value="">None</option>
+                            {(Object.values(project.audio || {}) as any[]).map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+                        </select>
+                    </Field>
+                    <Field label="Close sound">
+                        <select className={inputCls} value={ui.phoneCloseSoundId || ''} onChange={e => onUpdate({ phoneCloseSoundId: (e.target.value || undefined) as any })}>
+                            <option value="">None</option>
+                            {(Object.values(project.audio || {}) as any[]).map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+                        </select>
+                    </Field>
+                    <Field label="Button tap sound">
+                        <select className={inputCls} value={ui.phoneTapSoundId || ''} onChange={e => onUpdate({ phoneTapSoundId: (e.target.value || undefined) as any })}>
+                            <option value="">None</option>
+                            {(Object.values(project.audio || {}) as any[]).map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+                        </select>
+                    </Field>
+                    <Field label="Wallpaper (home / apps)">
+                        <PhoneBgSelect project={project} cls={inputCls} value={ui.phoneWallpaperImage} onChange={v => onUpdate({ phoneWallpaperImage: v })} />
+                    </Field>
+                    <Field label="Chat background (default for all threads)">
+                        <PhoneBgSelect project={project} cls={inputCls} value={ui.phoneChatBackgroundImage} onChange={v => onUpdate({ phoneChatBackgroundImage: v })} />
+                    </Field>
+                    <p className="text-[10px] text-[var(--text-muted)]">Backgrounds can be an image or a looping video. Videos play muted on a loop.</p>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Portraits & avatars">
+                    <p className="text-[10px] text-[var(--text-muted)] mb-1">Use "contain" + a smaller size so a tall full-body sprite fits without cropping.</p>
+                    <div className="grid grid-cols-2 gap-2">
+                        <Field label="Contacts avatar size (em)"><input type="number" step="0.1" min="1" max="6" className={inputCls} value={ui.phoneContactAvatarSize ?? 2.4} onChange={e => onUpdate({ phoneContactAvatarSize: parseFloat(e.target.value) || undefined })} /></Field>
+                        <Field label="Contacts avatar fit"><select className={inputCls} value={ui.phoneContactAvatarFit || 'cover'} onChange={e => onUpdate({ phoneContactAvatarFit: e.target.value as any })}><option value="cover">Cover (crop)</option><option value="contain">Contain (whole)</option></select></Field>
+                        <Field label="Chat avatar size (em)"><input type="number" step="0.1" min="1" max="6" className={inputCls} value={ui.phoneChatAvatarSize ?? 2.2} onChange={e => onUpdate({ phoneChatAvatarSize: parseFloat(e.target.value) || undefined })} /></Field>
+                        <Field label="Chat avatar fit"><select className={inputCls} value={ui.phoneChatAvatarFit || 'cover'} onChange={e => onUpdate({ phoneChatAvatarFit: e.target.value as any })}><option value="cover">Cover (crop)</option><option value="contain">Contain (whole)</option></select></Field>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                        <Field label="Call portrait size (%)"><input type="number" step="1" min="8" max="60" className={inputCls} value={ui.phoneCallPortraitSize ?? 22} onChange={e => onUpdate({ phoneCallPortraitSize: parseFloat(e.target.value) || undefined })} /></Field>
+                        <Field label="Call portrait fit"><select className={inputCls} value={ui.phoneCallPortraitFit || 'cover'} onChange={e => onUpdate({ phoneCallPortraitFit: e.target.value as any })}><option value="cover">Cover (crop)</option><option value="contain">Contain (whole)</option></select></Field>
+                    </div>
+                    <Field label="Call portrait focus (CSS object-position)"><input className={inputCls} value={ui.phoneCallPortraitPosition ?? ''} placeholder="center top" onChange={e => onUpdate({ phoneCallPortraitPosition: e.target.value || undefined })} /></Field>
                 </CollapsibleSection>
             </div>
         );
@@ -2114,7 +2277,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
     // Which confirmation the preview shows (Quit vs New Game). Default to New Game so it's visible.
     const [confirmPreviewVariant, setConfirmPreviewVariant] = useState<ConfirmVariant>((seedInGame?.confirmPreviewVariant as ConfirmVariant) ?? 'newGame');
     // Which phone "view" the canvas previews so each dynamic surface can be seen + themed live.
-    const [phonePreviewView, setPhonePreviewView] = useState<'phone' | 'notification' | 'badge' | 'call'>((seedInGame?.phonePreviewView as any) ?? 'phone');
+    const [phonePreviewView, setPhonePreviewView] = useState<'phone' | 'contacts' | 'notification' | 'badge' | 'call'>((seedInGame?.phonePreviewView as any) ?? 'phone');
     const [showSnapGuides, setShowSnapGuides] = useState(false);
     const stageRef = useRef<HTMLDivElement>(null);
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
@@ -2245,6 +2408,21 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
     const handleDragBanner = useCallback((u: { x: number; y: number }) => {
         updateUI({ phoneNotifX: u.x, phoneNotifY: u.y });
     }, [updateUI]);
+    // Drag/resize the incoming-call caller portrait — writes free position (screen-%) + size (% of width).
+    const handleDragCallPortrait = useCallback((u: { x: number; y: number; width: number; height: number }) => {
+        updateUI({ phoneCallPortraitX: Math.round(u.x), phoneCallPortraitY: Math.round(u.y), phoneCallPortraitSize: Math.max(8, Math.min(60, Math.round(u.width))) });
+    }, [updateUI]);
+    // Drag/resize the contacts list region — convert canvas-% back to phone-screen-% (like app buttons).
+    const handleDragContactsRegion = useCallback((u: { x: number; y: number; width: number; height: number }) => {
+        const phone = getPhoneRect(ui, gameW, gameH);
+        if (!phone.width || !phone.height) return;
+        updateUI({ phoneContactsRegion: {
+            x: ((u.x - phone.x) / phone.width) * 100,
+            y: ((u.y - phone.y) / phone.height) * 100,
+            width: (u.width / phone.width) * 100,
+            height: (u.height / phone.height) * 100,
+        } });
+    }, [updateUI, ui, gameW, gameH]);
 
     const handleDragQuickMenuButton = useCallback((key: string, isCustom: boolean, u: { x: number; y: number; width: number; height: number }) => {
         if (isCustom) {
@@ -2427,19 +2605,23 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                     {selectedElement === 'phone' && (
                         <>
                             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex gap-1 bg-[var(--bg-tertiary)] border border-[var(--border-default)] backdrop-blur-sm rounded-lg p-1 pointer-events-auto shadow-xl">
-                                {([['phone', 'Phone'], ['notification', 'Banner'], ['badge', 'Badge'], ['call', 'Call']] as const).map(([v, lbl]) => (
+                                {([['phone', 'Phone'], ['contacts', 'Contacts'], ['notification', 'Banner'], ['badge', 'Badge'], ['call', 'Call']] as const).map(([v, lbl]) => (
                                     <button key={v} onClick={() => setPhonePreviewView(v)}
                                         className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${phonePreviewView === v ? 'bg-[var(--accent-lavender)] text-white shadow' : 'text-[var(--text-primary)] hover:bg-white/10'}`}>
                                         {lbl}
                                     </button>
                                 ))}
                             </div>
-                            {/* Free app-button editing: phone shown as static context + one draggable
-                                per button (icon scales to the box via container-query units). */}
+                            {/* Free app-button editing: the phone shell is itself drag/resizable, with one
+                                draggable per button layered on top (icon scales to the box via cq units). */}
                             {phoneButtonsIndependent && (
-                                <div className="absolute pointer-events-none" style={{ left: `${phoneRect.x}%`, top: `${phoneRect.y}%`, width: `${phoneRect.width}%`, height: `${phoneRect.height}%`, opacity: 0.85, zIndex: 0 }}>
+                                <ResizableDraggable
+                                    x={phoneRect.x} y={phoneRect.y} width={phoneRect.width} height={phoneRect.height}
+                                    anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
+                                    onSelect={e => e.stopPropagation()} onUpdate={handleDragPhone}
+                                    snapGrid={1} label="Phone">
                                     <PhonePreview ui={ui} project={project} hideFreeButtons />
-                                </div>
+                                </ResizableDraggable>
                             )}
                             {phoneButtonsIndependent && phoneButtonRects.map(b => {
                                 const cfg = (ui.phoneButtons || []).find(x => x.id === b.id);
@@ -2450,9 +2632,9 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                                     anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
                                     onSelect={e => e.stopPropagation()} onUpdate={u => handleDragPhoneButton(b.id, u)}
                                     snapGrid={1} label={b.label || 'App'}>
-                                    <div style={{ width: '100%', height: '100%', containerType: 'size', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4cqmin', color: ui.phoneButtonIconColor || '#cbd5e1' } as React.CSSProperties}>
-                                        {ci ? <img src={ci} alt="" style={{ width: '64cqmin', height: '64cqmin', objectFit: 'contain' }} /> : <span style={{ fontSize: '58cqmin', lineHeight: 1 }}>{(cfg?.builtinIcon && PHONE_GLYPHS[cfg.builtinIcon]) || '●'}</span>}
-                                        {cfg?.label && <span style={{ fontSize: '20cqmin', lineHeight: 1, whiteSpace: 'nowrap' }}>{cfg.label}</span>}
+                                    <div style={{ width: '100%', height: '100%', containerType: 'size', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1cqmin', color: ui.phoneButtonIconColor || '#cbd5e1' } as React.CSSProperties}>
+                                        {ci ? <img src={ci} alt="" style={{ width: '82cqmin', height: '82cqmin', objectFit: 'contain' }} /> : <span style={{ fontSize: '74cqmin', lineHeight: 1 }}>{(cfg?.builtinIcon && PHONE_GLYPHS[cfg.builtinIcon]) || '●'}</span>}
+                                        {cfg?.label && <span style={{ fontSize: '18cqmin', lineHeight: 1, whiteSpace: 'nowrap' }}>{cfg.label}</span>}
                                     </div>
                                 </ResizableDraggable>
                                 );
@@ -2478,7 +2660,51 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                                     <PhoneBadgePreview ui={ui} fill />
                                 </ResizableDraggable>
                             )}
-                            {phonePreviewView === 'call' && <PhoneCallPreview ui={ui} project={project} />}
+                            {phonePreviewView === 'call' && (() => {
+                                const callSample = (Object.values(project.characters) as any[])[0];
+                                const callShape = ui.phoneCallPortraitShape || 'circle';
+                                const portW = ui.phoneCallPortraitSize ?? 22;
+                                return (<>
+                                    <div className="absolute inset-0" style={{ zIndex: 0 }}><PhoneCallPreview ui={ui} project={project} hidePortrait /></div>
+                                    <ResizableDraggable
+                                        x={ui.phoneCallPortraitX ?? 50} y={ui.phoneCallPortraitY ?? 18}
+                                        width={portW} height={portW * (gameW / gameH)}
+                                        anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
+                                        onSelect={e => e.stopPropagation()} onUpdate={u => handleDragCallPortrait(u)}
+                                        snapGrid={1} label="Caller portrait">
+                                        <div style={{ width: '100%', height: '100%', borderRadius: callShape === 'circle' ? '9999px' : '16px', overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
+                                            {callSample?.baseImageUrl && <img src={callSample.baseImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: ui.phoneCallPortraitFit || 'cover', objectPosition: ui.phoneCallPortraitPosition || 'center' }} />}
+                                        </div>
+                                    </ResizableDraggable>
+                                </>);
+                            })()}
+                            {/* Contacts view: the phone shell is drag/resizable, and the contacts list
+                                occupies a free region you can drag/resize within it. */}
+                            {phonePreviewView === 'contacts' && (() => {
+                                const region = ui.phoneContactsRegion || { x: 6, y: 16, width: 88, height: 78 };
+                                const regionRect = {
+                                    x: phoneRect.x + (region.x / 100) * phoneRect.width,
+                                    y: phoneRect.y + (region.y / 100) * phoneRect.height,
+                                    width: (region.width / 100) * phoneRect.width,
+                                    height: (region.height / 100) * phoneRect.height,
+                                };
+                                return (<>
+                                    <ResizableDraggable
+                                        x={phoneRect.x} y={phoneRect.y} width={phoneRect.width} height={phoneRect.height}
+                                        anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
+                                        onSelect={e => e.stopPropagation()} onUpdate={handleDragPhone}
+                                        snapGrid={1} label="Phone">
+                                        <PhonePreview ui={ui} project={project} view="contacts" />
+                                    </ResizableDraggable>
+                                    <ResizableDraggable
+                                        x={regionRect.x} y={regionRect.y} width={regionRect.width} height={regionRect.height}
+                                        anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
+                                        onSelect={e => e.stopPropagation()} onUpdate={handleDragContactsRegion}
+                                        snapGrid={1} label="Contacts list">
+                                        <div style={{ width: '100%', height: '100%', border: '1px dashed rgba(124,131,253,0.7)', borderRadius: 8, background: 'rgba(124,131,253,0.08)' }} />
+                                    </ResizableDraggable>
+                                </>);
+                            })()}
                         </>
                     )}
 
@@ -2554,7 +2780,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
 
             {/* Properties panel (right side) (Part 3: properties) */}
             {showProperties && (
-            <div className={`relative ${(!showTree && !showCanvas) ? 'flex-1 min-w-0' : 'w-72 flex-shrink-0 border-l border-[var(--border-subtle)]'} bg-[var(--bg-primary)] overflow-y-auto`}>
+            <div className={`relative flex flex-col min-h-0 ${(!showTree && !showCanvas) ? 'flex-1 min-w-0' : 'w-72 flex-shrink-0 border-l border-[var(--border-subtle)]'} bg-[var(--bg-primary)]`}>
                 {isMultiWindowSupported() && !isManagerWindow() && (
                     <button
                         onClick={() => openManagerWindow('inspector')}
@@ -2564,6 +2790,9 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                         ⧉
                     </button>
                 )}
+                {/* Inner scroller (flex-1 + min-h-0): reliably scrolls tall property lists, matching the
+                    tree sidebar's pattern. Self-overflow on the stretched flex item was clipping content. */}
+                <div className="flex-1 min-h-0 overflow-y-auto">
                 {selectedElement === 'textboxThemes' ? (
                     <TextboxThemeManager project={project} selectedThemeId={selectedThemeId} onSelect={setSelectedThemeId} />
                 ) : selectedElement ? (
@@ -2573,6 +2802,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                         Click an element on the sidebar to edit its properties
                     </div>
                 )}
+                </div>
             </div>
             )}
         </div>

@@ -6,6 +6,7 @@ import VisualNovelEditor from './components/VisualNovelEditor';
 import InspectorWindow from './components/InspectorWindow';
 import CanvasWindow from './components/CanvasWindow';
 import InGameWindow from './components/InGameWindow';
+import TestPlayWindow from './components/TestPlayWindow';
 import { getManagerWindowType } from './utils/windowManager';
 import { ProjectHub, saveRecentProject } from './components/ProjectHub';
 import { MusicPlayer } from './components/MusicPlayer';
@@ -184,6 +185,25 @@ const App = () => {
     // Focused PANEL windows (e.g. the popped-out Properties Inspector) render a single panel that
     // follows the main editor's selection — never the Project Hub or a full editor.
     const managerType = getManagerWindowType();
+
+    // The dedicated test-play window runs the game (LivePreview) in its own window.
+    if (managerType === 'testplay') {
+        if (!activeProject) {
+            return (
+                <ToastProvider>
+                    <div className="h-screen flex items-center justify-center bg-black text-white text-sm">Loading…</div>
+                </ToastProvider>
+            );
+        }
+        return (
+            <ToastProvider>
+                <ProjectProvider key={activeProject.id} initialProject={activeProject}>
+                    <TestPlayWindow />
+                </ProjectProvider>
+            </ToastProvider>
+        );
+    }
+
     const isPanelWindow = managerType === 'inspector' || managerType === 'canvas'
         || managerType === 'ingame-canvas' || managerType === 'ingame-properties';
 

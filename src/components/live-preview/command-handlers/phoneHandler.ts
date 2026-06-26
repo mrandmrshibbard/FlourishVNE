@@ -44,6 +44,8 @@ export const handleShowPhoneText = (command: ShowPhoneTextCommand, context: Comm
         senderId: command.senderId,
         text: command.text,
         ...(command.portrait ? { portrait: command.portrait } : {}),
+        // Tag the conversation thread (the character) so the Contacts app can group by contact.
+        ...(command.senderId !== 'player' ? { contactId: command.senderId } : {}),
     };
     const hasChoices = !!(command.choices && command.choices.length > 0);
     return {
@@ -55,6 +57,8 @@ export const handleShowPhoneText = (command: ShowPhoneTextCommand, context: Comm
                     ...prev,
                     open: true,
                     view: 'chat',
+                    // Focus this character's thread (so the chat shows just their conversation).
+                    activeContactId: command.senderId !== 'player' ? command.senderId : (prev as any).activeContactId,
                     messages: [...messages, msg],
                     waiting: hasChoices,
                     pendingChoices: hasChoices ? command.choices : undefined,

@@ -9,6 +9,8 @@ import { deriveHotSpotsFromScreen, deriveInteractiveElementsFromScreen } from '.
 import { XMarkIcon, FilmIcon, VariablesIcon } from './icons';
 import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform } from '../utils/styleUtils';
+import TrimmedVideo from './ui/TrimmedVideo';
+import { resolveVideoTrim } from '../utils/videoTrim';
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject, CGGalleryEntry } from '../types/project';
 import {
@@ -4944,11 +4946,11 @@ function renderPhoneBadge(ui: VNProjectUI): React.ReactNode {
 }
 
 /** A round phone avatar that overlaps a resolved portrait stack (base + pose layers, or custom). */
-const PhonePortrait: React.FC<{ urls: string[]; size: string }> = ({ urls, size }) => {
+const PhonePortrait: React.FC<{ urls: string[]; size: string; fit?: 'cover' | 'contain'; objectPosition?: string }> = ({ urls, size, fit, objectPosition }) => {
     if (urls.length === 0) return null;
     return (
         <div style={{ width: size, height: size, borderRadius: '9999px', overflow: 'hidden', flexShrink: 0, position: 'relative', background: 'rgba(0,0,0,0.2)' }}>
-            {urls.map((u, i) => <img key={i} src={u} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />)}
+            {urls.map((u, i) => <img key={i} src={u} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit || 'cover', objectPosition: objectPosition || 'center' }} />)}
         </div>
     );
 };
@@ -4962,7 +4964,10 @@ const PhonePanel: React.FC<{
     evaluateConditions: (c: VNCondition[] | undefined, v: Record<VNID, string | number | boolean>) => boolean;
     onAction: (a: VNUIAction) => void;
     onReply: (reply: PhoneReply) => void;
-}> = ({ ui, project, phone, variables, assetResolver, evaluateConditions, onAction, onReply }) => {
+    onContactMessage: (contactId: VNID) => void;
+    onContactCall: (contactId: VNID) => void;
+    playTap: () => void;
+}> = ({ ui, project, phone, variables, assetResolver, evaluateConditions, onAction, onReply, onContactMessage, onContactCall, playTap }) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [phone.messages.length, phone.pendingChoices]);
     const pos = ui.phonePosition || 'bottom-right';
@@ -4992,6 +4997,62 @@ const PhonePanel: React.FC<{
     const view = phone.view || 'chat';
     const showHistory = view === 'history';
     const isHome = view === 'home';
+    const isContacts = view === 'contacts';
+    // Contacts roster (filtered by per-contact unlock conditions).
+    const contacts = (ui.phoneContacts || []).filter(c => !c.conditions?.length || evaluateConditions(c.conditions, variables));
+    const sortedContacts = [...contacts].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+    // When a contact thread is open, show only that conversation (their messages + the player's replies in it).
+    const activeContactId = phone.activeContactId;
+    const threadMessages = activeContactId
+        ? phone.messages.filter(m => m.senderId === activeContactId || m.contactId === activeContactId)
+        : phone.messages;
+    const contactAvatarSize = `${ui.phoneContactAvatarSize ?? 2.4}em`;
+    const chatAvatarSize = `${ui.phoneChatAvatarSize ?? 2.2}em`;
+    const activeContact = activeContactId ? (ui.phoneContacts || []).find(c => c.characterId === activeContactId) : undefined;
+    // Backgrounds can be an image OR a looping video (per the {type,id} ref). Resolve to {url,isVideo}.
+    const resolvePhoneBg = (ref?: { type: 'image' | 'video'; id: VNID } | null) => {
+        if (!ref) return null;
+        const url = assetResolver(ref.id, ref.type === 'video' ? 'video' : 'image');
+        return url ? { url, isVideo: ref.type === 'video' } : null;
+    };
+    const wallpaper = resolvePhoneBg(ui.phoneWallpaperImage);
+    const chatBg = resolvePhoneBg(activeContact?.chatBackground || ui.phoneChatBackgroundImage);
+    const isChatView = !isHome && !isContacts && !showHistory;
+    // One backdrop per screen: chat bg overrides the wallpaper while a thread is open.
+    const screenBg = (isChatView ? chatBg : null) || wallpaper;
+    const contactsRegion = ui.phoneContactsRegion;
+    const activeContactName = activeContact?.displayName || (activeContactId ? project.characters[activeContactId]?.name : '') || '';
+    const lastMessageFor = (cid: VNID) => {
+        for (let i = phone.messages.length - 1; i >= 0; i--) {
+            const m = phone.messages[i];
+            if (m.senderId === cid || m.contactId === cid) return m.text;
+        }
+        return '';
+    };
+    // Contacts roster (shared between the in-flow content area and the free list region).
+    const contactsRoster = sortedContacts.length === 0 ? (
+        <div style={{ opacity: 0.5, textAlign: 'center', marginTop: 12, fontSize: '0.8em' }}>No contacts</div>
+    ) : sortedContacts.map(c => {
+        const char = project.characters[c.characterId];
+        const curls = resolvePhonePortrait(c.avatar, char, assetResolver);
+        const name = c.displayName || char?.name || 'Unknown';
+        const status = c.statusText ? interpolateVariables(c.statusText, variables, project) : '';
+        const preview = lastMessageFor(c.characterId);
+        return (
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 12, background: ui.phoneContactRowColor || ui.phoneHistoryRowColor || 'rgba(255,255,255,0.05)', color: ui.phoneContactTextColor || ui.phoneHistoryTextColor || '#fff' }}>
+                {ui.phoneShowAvatars !== false && <PhonePortrait urls={curls} size={contactAvatarSize} fit={ui.phoneContactAvatarFit} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600, ...(ui.phoneContactNameFont ? fontSettingsToStyle(ui.phoneContactNameFont) : {}) }}>{name}</div>
+                    {status && <div style={{ fontSize: '0.7em', opacity: 0.75, ...(ui.phoneContactStatusFont ? fontSettingsToStyle(ui.phoneContactStatusFont) : {}) }}>{status}</div>}
+                    {preview && <div style={{ fontSize: '0.7em', opacity: 0.6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{interpolateVariables(preview, variables, project)}</div>}
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    {!c.hideCall && <button onClick={() => { playTap(); onContactCall(c.characterId); }} title={ui.phoneContactCallLabel || 'Call'} style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '4px 8px', borderRadius: 9999, border: 'none', cursor: 'pointer', background: ui.phoneCallAcceptColor || '#22c55e', color: '#fff', fontSize: '0.7em' }}>📞</button>}
+                    {!c.hideMessage && <button onClick={() => { playTap(); onContactMessage(c.characterId); }} title={ui.phoneContactMessageLabel || 'Message'} style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '4px 8px', borderRadius: 9999, border: 'none', cursor: 'pointer', background: ui.phoneOutgoingBubbleColor || '#2f6bff', color: '#fff', fontSize: '0.7em' }}>💬</button>}
+                </div>
+            </div>
+        );
+    });
     return (
         // Casing (phone body): the screen is inset by the bezel so it reads as a separate panel.
         <div style={{
@@ -5007,7 +5068,17 @@ const PhonePanel: React.FC<{
                 flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
                 borderRadius: screenRadius, border: `1px solid ${ui.phoneScreenBorderColor || 'rgba(255,255,255,0.12)'}`,
                 background: ui.phoneScreenColor || '#0b0d12', ...bodyFont, position: 'relative',
+                ...(screenBg && !screenBg.isVideo ? { backgroundImage: `url(${screenBg.url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                ...(screenBg?.isVideo ? { isolation: 'isolate' } : {}),
             }}>
+            {/* Looping video backdrop (wallpaper or per-thread chat background). zIndex -1 so it sits
+                above the screen's base color but behind all content. */}
+            {screenBg?.isVideo && (
+                <video autoPlay loop muted playsInline key={screenBg.url}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1, pointerEvents: 'none' }}>
+                    <source src={screenBg.url} />
+                </video>
+            )}
             {/* Status bar */}
             {ui.phoneShowStatusBar !== false && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 14px', fontSize: '0.8em', color: ui.phoneStatusIconColor || '#fff', backgroundColor: ui.phoneStatusBarColor || 'transparent', flexShrink: 0 }}>
@@ -5036,7 +5107,9 @@ const PhonePanel: React.FC<{
             <style>{`@keyframes vn-phone-typing{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-3px);opacity:1}}`}</style>
             {/* Home (app buttons only — content area stays empty), chat, or recents/history. */}
             <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {isHome ? null : showHistory ? (
+                {isHome ? null : isContacts ? (
+                    contactsRegion ? null : contactsRoster
+                ) : showHistory ? (
                     <>
                         {(phone.callLog && phone.callLog.length > 0) ? [...phone.callLog].reverse().map(entry => {
                             const caller = entry.callerId === 'player' ? null : project.characters[entry.callerId];
@@ -5056,13 +5129,19 @@ const PhonePanel: React.FC<{
                     </>
                 ) : (
                 <>
-                {phone.messages.map(m => {
+                {activeContactId && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <button onClick={() => onAction({ type: UIActionType.ShowPhoneContacts } as VNUIAction)} title="Back to contacts" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: '1.1em', lineHeight: 1, padding: '0 4px' }}>‹</button>
+                        <span style={{ fontWeight: 600, fontSize: '0.85em' }}>{activeContactName}</span>
+                    </div>
+                )}
+                {threadMessages.map(m => {
                     const mine = m.senderId === 'player';
                     const char = mine ? null : project.characters[m.senderId];
                     const portraitUrls = mine ? [] : resolvePhonePortrait(m.portrait, char, assetResolver);
                     return (
                         <div key={m.id} style={{ display: 'flex', flexDirection: mine ? 'row-reverse' : 'row', gap: 6, alignItems: 'flex-end' }}>
-                            {ui.phoneShowAvatars !== false && !mine && <PhonePortrait urls={portraitUrls} size="2.2em" />}
+                            {ui.phoneShowAvatars !== false && !mine && <PhonePortrait urls={portraitUrls} size={chatAvatarSize} fit={ui.phoneChatAvatarFit} />}
                             <div style={{ maxWidth: '76%' }}>
                                 {!mine && char?.name && <div style={{ fontSize: '0.7em', opacity: 0.75, marginBottom: 1, color: char.color }}>{char.name}</div>}
                                 <div style={{ padding: '6px 10px', borderRadius: 14, wordBreak: 'break-word', background: mine ? (ui.phoneOutgoingBubbleColor || '#2f6bff') : (ui.phoneIncomingBubbleColor || '#2a2f3a'), color: ui.phoneBubbleTextColor || '#fff' }}>
@@ -5078,7 +5157,7 @@ const PhonePanel: React.FC<{
                     const turls = tchar ? resolvePhonePortrait(undefined, tchar, assetResolver) : [];
                     return (
                         <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
-                            {ui.phoneShowAvatars !== false && <PhonePortrait urls={turls} size="2.2em" />}
+                            {ui.phoneShowAvatars !== false && <PhonePortrait urls={turls} size={chatAvatarSize} fit={ui.phoneChatAvatarFit} />}
                             <div style={{ padding: '8px 12px', borderRadius: 14, background: ui.phoneIncomingBubbleColor || '#2a2f3a', display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                                 {[0, 1, 2].map(i => <span key={i} style={{ width: 6, height: 6, borderRadius: '9999px', background: ui.phoneTypingColor || ui.phoneBubbleTextColor || '#fff', animation: `vn-phone-typing 1s ${i * 0.2}s infinite` }} />)}
                             </div>
@@ -5089,7 +5168,7 @@ const PhonePanel: React.FC<{
                 {effectiveReplies.length > 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
                         {effectiveReplies.filter(o => !o.conditions?.length || evaluateConditions(o.conditions, variables)).map(o => (
-                            <button key={o.id} onClick={() => onReply(o)} style={{ alignSelf: 'flex-end', maxWidth: '82%', padding: '6px 12px', borderRadius: 14, border: 'none', cursor: 'pointer', ...bodyFont, background: ui.phoneOutgoingBubbleColor || '#2f6bff', color: ui.phoneBubbleTextColor || '#fff' }}>
+                            <button key={o.id} onClick={() => { playTap(); onReply(o); }} style={{ alignSelf: 'flex-end', maxWidth: '82%', padding: '6px 12px', borderRadius: 14, border: 'none', cursor: 'pointer', ...bodyFont, background: ui.phoneOutgoingBubbleColor || '#2f6bff', color: ui.phoneBubbleTextColor || '#fff' }}>
                                 {interpolateVariables(o.text, variables, project)}
                             </button>
                         ))}
@@ -5098,16 +5177,22 @@ const PhonePanel: React.FC<{
                 </>
                 )}
             </div>
+            {/* Contacts roster as a free, author-placed region (overrides the in-flow list). */}
+            {isContacts && contactsRegion && (
+                <div style={{ position: 'absolute', left: `${contactsRegion.x}%`, top: `${contactsRegion.y}%`, width: `${contactsRegion.width}%`, height: `${contactsRegion.height}%`, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, padding: '4px 6px', zIndex: 2 }}>
+                    {contactsRoster}
+                </div>
+            )}
             {/* App buttons appear ONLY on the home screen (not over chat / history / other apps).
                 Icon + label scale to the button box (container-query units) so resizing actually
                 changes the icon size. */}
             {isHome && ui.phoneButtonLayout === 'free' && buttons.map(b => {
                 const customIcon = b.iconImage ? assetResolver(b.iconImage.id, 'image') : null;
                 return (
-                    <button key={b.id} onClick={() => b.action && onAction(b.action)} title={b.label || ''}
-                        style={{ position: 'absolute', left: `${b.x ?? 8}%`, top: `${b.y ?? 12}%`, width: `${b.width ?? 14}%`, height: `${b.height ?? 14}%`, containerType: 'size', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4cqmin', background: 'transparent', border: 'none', cursor: 'pointer', color: ui.phoneButtonIconColor || '#cbd5e1', zIndex: 5 } as React.CSSProperties}>
-                        {customIcon ? <img src={customIcon} alt="" style={{ width: '64cqmin', height: '64cqmin', objectFit: 'contain' }} /> : <span style={{ fontSize: '58cqmin', lineHeight: 1 }}>{(b.builtinIcon && PHONE_GLYPHS[b.builtinIcon]) || '●'}</span>}
-                        {b.label && <span style={{ whiteSpace: 'nowrap', fontSize: '20cqmin', lineHeight: 1 }}>{b.label}</span>}
+                    <button key={b.id} onClick={() => { playTap(); b.action && onAction(b.action); }} title={b.label || ''}
+                        style={{ position: 'absolute', left: `${b.x ?? 8}%`, top: `${b.y ?? 12}%`, width: `${b.width ?? 14}%`, height: `${b.height ?? 14}%`, containerType: 'size', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1cqmin', background: 'transparent', border: 'none', cursor: 'pointer', color: ui.phoneButtonIconColor || '#cbd5e1', zIndex: 5 } as React.CSSProperties}>
+                        {customIcon ? <img src={customIcon} alt="" style={{ width: '82cqmin', height: '82cqmin', objectFit: 'contain' }} /> : <span style={{ fontSize: '74cqmin', lineHeight: 1 }}>{(b.builtinIcon && PHONE_GLYPHS[b.builtinIcon]) || '●'}</span>}
+                        {b.label && <span style={{ whiteSpace: 'nowrap', fontSize: '18cqmin', lineHeight: 1 }}>{b.label}</span>}
                     </button>
                 );
             })}
@@ -5117,7 +5202,7 @@ const PhonePanel: React.FC<{
                     {buttons.map(b => {
                         const customIcon = b.iconImage ? assetResolver(b.iconImage.id, 'image') : null;
                         return (
-                            <button key={b.id} onClick={() => b.action && onAction(b.action)} title={b.label || ''} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '4px 2px', background: 'transparent', border: 'none', cursor: 'pointer', color: ui.phoneButtonIconColor || '#cbd5e1', fontSize: '0.7em' }}>
+                            <button key={b.id} onClick={() => { playTap(); b.action && onAction(b.action); }} title={b.label || ''} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '4px 2px', background: 'transparent', border: 'none', cursor: 'pointer', color: ui.phoneButtonIconColor || '#cbd5e1', fontSize: '0.7em' }}>
                                 {customIcon ? <img src={customIcon} alt="" style={{ width: '1.6em', height: '1.6em', objectFit: 'contain' }} /> : <PhoneGlyph name={b.builtinIcon} />}
                                 {b.label && <span style={{ whiteSpace: 'nowrap' }}>{b.label}</span>}
                             </button>
@@ -5130,7 +5215,7 @@ const PhonePanel: React.FC<{
                 the home screen it closes the phone (like a real phone's home/back button). */}
             {showHome && (
                 <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: bezel * 0.6 }}>
-                    <button onClick={() => onAction({ type: isHome ? UIActionType.HidePhone : UIActionType.ShowPhone } as VNUIAction)} aria-label="Home" title="Home" style={{ width: '1.5em', height: '1.5em', borderRadius: '9999px', border: `2px solid ${ui.phoneHomeButtonColor || 'rgba(255,255,255,0.28)'}`, background: 'transparent', cursor: 'pointer', flexShrink: 0 }} />
+                    <button onClick={() => { playTap(); onAction({ type: isHome ? UIActionType.HidePhone : UIActionType.ShowPhone } as VNUIAction); }} aria-label="Home" title="Home" style={{ width: '1.5em', height: '1.5em', borderRadius: '9999px', border: `2px solid ${ui.phoneHomeButtonColor || 'rgba(255,255,255,0.28)'}`, background: 'transparent', cursor: 'pointer', flexShrink: 0 }} />
                 </div>
             )}
         </div>
@@ -5909,7 +5994,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 pickedUpItems: saveData.playerStateData.pickedUpItems,
                 history: [],
                 savedInputs: {},
-                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: saveData.playerStateData.phone ?? null },
+                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: saveData.playerStateData.phone ? { ...saveData.playerStateData.phone, outgoingCall: null } : null },
                 musicState: saveData.playerStateData.musicState,
             });
             setScreenStack([]);
@@ -7670,14 +7755,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     // onEnded/onClick guards) — the 'movie' resolver. Non-wait fullscreen = fire-and-forget.
                     case 'PlayMovie': {
                         const movieUrl = assetResolver(cmd.videoId, 'video');
+                        const sTrim = resolveVideoTrim(cmd, project.videos[cmd.videoId]);
                         if (cmd.displayMode === 'overlay') {
                             updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, movieOverlays: [
                                 ...(p.stageState.movieOverlays || []),
-                                { url: movieUrl || '', loop: cmd.loop ?? false, holdLastFrame: cmd.holdLastFrame ?? false, transition: cmd.transition, transitionDuration: cmd.transitionDuration, commandId: cmd.id, parallaxDepth: cmd.parallaxDepth, x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height, opacity: cmd.opacity, objectFit: cmd.objectFit },
+                                { url: movieUrl || '', loop: cmd.loop ?? false, trimStart: sTrim.start, trimEnd: sTrim.end, holdLastFrame: cmd.holdLastFrame ?? false, transition: cmd.transition, transitionDuration: cmd.transitionDuration, commandId: cmd.id, parallaxDepth: cmd.parallaxDepth, x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height, opacity: cmd.opacity, objectFit: cmd.objectFit },
                             ] } } : p);
                             return;
                         }
-                        updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, movieUrl, movieLoop: cmd.loop ?? false, movieHoldLastFrame: cmd.holdLastFrame ?? false, movieTransition: cmd.transition, movieTransitionDuration: cmd.transitionDuration, movieExiting: false } } : p);
+                        updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, movieUrl, movieLoop: cmd.loop ?? false, movieTrimStart: sTrim.start, movieTrimEnd: sTrim.end, movieHoldLastFrame: cmd.holdLastFrame ?? false, movieTransition: cmd.transition, movieTransitionDuration: cmd.transitionDuration, movieExiting: false } } : p);
                         if (cmd.waitsForCompletion !== false && !(cmd.loop ?? false)) {
                             return new Promise<void>(resolve => { scriptInputResolverRef.current = { kind: 'movie', resolve: () => resolve() }; });
                         }
@@ -8029,6 +8115,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const holdLastFrame = movieCmd.holdLastFrame ?? false;
                     const movieTransition = movieCmd.transition;
                     const movieTransitionDuration = movieCmd.transitionDuration;
+                    const movieTrim = resolveVideoTrim(movieCmd, project.videos[movieCmd.videoId]);
 
                     if (isOverlay) {
                         // Overlay mode: add to stageState.movieOverlays (behind characters, above background)
@@ -8042,6 +8129,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     movieOverlays: [...existing, {
                                         url: movieUrl || '',
                                         loop: shouldLoop,
+                                        trimStart: movieTrim.start,
+                                        trimEnd: movieTrim.end,
                                         holdLastFrame,
                                         transition: movieTransition,
                                         transitionDuration: movieTransitionDuration,
@@ -8064,12 +8153,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             instantAdvance = false;
                             updatePlayerState(p => p ? {
                                 ...p,
-                                uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false },
+                                uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false },
                             } : null);
                         } else {
                             updatePlayerState(p => p ? {
                                 ...p,
-                                uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false },
+                                uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false },
                             } : null);
                         }
                     }
@@ -9526,6 +9615,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             deleteGameSaveSlot((action as DeleteSaveAction).slotNumber);
         } else if (action.type === UIActionType.ShowPhone) {
             // Open the phone to its HOME screen (app buttons). Clears any banner/badge.
+            if (project.ui.phoneOpenSoundId && !playerState?.uiState.phone?.open) playSound(project.ui.phoneOpenSoundId, undefined, false);
             updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: true, view: 'home', notification: null, unread: false } } } : null);
         } else if (action.type === UIActionType.ShowPhoneText) {
             // Open straight to the chat view (the scene command additionally appends a message).
@@ -9533,7 +9623,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         } else if (action.type === UIActionType.ShowPhoneHistory) {
             // Open the phone to the recents / call-log view.
             updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: true, view: 'history', notification: null, unread: false } } } : null);
+        } else if (action.type === UIActionType.ShowPhoneContacts) {
+            // Open the phone to the Contacts app (roster with per-contact Call / Message).
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: true, view: 'contacts', activeContactId: null, notification: null, unread: false } } } : null);
         } else if (action.type === UIActionType.HidePhone) {
+            if (project.ui.phoneCloseSoundId && playerState?.uiState.phone?.open) playSound(project.ui.phoneCloseSoundId, undefined, false);
             updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: false, waiting: false, pendingChoices: undefined, notification: null } } } : null);
             // Optional: closing the phone advances the story one beat (so reading + closing continues
             // without an extra click). Opt-in via phoneOnCloseBehavior; default leaves the scene as-is.
@@ -10304,7 +10398,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             if (!p) return null;
             const ph = p.uiState.phone || { open: true, messages: [] };
             const msgs = ph.messages;
-            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: ph.open ?? true, messages: [...msgs, { id: `reply-${msgs.length}`, senderId: 'player' as const, text: reply.text }], waiting: false, pendingChoices: undefined, pendingReplies: undefined } } };
+            const replyMsg = { id: `reply-${msgs.length}`, senderId: 'player' as const, text: reply.text, ...(ph.activeContactId ? { contactId: ph.activeContactId } : {}) };
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: ph.open ?? true, messages: [...msgs, replyMsg], waiting: false, pendingChoices: undefined, pendingReplies: undefined } } };
         });
         const acts = (reply.actions || []) as VNUIAction[];
         acts.forEach(a => handleUIAction(a));
@@ -10314,13 +10409,37 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         if (followUps.length && !navigates) playPhoneFollowUps(followUps, resume); else resume();
     };
 
+    // Contacts app: open a contact's chat thread.
+    const handleContactMessage = (contactId: VNID) => {
+        updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: true, view: 'chat', activeContactId: contactId, notification: null, unread: false } } } : null);
+    };
+
+    // Contacts app: start an OUTGOING call → "Calling…" screen, then run the contact's callAction (if any).
+    const handleContactCall = (contactId: VNID) => {
+        clearPhoneTimers();
+        updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), outgoingCall: { contactId } } } } : null);
+        const contact = (project.ui.phoneContacts || []).find(c => c.characterId === contactId);
+        if (contact?.callAction) {
+            // Brief "connecting" beat, then the author's call action takes over (dialogue / jump / common event).
+            pushPhoneTimer(() => {
+                updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: p.uiState.phone ? { ...p.uiState.phone, outgoingCall: null } : p.uiState.phone } } : null);
+                handleUIAction(contact.callAction!);
+            }, 1200);
+        }
+    };
+
+    const endOutgoingCall = () => {
+        clearPhoneTimers();
+        updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: p.uiState.phone ? { ...p.uiState.phone, outgoingCall: null } : p.uiState.phone } } : null);
+    };
+
     // A text "arrives". 'notify' = non-blocking banner + ding + badge (tap to read); 'open' = open
     // the phone straight to the message (pauses only if it carries replies).
     const startIncomingText = (cmd: PhoneIncomingTextCommand) => {
         const presentation = cmd.presentation || 'notify';
         const replies = cmd.replies || [];
         const hasReplies = replies.length > 0;
-        const msg: PhoneMessage = { id: `it-${Date.now()}`, senderId: cmd.senderId, text: cmd.text, ...(cmd.portrait ? { portrait: cmd.portrait } : {}) };
+        const msg: PhoneMessage = { id: `it-${Date.now()}`, senderId: cmd.senderId, text: cmd.text, ...(cmd.portrait ? { portrait: cmd.portrait } : {}), ...(cmd.senderId !== 'player' ? { contactId: cmd.senderId } : {}) };
         const ding = cmd.soundId ?? project.ui.phoneNotifSoundId ?? null;
         if (presentation === 'notify') {
             updatePlayerState(p => {
@@ -10624,12 +10743,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     // Phone toggle hotkey (built-in chrome).
                     if (project.ui.phoneOpenHotkey && project.ui.phoneOpenHotkey.toLowerCase() === pressed) {
                         e.preventDefault();
+                        const wasOpen = !!playerStateRef.current?.uiState.phone?.open;
+                        const opening = !wasOpen;
+                        const snd = opening ? project.ui.phoneOpenSoundId : project.ui.phoneCloseSoundId;
+                        if (snd) playSound(snd, undefined, false);
                         updatePlayerState(p => {
                             if (!p) return null;
                             const ph = p.uiState.phone || { open: false, messages: [] };
-                            const opening = !ph.open;
-                            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: opening, ...(opening ? { view: 'home' as const, notification: null, unread: false } : {}) } } };
+                            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: opening, ...(opening ? { view: 'home' as const, notification: null, unread: false } : { waiting: false, pendingChoices: undefined, notification: null }) } } };
                         });
+                        // Closing via the hotkey honors phoneOnCloseBehavior (mirror the Hide Phone action).
+                        if (!opening && project.ui.phoneOnCloseBehavior === 'advance' && playerStateRef.current?.mode === 'playing') {
+                            updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+                        }
                         return;
                     }
                     const target = (Object.values(project.uiScreens) as VNUIScreen[]).find(s => !!s.openHotkey && s.openHotkey.toLowerCase() === pressed);
@@ -10904,31 +11030,37 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 const overlays = (p.stageState.movieOverlays || []).filter(o => o.commandId ? o.commandId !== movie.commandId : o !== movie);
                                 return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
                             });
+                            // Fires on native end (untrimmed) AND TrimmedVideo's onSegmentEnd (a trimmed clip
+                            // pauses at trimEnd and never ends natively).
+                            const handleOverlayEnded = () => {
+                                // Keep the overlay (frozen on its last frame) when looping or holding.
+                                if (movie.loop || movie.holdLastFrame) return;
+                                if (exitDur > 0 && !movie.exiting) {
+                                    // Mark exiting → CSS fades opacity to 0 → remove after the duration.
+                                    updatePlayerState(p => {
+                                        if (!p) return null;
+                                        const overlays = (p.stageState.movieOverlays || []).map(o => (o.commandId ? o.commandId === movie.commandId : o === movie) ? { ...o, exiting: true } : o);
+                                        return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
+                                    });
+                                    const tid = window.setTimeout(removeOverlay, exitDur * 1000);
+                                    activeEffectTimeoutsRef.current.push(tid);
+                                } else {
+                                    removeOverlay();
+                                }
+                            };
                             return (
                                 <div key={`movie-overlay-${idx}-${movie.url}`} className="pointer-events-none" style={containerStyle}>
-                                    <video
+                                    <TrimmedVideo
                                         src={movie.url}
                                         autoPlay
                                         muted
                                         loop={movie.loop}
                                         playsInline
+                                        trimStart={movie.trimStart}
+                                        trimEnd={movie.trimEnd}
                                         style={{ width: '100%', height: '100%', objectFit: videoFit, opacity: movie.exiting ? 0 : mOpacity, transform: innerTransform, transformOrigin: 'center', display: 'block', transition: movie.exiting ? `opacity ${exitDur}s ease-out` : undefined }}
-                                        onEnded={() => {
-                                            // Keep the overlay (frozen on its last frame) when looping or holding.
-                                            if (movie.loop || movie.holdLastFrame) return;
-                                            if (exitDur > 0 && !movie.exiting) {
-                                                // Mark exiting → CSS fades opacity to 0 → remove after the duration.
-                                                updatePlayerState(p => {
-                                                    if (!p) return null;
-                                                    const overlays = (p.stageState.movieOverlays || []).map(o => (o.commandId ? o.commandId === movie.commandId : o === movie) ? { ...o, exiting: true } : o);
-                                                    return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
-                                                });
-                                                const tid = window.setTimeout(removeOverlay, exitDur * 1000);
-                                                activeEffectTimeoutsRef.current.push(tid);
-                                            } else {
-                                                removeOverlay();
-                                            }
-                                        }}
+                                        onSegmentEnd={handleOverlayEnded}
+                                        onEnded={handleOverlayEnded}
                                     />
                                 </div>
                             );
@@ -11769,7 +11901,32 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     onClose={() => updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null)} 
                 />
             )}
-            {uiState.movieUrl && (
+            {uiState.movieUrl && (() => {
+                // Shared completion logic — fires from the native `ended` event (untrimmed) AND from
+                // TrimmedVideo's onSegmentEnd (a trimmed clip pauses at trimEnd and never ends natively).
+                const handleMovieEnded = () => {
+                    if (scriptInputResolverRef.current?.kind === 'movie') {
+                        const r = scriptInputResolverRef.current; scriptInputResolverRef.current = null;
+                        updatePlayerState(p => p ? {...p, uiState: {...p.uiState, movieUrl: null, movieLoop: false, movieExiting: false}} : null);
+                        r.resolve(undefined);
+                        return;
+                    }
+                    if (uiState.movieLoop) return;
+                    if (uiState.movieHoldLastFrame) return;
+                    const wasWaiting = uiState.isWaitingForInput;
+                    if (movieExitDur > 0 && !uiState.movieExiting) {
+                        updatePlayerState(p => p ? {...p, uiState: {...p.uiState, movieExiting: true}} : null);
+                        const tid = window.setTimeout(() => {
+                            updatePlayerState(p => p ? {...p, ...(wasWaiting ? { currentIndex: p.currentIndex + 1 } : {}), uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false}} : null);
+                        }, movieExitDur * 1000);
+                        activeEffectTimeoutsRef.current.push(tid);
+                    } else if (wasWaiting) {
+                        updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false}} : null);
+                    } else {
+                        updatePlayerState(p => p ? {...p, uiState: {...p.uiState, movieUrl: null, movieLoop: false}} : null);
+                    }
+                };
+                return (
                 <div
                     className="absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white"
                     style={{ opacity: uiState.movieExiting ? 0 : 1, transition: uiState.movieExiting ? `opacity ${movieExitDur}s ease-out` : undefined }}
@@ -11785,10 +11942,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false}} : null);
                     }}
                 >
-                    <video
+                    <TrimmedVideo
                         src={uiState.movieUrl}
                         autoPlay
                         playsInline
+                        trimStart={uiState.movieTrimStart}
+                        trimEnd={uiState.movieTrimEnd}
                         ref={(el) => {
                             if (!el) return;
                             // Prefer playing WITH sound; if the browser blocks autoplay-with-audio,
@@ -11797,41 +11956,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         }}
                         loop={uiState.movieLoop ?? false}
                         style={{ width: '100%', height: '100%', objectFit: 'contain', animation: movieEntryAnim(uiState.movieTransition, uiState.movieTransitionDuration) }}
-                        onEnded={() => {
-                            // Script-driven movie (game.playMovie, waitsForCompletion): resolve the awaiting
-                            // script + clear, regardless of holdLastFrame. (Checked first so a script never hangs.)
-                            if (scriptInputResolverRef.current?.kind === 'movie') {
-                                const r = scriptInputResolverRef.current; scriptInputResolverRef.current = null;
-                                updatePlayerState(p => p ? {...p, uiState: {...p.uiState, movieUrl: null, movieLoop: false, movieExiting: false}} : null);
-                                r.resolve(undefined);
-                                return;
-                            }
-                            // If looping, onEnded won't fire (browser handles loop). Just in case:
-                            if (uiState.movieLoop) return;
-                            // Hold last frame: leave the (now-ended) video frozen on its final frame.
-                            // In wait mode the player still clicks to continue; in non-wait the story
-                            // already advanced and the frame stays until a Stop Video.
-                            if (uiState.movieHoldLastFrame) return;
-                            const wasWaiting = uiState.isWaitingForInput;
-                            if (movieExitDur > 0 && !uiState.movieExiting) {
-                                // Fade the movie layer out, then clear (and advance if it was waiting).
-                                updatePlayerState(p => p ? {...p, uiState: {...p.uiState, movieExiting: true}} : null);
-                                const tid = window.setTimeout(() => {
-                                    updatePlayerState(p => p ? {...p, ...(wasWaiting ? { currentIndex: p.currentIndex + 1 } : {}), uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false}} : null);
-                                }, movieExitDur * 1000);
-                                activeEffectTimeoutsRef.current.push(tid);
-                            } else if (wasWaiting) {
-                                updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false}} : null);
-                            } else {
-                                updatePlayerState(p => p ? {...p, uiState: {...p.uiState, movieUrl: null, movieLoop: false}} : null);
-                            }
-                        }}
+                        onSegmentEnd={handleMovieEnded}
+                        onEnded={handleMovieEnded}
                     />
                     {(uiState.isWaitingForInput || scriptInputResolverRef.current?.kind === 'movie') && (
                         <div className="absolute bottom-4 right-4 text-xs opacity-50 pointer-events-none">Click to skip</div>
                     )}
                 </div>
-            )}
+                );
+            })()}
             {activeCreditRoll && (
                 <CreditRollOverlay
                     command={activeCreditRoll}
@@ -12739,6 +12872,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     evaluateConditions={evaluateConditions}
                     onAction={handleUIAction}
                     onReply={handlePhoneReply}
+                    onContactMessage={handleContactMessage}
+                    onContactCall={handleContactCall}
+                    playTap={() => { if (project.ui.phoneTapSoundId) playSound(project.ui.phoneTapSoundId, undefined, false); }}
                 />
             )}
             {/* Incoming-text notification banner (non-blocking; tap to open the phone to the message) */}
@@ -12784,8 +12920,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const bgImg = project.ui.phoneCallBgImage ? assetResolver(project.ui.phoneCallBgImage.id, 'image') : null;
                     return (
                         <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, color: '#fff', background: bgImg ? `url(${bgImg}) center/cover no-repeat` : (project.ui.phoneCallBgColor || 'rgba(8,10,14,0.96)'), animation: 'fade-in 0.25s ease-out' }}>
-                            <div style={{ width: '22%', aspectRatio: '1', borderRadius: shape === 'circle' ? '9999px' : '16px', overflow: 'hidden', position: 'relative', background: 'rgba(255,255,255,0.06)' }}>
-                                {curls.map((u, i) => <img key={i} src={u} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />)}
+                            <div style={{ ...((project.ui.phoneCallPortraitX != null || project.ui.phoneCallPortraitY != null) ? { position: 'absolute', left: `${project.ui.phoneCallPortraitX ?? 50}%`, top: `${project.ui.phoneCallPortraitY ?? 18}%` } : { position: 'relative' }), width: `${project.ui.phoneCallPortraitSize ?? 22}%`, aspectRatio: '1', borderRadius: shape === 'circle' ? '9999px' : '16px', overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
+                                {curls.map((u, i) => <img key={i} src={u} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: project.ui.phoneCallPortraitFit || 'cover', objectPosition: project.ui.phoneCallPortraitPosition || 'center' }} />)}
                             </div>
                             <div style={{ textAlign: 'center', ...nameStyle }}>{cchar?.name || 'Unknown'}</div>
                             <div style={{ opacity: 0.7, fontSize: '0.9em' }}>Incoming call…</div>
@@ -12804,6 +12940,30 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             </div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 2 }}>{declineBtn}{acceptBtn}</div>
+                    </div>
+                );
+            })()}
+            {/* Outgoing-call "Calling…" overlay (player tapped Call in Contacts). Full-screen, reuses the
+                call theming; Hang Up cancels. If the contact has a callAction it auto-connects after a beat. */}
+            {playerState?.mode === 'playing' && playerState.uiState.phone?.outgoingCall && (() => {
+                const oc = playerState.uiState.phone.outgoingCall!;
+                const contact = (project.ui.phoneContacts || []).find(c => c.characterId === oc.contactId);
+                const ochar = project.characters[oc.contactId];
+                const ourls = resolvePhonePortrait(contact?.avatar, ochar, assetResolver);
+                const shape = project.ui.phoneCallPortraitShape || 'circle';
+                const bgImg = project.ui.phoneCallBgImage ? assetResolver(project.ui.phoneCallBgImage.id, 'image') : null;
+                const nameStyle = project.ui.phoneCallNameFont ? fontSettingsToStyle(project.ui.phoneCallNameFont) : { fontSize: '1.5em', fontWeight: 700 };
+                return (
+                    <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, color: '#fff', background: bgImg ? `url(${bgImg}) center/cover no-repeat` : (project.ui.phoneCallBgColor || 'rgba(8,10,14,0.96)'), animation: 'fade-in 0.25s ease-out' }}>
+                        <div style={{ ...((project.ui.phoneCallPortraitX != null || project.ui.phoneCallPortraitY != null) ? { position: 'absolute', left: `${project.ui.phoneCallPortraitX ?? 50}%`, top: `${project.ui.phoneCallPortraitY ?? 18}%` } : { position: 'relative' }), width: `${project.ui.phoneCallPortraitSize ?? 22}%`, aspectRatio: '1', borderRadius: shape === 'circle' ? '9999px' : '16px', overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
+                            {ourls.map((u, i) => <img key={i} src={u} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: project.ui.phoneCallPortraitFit || 'cover', objectPosition: project.ui.phoneCallPortraitPosition || 'center' }} />)}
+                        </div>
+                        <div style={{ textAlign: 'center', ...nameStyle }}>{contact?.displayName || ochar?.name || 'Unknown'}</div>
+                        <div style={{ opacity: 0.7, fontSize: '0.9em' }}>Calling…</div>
+                        <button onClick={endOutgoingCall} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '0.85em', marginTop: 8 }}>
+                            <span style={{ width: '3em', height: '3em', borderRadius: '9999px', background: project.ui.phoneCallDeclineColor || '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3em' }}>⊘</span>
+                            <span>Hang up</span>
+                        </button>
                     </div>
                 );
             })()}

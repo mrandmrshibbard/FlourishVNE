@@ -81,6 +81,15 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
             [UIActionType.LoadGame]: { slotNumber: 1 },
             [UIActionType.SaveGame]: { slotNumber: 1 },
             [UIActionType.DeleteSave]: { slotNumber: 1 },
+            [UIActionType.GiveItem]: { itemId: '' as VNID, quantity: 1 },
+            [UIActionType.UseItem]: { itemId: '' as VNID },
+            [UIActionType.DestroyItem]: { itemId: '' as VNID, quantity: 1 },
+            [UIActionType.CarryItem]: { itemId: '' as VNID },
+            [UIActionType.RestockCollection]: { collectionId: '' as VNID },
+            [UIActionType.BuyItem]: { itemId: '' as VNID, collectionId: '' as VNID },
+            [UIActionType.SellItem]: { itemId: '' as VNID, collectionId: '' as VNID },
+            [UIActionType.BuySelectedItem]: { collectionId: '' as VNID },
+            [UIActionType.SellSelectedItem]: { collectionId: '' as VNID },
         };
         const next = [...actions];
         next[index] = { type: newType, ...(defaults[newType] || {}) } as VNUIAction;
@@ -245,6 +254,75 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                     </div>
                 );
             }
+            case UIActionType.GiveItem:
+            case UIActionType.UseItem:
+            case UIActionType.DestroyItem:
+            case UIActionType.CarryItem: {
+                const itemArr = Object.values(project.items || {}) as any[];
+                const showQty = (action.type === UIActionType.GiveItem || action.type === UIActionType.DestroyItem) && !a.all;
+                return (
+                    <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-amber-500/30 space-y-1">
+                        <select value={a.itemId || ''} onChange={e => updateAction(index, { itemId: e.target.value as VNID } as any)} className={inputCls}>
+                            <option value="">{itemArr.length === 0 ? t('actionsList.noItems', 'No items defined (Systems → Items)') : t('actionsList.selectItem', 'Select an item…')}</option>
+                            {itemArr.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                        </select>
+                        {action.type === UIActionType.DestroyItem && (
+                            <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+                                <input type="checkbox" checked={!!a.all} onChange={e => updateAction(index, { all: e.target.checked || undefined } as any)} />
+                                {t('actionsList.destroyAll', 'Remove all')}
+                            </label>
+                        )}
+                        {showQty && (
+                            <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-[var(--text-secondary)]">{t('actionsList.quantity', 'Quantity')}</span>
+                                <input type="number" min={1} value={a.quantity ?? 1}
+                                    onChange={e => updateAction(index, { quantity: Math.max(1, parseInt(e.target.value, 10) || 1) } as any)} className={inputCls + ' w-16'} />
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+            case UIActionType.RestockCollection: {
+                const collArr = Object.values(project.itemCollections || {}) as any[];
+                return (
+                    <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-amber-500/30">
+                        <select value={a.collectionId || ''} onChange={e => updateAction(index, { collectionId: e.target.value as VNID } as any)} className={inputCls}>
+                            <option value="">{collArr.length === 0 ? t('actionsList.noCollections', 'No item lists defined (Systems → Inventory)') : t('actionsList.selectCollection', 'Select an item list…')}</option>
+                            {collArr.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
+                        </select>
+                    </div>
+                );
+            }
+            case UIActionType.BuyItem:
+            case UIActionType.SellItem: {
+                const itemArr = Object.values(project.items || {}) as any[];
+                const collArr = Object.values(project.itemCollections || {}) as any[];
+                return (
+                    <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-amber-500/30 space-y-1">
+                        <select value={a.itemId || ''} onChange={e => updateAction(index, { itemId: e.target.value as VNID } as any)} className={inputCls}>
+                            <option value="">{itemArr.length === 0 ? t('actionsList.noItems', 'No items defined (Systems → Items)') : t('actionsList.selectItem', 'Select an item…')}</option>
+                            {itemArr.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                        </select>
+                        <select value={a.collectionId || ''} onChange={e => updateAction(index, { collectionId: e.target.value as VNID } as any)} className={inputCls}>
+                            <option value="">{collArr.length === 0 ? t('actionsList.noCollections', 'No item lists defined (Systems → Inventory)') : (action.type === UIActionType.BuyItem ? t('actionsList.shopBuyFrom', 'Shop list to buy from…') : t('actionsList.shopSellTo', 'Shop list to sell to…'))}</option>
+                            {collArr.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
+                        </select>
+                    </div>
+                );
+            }
+            case UIActionType.BuySelectedItem:
+            case UIActionType.SellSelectedItem: {
+                const collArr = Object.values(project.itemCollections || {}) as any[];
+                return (
+                    <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-amber-500/30 space-y-1">
+                        <select value={a.collectionId || ''} onChange={e => updateAction(index, { collectionId: e.target.value as VNID } as any)} className={inputCls}>
+                            <option value="">{collArr.length === 0 ? t('actionsList.noCollections', 'No item lists defined (Systems → Inventory)') : (action.type === UIActionType.BuySelectedItem ? t('actionsList.shopBuyFrom', 'Shop list to buy from…') : t('actionsList.shopSellTo', 'Shop list to sell to…'))}</option>
+                            {collArr.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
+                        </select>
+                        <p className="text-[10px] text-[var(--text-muted)]">{t('actionsList.selectedItemHint', 'Acts on the item the player has selected in the grid.')}</p>
+                    </div>
+                );
+            }
             case UIActionType.SaveGame:
             case UIActionType.LoadGame:
             case UIActionType.DeleteSave:
@@ -283,6 +361,8 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                     if (action.type === UIActionType.SetVariable || action.type === UIActionType.ResetVariable) detail = project.variables[a.variableId]?.name || '';
                     else if (action.type === UIActionType.JumpToScene) detail = (project.scenes[a.targetSceneId] as any)?.name || '';
                     else if (action.type === UIActionType.GoToScreen || action.type === UIActionType.ToggleScreen) detail = (project.uiScreens[a.targetScreenId] as any)?.name || '';
+                    else if (action.type === UIActionType.GiveItem || action.type === UIActionType.UseItem || action.type === UIActionType.DestroyItem || action.type === UIActionType.CarryItem || action.type === UIActionType.BuyItem || action.type === UIActionType.SellItem) detail = (project.items?.[a.itemId] as any)?.name || '';
+                    else if (action.type === UIActionType.RestockCollection || action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem) detail = (project.itemCollections?.[a.collectionId] as any)?.name || '';
                     const summary = detail ? `${actionLabel(action.type)}: ${detail}` : actionLabel(action.type);
                     return (
                         <CollapsibleSection

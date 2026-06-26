@@ -5,7 +5,7 @@
  * and configuring plugins in FlourishVNE.
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import JSZip from 'jszip';
 import { useTranslation } from 'react-i18next';
 import { useProject } from '../contexts/ProjectContext';
@@ -30,6 +30,10 @@ import {
 
 interface PluginManagerUIProps {
     onClose: () => void;
+    /** A file dropped onto the app to auto-install (set by Header's global drag-and-drop). */
+    initialFile?: File | null;
+    /** Called once `initialFile` has been picked up (so the parent can clear it). */
+    onInitialFileConsumed?: () => void;
 }
 
 type TabView = 'installed' | 'install' | 'details';
@@ -168,7 +172,7 @@ const CATEGORY_LABELS: Record<string, string> = {
     utility: '🔧 Utility',
 };
 
-const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose }) => {
+const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose, initialFile, onInitialFileConsumed }) => {
     const { t } = useTranslation('editorTools');
     const { project, dispatch } = useProject();
     const plugins = useMemo(() => Object.values(project.plugins || {}) as VNPlugin[], [project.plugins]);
@@ -279,19 +283,17 @@ const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose }) => {
         }
     }, [project.plugins]);
 
-    const handleImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        e.target.value = '';
-        if (!file) return;
-        const isZip = /\.(flourishext|zip)$/i.test(file.name);
-        if (isZip) {
-            // .flourishext bundle: read entry.js (the source) + resources/* (rebuilt as data URLs).
-            try {
+    // Read a dropped/picked extension file (.flourishext bundle or .js/.txt source), populate the install
+    // box, then jump straight to the trust prompt. Shared by the file picker AND drag-and-drop.
+    const processPluginFile = useCallback(async (file: File) => {
+        try {
+            let source: string;
+            let resources: Record<string, string> = {};
+            if (/\.(flourishext|zip)$/i.test(file.name)) {
                 const zip = await JSZip.loadAsync(file);
                 const entry = zip.file('entry.js') || zip.file(/\.js$/i)[0];
                 if (!entry) throw new Error('Bundle has no entry.js');
-                const source = await entry.async('string');
-                const resources: Record<string, string> = {};
+                source = await entry.async('string');
                 const tasks: Promise<void>[] = [];
                 zip.forEach((path, zf) => {
                     if (zf.dir || !path.startsWith('resources/')) return;
@@ -300,25 +302,37 @@ const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose }) => {
                     tasks.push(zf.async('base64').then(b64 => { resources[name] = `data:${mimeFromName(name)};base64,${b64}`; }));
                 });
                 await Promise.all(tasks);
-                setInstallSource(source);
-                setPendingInstallResources(resources);
-                setInstallError('');
-                setActiveTab('install');
-            } catch (err: any) {
-                setInstallError(`Couldn't read bundle: ${err.message}`);
-                setActiveTab('install');
+            } else {
+                source = await file.text();
             }
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => {
-            setInstallSource(String(reader.result || ''));
-            setPendingInstallResources({});
+            setInstallSource(source);
+            setPendingInstallResources(resources);
             setInstallError('');
             setActiveTab('install');
-        };
-        reader.readAsText(file);
-    }, []);
+            // Jump straight to the trust prompt (drop/pick a file → confirm → installed).
+            const manifest = pluginManager.peekManifest(source);
+            if (manifest) setPendingInstall(manifest);
+            else setInstallError(t('pluginManager.installErrorFormat'));
+        } catch (err: any) {
+            setActiveTab('install');
+            setInstallError(`Couldn't read "${file.name}": ${err.message}`);
+        }
+    }, [pluginManager, t]);
+
+    const handleImportFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (file) processPluginFile(file);
+    }, [processPluginFile]);
+
+    // Process a file handed in from a drag-and-drop onto the app (see Header's window drop handler).
+    useEffect(() => {
+        if (initialFile) {
+            processPluginFile(initialFile);
+            onInitialFileConsumed?.();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialFile]);
 
     // Export an installed extension as a shareable .flourishext bundle (manifest.json + entry.js + resources/).
     const handleExportBundle = useCallback(async (pluginId: string) => {
@@ -418,6 +432,16 @@ const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose }) => {
                                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
                                         by {plugin.manifest.author}
                                     </p>
+                                )}
+                                {(plugin.manifest.target === 'editor' || plugin.manifest.target === 'both') && (
+                                    <label className="flex items-center gap-1.5 text-[11px] mt-1.5 cursor-pointer w-fit" style={{ color: 'var(--text-secondary)' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={plugin.hideInTestPlay === true}
+                                            onChange={e => dispatch({ type: 'SET_PLUGIN_HIDE_IN_TESTPLAY', payload: { pluginId: plugin.manifest.id, hidden: e.target.checked } })}
+                                        />
+                                        {t('pluginManager.hideInTestPlay', 'Hide during test play')}
+                                    </label>
                                 )}
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
@@ -540,6 +564,9 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                         {t('pluginManager.installButton')}
                     </button>
                 </div>
+                <p className="text-[11px] mt-2 flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
+                    <span>⬇️</span>{t('pluginManager.dragDropHint', 'Tip: drag a .flourishext or .js file from your computer and drop it anywhere in Flourish to install it.')}
+                </p>
             </div>
         </div>
     );

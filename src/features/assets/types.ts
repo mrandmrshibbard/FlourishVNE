@@ -8,6 +8,9 @@ export interface VNBackground {
     isVideo?: boolean;
     loop?: boolean;
     autoplay?: boolean;
+    /** Default clip (seconds) when this video asset is shown without a per-use trim override. */
+    trimStart?: number;
+    trimEnd?: number;
     path?: string; // Optional directory path (e.g., "Characters/Heroes" or "" for root)
 }
 export interface VNImage {
@@ -18,6 +21,9 @@ export interface VNImage {
     isVideo?: boolean;
     loop?: boolean;
     autoplay?: boolean;
+    /** Default clip (seconds) when this video asset is shown without a per-use trim override. */
+    trimStart?: number;
+    trimEnd?: number;
     path?: string; // Optional directory path (e.g., "UI/Icons" or "" for root)
 }
 export interface VNAudio {
@@ -30,5 +36,8 @@ export interface VNVideo {
     id: VNID;
     name: string;
     videoUrl: string;
+    /** Default clip (seconds) when this video is shown without a per-use trim override. */
+    trimStart?: number;
+    trimEnd?: number;
     path?: string; // Optional directory path (e.g., "Cutscenes/Chapter1" or "" for root)
 }

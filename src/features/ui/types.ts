@@ -121,6 +121,34 @@ export interface PhoneButtonConfig {
     x?: number; y?: number; width?: number; height?: number;
 }
 
+/** A registered contact in the in-game phone's Contacts app. References a character; each row offers a
+ *  Call button (→ outgoing "Calling…" screen + optional callAction) and a Message button (→ that
+ *  character's chat thread). Additive-optional. */
+export interface PhoneContact {
+    id: VNID;
+    /** The character this contact represents (its base sprite/name are the defaults). */
+    characterId: VNID;
+    /** Override the displayed name (default = the character's name). */
+    displayName?: string;
+    /** Override the contact's avatar (default = the character's base sprite). */
+    avatar?: PhonePortraitSource;
+    /** A small status line under the name — interpolates variables, e.g. "Affection: {mia_love}". */
+    statusText?: string;
+    /** Only listed when all conditions pass (so contacts can unlock over the story). */
+    conditions?: VNCondition[];
+    /** Pinned contacts sort to the top of the list. */
+    pinned?: boolean;
+    /** What the Call button does after the "Calling…" screen shows (e.g. Call Common Event / Jump To
+     *  Scene to run the conversation). Optional — without it, Call just shows the calling screen. */
+    callAction?: VNUIAction;
+    /** Hide the Call button for this contact (text-only). */
+    hideCall?: boolean;
+    /** Hide the Message button for this contact (call-only). */
+    hideMessage?: boolean;
+    /** Per-thread chat background (overrides the global chat background for this contact's conversation). */
+    chatBackground?: { type: 'image' | 'video'; id: VNID } | null;
+}
+
 export interface VNProjectUI {
     titleScreenId: VNID | null;
     settingsScreenId: VNID | null;
@@ -344,6 +372,40 @@ export interface VNProjectUI {
     phoneHistoryHeader?: string;               // default "Recents"
     phoneHistoryRowColor?: string;
     phoneHistoryTextColor?: string;
+
+    // Contacts app
+    phoneContacts?: PhoneContact[];
+    phoneContactsHeader?: string;              // default "Contacts"
+    phoneContactRowColor?: string;             // contact row background (defaults to history row color)
+    phoneContactTextColor?: string;            // contact row text (defaults to history text color)
+    phoneContactCallLabel?: string;            // default "Call"
+    phoneContactMessageLabel?: string;         // default "Message"
+
+    // Sounds
+    phoneTapSoundId?: VNID;                     // played when any phone button / app icon / reply is tapped
+    phoneOpenSoundId?: VNID;                    // played when the phone opens
+    phoneCloseSoundId?: VNID;                   // played when the phone closes
+
+    // Backgrounds / wallpaper
+    phoneWallpaperImage?: { type: 'image' | 'video'; id: VNID } | null;       // behind the whole screen (home + apps)
+    phoneChatBackgroundImage?: { type: 'image' | 'video'; id: VNID } | null;  // behind chat threads (overrides wallpaper); per-contact can override again
+
+    // Portrait / avatar sizing (so tall full-body sprites fit)
+    phoneContactAvatarSize?: number;           // contacts-list avatar size in em (default 2.4)
+    phoneContactAvatarFit?: 'cover' | 'contain';   // default cover
+    phoneChatAvatarSize?: number;              // chat bubble avatar size in em (default 2.2)
+    phoneChatAvatarFit?: 'cover' | 'contain';      // default cover
+    phoneCallPortraitSize?: number;            // call-screen portrait size, % of the screen width (default 22)
+    phoneCallPortraitFit?: 'cover' | 'contain';    // default cover; 'contain' shows a full-body sprite uncropped
+    phoneCallPortraitPosition?: string;        // CSS object-position, e.g. "center top" (default "center")
+    phoneCallPortraitX?: number;               // free position on the call screen (% of screen); unset = centered
+    phoneCallPortraitY?: number;
+    // Per-screen fonts (additive; fall back to phoneFont / sensible defaults)
+    phoneContactNameFont?: VNFontSettings;     // contacts-list name
+    phoneContactStatusFont?: VNFontSettings;   // contacts-list status line
+    // Contacts list placement: when set, the scrollable roster occupies this sub-region of the
+    // phone screen (% of the phone, like free app buttons); unset = fills the content area.
+    phoneContactsRegion?: { x: number; y: number; width: number; height: number };
 }
 
 /**
@@ -421,6 +483,9 @@ export interface VNConfirmDialogSettings extends VNConfirmVariantStyle {
 export type UIAsset = {
     type: 'image' | 'video';
     id: VNID;
+    /** Per-use video clip (seconds). Overrides the asset's default trim. Ignored for images. */
+    trimStart?: number;
+    trimEnd?: number;
 }
 
 export enum UIElementType {
@@ -575,7 +640,7 @@ export interface UITextElement extends BaseUIElement {
 }
 export interface UIImageElement extends BaseUIElement {
     type: UIElementType.Image;
-    background?: { type: 'image' | 'video', assetId: VNID, loop?: boolean } | { type: 'color', value: string }; // Image/video from assets or solid color. `loop` (video only, default true): off = play once and hold last frame.
+    background?: { type: 'image' | 'video', assetId: VNID, loop?: boolean, trimStart?: number, trimEnd?: number } | { type: 'color', value: string }; // Image/video from assets or solid color. `loop` (video only, default true): off = play once and hold last frame. trimStart/trimEnd (seconds) play only a slice.
     image: UIAsset | null; // Deprecated, kept for backward compatibility
     objectFit?: 'contain' | 'cover' | 'fill'; // How the image/video should fit in the element
 }
@@ -994,7 +1059,7 @@ export type VNUIElement =
 /** An extra background plane on a screen (for multi-plane parallax backdrops). */
 export interface VNScreenBackgroundLayer {
     id: VNID;
-    background: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null, loop?: boolean };
+    background: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null, loop?: boolean, trimStart?: number, trimEnd?: number };
     /** Stacking order vs. the main background and elements (default 0). */
     layer?: number;
     /** Parallax depth (0/undefined = locked). Driven by the screen's `parallax` setting. */
@@ -1017,7 +1082,7 @@ export interface VNUIScreen {
     name:string;
     /** Optional editor-only category (color/grouping). Unset → inferred. Additive-optional. */
     category?: VNScreenCategory;
-    background: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null, loop?: boolean };
+    background: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null, loop?: boolean, trimStart?: number, trimEnd?: number };
     music: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
     ambientNoise: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
     elements: Record<VNID, VNUIElement>;
@@ -1133,6 +1198,8 @@ export interface VNHotZoneElement {
     videoId?: VNID; // Reference to project video asset (for video type)
     videoLoop?: boolean; // Loop video playback
     videoMuted?: boolean; // Mute video audio
+    videoTrimStart?: number; // Play only a slice (seconds); overrides the asset's default trim
+    videoTrimEnd?: number;
     text?: string; // Display text (for text/button types)
     font?: VNFontSettings; // Font settings (for text/button/textInput types)
     placeholder?: string; // Placeholder text (for textInput type)

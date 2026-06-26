@@ -49,6 +49,9 @@ export interface VNLayerAsset {
     isVideo?: boolean;
     loop?: boolean;
     autoplay?: boolean;
+    /** Default video clip (seconds) for this layer asset — one long video, many expressions. */
+    trimStart?: number;
+    trimEnd?: number;
 }
 export interface VNCharacterLayer {
     id: VNID;
@@ -73,6 +76,9 @@ export interface VNCharacter {
     baseVideoUrl?: string | null;
     isBaseVideo?: boolean;
     baseVideoLoop?: boolean;
+    /** Base video clip (seconds) — store several sprite animations in one video. */
+    baseVideoTrimStart?: number;
+    baseVideoTrimEnd?: number;
     layers: Record<VNID, VNCharacterLayer>;
     expressions: Record<VNID, VNCharacterExpression>;
     /** Default text effect for this character's dialogue */

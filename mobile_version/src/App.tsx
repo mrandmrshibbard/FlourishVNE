@@ -6,6 +6,7 @@ import VisualNovelEditor from './components/VisualNovelEditor';
 import InspectorWindow from './components/InspectorWindow';
 import CanvasWindow from './components/CanvasWindow';
 import InGameWindow from './components/InGameWindow';
+import TestPlayWindow from './components/TestPlayWindow';
 import { getManagerWindowType } from './utils/windowManager';
 import { ProjectHub, saveRecentProject } from './components/ProjectHub';
 import { MusicPlayer } from './components/MusicPlayer';
@@ -185,6 +186,26 @@ const App = () => {
     // follows the main editor's selection — never the Project Hub or a full editor. (Desktop only;
     // on mobile getManagerWindowType() is always null so this branch never runs.)
     const managerType = getManagerWindowType();
+
+    // The dedicated test-play window runs the game (LivePreview) in its own window. (Desktop only;
+    // on mobile getManagerWindowType() is always null so this branch never runs.)
+    if (managerType === 'testplay') {
+        if (!activeProject) {
+            return (
+                <ToastProvider>
+                    <div className="h-screen flex items-center justify-center bg-black text-white text-sm">Loading…</div>
+                </ToastProvider>
+            );
+        }
+        return (
+            <ToastProvider>
+                <ProjectProvider key={activeProject.id} initialProject={activeProject}>
+                    <TestPlayWindow />
+                </ProjectProvider>
+            </ToastProvider>
+        );
+    }
+
     const isPanelWindow = managerType === 'inspector' || managerType === 'canvas'
         || managerType === 'ingame-canvas' || managerType === 'ingame-properties';
 

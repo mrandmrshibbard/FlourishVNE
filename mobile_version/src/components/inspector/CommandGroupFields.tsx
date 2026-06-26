@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNProject } from '../../types/project';
 import type { VNID } from '../../types';
+import VideoTrimFields from '../ui/VideoTrimFields';
 import {
     VNCommand, CommandType, DialogueCommand, ShowButtonCommand, ShowItemCommand, ShowTextCommand, ShowImageCommand, ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand, REACTIVE_VISUAL_TYPES,
     ShowPhoneTextCommand, ChoiceOption,
@@ -2068,6 +2069,8 @@ const PlayMovieGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateComm
                         {videoAssets.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
                     </Select>
                 </FormField>
+                <VideoTrimFields className="mt-2" start={cmd.trimStart} end={cmd.trimEnd}
+                    onChange={patch => updateCommand(patch as any)} />
                 <FormField label={t('movie.displayMode')}>
                     <Select value={cmd.displayMode || 'fullscreen'} onChange={e => {
                         const mode = e.target.value as 'fullscreen' | 'overlay';

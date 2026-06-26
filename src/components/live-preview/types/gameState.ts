@@ -261,6 +261,8 @@ export interface StageState {
     movieOverlays?: Array<{
         url: string;
         loop: boolean;
+        trimStart?: number;
+        trimEnd?: number;
         holdLastFrame?: boolean;
         transition?: string;
         transitionDuration?: number;
@@ -368,6 +370,8 @@ export interface PlayerState {
         } | null;
         movieUrl: string | null;
         movieLoop?: boolean;
+        movieTrimStart?: number;
+        movieTrimEnd?: number;
         movieHoldLastFrame?: boolean;
         movieTransition?: string;
         movieTransitionDuration?: number;
@@ -392,8 +396,12 @@ export interface PlayerState {
             /** Richer reply options (text + follow-up sender messages + actions) for incoming texts. */
             pendingReplies?: PhoneReply[];
             /** Which built-in phone view is showing: the home screen (app buttons), the chat thread,
-             *  or the recents/history log. App buttons only appear on 'home'. */
-            view?: 'home' | 'chat' | 'history';
+             *  the recents/history log, or the Contacts app. App buttons only appear on 'home'. */
+            view?: 'home' | 'chat' | 'history' | 'contacts';
+            /** The contact whose chat thread is currently open (filters the chat view). null = all messages. */
+            activeContactId?: VNID | null;
+            /** An in-progress OUTGOING call (player tapped Call in Contacts) → "Calling…" screen. */
+            outgoingCall?: { contactId: VNID } | null;
             /** A pending incoming-text banner (non-blocking notification the player can tap to read). */
             notification?: PhoneNotification | null;
             /** A live "…" typing indicator shown on the sender side before a message lands. */
@@ -416,6 +424,9 @@ export interface PhoneMessage {
     text: string;
     /** Optional per-message avatar source (base sprite / chosen pose / custom). Unset = base. */
     portrait?: PhonePortraitSource;
+    /** The contact thread this message belongs to (a character id). Character messages = senderId;
+     *  player replies = the active thread. Lets the Contacts app filter per-conversation. */
+    contactId?: VNID;
 }
 
 /** A non-blocking incoming-text banner. */

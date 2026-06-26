@@ -656,7 +656,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                     const inspectorNode = renderInspector();
                     if (!inspectorNode) return null;
                     return (
-                        <div className="relative flex-shrink-0">
+                        <div className="relative flex-shrink-0 flex flex-col min-h-0">
                             {isMultiWindowSupported() && !isManagerWindow() && (
                                 <button
                                     onClick={() => openManagerWindow('inspector')}
@@ -666,7 +666,12 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                     ⧉
                                 </button>
                             )}
-                            {inspectorNode}
+                            {/* Inner scroller: Panel clips its own content (overflow-hidden), so the inline
+                                inspector needs an outer scroll region — the same one the pop-out window adds.
+                                Without it, tall property lists (e.g. UI screen elements) were unreachable. */}
+                            <div className="flex-1 min-h-0 overflow-y-auto">
+                                {inspectorNode}
+                            </div>
                         </div>
                     );
                 })()}

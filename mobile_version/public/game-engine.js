@@ -33,6 +33,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["ShowPhoneText"] = "ShowPhoneText";
     UIActionType2["HidePhoneText"] = "HidePhoneText";
     UIActionType2["ShowPhoneHistory"] = "ShowPhoneHistory";
+    UIActionType2["ShowPhoneContacts"] = "ShowPhoneContacts";
     UIActionType2["ReturnToGame"] = "ReturnToGame";
     UIActionType2["ReturnToPreviousScreen"] = "ReturnToPreviousScreen";
     UIActionType2["QuitToTitle"] = "QuitToTitle";
@@ -4194,6 +4195,82 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return { containerStyle, gradientSpanStyle };
   };
+  const TrimmedVideo = React2.forwardRef(
+    ({ src, trimStart, trimEnd, loop, onSegmentEnd, children, ...rest }, externalRef) => {
+      const innerRef = React2.useRef(null);
+      const setRefs = (el) => {
+        innerRef.current = el;
+        if (typeof externalRef === "function") externalRef(el);
+        else if (externalRef) externalRef.current = el;
+      };
+      const start = trimStart != null && trimStart > 0 ? trimStart : 0;
+      const end = trimEnd != null && trimEnd > start ? trimEnd : void 0;
+      const trimmed = start > 0 || end != null;
+      React2.useEffect(() => {
+        const el = innerRef.current;
+        if (!el || !trimmed) return;
+        const seekToStart = () => {
+          try {
+            el.currentTime = start;
+          } catch {
+          }
+        };
+        const onMeta = () => seekToStart();
+        let firedSegmentEnd = false;
+        const onTime = () => {
+          if (end != null && el.currentTime >= end) {
+            if (loop) {
+              try {
+                el.currentTime = start;
+                const p = el.play();
+                if (p && p.catch) p.catch(() => {
+                });
+              } catch {
+              }
+            } else {
+              try {
+                el.pause();
+                el.currentTime = end;
+              } catch {
+              }
+              if (!firedSegmentEnd) {
+                firedSegmentEnd = true;
+                onSegmentEnd == null ? void 0 : onSegmentEnd();
+              }
+            }
+          } else if (start > 0 && el.currentTime < start - 0.3) {
+            seekToStart();
+          }
+        };
+        const onEnded = () => {
+          if (loop) {
+            seekToStart();
+            const p = el.play();
+            if (p && p.catch) p.catch(() => {
+            });
+          }
+        };
+        if (el.readyState >= 1) seekToStart();
+        el.addEventListener("loadedmetadata", onMeta);
+        el.addEventListener("timeupdate", onTime);
+        el.addEventListener("ended", onEnded);
+        return () => {
+          el.removeEventListener("loadedmetadata", onMeta);
+          el.removeEventListener("timeupdate", onTime);
+          el.removeEventListener("ended", onEnded);
+        };
+      }, [src, start, end, loop, trimmed, onSegmentEnd]);
+      const nativeLoop = trimmed ? false : loop;
+      return /* @__PURE__ */ jsxRuntime2.jsx("video", { ref: setRefs, src, loop: nativeLoop, ...rest, children });
+    }
+  );
+  TrimmedVideo.displayName = "TrimmedVideo";
+  function resolveVideoTrim(perUse, asset) {
+    return {
+      start: (perUse == null ? void 0 : perUse.trimStart) ?? (asset == null ? void 0 : asset.trimStart),
+      end: (perUse == null ? void 0 : perUse.trimEnd) ?? (asset == null ? void 0 : asset.trimEnd)
+    };
+  }
   const BUILTIN_OVERLAY_EFFECT_TYPES = [
     "crtScanlines",
     "chromaticGlitch",
@@ -8520,7 +8597,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       id: `${command.id}-${messages.length}`,
       senderId: command.senderId,
       text: command.text,
-      ...command.portrait ? { portrait: command.portrait } : {}
+      ...command.portrait ? { portrait: command.portrait } : {},
+      // Tag the conversation thread (the character) so the Contacts app can group by contact.
+      ...command.senderId !== "player" ? { contactId: command.senderId } : {}
     };
     const hasChoices = !!(command.choices && command.choices.length > 0);
     return {
@@ -8532,6 +8611,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             ...prev,
             open: true,
             view: "chat",
+            // Focus this character's thread (so the chat shows just their conversation).
+            activeContactId: command.senderId !== "player" ? command.senderId : prev.activeContactId,
             messages: [...messages, msg],
             waiting: hasChoices,
             pendingChoices: hasChoices ? command.choices : void 0,
@@ -12793,11 +12874,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: Math.max(9, size * 0.62), fontWeight: 600, color: ui.phoneBadgeLabelColor || textColor, whiteSpace: "nowrap", textShadow: "0 1px 3px rgba(0,0,0,0.6)" }, children: ui.phoneBadgeLabel })
     ] });
   }
-  const PhonePortrait = ({ urls, size }) => {
+  const PhonePortrait = ({ urls, size, fit, objectPosition }) => {
     if (urls.length === 0) return null;
-    return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: size, height: size, borderRadius: "9999px", overflow: "hidden", flexShrink: 0, position: "relative", background: "rgba(0,0,0,0.2)" }, children: urls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" } }, i)) });
+    return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: size, height: size, borderRadius: "9999px", overflow: "hidden", flexShrink: 0, position: "relative", background: "rgba(0,0,0,0.2)" }, children: urls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: fit || "cover", objectPosition: objectPosition || "center" } }, i)) });
   };
-  const PhonePanel = ({ ui, project, phone, variables, assetResolver, evaluateConditions: evaluateConditions2, onAction, onReply }) => {
+  const PhonePanel = ({ ui, project, phone, variables, assetResolver, evaluateConditions: evaluateConditions2, onAction, onReply, onContactMessage, onContactCall, playTap }) => {
+    var _a;
     const scrollRef = React2.useRef(null);
     React2.useEffect(() => {
       if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -12812,8 +12894,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const bodyFont = ui.phoneFont ? fontSettingsToStyle(ui.phoneFont) : {};
     const titleFont = ui.phoneTitleFont ? fontSettingsToStyle(ui.phoneTitleFont) : {};
     const buttons = (ui.phoneButtons || []).filter((b) => {
-      var _a;
-      return b.show !== false && (!((_a = b.conditions) == null ? void 0 : _a.length) || evaluateConditions2(b.conditions, variables));
+      var _a2;
+      return b.show !== false && (!((_a2 = b.conditions) == null ? void 0 : _a2.length) || evaluateConditions2(b.conditions, variables));
     });
     const batteryPct = ui.phoneBatteryVariableId != null ? Math.max(0, Math.min(100, Number(variables[ui.phoneBatteryVariableId] ?? 100))) : 100;
     const signalBars = Math.max(1, Math.min(8, ui.phoneSignalBars ?? 4));
@@ -12828,6 +12910,60 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const view = phone.view || "chat";
     const showHistory = view === "history";
     const isHome = view === "home";
+    const isContacts = view === "contacts";
+    const contacts = (ui.phoneContacts || []).filter((c) => {
+      var _a2;
+      return !((_a2 = c.conditions) == null ? void 0 : _a2.length) || evaluateConditions2(c.conditions, variables);
+    });
+    const sortedContacts = [...contacts].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+    const activeContactId = phone.activeContactId;
+    const threadMessages = activeContactId ? phone.messages.filter((m) => m.senderId === activeContactId || m.contactId === activeContactId) : phone.messages;
+    const contactAvatarSize = `${ui.phoneContactAvatarSize ?? 2.4}em`;
+    const chatAvatarSize = `${ui.phoneChatAvatarSize ?? 2.2}em`;
+    const activeContact = activeContactId ? (ui.phoneContacts || []).find((c) => c.characterId === activeContactId) : void 0;
+    const resolvePhoneBg = (ref) => {
+      if (!ref) return null;
+      const url = assetResolver(ref.id, ref.type === "video" ? "video" : "image");
+      return url ? { url, isVideo: ref.type === "video" } : null;
+    };
+    const wallpaper = resolvePhoneBg(ui.phoneWallpaperImage);
+    const chatBg = resolvePhoneBg((activeContact == null ? void 0 : activeContact.chatBackground) || ui.phoneChatBackgroundImage);
+    const isChatView = !isHome && !isContacts && !showHistory;
+    const screenBg = (isChatView ? chatBg : null) || wallpaper;
+    const contactsRegion = ui.phoneContactsRegion;
+    const activeContactName = (activeContact == null ? void 0 : activeContact.displayName) || (activeContactId ? (_a = project.characters[activeContactId]) == null ? void 0 : _a.name : "") || "";
+    const lastMessageFor = (cid) => {
+      for (let i = phone.messages.length - 1; i >= 0; i--) {
+        const m = phone.messages[i];
+        if (m.senderId === cid || m.contactId === cid) return m.text;
+      }
+      return "";
+    };
+    const contactsRoster = sortedContacts.length === 0 ? /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.5, textAlign: "center", marginTop: 12, fontSize: "0.8em" }, children: "No contacts" }) : sortedContacts.map((c) => {
+      const char = project.characters[c.characterId];
+      const curls = resolvePhonePortrait(c.avatar, char, assetResolver);
+      const name = c.displayName || (char == null ? void 0 : char.name) || "Unknown";
+      const status = c.statusText ? interpolateVariables(c.statusText, variables, project) : "";
+      const preview = lastMessageFor(c.characterId);
+      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 12, background: ui.phoneContactRowColor || ui.phoneHistoryRowColor || "rgba(255,255,255,0.05)", color: ui.phoneContactTextColor || ui.phoneHistoryTextColor || "#fff" }, children: [
+        ui.phoneShowAvatars !== false && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: curls, size: contactAvatarSize, fit: ui.phoneContactAvatarFit }),
+        /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 600, ...ui.phoneContactNameFont ? fontSettingsToStyle(ui.phoneContactNameFont) : {} }, children: name }),
+          status && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.75, ...ui.phoneContactStatusFont ? fontSettingsToStyle(ui.phoneContactStatusFont) : {} }, children: status }),
+          preview && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: interpolateVariables(preview, variables, project) })
+        ] }),
+        /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 4, flexShrink: 0 }, children: [
+          !c.hideCall && /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
+            playTap();
+            onContactCall(c.characterId);
+          }, title: ui.phoneContactCallLabel || "Call", style: { display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", borderRadius: 9999, border: "none", cursor: "pointer", background: ui.phoneCallAcceptColor || "#22c55e", color: "#fff", fontSize: "0.7em" }, children: "📞" }),
+          !c.hideMessage && /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
+            playTap();
+            onContactMessage(c.characterId);
+          }, title: ui.phoneContactMessageLabel || "Message", style: { display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", borderRadius: 9999, border: "none", cursor: "pointer", background: ui.phoneOutgoingBubbleColor || "#2f6bff", color: "#fff", fontSize: "0.7em" }, children: "💬" })
+        ] })
+      ] }, c.id);
+    });
     return (
       // Casing (phone body): the screen is inset by the bezel so it reads as a separate panel.
       /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: {
@@ -12859,8 +12995,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           border: `1px solid ${ui.phoneScreenBorderColor || "rgba(255,255,255,0.12)"}`,
           background: ui.phoneScreenColor || "#0b0d12",
           ...bodyFont,
-          position: "relative"
+          position: "relative",
+          ...screenBg && !screenBg.isVideo ? { backgroundImage: `url(${screenBg.url})`, backgroundSize: "cover", backgroundPosition: "center" } : {},
+          ...(screenBg == null ? void 0 : screenBg.isVideo) ? { isolation: "isolate" } : {}
         }, children: [
+          (screenBg == null ? void 0 : screenBg.isVideo) && /* @__PURE__ */ jsxRuntime2.jsx(
+            "video",
+            {
+              autoPlay: true,
+              loop: true,
+              muted: true,
+              playsInline: true,
+              style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", zIndex: -1, pointerEvents: "none" },
+              children: /* @__PURE__ */ jsxRuntime2.jsx("source", { src: screenBg.url })
+            },
+            screenBg.url
+          ),
           ui.phoneShowStatusBar !== false && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 14px", fontSize: "0.8em", color: ui.phoneStatusIconColor || "#fff", backgroundColor: ui.phoneStatusBarColor || "transparent", flexShrink: 0 }, children: [
             /* @__PURE__ */ jsxRuntime2.jsx("span", { children: interpolateVariables(ui.phoneClockText || "", variables, project) }),
             /* @__PURE__ */ jsxRuntime2.jsxs("span", { style: { display: "inline-flex", gap: 8, alignItems: "center" }, children: [
@@ -12873,7 +13023,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ] }),
           ui.phoneHeaderText && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { padding: "2px 16px 6px", ...titleFont }, children: ui.phoneHeaderText }),
           /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `@keyframes vn-phone-typing{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-3px);opacity:1}}` }),
-          /* @__PURE__ */ jsxRuntime2.jsx("div", { ref: scrollRef, style: { flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 10px", display: "flex", flexDirection: "column", gap: 8 }, children: isHome ? null : showHistory ? /* @__PURE__ */ jsxRuntime2.jsx(jsxRuntime2.Fragment, { children: phone.callLog && phone.callLog.length > 0 ? [...phone.callLog].reverse().map((entry) => {
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { ref: scrollRef, style: { flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 10px", display: "flex", flexDirection: "column", gap: 8 }, children: isHome ? null : isContacts ? contactsRegion ? null : contactsRoster : showHistory ? /* @__PURE__ */ jsxRuntime2.jsx(jsxRuntime2.Fragment, { children: phone.callLog && phone.callLog.length > 0 ? [...phone.callLog].reverse().map((entry) => {
             const caller = entry.callerId === "player" ? null : project.characters[entry.callerId];
             const purls = resolvePhonePortrait(entry.portrait, caller, assetResolver);
             const icon = entry.status === "missed" ? "↙" : entry.status === "accepted" ? "↗" : "⊘";
@@ -12890,12 +13040,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               ] })
             ] }, entry.id);
           }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.5, textAlign: "center", marginTop: 12, fontSize: "0.8em" }, children: "No recent calls" }) }) : /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
-            phone.messages.map((m) => {
+            activeContactId && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }, children: [
+              /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => onAction({ type: UIActionType.ShowPhoneContacts }), title: "Back to contacts", style: { background: "transparent", border: "none", cursor: "pointer", color: "inherit", fontSize: "1.1em", lineHeight: 1, padding: "0 4px" }, children: "‹" }),
+              /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontWeight: 600, fontSize: "0.85em" }, children: activeContactName })
+            ] }),
+            threadMessages.map((m) => {
               const mine = m.senderId === "player";
               const char = mine ? null : project.characters[m.senderId];
               const portraitUrls = mine ? [] : resolvePhonePortrait(m.portrait, char, assetResolver);
               return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", flexDirection: mine ? "row-reverse" : "row", gap: 6, alignItems: "flex-end" }, children: [
-                ui.phoneShowAvatars !== false && !mine && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: portraitUrls, size: "2.2em" }),
+                ui.phoneShowAvatars !== false && !mine && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: portraitUrls, size: chatAvatarSize, fit: ui.phoneChatAvatarFit }),
                 /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { maxWidth: "76%" }, children: [
                   !mine && (char == null ? void 0 : char.name) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.75, marginBottom: 1, color: char.color }, children: char.name }),
                   /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { padding: "6px 10px", borderRadius: 14, wordBreak: "break-word", background: mine ? ui.phoneOutgoingBubbleColor || "#2f6bff" : ui.phoneIncomingBubbleColor || "#2a2f3a", color: ui.phoneBubbleTextColor || "#fff" }, children: interpolateVariables(m.text, variables, project) })
@@ -12906,26 +13060,33 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               const tchar = phone.typing.senderId === "player" ? null : project.characters[phone.typing.senderId];
               const turls = tchar ? resolvePhonePortrait(void 0, tchar, assetResolver) : [];
               return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 6, alignItems: "flex-end" }, children: [
-                ui.phoneShowAvatars !== false && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: turls, size: "2.2em" }),
+                ui.phoneShowAvatars !== false && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: turls, size: chatAvatarSize, fit: ui.phoneChatAvatarFit }),
                 /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { padding: "8px 12px", borderRadius: 14, background: ui.phoneIncomingBubbleColor || "#2a2f3a", display: "inline-flex", gap: 4, alignItems: "center" }, children: [0, 1, 2].map((i) => /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { width: 6, height: 6, borderRadius: "9999px", background: ui.phoneTypingColor || ui.phoneBubbleTextColor || "#fff", animation: `vn-phone-typing 1s ${i * 0.2}s infinite` } }, i)) })
               ] });
             })(),
             effectiveReplies.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }, children: effectiveReplies.filter((o) => {
-              var _a;
-              return !((_a = o.conditions) == null ? void 0 : _a.length) || evaluateConditions2(o.conditions, variables);
-            }).map((o) => /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => onReply(o), style: { alignSelf: "flex-end", maxWidth: "82%", padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", ...bodyFont, background: ui.phoneOutgoingBubbleColor || "#2f6bff", color: ui.phoneBubbleTextColor || "#fff" }, children: interpolateVariables(o.text, variables, project) }, o.id)) })
+              var _a2;
+              return !((_a2 = o.conditions) == null ? void 0 : _a2.length) || evaluateConditions2(o.conditions, variables);
+            }).map((o) => /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
+              playTap();
+              onReply(o);
+            }, style: { alignSelf: "flex-end", maxWidth: "82%", padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", ...bodyFont, background: ui.phoneOutgoingBubbleColor || "#2f6bff", color: ui.phoneBubbleTextColor || "#fff" }, children: interpolateVariables(o.text, variables, project) }, o.id)) })
           ] }) }),
+          isContacts && contactsRegion && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", left: `${contactsRegion.x}%`, top: `${contactsRegion.y}%`, width: `${contactsRegion.width}%`, height: `${contactsRegion.height}%`, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, padding: "4px 6px", zIndex: 2 }, children: contactsRoster }),
           isHome && ui.phoneButtonLayout === "free" && buttons.map((b) => {
             const customIcon = b.iconImage ? assetResolver(b.iconImage.id, "image") : null;
             return /* @__PURE__ */ jsxRuntime2.jsxs(
               "button",
               {
-                onClick: () => b.action && onAction(b.action),
+                onClick: () => {
+                  playTap();
+                  b.action && onAction(b.action);
+                },
                 title: b.label || "",
-                style: { position: "absolute", left: `${b.x ?? 8}%`, top: `${b.y ?? 12}%`, width: `${b.width ?? 14}%`, height: `${b.height ?? 14}%`, containerType: "size", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4cqmin", background: "transparent", border: "none", cursor: "pointer", color: ui.phoneButtonIconColor || "#cbd5e1", zIndex: 5 },
+                style: { position: "absolute", left: `${b.x ?? 8}%`, top: `${b.y ?? 12}%`, width: `${b.width ?? 14}%`, height: `${b.height ?? 14}%`, containerType: "size", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1cqmin", background: "transparent", border: "none", cursor: "pointer", color: ui.phoneButtonIconColor || "#cbd5e1", zIndex: 5 },
                 children: [
-                  customIcon ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: customIcon, alt: "", style: { width: "64cqmin", height: "64cqmin", objectFit: "contain" } }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "58cqmin", lineHeight: 1 }, children: b.builtinIcon && PHONE_GLYPHS[b.builtinIcon] || "●" }),
-                  b.label && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { whiteSpace: "nowrap", fontSize: "20cqmin", lineHeight: 1 }, children: b.label })
+                  customIcon ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: customIcon, alt: "", style: { width: "82cqmin", height: "82cqmin", objectFit: "contain" } }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "74cqmin", lineHeight: 1 }, children: b.builtinIcon && PHONE_GLYPHS[b.builtinIcon] || "●" }),
+                  b.label && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { whiteSpace: "nowrap", fontSize: "18cqmin", lineHeight: 1 }, children: b.label })
                 ]
               },
               b.id
@@ -12933,18 +13094,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }),
           isHome && ui.phoneButtonLayout !== "free" && buttons.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-around", gap: 4, padding: "6px 4px", backgroundColor: ui.phoneButtonBarColor || "rgba(0,0,0,0.35)", flexShrink: 0 }, children: buttons.map((b) => {
             const customIcon = b.iconImage ? assetResolver(b.iconImage.id, "image") : null;
-            return /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: () => b.action && onAction(b.action), title: b.label || "", style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 2px", background: "transparent", border: "none", cursor: "pointer", color: ui.phoneButtonIconColor || "#cbd5e1", fontSize: "0.7em" }, children: [
+            return /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: () => {
+              playTap();
+              b.action && onAction(b.action);
+            }, title: b.label || "", style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 2px", background: "transparent", border: "none", cursor: "pointer", color: ui.phoneButtonIconColor || "#cbd5e1", fontSize: "0.7em" }, children: [
               customIcon ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: customIcon, alt: "", style: { width: "1.6em", height: "1.6em", objectFit: "contain" } }) : /* @__PURE__ */ jsxRuntime2.jsx(PhoneGlyph, { name: b.builtinIcon }),
               b.label && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { whiteSpace: "nowrap" }, children: b.label })
             ] }, b.id);
           }) })
         ] }),
-        showHome && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", paddingTop: bezel * 0.6 }, children: /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => onAction({ type: isHome ? UIActionType.HidePhone : UIActionType.ShowPhone }), "aria-label": "Home", title: "Home", style: { width: "1.5em", height: "1.5em", borderRadius: "9999px", border: `2px solid ${ui.phoneHomeButtonColor || "rgba(255,255,255,0.28)"}`, background: "transparent", cursor: "pointer", flexShrink: 0 } }) })
+        showHome && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", paddingTop: bezel * 0.6 }, children: /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
+          playTap();
+          onAction({ type: isHome ? UIActionType.HidePhone : UIActionType.ShowPhone });
+        }, "aria-label": "Home", title: "Home", style: { width: "1.5em", height: "1.5em", borderRadius: "9999px", border: `2px solid ${ui.phoneHomeButtonColor || "rgba(255,255,255,0.28)"}`, background: "transparent", cursor: "pointer", flexShrink: 0 } }) })
       ] })
     );
   };
   const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false }) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q;
     const { project } = useProject();
     const toast = useToast();
     const notify = React2.useCallback((message, type = "info") => {
@@ -13597,7 +13764,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           pickedUpItems: saveData.playerStateData.pickedUpItems,
           history: [],
           savedInputs: {},
-          uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: saveData.playerStateData.phone ?? null },
+          uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: saveData.playerStateData.phone ? { ...saveData.playerStateData.phone, outgoingCall: null } : null },
           musicState: saveData.playerStateData.musicState
         });
         setScreenStack([]);
@@ -15323,14 +15490,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             // onEnded/onClick guards) — the 'movie' resolver. Non-wait fullscreen = fire-and-forget.
             case "PlayMovie": {
               const movieUrl = assetResolver(cmd.videoId, "video");
+              const sTrim = resolveVideoTrim(cmd, project.videos[cmd.videoId]);
               if (cmd.displayMode === "overlay") {
                 updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, movieOverlays: [
                   ...p.stageState.movieOverlays || [],
-                  { url: movieUrl || "", loop: cmd.loop ?? false, holdLastFrame: cmd.holdLastFrame ?? false, transition: cmd.transition, transitionDuration: cmd.transitionDuration, commandId: cmd.id, parallaxDepth: cmd.parallaxDepth, x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height, opacity: cmd.opacity, objectFit: cmd.objectFit }
+                  { url: movieUrl || "", loop: cmd.loop ?? false, trimStart: sTrim.start, trimEnd: sTrim.end, holdLastFrame: cmd.holdLastFrame ?? false, transition: cmd.transition, transitionDuration: cmd.transitionDuration, commandId: cmd.id, parallaxDepth: cmd.parallaxDepth, x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height, opacity: cmd.opacity, objectFit: cmd.objectFit }
                 ] } } : p);
                 return;
               }
-              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl, movieLoop: cmd.loop ?? false, movieHoldLastFrame: cmd.holdLastFrame ?? false, movieTransition: cmd.transition, movieTransitionDuration: cmd.transitionDuration, movieExiting: false } } : p);
+              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl, movieLoop: cmd.loop ?? false, movieTrimStart: sTrim.start, movieTrimEnd: sTrim.end, movieHoldLastFrame: cmd.holdLastFrame ?? false, movieTransition: cmd.transition, movieTransitionDuration: cmd.transitionDuration, movieExiting: false } } : p);
               if (cmd.waitsForCompletion !== false && !(cmd.loop ?? false)) {
                 return new Promise((resolve) => {
                   scriptInputResolverRef.current = { kind: "movie", resolve: () => resolve() };
@@ -15662,6 +15830,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               const holdLastFrame = movieCmd.holdLastFrame ?? false;
               const movieTransition = movieCmd.transition;
               const movieTransitionDuration = movieCmd.transitionDuration;
+              const movieTrim = resolveVideoTrim(movieCmd, project.videos[movieCmd.videoId]);
               if (isOverlay) {
                 updatePlayerState((p) => {
                   if (!p) return null;
@@ -15673,6 +15842,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       movieOverlays: [...existing, {
                         url: movieUrl || "",
                         loop: shouldLoop,
+                        trimStart: movieTrim.start,
+                        trimEnd: movieTrim.end,
                         holdLastFrame,
                         transition: movieTransition,
                         transitionDuration: movieTransitionDuration,
@@ -15693,12 +15864,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   instantAdvance = false;
                   updatePlayerState((p) => p ? {
                     ...p,
-                    uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false }
+                    uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false }
                   } : null);
                 } else {
                   updatePlayerState((p) => p ? {
                     ...p,
-                    uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false }
+                    uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false }
                   } : null);
                 }
               }
@@ -16526,7 +16697,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       executeUIAction(action, opts);
     };
     const executeUIAction = (action, opts) => {
-      var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2;
+      var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2;
       if (action.type === UIActionType.StartNewGame) {
         startNewGameWithFade();
       } else if (!playerState && action.type === UIActionType.ContinueGame) {
@@ -16922,12 +17093,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       } else if (action.type === UIActionType.DeleteSave) {
         deleteGameSaveSlot(action.slotNumber);
       } else if (action.type === UIActionType.ShowPhone) {
+        if (project.ui.phoneOpenSoundId && !((_b2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _b2.open)) playSound(project.ui.phoneOpenSoundId, void 0, false);
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "home", notification: null, unread: false } } } : null);
       } else if (action.type === UIActionType.ShowPhoneText) {
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "chat", notification: null, unread: false } } } : null);
       } else if (action.type === UIActionType.ShowPhoneHistory) {
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "history", notification: null, unread: false } } } : null);
+      } else if (action.type === UIActionType.ShowPhoneContacts) {
+        updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "contacts", activeContactId: null, notification: null, unread: false } } } : null);
       } else if (action.type === UIActionType.HidePhone) {
+        if (project.ui.phoneCloseSoundId && ((_c2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _c2.open)) playSound(project.ui.phoneCloseSoundId, void 0, false);
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: false, waiting: false, pendingChoices: void 0, notification: null } } } : null);
         if (project.ui.phoneOnCloseBehavior === "advance" && (playerState == null ? void 0 : playerState.mode) === "playing") {
           updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
@@ -17291,10 +17466,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         runtimeDebugLog("JumpToLabel handler triggered:", {
           targetLabel,
           currentSceneId: playerState.currentSceneId,
-          currentSceneName: (_b2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _b2.name,
+          currentSceneName: (_d2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _d2.name,
           screenSceneId: playerState.uiState.screenSceneId,
           targetSceneId,
-          targetSceneName: (_c2 = project.scenes[targetSceneId]) == null ? void 0 : _c2.name
+          targetSceneName: (_e2 = project.scenes[targetSceneId]) == null ? void 0 : _e2.name
         });
         const targetScene = project.scenes[targetSceneId];
         if (!targetScene) {
@@ -17396,7 +17571,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const savedVariables = {};
         const clearedVariables = [];
         for (const param of ce.parameters || []) {
-          const raw = (_d2 = ccAction.arguments) == null ? void 0 : _d2[param.id];
+          const raw = (_f2 = ccAction.arguments) == null ? void 0 : _f2[param.id];
           overrides[param.id] = raw !== void 0 ? coerceParam(raw, param.type) : param.defaultValue;
           if (Object.prototype.hasOwnProperty.call(playerState.variables, param.id)) savedVariables[param.id] = playerState.variables[param.id];
           else clearedVariables.push(param.id);
@@ -17418,22 +17593,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         });
       } else if (action.type === UIActionType.GiveItem) {
         const a = action;
-        const item = (_e2 = project.items) == null ? void 0 : _e2[a.itemId];
+        const item = (_g2 = project.items) == null ? void 0 : _g2[a.itemId];
         if (item) executeUIAction(item.unique ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 1 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "add", value: a.quantity ?? 1 });
       } else if (action.type === UIActionType.UseItem) {
         const a = action;
-        const item = (_f2 = project.items) == null ? void 0 : _f2[a.itemId];
+        const item = (_h2 = project.items) == null ? void 0 : _h2[a.itemId];
         if (item) {
           if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
           (item.useEffect || []).forEach((eff) => executeUIAction(eff));
         }
       } else if (action.type === UIActionType.DestroyItem) {
         const a = action;
-        const item = (_g2 = project.items) == null ? void 0 : _g2[a.itemId];
+        const item = (_i2 = project.items) == null ? void 0 : _i2[a.itemId];
         if (item) executeUIAction(a.all ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 0 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: a.quantity ?? 1 });
       } else if (action.type === UIActionType.UseSelectedItem) {
-        const selId = (_h2 = playerStateRef.current) == null ? void 0 : _h2.selectedItemId;
-        const item = selId ? (_i2 = project.items) == null ? void 0 : _i2[selId] : void 0;
+        const selId = (_j2 = playerStateRef.current) == null ? void 0 : _j2.selectedItemId;
+        const item = selId ? (_k2 = project.items) == null ? void 0 : _k2[selId] : void 0;
         if (item && item.usable) {
           if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
           (item.useEffect || []).forEach((eff) => executeUIAction(eff));
@@ -17442,7 +17617,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         startCarry(action.itemId);
       } else if (action.type === UIActionType.RestockCollection) {
         const a = action;
-        const collection = (_j2 = project.itemCollections) == null ? void 0 : _j2[a.collectionId];
+        const collection = (_l2 = project.itemCollections) == null ? void 0 : _l2[a.collectionId];
         if (collection) {
           const restocked = computeCollectionRestock(collection, project.variables);
           Object.entries(restocked).forEach(([varId, val]) => {
@@ -17451,12 +17626,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
       } else if (action.type === UIActionType.BuyItem || action.type === UIActionType.SellItem || action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem) {
         const a = action;
-        const collection = (_k2 = project.itemCollections) == null ? void 0 : _k2[a.collectionId];
+        const collection = (_m2 = project.itemCollections) == null ? void 0 : _m2[a.collectionId];
         const isBuy = action.type === UIActionType.BuyItem || action.type === UIActionType.BuySelectedItem;
         const isSelected = action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem;
-        const itemId = isSelected ? (_l2 = playerStateRef.current) == null ? void 0 : _l2.selectedItemId : a.itemId;
+        const itemId = isSelected ? (_n2 = playerStateRef.current) == null ? void 0 : _n2.selectedItemId : a.itemId;
         if (collection && itemId) {
-          const curVars = ((_m2 = playerStateRef.current) == null ? void 0 : _m2.variables) || {};
+          const curVars = ((_o2 = playerStateRef.current) == null ? void 0 : _o2.variables) || {};
           const res = isBuy ? computeBuy(itemId, collection, project, curVars) : computeSell(itemId, collection, project, curVars);
           if (!("blocked" in res)) {
             Object.entries(res.updates).forEach(([varId, val]) => {
@@ -17591,7 +17766,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         if (!p) return null;
         const ph = p.uiState.phone || { open: true, messages: [] };
         const msgs = ph.messages;
-        return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: ph.open ?? true, messages: [...msgs, { id: `reply-${msgs.length}`, senderId: "player", text: reply.text }], waiting: false, pendingChoices: void 0, pendingReplies: void 0 } } };
+        const replyMsg = { id: `reply-${msgs.length}`, senderId: "player", text: reply.text, ...ph.activeContactId ? { contactId: ph.activeContactId } : {} };
+        return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: ph.open ?? true, messages: [...msgs, replyMsg], waiting: false, pendingChoices: void 0, pendingReplies: void 0 } } };
       });
       const acts = reply.actions || [];
       acts.forEach((a) => handleUIAction(a));
@@ -17603,11 +17779,29 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (followUps.length && !navigates) playPhoneFollowUps(followUps, resume);
       else resume();
     };
+    const handleContactMessage = (contactId) => {
+      updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "chat", activeContactId: contactId, notification: null, unread: false } } } : null);
+    };
+    const handleContactCall = (contactId) => {
+      clearPhoneTimers();
+      updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, outgoingCall: { contactId } } } } : null);
+      const contact = (project.ui.phoneContacts || []).find((c) => c.characterId === contactId);
+      if (contact == null ? void 0 : contact.callAction) {
+        pushPhoneTimer(() => {
+          updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: p.uiState.phone ? { ...p.uiState.phone, outgoingCall: null } : p.uiState.phone } } : null);
+          handleUIAction(contact.callAction);
+        }, 1200);
+      }
+    };
+    const endOutgoingCall = () => {
+      clearPhoneTimers();
+      updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: p.uiState.phone ? { ...p.uiState.phone, outgoingCall: null } : p.uiState.phone } } : null);
+    };
     const startIncomingText = (cmd) => {
       const presentation = cmd.presentation || "notify";
       const replies = cmd.replies || [];
       const hasReplies = replies.length > 0;
-      const msg = { id: `it-${Date.now()}`, senderId: cmd.senderId, text: cmd.text, ...cmd.portrait ? { portrait: cmd.portrait } : {} };
+      const msg = { id: `it-${Date.now()}`, senderId: cmd.senderId, text: cmd.text, ...cmd.portrait ? { portrait: cmd.portrait } : {}, ...cmd.senderId !== "player" ? { contactId: cmd.senderId } : {} };
       const ding = cmd.soundId ?? project.ui.phoneNotifSoundId ?? null;
       if (presentation === "notify") {
         updatePlayerState((p) => {
@@ -17860,6 +18054,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     handleUIActionRef.current = handleUIAction;
     React2.useEffect(() => {
       const handleKeyDown = (e) => {
+        var _a2, _b2, _c2;
         if (!playerState) return;
         if ((e.key === " " || e.key === "Enter") && playerState.mode === "playing" && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput) {
           e.preventDefault();
@@ -17888,12 +18083,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const pressed = e.key.toLowerCase();
             if (project.ui.phoneOpenHotkey && project.ui.phoneOpenHotkey.toLowerCase() === pressed) {
               e.preventDefault();
+              const wasOpen = !!((_b2 = (_a2 = playerStateRef.current) == null ? void 0 : _a2.uiState.phone) == null ? void 0 : _b2.open);
+              const opening = !wasOpen;
+              const snd = opening ? project.ui.phoneOpenSoundId : project.ui.phoneCloseSoundId;
+              if (snd) playSound(snd, void 0, false);
               updatePlayerState((p) => {
                 if (!p) return null;
                 const ph = p.uiState.phone || { open: false, messages: [] };
-                const opening = !ph.open;
-                return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: opening, ...opening ? { view: "home", notification: null, unread: false } : {} } } };
+                return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: opening, ...opening ? { view: "home", notification: null, unread: false } : { waiting: false, pendingChoices: void 0, notification: null } } } };
               });
+              if (!opening && project.ui.phoneOnCloseBehavior === "advance" && ((_c2 = playerStateRef.current) == null ? void 0 : _c2.mode) === "playing") {
+                updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+              }
               return;
             }
             const target = Object.values(project.uiScreens).find((s) => !!s.openHotkey && s.openHotkey.toLowerCase() === pressed);
@@ -18113,29 +18314,33 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   const overlays = (p.stageState.movieOverlays || []).filter((o) => o.commandId ? o.commandId !== movie.commandId : o !== movie);
                   return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
                 });
+                const handleOverlayEnded = () => {
+                  if (movie.loop || movie.holdLastFrame) return;
+                  if (exitDur > 0 && !movie.exiting) {
+                    updatePlayerState((p) => {
+                      if (!p) return null;
+                      const overlays = (p.stageState.movieOverlays || []).map((o) => (o.commandId ? o.commandId === movie.commandId : o === movie) ? { ...o, exiting: true } : o);
+                      return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
+                    });
+                    const tid = window.setTimeout(removeOverlay, exitDur * 1e3);
+                    activeEffectTimeoutsRef.current.push(tid);
+                  } else {
+                    removeOverlay();
+                  }
+                };
                 return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "pointer-events-none", style: containerStyle, children: /* @__PURE__ */ jsxRuntime2.jsx(
-                  "video",
+                  TrimmedVideo,
                   {
                     src: movie.url,
                     autoPlay: true,
                     muted: true,
                     loop: movie.loop,
                     playsInline: true,
+                    trimStart: movie.trimStart,
+                    trimEnd: movie.trimEnd,
                     style: { width: "100%", height: "100%", objectFit: videoFit, opacity: movie.exiting ? 0 : mOpacity, transform: innerTransform, transformOrigin: "center", display: "block", transition: movie.exiting ? `opacity ${exitDur}s ease-out` : void 0 },
-                    onEnded: () => {
-                      if (movie.loop || movie.holdLastFrame) return;
-                      if (exitDur > 0 && !movie.exiting) {
-                        updatePlayerState((p) => {
-                          if (!p) return null;
-                          const overlays = (p.stageState.movieOverlays || []).map((o) => (o.commandId ? o.commandId === movie.commandId : o === movie) ? { ...o, exiting: true } : o);
-                          return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
-                        });
-                        const tid = window.setTimeout(removeOverlay, exitDur * 1e3);
-                        activeEffectTimeoutsRef.current.push(tid);
-                      } else {
-                        removeOverlay();
-                      }
-                    }
+                    onSegmentEnd: handleOverlayEnded,
+                    onEnded: handleOverlayEnded
                   }
                 ) }, `movie-overlay-${idx}-${movie.url}`);
               }),
@@ -18774,7 +18979,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ] });
     };
     const renderPlayerUI = () => {
-      var _a2;
       if (!playerState || playerState.mode !== "playing") return null;
       const { uiState } = playerState;
       const currentHudScreenId = hudStack.length > 0 ? hudStack[hudStack.length - 1] : project.ui.gameHudScreenId;
@@ -18790,70 +18994,77 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             onClose: () => updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null)
           }
         ),
-        uiState.movieUrl && /* @__PURE__ */ jsxRuntime2.jsxs(
-          "div",
-          {
-            className: "absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white",
-            style: { opacity: uiState.movieExiting ? 0 : 1, transition: uiState.movieExiting ? `opacity ${movieExitDur}s ease-out` : void 0 },
-            onClick: () => {
-              var _a3;
-              if (((_a3 = scriptInputResolverRef.current) == null ? void 0 : _a3.kind) === "movie") {
-                const r = scriptInputResolverRef.current;
-                scriptInputResolverRef.current = null;
-                updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl: null, movieLoop: false, movieExiting: false } } : null);
-                r.resolve(void 0);
-                return;
-              }
-              if (!uiState.isWaitingForInput) return;
-              updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false } } : null);
-            },
-            children: [
-              /* @__PURE__ */ jsxRuntime2.jsx(
-                "video",
-                {
-                  src: uiState.movieUrl,
-                  autoPlay: true,
-                  playsInline: true,
-                  ref: (el) => {
-                    if (!el) return;
-                    el.play().catch(() => {
-                      el.muted = true;
-                      el.play().catch(() => {
-                      });
-                    });
-                  },
-                  loop: uiState.movieLoop ?? false,
-                  style: { width: "100%", height: "100%", objectFit: "contain", animation: movieEntryAnim(uiState.movieTransition, uiState.movieTransitionDuration) },
-                  onEnded: () => {
-                    var _a3;
-                    if (((_a3 = scriptInputResolverRef.current) == null ? void 0 : _a3.kind) === "movie") {
-                      const r = scriptInputResolverRef.current;
-                      scriptInputResolverRef.current = null;
-                      updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl: null, movieLoop: false, movieExiting: false } } : null);
-                      r.resolve(void 0);
-                      return;
-                    }
-                    if (uiState.movieLoop) return;
-                    if (uiState.movieHoldLastFrame) return;
-                    const wasWaiting = uiState.isWaitingForInput;
-                    if (movieExitDur > 0 && !uiState.movieExiting) {
-                      updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieExiting: true } } : null);
-                      const tid = window.setTimeout(() => {
-                        updatePlayerState((p) => p ? { ...p, ...wasWaiting ? { currentIndex: p.currentIndex + 1 } : {}, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false } } : null);
-                      }, movieExitDur * 1e3);
-                      activeEffectTimeoutsRef.current.push(tid);
-                    } else if (wasWaiting) {
-                      updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false } } : null);
-                    } else {
-                      updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl: null, movieLoop: false } } : null);
-                    }
-                  }
+        uiState.movieUrl && (() => {
+          var _a2;
+          const handleMovieEnded = () => {
+            var _a3;
+            if (((_a3 = scriptInputResolverRef.current) == null ? void 0 : _a3.kind) === "movie") {
+              const r = scriptInputResolverRef.current;
+              scriptInputResolverRef.current = null;
+              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl: null, movieLoop: false, movieExiting: false } } : null);
+              r.resolve(void 0);
+              return;
+            }
+            if (uiState.movieLoop) return;
+            if (uiState.movieHoldLastFrame) return;
+            const wasWaiting = uiState.isWaitingForInput;
+            if (movieExitDur > 0 && !uiState.movieExiting) {
+              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieExiting: true } } : null);
+              const tid = window.setTimeout(() => {
+                updatePlayerState((p) => p ? { ...p, ...wasWaiting ? { currentIndex: p.currentIndex + 1 } : {}, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false } } : null);
+              }, movieExitDur * 1e3);
+              activeEffectTimeoutsRef.current.push(tid);
+            } else if (wasWaiting) {
+              updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false } } : null);
+            } else {
+              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl: null, movieLoop: false } } : null);
+            }
+          };
+          return /* @__PURE__ */ jsxRuntime2.jsxs(
+            "div",
+            {
+              className: "absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white",
+              style: { opacity: uiState.movieExiting ? 0 : 1, transition: uiState.movieExiting ? `opacity ${movieExitDur}s ease-out` : void 0 },
+              onClick: () => {
+                var _a3;
+                if (((_a3 = scriptInputResolverRef.current) == null ? void 0 : _a3.kind) === "movie") {
+                  const r = scriptInputResolverRef.current;
+                  scriptInputResolverRef.current = null;
+                  updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl: null, movieLoop: false, movieExiting: false } } : null);
+                  r.resolve(void 0);
+                  return;
                 }
-              ),
-              (uiState.isWaitingForInput || ((_a2 = scriptInputResolverRef.current) == null ? void 0 : _a2.kind) === "movie") && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute bottom-4 right-4 text-xs opacity-50 pointer-events-none", children: "Click to skip" })
-            ]
-          }
-        ),
+                if (!uiState.isWaitingForInput) return;
+                updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false } } : null);
+              },
+              children: [
+                /* @__PURE__ */ jsxRuntime2.jsx(
+                  TrimmedVideo,
+                  {
+                    src: uiState.movieUrl,
+                    autoPlay: true,
+                    playsInline: true,
+                    trimStart: uiState.movieTrimStart,
+                    trimEnd: uiState.movieTrimEnd,
+                    ref: (el) => {
+                      if (!el) return;
+                      el.play().catch(() => {
+                        el.muted = true;
+                        el.play().catch(() => {
+                        });
+                      });
+                    },
+                    loop: uiState.movieLoop ?? false,
+                    style: { width: "100%", height: "100%", objectFit: "contain", animation: movieEntryAnim(uiState.movieTransition, uiState.movieTransitionDuration) },
+                    onSegmentEnd: handleMovieEnded,
+                    onEnded: handleMovieEnded
+                  }
+                ),
+                (uiState.isWaitingForInput || ((_a2 = scriptInputResolverRef.current) == null ? void 0 : _a2.kind) === "movie") && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute bottom-4 right-4 text-xs opacity-50 pointer-events-none", children: "Click to skip" })
+              ]
+            }
+          );
+        })(),
         activeCreditRoll && /* @__PURE__ */ jsxRuntime2.jsx(
           CreditRollOverlay,
           {
@@ -18883,7 +19094,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         ),
         uiState.dialogue && (!currentHudScreen || shouldShowDialogueOnHud) && /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
           (() => {
-            var _a3, _b2;
+            var _a2, _b2;
             const qmPosition = project.ui.quickMenuPosition ?? "above-dialogue";
             if (qmPosition === "hidden") return null;
             if (uiState.showHistory) return null;
@@ -18898,7 +19109,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const qmRadius = project.ui.quickMenuBorderRadius ?? 4;
             const qmBg = hexToRgba(qmColor, qmOpacity);
             const qmBgDisabled = hexToRgba(qmColor, Math.max(10, qmOpacity - 35));
-            ((_a3 = project.gameResolution) == null ? void 0 : _a3.width) || 1920;
+            ((_a2 = project.gameResolution) == null ? void 0 : _a2.width) || 1920;
             const lpGameH = ((_b2 = project.gameResolution) == null ? void 0 : _b2.height) || 1080;
             const dlgW = project.ui.dialogueBoxWidth ?? 100;
             const dlgH = project.ui.dialogueBoxHeight ? project.ui.dialogueBoxHeight * 100 / lpGameH : 20;
@@ -19679,7 +19890,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           assetResolver,
           evaluateConditions: evaluateConditions2,
           onAction: handleUIAction,
-          onReply: handlePhoneReply
+          onReply: handlePhoneReply,
+          onContactMessage: handleContactMessage,
+          onContactCall: handleContactCall,
+          playTap: () => {
+            if (project.ui.phoneTapSoundId) playSound(project.ui.phoneTapSoundId, void 0, false);
+          }
         }
       ),
       (playerState == null ? void 0 : playerState.mode) === "playing" && ((_l = (_k = playerState.uiState.phone) == null ? void 0 : _k.notification) == null ? void 0 : _l.visible) && !playerState.uiState.phone.open && (() => {
@@ -19728,7 +19944,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         if (call.modal) {
           const bgImg = project.ui.phoneCallBgImage ? assetResolver(project.ui.phoneCallBgImage.id, "image") : null;
           return /* @__PURE__ */ jsxRuntime2.jsxs("div", { onClick: (e) => e.stopPropagation(), style: { position: "absolute", inset: 0, zIndex: 80, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, color: "#fff", background: bgImg ? `url(${bgImg}) center/cover no-repeat` : project.ui.phoneCallBgColor || "rgba(8,10,14,0.96)", animation: "fade-in 0.25s ease-out" }, children: [
-            /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: "22%", aspectRatio: "1", borderRadius: shape === "circle" ? "9999px" : "16px", overflow: "hidden", position: "relative", background: "rgba(255,255,255,0.06)" }, children: curls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" } }, i)) }),
+            /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...project.ui.phoneCallPortraitX != null || project.ui.phoneCallPortraitY != null ? { position: "absolute", left: `${project.ui.phoneCallPortraitX ?? 50}%`, top: `${project.ui.phoneCallPortraitY ?? 18}%` } : { position: "relative" }, width: `${project.ui.phoneCallPortraitSize ?? 22}%`, aspectRatio: "1", borderRadius: shape === "circle" ? "9999px" : "16px", overflow: "hidden", background: "rgba(255,255,255,0.06)" }, children: curls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: project.ui.phoneCallPortraitFit || "cover", objectPosition: project.ui.phoneCallPortraitPosition || "center" } }, i)) }),
             /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { textAlign: "center", ...nameStyle }, children: (cchar == null ? void 0 : cchar.name) || "Unknown" }),
             /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.7, fontSize: "0.9em" }, children: "Incoming call…" }),
             /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 48, marginTop: 8 }, children: [
@@ -19751,7 +19967,25 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ] })
         ] });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_o = playerState.uiState.phone) == null ? void 0 : _o.unread) && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_o = playerState.uiState.phone) == null ? void 0 : _o.outgoingCall) && (() => {
+        const oc = playerState.uiState.phone.outgoingCall;
+        const contact = (project.ui.phoneContacts || []).find((c) => c.characterId === oc.contactId);
+        const ochar = project.characters[oc.contactId];
+        const ourls = resolvePhonePortrait(contact == null ? void 0 : contact.avatar, ochar, assetResolver);
+        const shape = project.ui.phoneCallPortraitShape || "circle";
+        const bgImg = project.ui.phoneCallBgImage ? assetResolver(project.ui.phoneCallBgImage.id, "image") : null;
+        const nameStyle = project.ui.phoneCallNameFont ? fontSettingsToStyle(project.ui.phoneCallNameFont) : { fontSize: "1.5em", fontWeight: 700 };
+        return /* @__PURE__ */ jsxRuntime2.jsxs("div", { onClick: (e) => e.stopPropagation(), style: { position: "absolute", inset: 0, zIndex: 80, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, color: "#fff", background: bgImg ? `url(${bgImg}) center/cover no-repeat` : project.ui.phoneCallBgColor || "rgba(8,10,14,0.96)", animation: "fade-in 0.25s ease-out" }, children: [
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...project.ui.phoneCallPortraitX != null || project.ui.phoneCallPortraitY != null ? { position: "absolute", left: `${project.ui.phoneCallPortraitX ?? 50}%`, top: `${project.ui.phoneCallPortraitY ?? 18}%` } : { position: "relative" }, width: `${project.ui.phoneCallPortraitSize ?? 22}%`, aspectRatio: "1", borderRadius: shape === "circle" ? "9999px" : "16px", overflow: "hidden", background: "rgba(255,255,255,0.06)" }, children: ourls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: project.ui.phoneCallPortraitFit || "cover", objectPosition: project.ui.phoneCallPortraitPosition || "center" } }, i)) }),
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { textAlign: "center", ...nameStyle }, children: (contact == null ? void 0 : contact.displayName) || (ochar == null ? void 0 : ochar.name) || "Unknown" }),
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.7, fontSize: "0.9em" }, children: "Calling…" }),
+          /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: endOutgoingCall, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 6, background: "transparent", border: "none", cursor: "pointer", color: "#fff", fontSize: "0.85em", marginTop: 8 }, children: [
+            /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { width: "3em", height: "3em", borderRadius: "9999px", background: project.ui.phoneCallDeclineColor || "#ef4444", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3em" }, children: "⊘" }),
+            /* @__PURE__ */ jsxRuntime2.jsx("span", { children: "Hang up" })
+          ] })
+        ] });
+      })(),
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_p = playerState.uiState.phone) == null ? void 0 : _p.unread) && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
         const bx = project.ui.phoneBadgeX ?? 95;
         const by = project.ui.phoneBadgeY ?? 4;
         const badge = renderPhoneBadge(project.ui);
@@ -19855,7 +20089,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         /* @__PURE__ */ jsxRuntime2.jsx(
           "img",
           {
-            src: assetResolver(((_p = carriedItem.icon) == null ? void 0 : _p.id) || null, "image") || "",
+            src: assetResolver(((_q = carriedItem.icon) == null ? void 0 : _q.id) || null, "image") || "",
             alt: "",
             draggable: false,
             className: "fixed z-[10052] pointer-events-none select-none",
@@ -20014,7 +20248,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "3.0.0",
+    version: "3.3.2",
     /**
      * Check if the engine is ready
      */

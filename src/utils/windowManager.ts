@@ -20,7 +20,9 @@ export type ManagerWindowType =
   | 'canvas'
   // The In-Game UI editor's canvas and properties, each poppable into its own window.
   | 'ingame-canvas'
-  | 'ingame-properties';
+  | 'ingame-properties'
+  // A dedicated test-play window (the running game in its own window, with a Reload button).
+  | 'testplay';
 
 /** Which focused PANEL windows are currently open (editors hide their matching inline panel). */
 export interface PanelWindowState {
@@ -147,6 +149,14 @@ const WINDOW_CONFIGS: Record<ManagerWindowType, WindowConfig> = {
     title: 'In-Game UI Properties',
     minWidth: 280,
     minHeight: 320
+  },
+  testplay: {
+    type: 'testplay',
+    width: 1280,
+    height: 760,
+    title: 'Test Play',
+    minWidth: 480,
+    minHeight: 360
   }
 };
 

@@ -9,7 +9,7 @@ import { estimateProjectAssetBytes, formatBytes, LARGE_PROJECT_WARN_BYTES, type 
 import { isElectronAssetStore, getProjectAssetSizes } from '../utils/assetStore';
 import { saveRecentProject, getRecentProjectInfo } from './ProjectHub';
 import { GameBuilder } from './GameBuilder';
-import { isManagerWindow, closeAllManagerWindows, onPanelWindowState } from '../utils/windowManager';
+import { isManagerWindow, closeAllManagerWindows, onPanelWindowState, openManagerWindow, isMultiWindowSupported } from '../utils/windowManager';
 import InfoModal from './ui/InfoModal';
 import LoadingOverlay from './ui/LoadingOverlay';
 import ThemeSelector from './ThemeSelector';
@@ -52,6 +52,7 @@ const Header: React.FC<{
     const [showToolsMenu, setShowToolsMenu] = useState(false);
     const [showScriptEditor, setShowScriptEditor] = useState(false);
     const [showPluginManager, setShowPluginManager] = useState(false);
+    const [droppedPluginFile, setDroppedPluginFile] = useState<File | null>(null);
     const [showCompareMerge, setShowCompareMerge] = useState(false);
     const [showExitModal, setShowExitModal] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
@@ -75,6 +76,30 @@ const Header: React.FC<{
     const toast = useToast();
     const { t } = useTranslation(['header', 'common']);
     const isChildWindow = isManagerWindow();
+
+    // Drag-and-drop install: drop a .flourishext / .js / .zip extension file anywhere in the app to
+    // open the Plugin Manager with it queued (→ trust prompt). Only the main editor window listens, and
+    // we only act on extension-file types — other file drops (e.g. asset uploads) are untouched.
+    useEffect(() => {
+        if (isChildWindow) return;
+        const isExtFile = (name: string) => /\.(flourishext|zip|js|txt)$/i.test(name);
+        const hasFiles = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+        const onDragOver = (e: DragEvent) => { if (hasFiles(e)) e.preventDefault(); };
+        const onDrop = (e: DragEvent) => {
+            if (!hasFiles(e)) return;
+            // Stop the browser from navigating to a dropped file (data-loss footgun). Component drop
+            // zones (e.g. AssetManager) handle their own files first via their React onDrop.
+            if (e.defaultPrevented) return;   // already handled by a component drop zone
+            const file = Array.from(e.dataTransfer!.files || []).find(f => isExtFile(f.name));
+            if (!file) { e.preventDefault(); return; }   // ignore non-extension files, but no navigation
+            e.preventDefault();
+            setDroppedPluginFile(file);
+            setShowPluginManager(true);
+        };
+        window.addEventListener('dragover', onDragOver);
+        window.addEventListener('drop', onDrop);
+        return () => { window.removeEventListener('dragover', onDragOver); window.removeEventListener('drop', onDrop); };
+    }, [isChildWindow]);
 
     // When any panel (inspector/canvas/in-game part) is popped out, the main editor is usually shrunk
     // small — so stack the nav tabs ABOVE the action buttons (their own full-width row) instead of
@@ -493,13 +518,24 @@ const Header: React.FC<{
                             {t('common:save')}
                         </button>
                         <div className="flex flex-col gap-0.5">
-                            <button
-                                onClick={onPlay}
-                                className="btn-primary-gradient text-white font-semibold px-3 py-1 rounded-lg flex items-center justify-center gap-1 text-[11px] leading-tight"
-                            >
-                                <PlayIcon className="w-3.5 h-3.5" />
-                                {t('play')}
-                            </button>
+                            <div className="flex gap-0.5">
+                                <button
+                                    onClick={onPlay}
+                                    className="btn-primary-gradient text-white font-semibold px-3 py-1 rounded-lg flex items-center justify-center gap-1 text-[11px] leading-tight flex-1"
+                                >
+                                    <PlayIcon className="w-3.5 h-3.5" />
+                                    {t('play')}
+                                </button>
+                                {isMultiWindowSupported() && (
+                                    <button
+                                        onClick={() => openManagerWindow('testplay')}
+                                        className="btn-primary-gradient text-white px-1.5 py-1 rounded-lg flex items-center justify-center text-[11px] leading-tight"
+                                        title={t('playInWindow', 'Play in a separate window (with Reload)')}
+                                    >
+                                        ⧉
+                                    </button>
+                                )}
+                            </div>
                             <button
                                 onClick={() => setShowBuilder(true)}
                                 className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-semibold px-3 py-1 rounded-lg flex items-center justify-center gap-1 transition-all text-[11px] leading-tight shadow-sm hover:shadow-md hover:shadow-green-500/20"
@@ -638,7 +674,11 @@ const Header: React.FC<{
         )}
         
         {!isChildWindow && showPluginManager && (
-            <PluginManagerUI onClose={() => setShowPluginManager(false)} />
+            <PluginManagerUI
+                onClose={() => setShowPluginManager(false)}
+                initialFile={droppedPluginFile}
+                onInitialFileConsumed={() => setDroppedPluginFile(null)}
+            />
         )}
 
         {!isChildWindow && <ExtensionPanelsHost openIds={openPanelIds} onClose={closeExtensionPanel} />}

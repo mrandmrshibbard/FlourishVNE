@@ -3,6 +3,7 @@ import { useTranslation, Trans } from 'react-i18next';
 import { useProject } from '../contexts/ProjectContext';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
+import VideoTrimFields from './ui/VideoTrimFields';
 import {
     VNCommand, CommandType, DialogueCommand, SetBackgroundCommand, ShowCharacterCommand,
     HideCharacterCommand, ChoiceCommand, SetVariableCommand, TextInputCommand, JumpCommand, ChoiceOption,
@@ -777,6 +778,8 @@ const PropertiesInspector: React.FC<{
                             {movieVideoAssets.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
                         </Select>
                     </FormField>
+                    <VideoTrimFields className="mt-2" start={cmd.trimStart} end={cmd.trimEnd}
+                        onChange={patch => updateCommand(patch)} />
                     <FormField label={t('movie.displayMode')}>
                         <Select value={cmd.displayMode || 'fullscreen'} onChange={e => {
                             const mode = e.target.value as 'fullscreen' | 'overlay';
