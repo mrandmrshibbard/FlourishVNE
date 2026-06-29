@@ -52,12 +52,15 @@
     "sellItem": "Sell Item",
     "buySelectedItem": "Buy Selected Item",
     "sellSelectedItem": "Sell Selected Item",
-    "openPauseMenu": "Open Pause Menu"
+    "openPauseMenu": "Open Pause Menu",
+    "startTimer": "Start Timer",
+    "stopTimer": "Stop Timer"
   },
   "actionsList": {
     "actions": "Actions",
     "add": "Add",
     "noActions": "No actions configured",
+    "runOnlyIf": "Run only if…",
     "selectVariable": "-- Variable --",
     "allVariables": "All Variables",
     "selectAudio": "-- Audio --",

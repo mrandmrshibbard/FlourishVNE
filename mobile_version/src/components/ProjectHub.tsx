@@ -290,7 +290,14 @@ export const ProjectHub: React.FC<{
             const BASE = 'welcome_onboarding_export/';
             const prefixUrl = (url: string | undefined): string | undefined => {
                 if (!url || url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('http')) return url;
-                return url.startsWith('assets/') ? BASE + url : url;
+                if (!url.startsWith('assets/')) return url;
+                // Resolve the bundled demo asset to an ABSOLUTE url (relative to index.html — the same
+                // resolution the browser used to do for the bare relative path). The file-backed asset
+                // resolver (resolveFieldUrl) only rewrites bare `assets/…` refs to flourish-asset://; an
+                // absolute file:/http: url passes through untouched. Without this the demo's bundled paths
+                // were rewritten to a managed-store path that doesn't hold the demo files → broken art
+                // until a save/load externalised them.
+                try { return new URL(BASE + url, window.location.href).href; } catch { return BASE + url; }
             };
 
             if (project.backgrounds) {

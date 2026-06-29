@@ -6,7 +6,8 @@
  * resting store — stage state is never mutated, preventing coordinate corruption.
  */
 
-import { TweenElementCommand } from '../../../features/scene/types';
+import { TweenElementCommand, MoveCharacterCommand } from '../../../features/scene/types';
+import { VNPosition } from '../../../types';
 import { CommandContext, CommandResult } from './types';
 import { TweenManager, TweenableProperties } from '../systems/tweenManager';
 import type { TweenTargetType } from '../systems/tweenManager';
@@ -176,4 +177,49 @@ export function handleTweenElement(
     return {
         advance: !waitForCompletion,
     };
+}
+
+/** Resolve a VNPosition (preset name or {x,y}) to coordinates. */
+function posToCoords(p?: VNPosition): { x: number; y: number } {
+    if (typeof p === 'string') return PRESET_COORDS[p] ?? { x: 50, y: 10 };
+    if (p && typeof p === 'object') return p;
+    return { x: 50, y: 10 };
+}
+
+/**
+ * Handle a MoveCharacter command — a character-first wrapper over the tween system. Animates the
+ * character from point A (its current resting/stage spot, or an explicit `fromPosition`) to point B
+ * (`toPosition`), optionally also tweening scale / opacity / rotation. Runs on the character tween.
+ */
+export function handleMoveCharacter(
+    command: MoveCharacterCommand,
+    context: CommandContext
+): CommandResult {
+    const { advance } = context;
+    const char = context.playerState.stageState.characters[command.characterId];
+    if (!char) return { advance: true }; // not on stage → nothing to move
+
+    const resting = TweenManager.getRestingValues(command.characterId, 'character');
+    const curPos = typeof char.position === 'object' ? char.position : (PRESET_COORDS[char.position] ?? { x: 50, y: 10 });
+    const fromPos = command.fromPosition ? posToCoords(command.fromPosition) : { x: resting?.x ?? curPos.x, y: resting?.y ?? curPos.y };
+    const toPos = posToCoords(command.toPosition);
+
+    const from: TweenableProperties = { x: fromPos.x, y: fromPos.y };
+    const to: TweenableProperties = { x: toPos.x, y: toPos.y };
+    if (command.scale !== undefined) { from.scale = resting?.scale ?? (char as any).scale ?? 1; to.scale = command.scale; }
+    if (command.opacity !== undefined) { from.opacity = resting?.opacity ?? 1; to.opacity = command.opacity; }
+    if (command.rotation !== undefined) { from.rotation = resting?.rotation ?? (char as any).rotation ?? 0; to.rotation = command.rotation; }
+
+    const waitForCompletion = command.waitForCompletion !== false; // default true
+    TweenManager.start({
+        targetId: command.characterId,
+        targetType: 'character',
+        from,
+        to,
+        easing: command.easing || 'easeInOutCubic',
+        duration: command.duration,
+        onComplete: waitForCompletion ? () => advance() : undefined,
+    });
+
+    return { advance: !waitForCompletion };
 }

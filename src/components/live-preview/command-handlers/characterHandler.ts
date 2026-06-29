@@ -11,20 +11,23 @@ function buildCharacterMedia(
   charData: any,
   layerSelections: Record<VNID, VNID | null>,
   wrap: (u: string) => string,
-): { imageUrls: string[]; videoUrls: string[]; hasVideo: boolean; videoLoop: boolean } {
+): { imageUrls: string[]; videoUrls: string[]; videoTrims: Array<{ start?: number; end?: number }>; hasVideo: boolean; videoLoop: boolean } {
   const imageUrls: string[] = [];
   const videoUrls: string[] = [];
+  // Parallel to videoUrls: the base sprite carries its own [start,end] trim; layer asset
+  // videos have no trim field yet → an empty slice (whole video).
+  const videoTrims: Array<{ start?: number; end?: number }> = [];
   let hasVideo = false;
   let videoLoop = false;
-  if (charData.baseVideoUrl) { videoUrls.push(wrap(charData.baseVideoUrl)); hasVideo = true; videoLoop = !!charData.baseVideoLoop; }
+  if (charData.baseVideoUrl) { videoUrls.push(wrap(charData.baseVideoUrl)); videoTrims.push({ start: charData.baseVideoTrimStart, end: charData.baseVideoTrimEnd }); hasVideo = true; videoLoop = !!charData.baseVideoLoop; }
   else if (charData.baseImageUrl) { imageUrls.push(wrap(charData.baseImageUrl)); }
   (Object.values(charData.layers) as VNCharacterLayer[]).forEach(layer => {
     const assetId = layerSelections[layer.id];
     const asset = assetId ? layer.assets[assetId] : null;
-    if (asset?.videoUrl) { videoUrls.push(wrap(asset.videoUrl)); hasVideo = true; videoLoop = videoLoop || !!asset.loop; }
+    if (asset?.videoUrl) { videoUrls.push(wrap(asset.videoUrl)); videoTrims.push({}); hasVideo = true; videoLoop = videoLoop || !!asset.loop; }
     else if (asset?.imageUrl) { imageUrls.push(wrap(asset.imageUrl)); }
   });
-  return { imageUrls, videoUrls, hasVideo, videoLoop };
+  return { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop };
 }
 
 /**
@@ -121,7 +124,7 @@ export function handleShowCharacter(
     }
   });
 
-  const { imageUrls, videoUrls, hasVideo, videoLoop } = buildCharacterMedia(charData, layerSelections, wrap);
+  const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, layerSelections, wrap);
 
   // For slide transitions, use endPosition if specified, otherwise use position
   let finalPosition = command.endPosition || command.position;
@@ -153,6 +156,7 @@ export function handleShowCharacter(
     position: existingSameChar!.position,
     imageUrls: existingSameChar!.imageUrls,
     videoUrls: existingSameChar!.videoUrls,
+    videoTrims: existingSameChar!.videoTrims,
     isVideo: existingSameChar!.isVideo,
     videoLoop: existingSameChar!.videoLoop,
     expressionId: existingSameChar!.expressionId,
@@ -184,6 +188,7 @@ export function handleShowCharacter(
     position: finalPosition,
     imageUrls,
     videoUrls,
+    videoTrims,
     isVideo: hasVideo,
     videoLoop,
     expressionId: command.expressionId,
@@ -356,7 +361,7 @@ export function handleSetCharacterLayer(
       if (!cur) return {};
       const selections: Record<VNID, VNID | null> = { ...(cur.layerSelections || {}) };
       (command.layers || []).forEach(({ layerId, assetId }) => { selections[layerId] = assetId || null; });
-      const { imageUrls, videoUrls, hasVideo, videoLoop } = buildCharacterMedia(charData, selections, wrap);
+      const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, selections, wrap);
       return {
         characters: {
           ...prev.characters,
@@ -364,6 +369,7 @@ export function handleSetCharacterLayer(
             ...cur,
             imageUrls,
             videoUrls,
+            videoTrims,
             isVideo: hasVideo,
             videoLoop,
             layerSelections: selections,

@@ -2,6 +2,7 @@ import { VNProject } from '../../../types/project';
 import { migrateProjectToUnifiedScreens } from '../../../utils/unifiedScreenMigration';
 import { migrateProjectRemoveLegacyCommands } from '../../../utils/legacyCommandMigration';
 import { migrateItemCountVariableBounds, migrateStatVariables, repairOrphanBranchMarkers } from '../../../utils/itemVariableMigration';
+import { migrateInventorySlotButton } from '../../../utils/inventoryElementMigration';
 
 export type ProjectAction_Project =
   | { type: 'SET_PROJECT'; payload: VNProject }
@@ -15,7 +16,7 @@ export const projectReducer = (state: VNProject, action: ProjectAction_Project):
       // unified-screens schema + removal of retired scene commands + item-count
       // min:0 backfill + stat-variable self-heal. All idempotent, so already-migrated
       // projects pass through cheaply.
-      return repairOrphanBranchMarkers(migrateStatVariables(migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload)))));
+      return repairOrphanBranchMarkers(migrateStatVariables(migrateItemCountVariableBounds(migrateInventorySlotButton(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload))))));
 
     case 'UPDATE_PROJECT': {
         return {

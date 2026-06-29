@@ -31,6 +31,8 @@ import ConditionsEditor from '../ui/ConditionsEditor';
 import SearchableSelect from '../ui/SearchableSelect';
 import UIActionsListEditor from '../ui/UIActionsListEditor';
 import { OrientationFields, TransitionFields, PositionInputs, CharacterVisualEffectsEditor } from './fields';
+import { canvasPointPick, useCanvasPointPick } from '../../utils/canvasPointPick';
+import { computeCharacterFitScale } from '../../utils/characterFit';
 import CollapsibleSection from '../ui/CollapsibleSection';
 import { InspectorGroupId, INSPECTOR_GROUPS, getCommandGroups } from './inspectorGroups';
 import { LayerControl, ParallaxDepthControl } from './LayerControl';
@@ -59,6 +61,22 @@ function commandSiblingLayers(project: VNProject, cmdId: string): number[] {
 
 /** Scene context some renderers need (e.g. Hide* target lists = prior matching commands). */
 export interface GroupCtx { sceneId: string; commandIndex: number; }
+
+/** "Pick on canvas" button — arms the canvas point-picker for a command field, then the user
+ *  clicks the scene canvas to set the {x,y}. Toggles (click again to cancel). */
+const CanvasPickButton: React.FC<{ sceneId: string; commandIndex: number; field: string; label: string }> = ({ sceneId, commandIndex, field, label }) => {
+    const active = useCanvasPointPick();
+    const isArmed = !!active && active.sceneId === sceneId && active.commandIndex === commandIndex && active.field === field;
+    return (
+        <button
+            type="button"
+            onClick={() => canvasPointPick.begin({ sceneId, commandIndex, field, label })}
+            className={`mt-1 w-full text-xs px-2 py-1 rounded border transition-colors ${isArmed ? 'bg-[var(--accent-lavender)]/30 border-[var(--accent-lavender)] text-[var(--text-primary)] animate-pulse' : 'bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] border-[var(--border-subtle)] text-[var(--text-secondary)]'}`}
+        >
+            {isArmed ? '◎ Click the canvas… (or click here to cancel)' : `🎯 ${label}`}
+        </button>
+    );
+};
 
 interface GroupProps {
     groupId: InspectorGroupId;
@@ -115,7 +133,7 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
         return <>{<ShowTextGroup groupId={groupId} cmd={command as ShowTextCommand} updateCommand={updateCommand} t={t} />}{layerCtl}</>;
     }
     if (command.type === CommandType.ShowImage) {
-        return <>{<ShowImageGroup groupId={groupId} cmd={command as ShowImageCommand} updateCommand={updateCommand} t={t} />}{layerCtl}</>;
+        return <>{<ShowImageGroup groupId={groupId} cmd={command as ShowImageCommand} updateCommand={updateCommand} project={project} t={t} />}{layerCtl}</>;
     }
     if (command.type === CommandType.ShowCharacter) {
         return <>{<ShowCharacterGroup groupId={groupId} cmd={command as ShowCharacterCommand} updateCommand={updateCommand} project={project} t={t} />}{layerCtl}</>;
@@ -174,6 +192,12 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
     if (command.type === CommandType.TweenElement) {
         return <TweenElementGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} ctx={ctx} />;
     }
+    if (command.type === CommandType.MoveCharacter) {
+        return <MoveCharacterGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} ctx={ctx} />;
+    }
+    if (command.type === CommandType.StartTimer || command.type === CommandType.StopTimer) {
+        return <TimerGroup groupId={groupId} command={command as any} updateCommand={updateCommand} project={project} t={t} />;
+    }
     if (command.type === CommandType.HideText || command.type === CommandType.HideImage || command.type === CommandType.HideButton
         || command.type === CommandType.HideHotSpot) {
         return <HideTargetGroup groupId={groupId} command={command} updateCommand={updateCommand} project={project} t={t} ctx={ctx} />;
@@ -220,15 +244,22 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
         const waitItems = Object.values(project.items || {}) as any[];
         const seedItems = () => (c.targetItemIds && c.targetItemIds.length > 0) ? c.targetItemIds : (waitItems[0] ? [waitItems[0].id] : []);
         return <>
-            <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={c.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 } as any)} disabled={c.waitIndefinitelyForInput || c.waitForItems} /></FormField>
+            <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={c.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 } as any)} disabled={c.waitIndefinitelyForInput || c.waitForItems || c.waitForCondition} /></FormField>
             <FormField label={t('wait.waitMode')}>
                 <div className="space-y-2">
-                    <label className="flex items-center gap-1"><input type="checkbox" checked={!c.waitIndefinitelyForInput && !c.waitForInput && !c.waitForItems} onChange={() => updateCommand({ waitForInput: false, waitIndefinitelyForInput: false, waitForItems: false } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.timed')}</span></label>
-                    <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.waitForInput && !c.waitIndefinitelyForInput && !c.waitForItems} onChange={() => updateCommand({ waitForInput: true, waitIndefinitelyForInput: false, waitForItems: false } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.allowClick')}</span></label>
-                    <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.waitIndefinitelyForInput && !c.waitForItems} onChange={() => updateCommand({ waitIndefinitelyForInput: true, waitForInput: false, waitForItems: false } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.indefinite')}</span></label>
-                    <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.waitForItems} onChange={() => updateCommand({ waitForItems: true, waitForInput: false, waitIndefinitelyForInput: false, targetItemIds: seedItems() } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.untilItems')}</span></label>
+                    <label className="flex items-center gap-1"><input type="checkbox" checked={!c.waitIndefinitelyForInput && !c.waitForInput && !c.waitForItems && !c.waitForCondition} onChange={() => updateCommand({ waitForInput: false, waitIndefinitelyForInput: false, waitForItems: false, waitForCondition: false } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.timed')}</span></label>
+                    <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.waitForInput && !c.waitIndefinitelyForInput && !c.waitForItems && !c.waitForCondition} onChange={() => updateCommand({ waitForInput: true, waitIndefinitelyForInput: false, waitForItems: false, waitForCondition: false } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.allowClick')}</span></label>
+                    <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.waitIndefinitelyForInput && !c.waitForItems && !c.waitForCondition} onChange={() => updateCommand({ waitIndefinitelyForInput: true, waitForInput: false, waitForItems: false, waitForCondition: false } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.indefinite')}</span></label>
+                    <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.waitForItems} onChange={() => updateCommand({ waitForItems: true, waitForInput: false, waitIndefinitelyForInput: false, waitForCondition: false, targetItemIds: seedItems() } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.untilItems')}</span></label>
+                    <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.waitForCondition} onChange={() => updateCommand({ waitForCondition: true, waitForItems: false, waitForInput: false, waitIndefinitelyForInput: false } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.untilCondition', 'Until a condition is true (live)')}</span></label>
                 </div>
             </FormField>
+            {c.waitForCondition && (
+                <div className="pl-2 border-l-2 border-[var(--accent-lavender)]/40 space-y-2">
+                    <p className="text-[10px] text-[var(--text-muted)]">{t('wait.conditionHint', 'Advances as soon as these are met (checked continuously).')}</p>
+                    <ConditionsEditor conditions={c.waitConditions || []} project={project} onChange={(cs) => updateCommand({ waitConditions: cs } as any)} />
+                </div>
+            )}
             {c.waitForItems && (
                 <div className="pl-2 border-l-2 border-[var(--accent-lavender)]/40 space-y-2">
                     <FormField label={t('wait.itemsRequire')}>
@@ -240,6 +271,10 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
                     <div className="space-y-1">
                         {(c.targetItemIds || []).map((id: string, idx: number) => (
                             <div key={idx} className="flex items-center gap-1">
+                                <input type="number" min="1" step="1" title={t('wait.quantity', 'Required amount')} value={(c.targetItemCounts?.[id]) ?? 1}
+                                    onChange={e => { const n = Math.max(1, parseInt(e.target.value, 10) || 1); updateCommand({ targetItemCounts: { ...(c.targetItemCounts || {}), [id]: n } } as any); }}
+                                    className="w-14 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded px-1 py-1 text-xs text-[var(--text-primary)]" />
+                                <span className="text-xs text-[var(--text-muted)]">×</span>
                                 <Select value={id} onChange={e => { const next = [...(c.targetItemIds || [])]; next[idx] = e.target.value; updateCommand({ targetItemIds: next } as any); }}>
                                     {waitItems.length === 0 && <option value="">{t('wait.noItems')}</option>}
                                     {waitItems.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
@@ -692,10 +727,14 @@ const ShowTextGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowTextCommand;
 // ─────────────────────────────────────────────────────────────────────────────
 // ShowImage
 // ─────────────────────────────────────────────────────────────────────────────
-const ShowImageGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowImageCommand; updateCommand: UpdateCommand; t: any }> = ({ groupId, cmd, updateCommand, t }) => {
+const ShowImageGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowImageCommand; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
+    const isVid = !!cmd.imageId && !!(project.videos?.[cmd.imageId] || (project.images?.[cmd.imageId] as any)?.videoUrl || (project.backgrounds?.[cmd.imageId] as any)?.videoUrl);
     switch (groupId) {
         case 'content':
-            return <AssetSelector label={t('image.image')} assetType="images" value={cmd.imageId} onChange={id => updateCommand({ imageId: id || '' } as any)} allowVideo />;
+            return <>
+                <AssetSelector label={t('image.image')} assetType="images" value={cmd.imageId} onChange={id => updateCommand({ imageId: id || '' } as any)} allowVideo />
+                {isVid && <VideoTrimFields className="mt-2" start={(cmd as any).trimStart} end={(cmd as any).trimEnd} onChange={patch => updateCommand(patch as any)} />}
+            </>;
         case 'transform':
             return <>
                 <div className="grid grid-cols-2 gap-1">
@@ -890,6 +929,9 @@ const SetBackgroundGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; update
                     <input type="checkbox" checked={cmd.loop ?? true} onChange={e => updateCommand({ loop: e.target.checked } as any)} className="w-4 h-4" />
                     <span>Loop video <span className="text-[10px]">(videos only; off = play once &amp; hold last frame)</span></span>
                 </label>
+            )}
+            {!useColor && !!cmd.backgroundId && !!(project.videos?.[cmd.backgroundId] || (project.images?.[cmd.backgroundId] as any)?.videoUrl || (project.backgrounds?.[cmd.backgroundId] as any)?.videoUrl) && (
+                <VideoTrimFields className="mt-2" start={cmd.trimStart} end={cmd.trimEnd} onChange={patch => updateCommand(patch as any)} />
             )}
             {/* Parallax depth: drifts the backdrop (slower than foreground visuals). Applies to
                 both the base background and stacked planes. */}
@@ -1748,6 +1790,9 @@ const CreditRollGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCom
                                     </div>
                                 </>}
                                 <FormField label={t('credit.opacity', { value: Math.round((bg.opacity ?? 1) * 100) })}><RangeInput min="0" max="1" step="0.01" value={bg.opacity ?? 1} onChange={e => updateBg(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                                {!!bg.assetId && !!(project.videos?.[bg.assetId] || (project.images?.[bg.assetId] as any)?.videoUrl || (project.backgrounds?.[bg.assetId] as any)?.videoUrl) && (
+                                    <VideoTrimFields className="mt-2" start={(bg as any).trimStart} end={(bg as any).trimEnd} onChange={patch => updateBg(i, patch as any)} />
+                                )}
                             </div>
                         ))}
                     </div>
@@ -1786,6 +1831,9 @@ const CreditRollGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCom
                                     </div>
                                 </>}
                                 <FormField label={t('credit.opacity', { value: Math.round((item.opacity ?? 1) * 100) })}><RangeInput min="0" max="1" step="0.01" value={item.opacity ?? 1} onChange={e => updateMedia(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                                {!!item.assetId && !!(project.videos?.[item.assetId] || (project.images?.[item.assetId] as any)?.videoUrl || (project.backgrounds?.[item.assetId] as any)?.videoUrl) && (
+                                    <VideoTrimFields className="mt-2" start={(item as any).trimStart} end={(item as any).trimEnd} onChange={patch => updateMedia(i, patch as any)} />
+                                )}
                                 <div className="grid grid-cols-2 gap-1 mt-1.5">
                                     <FormField label={t('credit.showAt')}><TextInput type="number" min="0" step="0.5" value={item.showAt} onChange={e => updateMedia(i, { showAt: parseFloat(e.target.value) || 0 })} /></FormField>
                                     <FormField label={t('credit.hideAt')}><TextInput type="number" min="0" step="0.5" value={item.hideAt} onChange={e => updateMedia(i, { hideAt: parseFloat(e.target.value) || 0 })} /></FormField>
@@ -2048,6 +2096,118 @@ const TweenElementGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateC
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MoveCharacter (character-first move A→B; optional scale/opacity/rotation)
+// ─────────────────────────────────────────────────────────────────────────────
+const MoveCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand: UpdateCommand; project: VNProject; t: any; ctx?: GroupCtx }> = ({ groupId, cmd, updateCommand, project, t, ctx }) => {
+    if (groupId !== 'content') return null;
+    const characters = Object.values(project.characters || {}) as any[];
+    const setOpt = (key: string, raw: string) => updateCommand({ [key]: raw === '' ? undefined : (parseFloat(raw) || 0) } as any);
+    return <>
+        <FormField label={t('moveChar.character', 'Character')}>
+            <Select value={cmd.characterId || ''} onChange={e => updateCommand({ characterId: e.target.value } as any)}>
+                {characters.length === 0 && <option value="">{t('moveChar.noCharacters', 'No characters')}</option>}
+                {characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </Select>
+        </FormField>
+
+        {/* Point B (destination) — A defaults to where the character is now. */}
+        <PositionInputs label={t('moveChar.toPosition', 'Move to (point B)')} position={cmd.toPosition || 'center'} onChange={pos => updateCommand({ toPosition: pos } as any)} />
+        {ctx && <CanvasPickButton sceneId={ctx.sceneId} commandIndex={ctx.commandIndex} field="toPosition" label={t('moveChar.pickB', 'Pick point B on canvas')} />}
+
+        {/* Optional explicit start point (point A). Off = animate from the current spot. */}
+        <label className="flex items-center gap-1 mt-2">
+            <input type="checkbox" checked={cmd.fromPosition !== undefined} onChange={e => updateCommand({ fromPosition: e.target.checked ? (cmd.fromPosition || 'center') : undefined } as any)} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
+            <span className="text-sm">{t('moveChar.useFrom', 'Set an explicit start point (otherwise starts where the character is)')}</span>
+        </label>
+        {cmd.fromPosition !== undefined && <>
+            <PositionInputs label={t('moveChar.fromPosition', 'Start from (point A)')} position={cmd.fromPosition || 'center'} onChange={pos => updateCommand({ fromPosition: pos } as any)} />
+            {ctx && <CanvasPickButton sceneId={ctx.sceneId} commandIndex={ctx.commandIndex} field="fromPosition" label={t('moveChar.pickA', 'Pick point A on canvas')} />}
+        </>}
+
+        <FormField label={t('moveChar.duration', 'Duration (seconds)')}><TextInput type="number" min="0.01" step="0.1" value={cmd.duration ?? 1} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 1 } as any)} /></FormField>
+        <FormField label={t('tween.easing')}>
+            <Select value={cmd.easing || 'easeInOutCubic'} onChange={e => updateCommand({ easing: e.target.value } as any)}>
+                {TWEEN_EASING.map(g => <optgroup key={g.group} label={g.group}>{g.options.map(o => <option key={o} value={o}>{o}</option>)}</optgroup>)}
+            </Select>
+        </FormField>
+        <label className="flex items-center gap-1 mt-1">
+            <input type="checkbox" checked={cmd.waitForCompletion !== false} onChange={e => updateCommand({ waitForCompletion: e.target.checked } as any)} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
+            <span className="text-sm">{t('tween.waitForCompletion')}</span>
+        </label>
+
+        {/* Optional extras — leave blank to keep unchanged. */}
+        <div className="mt-2 pt-2 border-t border-[var(--border-subtle)]">
+            <p className="text-[10px] mb-1" style={{ color: 'var(--text-muted)' }}>{t('moveChar.extrasHint', 'Optional — also change these during the move (blank = unchanged):')}</p>
+            <div className="grid grid-cols-3 gap-1">
+                <FormField label={t('moveChar.scale', 'Scale')}><TextInput type="number" min="0.1" step="0.05" value={cmd.scale ?? ''} onChange={e => setOpt('scale', e.target.value)} placeholder="–" /></FormField>
+                <FormField label={t('moveChar.opacity', 'Opacity')}><TextInput type="number" min="0" max="1" step="0.05" value={cmd.opacity ?? ''} onChange={e => setOpt('opacity', e.target.value)} placeholder="–" /></FormField>
+                <FormField label={t('moveChar.rotation', 'Rotation°')}><TextInput type="number" step="1" value={cmd.rotation ?? ''} onChange={e => setOpt('rotation', e.target.value)} placeholder="–" /></FormField>
+            </div>
+            {/* Fit-to-screen presets — fill the scale field with the value that fits the game resolution. */}
+            <div className="flex items-center gap-1 mt-1">
+                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('moveChar.fit', 'Fit:')}</span>
+                <button type="button" onClick={() => updateCommand({ scale: computeCharacterFitScale('height', { width: project.gameResolution?.width || 1920, height: project.gameResolution?.height || 1080 }) } as any)} className="text-[10px] px-2 py-0.5 rounded bg-[var(--bg-secondary)] hover:bg-sky-600/70">{t('moveChar.fitHeight', 'Height')}</button>
+                <button type="button" onClick={() => updateCommand({ scale: computeCharacterFitScale('width', { width: project.gameResolution?.width || 1920, height: project.gameResolution?.height || 1080 }) } as any)} className="text-[10px] px-2 py-0.5 rounded bg-[var(--bg-secondary)] hover:bg-sky-600/70">{t('moveChar.fitWidth', 'Width')}</button>
+                <button type="button" onClick={() => updateCommand({ scale: 1 } as any)} className="text-[10px] px-2 py-0.5 rounded bg-[var(--bg-secondary)] hover:bg-sky-600/70">{t('moveChar.fitReset', '100%')}</button>
+            </div>
+        </div>
+    </>;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StartTimer / StopTimer (variable-backed countdown / stopwatch + on-finish actions)
+// ─────────────────────────────────────────────────────────────────────────────
+const TimerGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, command, updateCommand, project, t }) => {
+    if (groupId !== 'content') return null;
+    const c = command as any;
+    const numberVars = (Object.values(project.variables || {}) as any[]).filter(v => v.type === 'number');
+    if (command.type === CommandType.StopTimer) {
+        return <FormField label={t('timer.idStop', 'Timer to stop (blank = default)')}>
+            <TextInput value={c.timerId || ''} onChange={e => updateCommand({ timerId: e.target.value } as any)} placeholder="default" />
+        </FormField>;
+    }
+    const mode = c.mode === 'stopwatch' ? 'stopwatch' : 'countdown';
+    return <>
+        <FormField label={t('timer.variable', 'Show on a number variable (optional)')}>
+            <SearchableSelect
+                options={[{ value: '', label: t('timer.noneVar', '(none — just run the actions below)') }, ...numberVars.map(v => ({ value: v.id, label: v.name }))]}
+                value={c.variableId || ''}
+                onChange={(v) => updateCommand({ variableId: v } as any)}
+                placeholder={t('timer.pickVar', 'Optional: a number variable to tick')} />
+        </FormField>
+        <p className="text-[10px] -mt-1 mb-1" style={{ color: 'var(--text-muted)' }}>{t('timer.varHint', 'Optional — only needed to show the timer (Meter bar / {var} text / conditions). The timer still runs and fires its actions without it.')}</p>
+        <FormField label={t('timer.mode', 'Mode')}>
+            <Select value={mode} onChange={e => updateCommand({ mode: e.target.value } as any)}>
+                <option value="countdown">{t('timer.countdown', 'Countdown (to 0)')}</option>
+                <option value="stopwatch">{t('timer.stopwatch', 'Stopwatch (count up)')}</option>
+            </Select>
+        </FormField>
+        {mode === 'countdown'
+            ? <FormField label={t('timer.startFrom', 'Count down from (seconds)')}><TextInput type="number" min="1" step="1" value={c.duration ?? 10} onChange={e => updateCommand({ duration: parseInt(e.target.value, 10) || 0 } as any)} /></FormField>
+            : <>
+                <FormField label={t('timer.from', 'Start at (seconds)')}><TextInput type="number" min="0" step="1" value={c.from ?? 0} onChange={e => updateCommand({ from: parseInt(e.target.value, 10) || 0 } as any)} /></FormField>
+                <FormField label={t('timer.cap', 'Stop at (seconds; 0 = run until stopped)')}><TextInput type="number" min="0" step="1" value={c.duration ?? 0} onChange={e => updateCommand({ duration: parseInt(e.target.value, 10) || 0 } as any)} /></FormField>
+            </>}
+        <div className="grid grid-cols-2 gap-1">
+            <FormField label={t('timer.interval', 'Tick every (seconds)')}><TextInput type="number" min="0.1" step="0.1" value={c.interval ?? 1} onChange={e => updateCommand({ interval: parseFloat(e.target.value) || 1 } as any)} /></FormField>
+            <FormField label={t('timer.id', 'Timer id (for Stop Timer)')}><TextInput value={c.timerId || ''} onChange={e => updateCommand({ timerId: e.target.value } as any)} placeholder="default" /></FormField>
+        </div>
+        <label className="flex items-center gap-1 mt-1">
+            <input type="checkbox" checked={!!c.loop} onChange={e => updateCommand({ loop: e.target.checked } as any)} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
+            <span className="text-sm">{t('timer.loop', 'Loop (restart when it finishes)')}</span>
+        </label>
+        <label className="flex items-start gap-1 mt-2">
+            <input type="checkbox" checked={!!c.blockEngine} onChange={e => updateCommand({ blockEngine: e.target.checked || undefined } as any)} className="h-4 w-4 mt-0.5 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
+            <span className="text-sm">{t('timer.blockEngine', 'Pause the story until it finishes')}<br /><span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('timer.blockEngineHint', 'The story waits here, but on-screen buttons/hot spots stay clickable — place buttons for the player to beat the clock. A button that jumps scenes ends it; a Stop Timer button ends it early.')}</span></span>
+        </label>
+        <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{t('timer.tip', 'Tip: bind a Meter element to this variable for a visual bar, or write {VarName} in text.')}</p>
+        <div className="mt-2 pt-2 border-t border-[var(--border-subtle)]">
+            <UIActionsListEditor actions={c.onComplete || []} project={project} onChange={(acts) => updateCommand({ onComplete: acts } as any)} label={t('timer.onComplete', 'When it finishes, run')} />
+        </div>
+    </>;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PlayMovie (video; displayMode/loop/wait; sizing + custom rect; opacity)
 // ─────────────────────────────────────────────────────────────────────────────
 const PlayMovieGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
@@ -2210,6 +2370,33 @@ const ChoiceGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand
             );
         })}
         <button onClick={addOption} className="text-sky-400 hover:text-sky-300 mt-2 flex items-center gap-1 text-xs"><PlusIcon className="w-4 h-4" />{t('choice.addOption')}</button>
+
+        {/* Time-limited choice — optional countdown that auto-resolves on expiry. */}
+        <div className="mt-3 pt-2 border-t border-[var(--border-subtle)]">
+            <FormField label={t('choice.timeLimit', 'Time limit (seconds; 0 = none)')}>
+                <TextInput type="number" min="0" step="1" value={cmd.timeLimit ?? 0} onChange={e => updateCommand({ timeLimit: parseInt(e.target.value, 10) || 0 } as any)} />
+            </FormField>
+            {(cmd.timeLimit ?? 0) > 0 && <>
+                <label className="flex items-center gap-1 mt-1">
+                    <input type="checkbox" checked={cmd.showTimer !== false} onChange={e => updateCommand({ showTimer: e.target.checked } as any)} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
+                    <span className="text-sm">{t('choice.showTimer', 'Show a countdown bar')}</span>
+                </label>
+                <FormField label={t('choice.onTimeout', 'When time runs out')}>
+                    <Select value={cmd.timeoutBehavior || 'option'} onChange={e => updateCommand({ timeoutBehavior: e.target.value } as any)}>
+                        <option value="option">{t('choice.timeoutPick', 'Auto-pick an option')}</option>
+                        <option value="actions">{t('choice.timeoutRun', 'Run actions')}</option>
+                    </Select>
+                </FormField>
+                {(cmd.timeoutBehavior || 'option') === 'option'
+                    ? <FormField label={t('choice.timeoutOption', 'Option to auto-pick')}>
+                        <Select value={cmd.timeoutOptionId || ''} onChange={e => updateCommand({ timeoutOptionId: e.target.value } as any)}>
+                            <option value="">{t('choice.timeoutFirst', '(first available option)')}</option>
+                            {cmd.options.map((o: any, i: number) => <option key={o.id || i} value={o.id}>{o.text || `Option ${i + 1}`}</option>)}
+                        </Select>
+                    </FormField>
+                    : <UIActionsListEditor actions={cmd.timeoutActions || []} project={project} onChange={acts => updateCommand({ timeoutActions: acts } as any)} label={t('choice.timeoutActions', 'Timeout actions')} />}
+            </>}
+        </div>
     </div>;
 };
 
@@ -2469,6 +2656,10 @@ export function summarizeGroup(groupId: InspectorGroupId, command: VNCommand, pr
     if (command.type === CommandType.TweenElement) {
         const c = command as any;
         if (groupId === 'content') return `${c.targetType || '?'} · ${c.duration ?? 1}s`;
+    }
+    if (command.type === CommandType.MoveCharacter) {
+        const c = command as any;
+        if (groupId === 'content') { const to = typeof c.toPosition === 'object' ? `${c.toPosition.x},${c.toPosition.y}` : (c.toPosition || 'center'); return `→ ${to} · ${c.duration ?? 1}s`; }
     }
     if (groupId === 'content') {
         const c = command as any;

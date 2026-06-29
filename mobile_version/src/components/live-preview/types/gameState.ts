@@ -60,6 +60,9 @@ export interface ImageOverlay {
     videoUrl?: string;
     isVideo?: boolean;
     videoLoop?: boolean;
+    /** Play only a [trimStart,trimEnd] slice of the video (seconds). */
+    videoTrimStart?: number;
+    videoTrimEnd?: number;
     x: number;
     y: number;
     width: number;
@@ -134,6 +137,9 @@ export interface ButtonOverlay {
     draggable?: boolean;
     /** The item id this overlay represents (for drag tag lookup), even when giveOnClick is off. */
     dragItemId?: VNID | null;
+    /** Visible/clickable sub-region (inset fractions). For image buttons, restricts the in-game click
+     *  hit-area to the visible art so transparent corners aren't clickable. Additive-optional. */
+    contentBox?: import('../../../types').VNContentBox;
 }
 
 /** An interactive hot spot placed on the scene stage (from a ShowHotSpot command). */
@@ -179,6 +185,8 @@ export interface StageCharacterState {
     videoUrls?: string[];
     isVideo?: boolean;
     videoLoop?: boolean;
+    /** Per-video [start,end] trim (seconds), parallel to videoUrls. The base sprite's slice. */
+    videoTrims?: Array<{ start?: number; end?: number }>;
     transition: StageCharacterTransition | null;
     expressionId?: VNID;
     layerVariableBindings?: Record<VNID, VNID>;
@@ -210,6 +218,9 @@ export interface BackgroundLayer {
     color?: string;
     isVideo?: boolean;
     loop?: boolean;
+    /** Play only a [trimStart,trimEnd] slice of the video (seconds). */
+    trimStart?: number;
+    trimEnd?: number;
     /** Parallax depth for this background candidate (0/undefined = locked). */
     parallaxDepth?: number;
     /** Stacking order of the background vs. stage visuals (default 0 = behind). */
@@ -224,6 +235,9 @@ export interface BackgroundStackPlane {
     color?: string;
     isVideo?: boolean;
     loop?: boolean;
+    /** Play only a [trimStart,trimEnd] slice of the video (seconds). */
+    trimStart?: number;
+    trimEnd?: number;
     parallaxDepth?: number;
     layer?: number;
     /** Entry transition for this plane (plays once on mount). */
@@ -235,6 +249,9 @@ export interface StageState {
     backgroundUrl: string | null;
     backgroundIsVideo?: boolean;
     backgroundLoop?: boolean;
+    /** Play only a [trimStart,trimEnd] slice of the background video (seconds). */
+    backgroundTrimStart?: number;
+    backgroundTrimEnd?: number;
     /** Solid color background (used when backgroundColor is set on the SetBackground command) */
     backgroundColor?: string;
     /** Parallax depth for the scene background (0/undefined = locked). Over-scaled when set so the shift never reveals edges. */
@@ -362,6 +379,13 @@ export interface PlayerState {
         choices: ChoiceOption[] | null;
         /** Layout for the active choice menu (from the Choice command). undefined = vertical stack. */
         choiceLayout?: 'vertical' | 'horizontal' | 'free';
+        /** Time-limited choice config (from the Choice command). When choiceTimeLimit > 0 a countdown
+         *  runs while the choices are shown and auto-resolves on expiry. */
+        choiceTimeLimit?: number;
+        choiceShowTimer?: boolean;
+        choiceTimeoutBehavior?: 'option' | 'actions';
+        choiceTimeoutOptionId?: VNID;
+        choiceTimeoutActions?: import('../../../types/shared').VNUIAction[];
         textInput: {
             variableId: VNID;
             prompt: string;

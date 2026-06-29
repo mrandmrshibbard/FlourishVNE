@@ -4941,5 +4941,6 @@
   },
   "scripts": {},
   "plugins": {},
-  "pluginRegistry": {}
+  "pluginRegistry": {},
+  "assetStorage": "external"
 }

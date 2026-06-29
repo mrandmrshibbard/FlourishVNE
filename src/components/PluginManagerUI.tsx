@@ -5,7 +5,7 @@
  * and configuring plugins in FlourishVNE.
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import JSZip from 'jszip';
 import { useTranslation } from 'react-i18next';
 import { useProject } from '../contexts/ProjectContext';
@@ -183,6 +183,8 @@ const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose, initialFile,
     const [consoleLog, setConsoleLog] = useState<string[]>([]);
     const [pendingInstall, setPendingInstall] = useState<PluginManifest | null>(null);
     const [pendingInstallResources, setPendingInstallResources] = useState<Record<string, string>>({});
+    const updateFileRef = useRef<HTMLInputElement>(null);
+    const dataFileRef = useRef<HTMLInputElement>(null);
 
     const selectedPlugin = selectedPluginId ? (project.plugins || {})[selectedPluginId] : null;
 
@@ -360,6 +362,78 @@ const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose, initialFile,
             setConsoleLog(prev => [...prev, `✖ Bundle export failed: ${err.message}`]);
         }
     }, [project.plugins]);
+
+    // Update an installed plugin in place from a newer version file (.flourishext / .js / .txt). Keeps
+    // the user's settings + stored data (the service requires the SAME plugin id and preserves config).
+    const handleUpdateFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        const pid = selectedPluginId;
+        if (!file || !pid) return;
+        const prevVersion = (project.plugins || {})[pid]?.manifest.version;
+        try {
+            let source: string;
+            let resources: Record<string, string> = {};
+            if (/\.(flourishext|zip)$/i.test(file.name)) {
+                const zip = await JSZip.loadAsync(file);
+                const entry = zip.file('entry.js') || zip.file(/\.js$/i)[0];
+                if (!entry) throw new Error('Bundle has no entry.js');
+                source = await entry.async('string');
+                const tasks: Promise<void>[] = [];
+                zip.forEach((path, zf) => {
+                    if (zf.dir || !path.startsWith('resources/')) return;
+                    const name = path.slice('resources/'.length);
+                    if (!name) return;
+                    tasks.push(zf.async('base64').then(b64 => { resources[name] = `data:${mimeFromName(name)};base64,${b64}`; }));
+                });
+                await Promise.all(tasks);
+            } else {
+                source = await file.text();
+            }
+            const newManifest = pluginManager.updatePlugin(pid, source, project, dispatch, Object.keys(resources).length ? resources : undefined);
+            setConsoleLog(prev => [...prev, `✓ Updated "${newManifest.name}" ${prevVersion ? `v${prevVersion} → ` : ''}v${newManifest.version} (settings & data kept)`]);
+        } catch (err: any) {
+            setConsoleLog(prev => [...prev, `✖ Update failed: ${err.message}`]);
+        }
+    }, [selectedPluginId, project, dispatch, pluginManager]);
+
+    // Export a plugin's stored DATA (project.pluginStorage[id]) to a JSON file — e.g. a Story Bible —
+    // so it can be carried into another project. Generic: works for any plugin's storage bucket.
+    const handleExportData = useCallback((pluginId: string) => {
+        const bucket = (project.pluginStorage || {})[pluginId] || {};
+        try {
+            const payload = { flourishPluginData: true, pluginId, data: bucket };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${pluginId}.data.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            setConsoleLog(prev => [...prev, `✓ Exported data for "${pluginId}" (${Object.keys(bucket).length} keys)`]);
+        } catch (err: any) {
+            setConsoleLog(prev => [...prev, `✖ Export data failed: ${err.message}`]);
+        }
+    }, [project.pluginStorage]);
+
+    // Import a plugin-data JSON file into the selected plugin's storage (merge by key, per-key dispatch).
+    const handleImportData = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        const pid = selectedPluginId;
+        if (!file || !pid) return;
+        try {
+            const parsed = JSON.parse(await file.text());
+            // Accept either our wrapper { data: {...} } or a raw bucket {...}.
+            const data = (parsed && typeof parsed === 'object' && parsed.data && typeof parsed.data === 'object') ? parsed.data : parsed;
+            if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Not a plugin-data file');
+            const keys = Object.keys(data);
+            keys.forEach(key => dispatch({ type: 'SET_PLUGIN_STORAGE', payload: { pluginId: pid, key, value: (data as any)[key] } }));
+            setConsoleLog(prev => [...prev, `✓ Imported data into "${pid}" (${keys.length} keys merged)`]);
+        } catch (err: any) {
+            setConsoleLog(prev => [...prev, `✖ Import data failed: ${err.message}`]);
+        }
+    }, [selectedPluginId, project, dispatch]);
 
     // Attach resource files to an installed extension (so an Export bundles them).
     const handleAddResources = useCallback(async (pluginId: string, files: FileList | null) => {
@@ -769,6 +843,29 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                         >
                             {t('pluginManager.detailsExportBundle', 'Export .flourishext')}
                         </button>
+                        <button
+                            onClick={() => updateFileRef.current?.click()}
+                            className="text-xs px-3 py-1.5 rounded bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 transition-colors"
+                            title={t('pluginManager.detailsUpdateHint', 'Replace with a newer version file — keeps your settings & data')}
+                        >
+                            {t('pluginManager.detailsUpdate', 'Update…')}
+                        </button>
+                        <input ref={updateFileRef} type="file" accept=".js,.txt,.flourishext,.zip" onChange={handleUpdateFile} className="hidden" />
+                        <button
+                            onClick={() => handleExportData(m.id)}
+                            className="text-xs px-3 py-1.5 rounded bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 transition-colors"
+                            title={t('pluginManager.detailsExportDataHint', "Export this plugin's saved data (e.g. a Story Bible) to a file")}
+                        >
+                            {t('pluginManager.detailsExportData', 'Export data')}
+                        </button>
+                        <button
+                            onClick={() => dataFileRef.current?.click()}
+                            className="text-xs px-3 py-1.5 rounded bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 transition-colors"
+                            title={t('pluginManager.detailsImportDataHint', "Import saved data into this plugin (merges by key)")}
+                        >
+                            {t('pluginManager.detailsImportData', 'Import data')}
+                        </button>
+                        <input ref={dataFileRef} type="file" accept=".json" onChange={handleImportData} className="hidden" />
                         <button
                             onClick={() => { handleUninstallPlugin(m.id); setActiveTab('installed'); }}
                             className="text-xs px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-300 transition-colors"

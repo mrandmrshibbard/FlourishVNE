@@ -1,6 +1,7 @@
 import React, { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import Panel from '../ui/Panel';
+import TrimmedVideo from '../ui/TrimmedVideo';
 import { useProject } from '../../contexts/ProjectContext';
 import { useToast } from '../../contexts/ToastContext';
 import { VNID } from '../../types';
@@ -9,6 +10,10 @@ import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISett
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import { UIActionType } from '../../types/shared';
 import ResizableDraggable from './ResizableDraggable';
+import CanvasSnapGuides from './CanvasSnapGuides';
+import ContentBoxEditor from './ContentBoxEditor';
+import { SnapRect, SnapGuide, insetRect } from '../../utils/canvasSnap';
+import { computeAlphaBounds } from '../../utils/alphaBounds';
 import { createUIElement, createCustomUIElement } from '../../utils/uiElementFactory';
 import { pluginManager } from '../../features/plugins/PluginManagerService';
 import { useExtensionUIElementTypes } from '../ExtensionPanelsHost';
@@ -94,7 +99,9 @@ const FreeSlotHandles: React.FC<{
     onSelectSlot: (index: number, e: React.MouseEvent) => void;
     onUpdateSlot: (index: number, rect: { x: number; y: number; width: number; height: number }) => void;
     onContextMenu: (e: React.MouseEvent) => void;
-}> = ({ element, parentSize, isElementSelected, focusedSlot, onSelectSlot, onUpdateSlot, onContextMenu }) => {
+    snapEnabled?: boolean;
+    onGuides?: (g: SnapGuide[]) => void;
+}> = ({ element, parentSize, isElementSelected, focusedSlot, onSelectSlot, onUpdateSlot, onContextMenu, snapEnabled, onGuides }) => {
     const isSave = element.type === UIElementType.SaveSlotGrid;
     const allRects = element.slotRects || [];
     // Save grids cap visible slots at slotCount (the engine does too); galleries show every placed box.
@@ -118,6 +125,9 @@ const FreeSlotHandles: React.FC<{
                         onContextMenu={onContextMenu}
                         zIndex={layer}
                         snapGrid={1}
+                        snapEnabled={snapEnabled}
+                        siblings={rects.filter((_, j) => j !== i).filter(Boolean).map(r => ({ x: r!.x, y: r!.y, width: r!.width, height: r!.height }))}
+                        onGuides={onGuides}
                         label={isSave ? `Slot ${i + 1}` : `CG ${i + 1}`}
                     >
                         <FreeSlotPreview element={element} index={i} ring={isElementSelected && !focused} />
@@ -371,16 +381,18 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
              // Build image/video arrays similar to LivePreview rendering
              const imageUrls: string[] = [];
              const videoUrls: string[] = [];
+             const videoTrims: Array<{ start?: number; end?: number }> = [];
              let hasVideo = false;
-             
+
              // Add base
              if (char.baseVideoUrl) {
                  videoUrls.push(char.baseVideoUrl);
+                 videoTrims.push({ start: (char as any).baseVideoTrimStart, end: (char as any).baseVideoTrimEnd });
                  hasVideo = true;
              } else if (char.baseImageUrl) {
                  imageUrls.push(char.baseImageUrl);
              }
-             
+
              // Add layers from first expression (for preview purposes)
              const firstExpr = Object.values(char.expressions)[0];
              if (firstExpr && firstExpr.layerConfiguration) {
@@ -390,6 +402,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                          const asset = layer.assets[assetId];
                          if (asset?.videoUrl) {
                              videoUrls.push(asset.videoUrl);
+                             videoTrims.push({});
                              hasVideo = true;
                          } else if (asset?.imageUrl) {
                              imageUrls.push(asset.imageUrl);
@@ -401,14 +414,16 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
              return <div className="w-full h-full border-2 border-dashed border-[var(--accent-purple)] flex items-center justify-center relative overflow-hidden bg-black/20">
                  {hasVideo && videoUrls.length > 0 ? (
                      videoUrls.map((url, i) => (
-                         <video 
+                         <TrimmedVideo
                              key={i}
-                             src={url} 
-                             autoPlay 
-                             muted 
-                             loop 
+                             src={url}
+                             autoPlay
+                             muted
+                             loop
+                             trimStart={videoTrims[i]?.start}
+                             trimEnd={videoTrims[i]?.end}
                              playsInline
-                             className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none" 
+                             className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none"
                              style={{ zIndex: i }}
                          />
                      ))
@@ -767,6 +782,27 @@ const MenuEditor: React.FC<{
     // Which individual free-placement slot is focused (shows resize handles), as `${elementId}:${index}`.
     const [freeSlotFocus, setFreeSlotFocus] = useState<string | null>(null);
 
+    // Smart-snap: toggle (editor-only, default ON) + live alignment-guide lines for the canvas.
+    const [snapEnabled, setSnapEnabled] = useState(false);
+    const [menuSnapGuides, setMenuSnapGuides] = useState<SnapGuide[]>([]);
+
+    // Every element's VISUAL top-left rect (% of canvas) — the sibling set for alignment snapping.
+    const elementRects = React.useMemo(() => {
+        const map = new Map<string, SnapRect>();
+        for (const el of Object.values(screen?.elements || {}) as VNUIElement[]) {
+            const e = el as any;
+            const w = e.width ?? 0, h = e.height ?? 0, ax = e.anchorX ?? 0, ay = e.anchorY ?? 0;
+            // Present the element's VISIBLE region (content box) as the snap target when one is set.
+            map.set(el.id, insetRect({ x: (e.x ?? 0) - ax * w, y: (e.y ?? 0) - ay * h, width: w, height: h }, e.contentBox));
+        }
+        return map;
+    }, [screen?.elements]);
+    const siblingsFor = useCallback((id: string): SnapRect[] => {
+        const out: SnapRect[] = [];
+        elementRects.forEach((r, k) => { if (k !== id) out.push(r); });
+        return out;
+    }, [elementRects]);
+
     // Defer rendering elements to give the browser time to settle
     const [isReady, setIsReady] = useState(false);
     useEffect(() => {
@@ -935,6 +971,30 @@ const MenuEditor: React.FC<{
 
     const handleUpdateElement = (elementId: VNID, updates: Partial<VNUIElement>) => {
         dispatch({ type: 'UPDATE_UI_ELEMENT', payload: { screenId: activeScreenId, elementId, updates } });
+    };
+
+    // Resolve the displayed image url of an image/button element (for "Trim to visible edges").
+    const elementImageUrl = (el: VNUIElement): string | undefined => {
+        const e = el as any;
+        if (el.type === UIElementType.Button) {
+            const img = e.image as { type: 'image' | 'video'; id: VNID } | null;
+            if (!img?.id || img.type === 'video') return undefined;
+            return project.images[img.id]?.imageUrl || project.backgrounds[img.id]?.imageUrl || undefined;
+        }
+        if (el.type === UIElementType.Image) {
+            const bg = e.background;
+            if (bg?.type === 'color') return undefined;
+            const id = bg?.assetId || e.image?.id;
+            if (!id || (bg && bg.type === 'video')) return undefined;
+            return project.images[id]?.imageUrl || project.backgrounds[id]?.imageUrl || undefined;
+        }
+        return undefined;
+    };
+    const trimElementContentBox = async (el: VNUIElement, boxAspect: number) => {
+        const url = elementImageUrl(el);
+        if (!url) return;
+        const box = await computeAlphaBounds(url, { boxAspect });
+        if (box) handleUpdateElement(el.id, { contentBox: box } as Partial<VNUIElement>);
     };
 
     /** Patch a single free-placement slot rect by index, preserving the others. Only one slot
@@ -1155,13 +1215,24 @@ const MenuEditor: React.FC<{
                         '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1,
                     } as React.CSSProperties}
                 >
+                    {/* Smart-snap toggle + live alignment guides. */}
+                    <button
+                        onMouseDown={(e) => { e.stopPropagation(); setSnapEnabled(s => !s); }}
+                        title={t('menuEditor.snapTip', 'Smart snapping to edges, centers & other elements. Hold Alt while dragging to place freely.')}
+                        className={`absolute top-1 left-1 px-2 py-0.5 rounded text-[10px] font-medium border ${snapEnabled ? 'bg-sky-500/80 border-sky-400/50 text-white' : 'bg-slate-800/80 border-slate-600/50 text-slate-200'}`}
+                        style={{ zIndex: 99999 }}
+                    >
+                        {t('menuEditor.snap', 'Snap')}
+                    </button>
+                    <CanvasSnapGuides guides={menuSnapGuides} />
+
                     {/* Main video background — CSS can't show a video, so render a real <video>.
                         Dropped while Test Play is open (it's covered by the overlay): the browser
                         evicts an offscreen video behind a fullscreen overlay and won't re-fire
                         autoPlay, leaving it broken/blank on return — so we unmount it during play
                         and let it mount fresh when the editor is shown again. */}
                     {mainBgVideoUrl && !isPlaying && (
-                        <video key={`mainbg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={mainBgVideoUrl} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" style={{ zIndex: 0, transform: mainBgParallax ? 'scale(1.15)' : undefined, transformOrigin: 'center' }} />
+                        <TrimmedVideo key={`mainbg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={mainBgVideoUrl} autoPlay loop muted trimStart={(screen.background as any)?.trimStart} trimEnd={(screen.background as any)?.trimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" style={{ zIndex: 0, transform: mainBgParallax ? 'scale(1.15)' : undefined, transformOrigin: 'center' }} />
                     )}
 
                     {/* Parallaxed image main background — scaled layer mirroring the engine's over-scale. */}
@@ -1194,7 +1265,7 @@ const MenuEditor: React.FC<{
                         return (
                             <div key={b.id} className="absolute inset-0 overflow-hidden" style={{ zIndex: b.layer ?? 0 }}>
                                 {planeIsVideo
-                                    ? (!isPlaying && <video key={`v-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={url} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" style={planeScale} />)
+                                    ? (!isPlaying && <TrimmedVideo key={`v-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={url} autoPlay loop muted trimStart={(b.background as any)?.trimStart} trimEnd={(b.background as any)?.trimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" style={planeScale} />)
                                     : <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover" style={planeScale} />}
                             </div>
                         );
@@ -1223,6 +1294,8 @@ const MenuEditor: React.FC<{
                                     }}
                                     onUpdateSlot={(idx, rect) => handleUpdateSlotRect(element.id, idx, rect)}
                                     onContextMenu={(e) => handleElementContextMenu(element.id, e)}
+                                    snapEnabled={snapEnabled}
+                                    onGuides={setMenuSnapGuides}
                                 />
                             );
                         }
@@ -1242,6 +1315,18 @@ const MenuEditor: React.FC<{
                                 onContextMenu={(e) => handleElementContextMenu(element.id, e)}
                                 zIndex={(element as any).layer ?? 0}
                                 snapGrid={1}
+                                snapEnabled={snapEnabled}
+                                siblings={siblingsFor(element.id)}
+                                onGuides={setMenuSnapGuides}
+                                contentBox={(element as any).contentBox}
+                                overlay={selectedElementIds.includes(element.id) && (element.type === UIElementType.Button || element.type === UIElementType.Image) ? (
+                                    <ContentBoxEditor
+                                        box={(element as any).contentBox}
+                                        onChange={b => handleUpdateElement(element.id, { contentBox: b } as Partial<VNUIElement>)}
+                                        onTrim={elementImageUrl(element) ? (aspect) => trimElementContentBox(element, aspect) : undefined}
+                                        onReset={() => handleUpdateElement(element.id, { contentBox: undefined } as Partial<VNUIElement>)}
+                                    />
+                                ) : undefined}
                             >
                                 <SafeUIElementRenderer element={element} project={project} />
                             </ResizableDraggable>

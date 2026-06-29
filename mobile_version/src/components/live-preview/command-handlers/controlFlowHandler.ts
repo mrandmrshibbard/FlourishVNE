@@ -62,29 +62,74 @@ export function handleJump(command: JumpCommand, context: CommandContext): Comma
 }
 
 /**
- * Handles jumping to a labeled position within the current scene
+ * Handles jumping to a labeled position. Searches the CURRENT scene first (so a label name
+ * that exists in several scenes resolves locally, preserving the old behavior), then falls
+ * back to scanning every other scene — when the match lives elsewhere we switch scenes
+ * (clearing stage/UI state like a scene Jump) so "Jump to Label" works across scenes.
  */
 export function handleJumpToLabel(
   command: JumpToLabelCommand,
   context: CommandContext
 ): CommandResult {
-  const { playerState } = context;
-  
-  const labelIndex = playerState.currentCommands.findIndex(
-    (c) => c.type === CommandType.Label && (c as LabelCommand).labelId === command.labelId
-  );
-  
-  if (labelIndex === -1) {
-    console.warn(`Label not found: ${command.labelId}`);
-    return { advance: true };
+  const { project, playerState } = context;
+
+  const matchesLabel = (c: any) =>
+    c.type === CommandType.Label && (c as LabelCommand).labelId === command.labelId;
+
+  // 1. Current scene — same-scene jump keeps execution in place (no stage reset).
+  const localIndex = playerState.currentCommands.findIndex(matchesLabel);
+  if (localIndex !== -1) {
+    return { advance: false, updates: { currentIndex: localIndex } };
   }
 
-  return {
-    advance: false, // Don't advance after jump
-    updates: {
-      currentIndex: labelIndex,
-    },
-  };
+  // 2. Other scenes — find the first scene that defines this label and switch to it.
+  for (const [sceneId, scene] of Object.entries(project.scenes || {})) {
+    if (sceneId === playerState.currentSceneId) continue;
+    const idx = scene.commands.findIndex(matchesLabel);
+    if (idx === -1) continue;
+    return {
+      advance: false,
+      updates: {
+        currentSceneId: sceneId,
+        currentCommands: scene.commands,
+        currentIndex: idx,
+        commandStack: [],
+        // Clear stage state for the new scene (mirrors handleJump).
+        stageState: {
+          backgroundUrl: null,
+          characters: {},
+          textOverlays: [],
+          imageOverlays: [],
+          buttonOverlays: [],
+          movieOverlays: [],
+          screen: {
+            shake: { active: false, intensity: 0 },
+            tint: 'transparent',
+            zoom: 1,
+            panX: 0,
+            panY: 0,
+            transitionDuration: 0.5,
+            overlayEffects: []
+          }
+        },
+        uiState: {
+          dialogue: null,
+          choices: null,
+          textInput: null,
+          movieUrl: null,
+          isWaitingForInput: false,
+          isTransitioning: false,
+          transitionElement: null,
+          flash: null,
+          showHistory: false,
+          screenSceneId: null
+        }
+      },
+    };
+  }
+
+  console.warn(`Label not found: ${command.labelId}`);
+  return { advance: true };
 }
 
 /**

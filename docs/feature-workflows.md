@@ -38,6 +38,10 @@ This guide covers **multi-step workflows** — features that require working acr
 30. [Layering & Parallax Depth](#30-layering--parallax-depth)
 31. [Keep Character Expressions in Place](#31-keep-character-expressions-in-place)
 32. [Variables, Conditions & the Live Variable Tracker](#32-variables-conditions--the-live-variable-tracker)
+33. [Interactive Hot Spots (Scenes & Screens)](#33-interactive-hot-spots-scenes--screens)
+34. [Inventory, Items & Stats — the Systems Hub](#34-inventory-items--stats--the-systems-hub)
+35. [The In-Game Phone (Overview — Work in Progress)](#35-the-in-game-phone-overview--work-in-progress)
+36. [Interactive Elements (Clickable & Draggable Images, Buttons & Regions)](#36-interactive-elements-clickable--draggable-images-buttons--regions)
 
 ---
 
@@ -1751,3 +1755,238 @@ This tracker is an editor-only helper. It is never shown in your exported or sta
 ### A note on hidden (internal) variables
 
 Some variables are created and managed automatically by other systems — for example the per-list stock count behind a shop. These are flagged as internal and are **hidden from the Variables list** so it stays calm. They still work everywhere by name: you can reference them in conditions, show them in text with `{name}`, and change them with Set Variable. You'll also see them in the live Variable Tracker during test-play.
+
+---
+
+## 33. Interactive Hot Spots (Scenes & Screens)
+
+**Tabs involved:** Scenes (Show Hot Spot command) and/or UI/Screens (Screen Properties → Interactivity)
+
+A **Hot Spot** is an invisible (or lightly highlighted) region you place on top of a background or screen. When the player **clicks**, **hovers**, or **drops something onto** that region, it runs the actions you choose. Hot Spots are FlourishVNE's point-and-click tool — they are how you make a "click the door to go inside," "hover the painting for a hint," or "drag the key onto the lock" interaction.
+
+> **Tip:** A Hot Spot is an *invisible* region. If you instead want a **visible** clickable or draggable thing — an image, a button, or one picture with many clickable areas — use an **Interactive Element** (see [section 36](#36-interactive-elements-clickable--draggable-images-buttons--regions)).
+
+There are **two kinds**, and they work the same way:
+
+- **Scene Hot Spot** — a temporary spot that lives in the story timeline. Use it when a spot should appear at a certain moment and go away later.
+- **Screen Hot Spot** — a permanent spot that's part of a UI screen. Use it for map screens, inventory backdrops, or any always-present clickable area.
+
+### Step 1: Add a Hot Spot
+
+**On a scene (story timeline):**
+
+1. Open the **Scenes** tab and select the scene.
+2. In the command palette, open the **UI Elements** category and drag **Show Hot Spot** into your command list.
+3. Position and size it on the stage canvas, or with the X / Y / Width / Height fields in its properties.
+4. Add a **Hide Hot Spot** command later if you want to remove it (it targets the Show Hot Spot by its command).
+
+**On a UI screen (permanent):**
+
+1. Open the **UI/Screens** tab and select a screen.
+2. In the **Screen Properties** inspector on the right, open the **Interactivity** section and click **Add Hot Spot**.
+3. Drag and resize the new spot on the screen canvas.
+
+### Step 2: Choose its shape, visibility, and trigger
+
+In the Hot Spot's properties you can set:
+
+- **Shape** — **Rectangle** or **Circle**.
+- **Visible / highlight** — by default a Hot Spot is **invisible** in the game (the player just sees the background). Turn on its highlight and pick a **highlight color** if you want the region to be visibly tinted (handy for accessibility or a "things you can click glow" style). Invisible spots still show on the editor canvas so you can position them.
+- **Trigger** — what activates it:
+  - **Click** — fires when the player clicks the region (the most common).
+  - **Hover** — fires when the pointer moves over it (good for tooltips/peeks).
+  - **Drop** — fires when the player **drops a dragged object or carried item** onto it (see Step 4).
+- **Advance on trigger** (scene Hot Spots) — when on, activating the spot also advances the story to the next command.
+
+### Step 3: Give it actions (and optional conditions)
+
+1. Open the Hot Spot's **Actions** list and add one or more actions — the same action set buttons use: **Jump to Scene**, **Set Variable**, **Give Item**, **Show Screen**, **Play Sound**, **Call Common Event**, and so on.
+2. (Optional) Add **Conditions** so the spot only works when they're met — for example, a door spot that only opens once `HasKey is on`.
+
+> **Tip:** Because Hot Spots run the full action list, one spot can do several things at once — e.g. *Set Variable `DoorOpen` = on*, *Play Sound (creak)*, then *Jump to Scene (Hallway)*.
+
+### Step 4: Drag-and-drop interactions (tags & carried items)
+
+Hot Spots with the **Drop** trigger are drop zones. There are three ways to deliver something to them, all matched by a shared **tag** system so the right object lands on the right spot:
+
+- **Drag a screen object onto a spot** — give a draggable screen element a **Drag tag** (in its Behavior section), and give the drop-zone Hot Spot an **Accept objects tagged** value. A drop only succeeds when the tags match (or when you list the specific element in the spot's *Accepted Elements*). Example: tag every key element `key` and set the lock spot to accept `key`, so any key works; tag only the correct key to make just that one work.
+- **Carry an item from the inventory** — mark an item **"Use by carrying it onto the scene"** (Systems → Items) and give it a **Drag tag**. In-game, the player clicks the item's **Use**, the item attaches to the cursor (the inventory closes), and they click a Hot Spot to use it there. If the item's tag matches the spot, the item is consumed (unless you made it reusable) and the spot's drop actions run.
+- **Drag a scene item icon** — a **Show Item** command can be marked **"Player can drag it onto a hot spot"**, letting the on-scene item be dragged straight onto a matching drop zone.
+
+> **Tip:** Tags are free text with autocomplete — the editor remembers tags already in use so you don't introduce typos. Keep them simple, like `key`, `coin`, or `tool`.
+
+### Hot Spot vs. Interactive Element — which do I use?
+
+- Use a **Hot Spot** when you want an **invisible (or highlighted) region** over a background — the player can't "see" it, they just click/hover/drop where you tell them to.
+- Use an **Interactive Element** when you want a **visible thing** the player interacts with — a clickable image or button, a draggable object, or a single picture with many clickable areas (regions). That's covered next, in [section 36](#36-interactive-elements-clickable--draggable-images-buttons--regions).
+
+---
+
+## 34. Inventory, Items & Stats — the Systems Hub
+
+**Tabs involved:** Systems (Items / Inventory / Stats) → UI/Screens (to show them) → Scenes (to change them)
+
+FlourishVNE keeps its RPG / dating-sim mechanics under one **Systems** top tab. Three of them work together and share one idea: **everything is built on plain number variables**, so conditions, `{name}` text, and the Set Variable command all work on them with no code.
+
+- **Items** — things the player can carry, give, use, buy, and sell.
+- **Inventory** — the screens (grids) that show owned items, shops, chests, and libraries.
+- **Stats** — named values like Affection, Health, or Reputation (global, or per-character).
+
+This section is the map. The detailed click-by-click for Items, the Inventory grid, item lists, and shops lives in **sections 23–26** above; this one orients you, covers **Stats** in full, and then highlights the two things that make inventories and shops actually behave: **overlay behavior** and **hotkeys**.
+
+### Items, Inventory, and Shops at a glance
+
+1. **Items** — open **Systems → Items** and click **Add**. Give it a name, icon, "Starts with" quantity, and (optionally) mark it **Usable**. Each item is secretly a number variable, so `{ItemName}` shows the count anywhere. *(Full walkthrough: section 23.)*
+2. **Inventory grids** — a screen holding one **Inventory** grid element auto-arranges owned items into slots. The quickest path is **Systems → Inventory → Create inventory screen**. *(Full walkthrough: section 24.)*
+3. **Item lists & shops** — separate stockpiles (a shop, chest, or library) are **item lists**; a shop adds a currency variable and per-slot **Buy** / **Sell** buttons. *(Full walkthroughs: sections 25 and 26.)*
+
+### The Stats system (Affection, Health, Reputation…)
+
+A **stat** is sugar over number variables, with a friendly editor and the option to track one value **per character**.
+
+#### Step 1: Create a stat
+
+1. Open the **Systems** tab and select **Stats**.
+2. Click **Add** to create a stat. Give it a **name** (e.g. "Affection"), a **Min** / **Max** range, a **default** value, and a **color** (used by meters).
+3. Choose **Applies to**:
+   - **Global** — one shared value for the whole game (e.g. "Reputation"). The backing variable is named exactly like the stat, so `{Reputation}` works directly.
+   - **Characters** — a *separate* value for each character you tick. The editor creates one variable per character, auto-named `Character — Stat` (for example `Mira — Affection`).
+
+#### Step 2: Pick which characters have the stat (per-character stats)
+
+When **Applies to** is **Characters**, a checklist of your characters appears. Tick each character that should have this stat — the editor instantly creates (or removes) their backing variable. You can rename those variables later in the **Variables** tab and the name will stick.
+
+> **Tip:** Want a plain, un-prefixed variable name? Use a **Global** stat — its variable is named exactly like the stat (no `Character —` prefix).
+
+#### Step 3: Change a stat during play
+
+Stats are number variables, so you change them the usual ways — no special command:
+
+- **Set Variable** (scene command or button action) → pick the stat's variable → **Add**, **Subtract**, or **Set**. For a per-character stat, pick `Mira — Affection`.
+- Use them in **conditions** ("`Mira — Affection` is at least 10") and in **text** (`Affection: {Mira — Affection}`).
+
+#### Step 4: Show a stat with a Meter
+
+The **Meter** element draws a stat as a bar (or battery, or segments):
+
+1. In the **UI/Screens** editor, add a **Meter** element to a screen (or use **Systems → Stats → Create meter screen** for a quick start).
+2. In the Meter's inspector, bind it to the stat's **variable**. It uses the variable's Min/Max for the fill, and you can reuse the stat's color, add a label, and show the value as a number or percentage.
+
+> **Tip:** A Meter bound to a countdown **timer** variable makes a live countdown bar — the same element works for health, affection, XP, or time.
+
+### ⚠️ Overlay behavior — this is what makes inventories & shops work
+
+An inventory, shop, or stats popup is just a **UI screen** that you open *on top of* the story. How it opens is controlled by the screen's **Overlay Behavior** — and getting this right is essential:
+
+- **Pause scene while open** — freezes the story behind the popup (no advancing, no skipping) so the player can browse safely. Almost always what you want for an inventory or shop.
+- **Pass-through clicks** — lets clicks in empty areas reach the scene beneath (used by always-on HUDs), with an option to show the overlay **above the dialogue box** so it can be opened mid-line.
+- **Backdrop dim / blur** — darkens or blurs the scene behind the popup so it stands out.
+- **When this screen closes** — choose **Resume (don't advance)** for a glance-and-return inventory, **Advance the story**, or **Run actions**.
+
+Screens you create from **Systems → Create inventory screen** are pre-configured as a paused, dimmed **System** overlay — but any inventory/shop/stat screen you build by hand needs these set. **The full, step-by-step guide to Overlay Behavior is section 27 — read it before shipping an inventory or shop.**
+
+### Hotkeys — let players open it with a key
+
+Every screen can be bound to a single keyboard key that **toggles it open and closed**:
+
+1. In **UI/Screens**, select the screen and find the **Keyboard shortcut** mapper near the top of the **Screen Properties** inspector.
+2. Click **Set shortcut**, then press the key — for example **I** for inventory or **C** for a character/stats screen.
+3. In-game, that key opens and closes the screen.
+
+You can also open these screens from a button using the **Toggle Screen** action, or from the story with the **Show Screen** command. **Full details (and which built-in keys to avoid) are in section 27, Steps 4–5.**
+
+> **Tip:** Give an inventory both an **I** hotkey *and* a **Toggle Screen** button on your HUD, so players can open it whichever way they like — both respect the same Overlay Behavior.
+
+---
+
+## 35. The In-Game Phone (Overview — Work in Progress)
+
+**Tabs involved:** UI/Screens → In-Game UI (Phone panel) → Scenes (Phone commands) → buttons (Phone actions)
+
+> **Heads up:** The Phone is a **work in progress**. The core — texting, themeable look, incoming texts and calls, and a Contacts app — is in and usable, but expect rough edges and more features (and polish) to come. Treat it as a preview while you experiment.
+
+The **Phone** is a built-in, themeable cellphone overlay with story-scripted messaging — think Himura-style texting scenes. It is **not** a screen you assemble yourself; like the Quick Menu and confirmation dialogs, it's built-in **chrome** you style in one place and drive from the story.
+
+### Where to find it
+
+- **Style it:** open the **UI/Screens** tab, switch to the **In-Game UI** editor, and choose **Phone** in the left sidebar. There you'll find accordions for the **shell & position**, **status bar**, **header & bubbles**, **app buttons**, **fonts**, **incoming text/call theming**, **Contacts**, **backgrounds**, and **sounds**, with a live preview (use the **Phone / Banner / Badge / Call** view switcher on the canvas to style each state).
+- **Script it:** in the **Scenes** tab, the command palette's **Phone** category has the phone commands.
+- **Drive it from buttons:** any button can use the phone **actions** (Show Phone, Hide Phone, Show Text, etc.).
+
+### What it can do today
+
+- **Show Text** (the `Show Phone Text` command) — appends a chat bubble from a character (or the player) and auto-opens the phone. Add **reply choices** to pause for the player to text back; follow-up messages can arrive with a typing "…" indicator.
+- **Incoming Text** — a text "arrives" as a non-blocking banner + ding (and an unread badge), or auto-opens the phone.
+- **Incoming Call** — a ringing accept/decline overlay (modal or a non-blocking corner card), with a ringtone and a "missed call" outcome if ignored.
+- **Contacts app** — a roster of characters with per-contact **Call** and **Message** buttons; **Recents** shows the call/chat history.
+- **Show / Hide Phone** — open or close the phone from the story or a button.
+- It saves with the game (open chats, messages, call log, and unread state persist through save/load).
+
+### How to open the phone (and the phone hotkey)
+
+- From the **story**: drag a **Show Phone** command into a scene (or any **Show Text** command, which opens it automatically).
+- From a **button**: add a **Show Phone** action.
+- With a **key**: in the **In-Game UI → Phone** panel's **Shell & position** section, set the **Open hotkey**. Pressing that key in-game toggles the phone open and closed. (This is the phone's *own* hotkey field — separate from the per-screen keyboard shortcut described in section 27, because the phone is built-in chrome, not a normal screen.)
+
+> **Tip:** Because the Phone is still evolving, keep your phone scenes simple for now and re-test after updates. If something looks off in an exported game after an editor update, re-export — the phone is part of the game engine.
+
+---
+
+## 36. Interactive Elements (Clickable & Draggable Images, Buttons & Regions)
+
+**Tabs involved:** UI/Screens (Screen Properties → Interactivity)
+
+Where a **Hot Spot** (section 33) is an *invisible* region, an **Interactive Element** is a **visible** element on a screen that the player can **click** or **drag**. It can be an image, a button, text, a video, a text input, or a single image carrying many independently-clickable **regions**. Use it for clickable map pins, a draggable puzzle piece or key, a "drag this onto that" interaction, or one big picture (a control panel, a world map) with lots of clickable areas.
+
+### Step 1: Add an interactive element
+
+1. Open the **UI/Screens** tab and select a screen.
+2. In the **Screen Properties** inspector, open the **Interactivity** section and click **Add interactive element**.
+3. A new element appears on the screen canvas (a transparent box to start). Drag and resize it like any element.
+
+### Step 2: Pick what kind of element it is
+
+In the element's inspector, set the **Element Type**:
+
+- **Image** — show a picture (pick the asset). The most common choice for clickable/draggable objects.
+- **Button** — a button with text and/or an image and a background color.
+- **Text** — a styled text label.
+- **Video** — a looping video.
+- **Text input** — a field the player types into (bound to a variable).
+- **Image with regions** — one image split into several clickable areas (see Step 5).
+
+> **Tip:** Whatever type you choose, the element is still a normal screen element — it honors **Conditions** (only shows when met), **Start hidden**, and the **Show Element / Hide Element** button actions, so you can reveal or hide it during play.
+
+### Step 3: Make it clickable
+
+1. Open the element's **Actions** list and add the actions to run when it's clicked — the full action set: **Jump to Scene**, **Set Variable**, **Give Item**, **Toggle Screen**, **Play Sound**, **Call Common Event**, and so on.
+2. (Optional) Set a **Click sound** and/or **Hover sound**.
+3. (Optional) Add **Conditions** so it only reacts when they're met.
+
+### Step 4: Make it draggable
+
+In the element's **Behavior** section, turn on **Draggable**. Then choose how the drag resolves:
+
+- **Drag tag** — a label (like `key` or `piece1`) used to match drop zones. The player can drop this element onto any **Hot Spot** with the **Drop** trigger that **accepts that tag** (see section 33, Step 4).
+- **Snap back** — if the player releases it somewhere that isn't a valid drop zone, it springs back to its starting spot.
+- **Snap to hot spot** — when dropped on a matching zone, it locks neatly onto that zone.
+- **Hide on drop** — the element disappears once it's been successfully dropped (great for "the piece is now placed").
+- **This object is an item** (bound item) — link the element to an inventory item; dropping it on a matching zone **consumes that item** and runs its use-effect, so a draggable object and an inventory item stay in sync.
+
+> **Tip:** Dragging is a two-part setup: the **Interactive Element** is the thing being dragged (give it a Drag tag here), and a **Hot Spot** with the **Drop** trigger is the place it goes (set its *Accept objects tagged* to the same tag). Matching tags = a successful drop.
+
+### Step 5: One image, many clickable areas (regions)
+
+Set the **Element Type** to **Image with regions** for a picture that needs several separate clickable spots:
+
+1. Pick the image asset.
+2. Click **Add region** for each area. For each region set:
+   - a **shape** — rectangle, circle, or polygon — and its position/size,
+   - its own **Actions** (what happens when that area is clicked),
+   - optional **Conditions** (the region only works when met),
+   - an optional **tooltip** and a **hover highlight** color.
+3. Add as many regions as you need — each is scripted independently on the same image.
+
+This is ideal for a world map (each location is a region that jumps to a scene) or a control panel (each switch is a region that sets a variable).
+
+> **Tip:** Regions and a draggable image are two different jobs: **regions** = many click targets on one static picture; **draggable** = the whole element moves. Pick the one that matches what the player does.

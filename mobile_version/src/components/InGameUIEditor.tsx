@@ -21,11 +21,18 @@ import { useTranslation } from 'react-i18next';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
 import { GradientText } from './ui/GradientText';
 import ResizableDraggable from './menu-editor/ResizableDraggable';
+import CanvasSnapGuides from './menu-editor/CanvasSnapGuides';
+import { SnapRect, SnapGuide } from '../utils/canvasSnap';
 import TextboxThemeManager from './ui/TextboxThemeManager';
 import DialogueReactiveStatesEditor from './ui/DialogueReactiveStatesEditor';
 import QuickMenuReactiveStatesEditor from './ui/QuickMenuReactiveStatesEditor';
 import ActionEditor from './menu-editor/ActionEditor';
 import ConditionsEditor from './ui/ConditionsEditor';
+import TrimmedVideo from './ui/TrimmedVideo';
+import VideoTrimFields from './ui/VideoTrimFields';
+import { resolveVideoTrim } from '../utils/videoTrim';
+import { resolveFieldUrl } from '../utils/assetStore';
+import { useTestPlayActive } from '../utils/testPlayState';
 import { PhonePortraitPicker } from './inspector/CommandGroupFields';
 import { UIActionType, VNUIAction } from '../types/shared';
 import {
@@ -79,6 +86,36 @@ function hexToRgba(hex: string, opacityPct: number): string {
 function fontToStyle(f: VNFontSettings | undefined): React.CSSProperties {
     if (!f) return {};
     return fontSettingsToStyle(f);
+}
+
+/** Resolve a chrome-background UIAsset ref to its media: image url (CSS bg) OR video url (real <video>),
+ *  detecting video by the actual asset (across videos/images/backgrounds). URLs go through
+ *  resolveFieldUrl so file-backed refs load. Trim = per-use (on the ref) → asset default. */
+function chromeBgMedia(ref: any, project: VNProject): { imageUrl: string | null; videoUrl: string | null; isVideo: boolean; trimStart?: number; trimEnd?: number } {
+    const id = ref?.id;
+    if (!id) return { imageUrl: null, videoUrl: null, isVideo: false };
+    const asset: any = (project.videos as any)?.[id] || (project.images as any)?.[id] || (project.backgrounds as any)?.[id];
+    const isVideo = ref.type === 'video' || !!(asset && (asset.isVideo || asset.videoUrl));
+    const t = resolveVideoTrim(ref, asset);
+    return {
+        imageUrl: !isVideo ? (resolveFieldUrl(project.id, asset?.imageUrl) || null) : null,
+        videoUrl: isVideo ? (resolveFieldUrl(project.id, asset?.videoUrl) || null) : null,
+        isVideo,
+        trimStart: t.start,
+        trimEnd: t.end,
+    };
+}
+
+/** Bumps when test-play closes (fires 'flourish:playended') so a preview <video> behind the
+ *  overlay — which the browser evicts and won't auto-resume — remounts and replays on return. */
+function useVideoReloadNonce(): number {
+    const [n, setN] = React.useState(0);
+    React.useEffect(() => {
+        const onEnded = () => setN(x => x + 1);
+        window.addEventListener('flourish:playended', onEnded);
+        return () => window.removeEventListener('flourish:playended', onEnded);
+    }, []);
+    return n;
 }
 
 function buildImageBackgroundStyle(url: string, sizeMode: string, slicePx?: number): React.CSSProperties {
@@ -259,6 +296,8 @@ function getQuickMenuButtonRects(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
 
 const DialogueBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
     const { t } = useTranslation('ui');
+    const vReload = useVideoReloadNonce();
+    const testPlaying = useTestPlayActive();
     const bgColor = hexToRgba(ui.dialogueBoxColor ?? '#0f172a', ui.dialogueBoxOpacity ?? 90);
     const br = ui.dialogueBoxBorderRadius ?? 8;
     const padding = ui.dialogueBoxPadding ?? 20;
@@ -269,11 +308,10 @@ const DialogueBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({
     const sizeMode = ui.dialogueBoxSizeMode ?? 'stretch';
     const slice = ui.dialogueBoxSlice ?? 30;
 
-    // Resolve images
-    const bgImgId = ui.dialogueBoxImage?.id;
-    const bgUrl = bgImgId
-        ? ((project.images as any)[bgImgId]?.imageUrl || (project.backgrounds as any)[bgImgId]?.imageUrl)
-        : null;
+    // Resolve images / video
+    const bgMedia = chromeBgMedia(ui.dialogueBoxImage, project);
+    const bgUrl = bgMedia.imageUrl;
+    const bgVideoUrl = bgMedia.videoUrl;
 
     // Resolve border image
     const borderImgId = ui.dialogueBoxBorderImage?.id;
@@ -282,7 +320,7 @@ const DialogueBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({
         : null;
     const borderPadding = ui.dialogueBorderPadding ?? 12;
 
-    const hasCustomImage = bgUrl || borderUrl;
+    const hasCustomImage = bgUrl || bgVideoUrl || borderUrl;
 
     return (
         <div className="w-full h-full relative" style={{
@@ -303,7 +341,9 @@ const DialogueBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({
                         ...(sizeMode !== 'nine-slice' ? { padding: `calc(var(--font-scale,1) * ${padding}px)` } : {}) }
                     : { padding: `calc(var(--font-scale,1) * ${padding}px)` }),
             }}>
+                {!testPlaying && bgVideoUrl && <TrimmedVideo key={`dlg-${bgVideoUrl}-${vReload}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={bgVideoUrl} autoPlay loop muted playsInline trimStart={bgMedia.trimStart} trimEnd={bgMedia.trimEnd} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} />}
                 <div style={{
+                    position: 'relative', zIndex: 1,
                     padding: sizeMode === 'nine-slice' && bgUrl ? `calc(var(--font-scale,1) * ${padding}px)` : undefined,
                     paddingTop: textPadTop ? `calc(var(--font-scale,1) * ${textPadTop}px)` : undefined,
                     paddingBottom: textPadBot ? `calc(var(--font-scale,1) * ${textPadBot}px)` : undefined,
@@ -359,23 +399,24 @@ const NameBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui,
 
 const ChoiceButtonsPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
     const { t } = useTranslation('ui');
+    const vReload = useVideoReloadNonce();
+    const testPlaying = useTestPlayActive();
     const bgColor = hexToRgba(ui.choiceButtonColor ?? '#1e293b', ui.choiceButtonOpacity ?? 90);
     const br = ui.choiceButtonBorderRadius ?? 8;
     const pad = ui.choiceButtonPadding ?? 16;
     const slice = ui.choiceButtonSlice ?? 15;
     const sizeMode = ui.choiceButtonSizeMode ?? 'stretch';
 
-    const bgImgId = ui.choiceButtonImage?.id;
-    const bgUrl = bgImgId
-        ? ((project.images as any)[bgImgId]?.imageUrl || (project.backgrounds as any)[bgImgId]?.imageUrl)
-        : null;
+    const bgMedia = chromeBgMedia(ui.choiceButtonImage, project);
+    const bgUrl = bgMedia.imageUrl;
+    const bgVideoUrl = bgMedia.videoUrl;
 
     const borderImgId = (ui as any).choiceButtonBorderImage?.id;
     const borderUrl = borderImgId
         ? ((project.images as any)[borderImgId]?.imageUrl || (project.backgrounds as any)[borderImgId]?.imageUrl)
         : null;
     const borderPadding = (ui as any).choiceBorderPadding ?? 8;
-    const hasCustomImage = bgUrl || borderUrl;
+    const hasCustomImage = bgUrl || bgVideoUrl || borderUrl;
 
     return (
         <div className="w-full h-full flex flex-col items-center justify-center gap-[4%]">
@@ -385,6 +426,7 @@ const ChoiceButtonsPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
                          ? { ...buildImageBackgroundStyle(borderUrl, sizeMode, slice), padding: `calc(var(--font-scale,1) * ${borderPadding}px)`, borderRadius: `calc(var(--font-scale,1) * ${br}px)` }
                          : {}}>
                     <div className="w-full" style={{
+                        position: 'relative', overflow: 'hidden',
                         textAlign: (ui.choiceTextFont?.align || 'center') as any,
                         borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
                         padding: `calc(var(--font-scale,1) * ${pad}px)`,
@@ -398,7 +440,8 @@ const ChoiceButtonsPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
                                   }
                                 : {}),
                     }}>
-                        <span style={fontToStyle(ui.choiceTextFont)} className="opacity-90">
+                        {!testPlaying && bgVideoUrl && <TrimmedVideo key={`cho-${label}-${bgVideoUrl}-${vReload}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={bgVideoUrl} autoPlay loop muted playsInline trimStart={bgMedia.trimStart} trimEnd={bgMedia.trimEnd} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} />}
+                        <span style={{ ...fontToStyle(ui.choiceTextFont), position: 'relative', zIndex: 1 }} className="opacity-90">
                             <GradientText style={extractTextGradientStyle(ui.choiceTextFont)}>{`${t('inGameUi.sampleChoice')} ${label}`}</GradientText>
                         </span>
                     </div>
@@ -410,23 +453,24 @@ const ChoiceButtonsPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
 
 const InputBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
     const { t } = useTranslation('ui');
+    const vReload = useVideoReloadNonce();
+    const testPlaying = useTestPlayActive();
     const bgColor = hexToRgba(ui.inputBoxColor ?? '#0f172a', ui.inputBoxOpacity ?? 92);
     const br = ui.inputBoxBorderRadius ?? 8;
     const pad = ui.inputBoxPadding ?? 24;
     const slice = ui.inputBoxSlice ?? 20;
     const sizeMode = ui.inputBoxSizeMode ?? 'stretch';
 
-    const bgImgId = ui.inputBoxImage?.id;
-    const bgUrl = bgImgId
-        ? ((project.images as any)[bgImgId]?.imageUrl || (project.backgrounds as any)[bgImgId]?.imageUrl)
-        : null;
+    const bgMedia = chromeBgMedia(ui.inputBoxImage, project);
+    const bgUrl = bgMedia.imageUrl;
+    const bgVideoUrl = bgMedia.videoUrl;
 
     const borderImgId = (ui as any).inputBoxBorderImage?.id;
     const borderUrl = borderImgId
         ? ((project.images as any)[borderImgId]?.imageUrl || (project.backgrounds as any)[borderImgId]?.imageUrl)
         : null;
     const borderPadding = (ui as any).inputBorderPadding ?? 8;
-    const hasCustomImage = bgUrl || borderUrl;
+    const hasCustomImage = bgUrl || bgVideoUrl || borderUrl;
 
     return (
         <div className="w-full h-full flex flex-col items-center justify-center">
@@ -435,6 +479,7 @@ const InputBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui
                      ? { ...buildImageBackgroundStyle(borderUrl, sizeMode, slice), padding: `calc(var(--font-scale,1) * ${borderPadding}px)`, borderRadius: `calc(var(--font-scale,1) * ${br}px)` }
                      : {}}>
                 <div className="w-full flex flex-col items-center justify-center gap-[6%]" style={{
+                    position: 'relative', overflow: 'hidden',
                     borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
                     padding: `calc(var(--font-scale,1) * ${pad}px)`,
                     ...(bgUrl
@@ -447,13 +492,15 @@ const InputBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui
                               }
                             : {}),
                 }}>
-                    <p style={fontToStyle(ui.inputPromptFont)} className="opacity-90">
+                    {!testPlaying && bgVideoUrl && <TrimmedVideo key={`inp-${bgVideoUrl}-${vReload}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={bgVideoUrl} autoPlay loop muted playsInline trimStart={bgMedia.trimStart} trimEnd={bgMedia.trimEnd} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} />}
+                    <p style={{ ...fontToStyle(ui.inputPromptFont), position: 'relative', zIndex: 1 }} className="opacity-90">
                         <GradientText style={extractTextGradientStyle(ui.inputPromptFont)}>{t('inGameUi.whatIsYourName')}</GradientText>
                     </p>
-                    <div className="w-[80%] bg-white/10 rounded px-2 py-1" style={fontToStyle(ui.inputFieldFont)}>
+                    <div className="w-[80%] bg-white/10 rounded px-2 py-1" style={{ ...fontToStyle(ui.inputFieldFont), position: 'relative', zIndex: 1 }}>
                         <span className="opacity-40">{t('inGameUi.typeHere')}</span>
                     </div>
                     <div className="px-4 py-1" style={{
+                        position: 'relative', zIndex: 1,
                         borderRadius: ui.inputSubmitBorderRadius ?? 6,
                         ...((() => {
                             const subUrl = ui.inputSubmitImage?.id
@@ -1014,6 +1061,15 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
         ...Object.values(project.images || {}) as any[],
         ...Object.values(project.backgrounds || {}) as any[],
     ], [project.images, project.backgrounds]);
+    // Chrome backgrounds (dialogue/input/choice) can be a VIDEO too — list videos alongside images.
+    const allBgMedia = useMemo(() => [
+        ...allImages,
+        ...Object.values(project.videos || {}) as any[],
+    ], [allImages, project.videos]);
+    const isVideoAssetId = (id: string): boolean =>
+        !!(project.videos as any)?.[id] || !!((project.images as any)?.[id]?.videoUrl) || !!((project.backgrounds as any)?.[id]?.videoUrl);
+    /** Build the chrome-bg ref for an asset id, tagging type video/image (preserves no trim — new pick). */
+    const bgRefFor = (id: string) => id ? { type: (isVideoAssetId(id) ? 'video' : 'image') as 'video' | 'image', id } : null;
 
     // Local aliases for brevity
     const Field = PropsField;
@@ -1048,14 +1104,15 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                     <div className="space-y-2">
                         <Field label={t('inGameUi.backgroundImage')}>
                             <select className={inputCls} value={ui.dialogueBoxImage?.id || ''}
-                                onChange={e => {
-                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
-                                    onUpdate({ dialogueBoxImage: asset ? { type: 'image', id: asset.id } : null });
-                                }}>
+                                onChange={e => onUpdate({ dialogueBoxImage: bgRefFor(e.target.value) })}>
                                 <option value="">{t('inGameUi.noneUseColor')}</option>
-                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                                {allBgMedia.map((a: any) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
                             </select>
                         </Field>
+                        {ui.dialogueBoxImage?.type === 'video' && (
+                            <VideoTrimFields className="mt-1" start={ui.dialogueBoxImage.trimStart} end={ui.dialogueBoxImage.trimEnd}
+                                onChange={patch => onUpdate({ dialogueBoxImage: { ...(ui.dialogueBoxImage as any), ...patch } })} />
+                        )}
                         {ui.dialogueBoxImage && (
                             <Field label={t('inGameUi.imageFitMode')}>
                                 <select className={inputCls} value={ui.dialogueBoxSizeMode ?? 'stretch'}
@@ -1210,14 +1267,15 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                     <div className="space-y-2">
                         <Field label={t('inGameUi.backgroundImage')}>
                             <select className={inputCls} value={ui.choiceButtonImage?.id || ''}
-                                onChange={e => {
-                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
-                                    onUpdate({ choiceButtonImage: asset ? { type: 'image', id: asset.id } : null });
-                                }}>
+                                onChange={e => onUpdate({ choiceButtonImage: bgRefFor(e.target.value) })}>
                                 <option value="">{t('inGameUi.noneUseColor')}</option>
-                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                                {allBgMedia.map((a: any) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
                             </select>
                         </Field>
+                        {ui.choiceButtonImage?.type === 'video' && (
+                            <VideoTrimFields className="mt-1" start={ui.choiceButtonImage.trimStart} end={ui.choiceButtonImage.trimEnd}
+                                onChange={patch => onUpdate({ choiceButtonImage: { ...(ui.choiceButtonImage as any), ...patch } })} />
+                        )}
                         {ui.choiceButtonImage && (
                             <Field label={t('inGameUi.imageFitMode')}>
                                 <select className={inputCls} value={ui.choiceButtonSizeMode ?? 'stretch'}
@@ -1292,14 +1350,15 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                     <div className="space-y-2">
                         <Field label={t('inGameUi.backgroundImage')}>
                             <select className={inputCls} value={ui.inputBoxImage?.id || ''}
-                                onChange={e => {
-                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
-                                    onUpdate({ inputBoxImage: asset ? { type: 'image', id: asset.id } : null });
-                                }}>
+                                onChange={e => onUpdate({ inputBoxImage: bgRefFor(e.target.value) })}>
                                 <option value="">{t('inGameUi.noneUseColor')}</option>
-                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                                {allBgMedia.map((a: any) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
                             </select>
                         </Field>
+                        {ui.inputBoxImage?.type === 'video' && (
+                            <VideoTrimFields className="mt-1" start={ui.inputBoxImage.trimStart} end={ui.inputBoxImage.trimEnd}
+                                onChange={patch => onUpdate({ inputBoxImage: { ...(ui.inputBoxImage as any), ...patch } })} />
+                        )}
                         {ui.inputBoxImage && (
                             <Field label={t('inGameUi.imageFitMode')}>
                                 <select className={inputCls} value={ui.inputBoxSizeMode ?? 'stretch'}
@@ -2279,6 +2338,9 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
     // Which phone "view" the canvas previews so each dynamic surface can be seen + themed live.
     const [phonePreviewView, setPhonePreviewView] = useState<'phone' | 'contacts' | 'notification' | 'badge' | 'call'>((seedInGame?.phonePreviewView as any) ?? 'phone');
     const [showSnapGuides, setShowSnapGuides] = useState(false);
+    // Smart snapping (default ON; Alt bypasses per-drag) + live alignment guides for the canvas.
+    const [snapEnabled, setSnapEnabled] = useState(false);
+    const [inGameSnapGuides, setInGameSnapGuides] = useState<SnapGuide[]>([]);
     const stageRef = useRef<HTMLDivElement>(null);
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
 
@@ -2472,6 +2534,43 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
 
     const activeEl = selectedElement && !isHidden(selectedElement) ? elementRects[selectedElement] ?? null : null;
 
+    // Sibling rects (other chrome elements, % top-left) for alignment snapping of the active element.
+    const inGameSiblings = useMemo(() => {
+        const out: SnapRect[] = [];
+        (Object.keys(elementRects) as InGameUIElement[]).forEach(k => {
+            if (k === selectedElement || isHidden(k)) return;
+            const r = elementRects[k]?.rect;
+            if (r) out.push({ x: r.x, y: r.y, width: r.width, height: r.height });
+        });
+        return out;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [elementRects, selectedElement, ui.quickMenuPosition]);
+
+    // Arrow-key nudge for the selected element (parity with StagingArea / MenuEditor).
+    // 0.5% steps (Shift = 2%); Alt = resize width/height instead of moving.
+    useEffect(() => {
+        if (!activeEl) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+            const target = e.target as HTMLElement;
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+            e.preventDefault();
+            const step = e.shiftKey ? 2 : 0.5;
+            const r = activeEl.rect;
+            if (e.altKey) {
+                const dw = e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0;
+                const dh = e.key === 'ArrowDown' ? step : e.key === 'ArrowUp' ? -step : 0;
+                activeEl.handler({ x: r.x, y: r.y, width: Math.max(2, r.width + dw), height: Math.max(2, r.height + dh) });
+            } else {
+                const dx = e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0;
+                const dy = e.key === 'ArrowDown' ? step : e.key === 'ArrowUp' ? -step : 0;
+                activeEl.handler({ x: r.x + dx, y: r.y + dy, width: r.width, height: r.height });
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [activeEl]);
+
     // Live preview for the Textbox Themes section: the global dialogue UI with the selected theme's
     // DEFINED fields applied on top (blank theme fields keep the project default).
     const themedUi = useMemo<VNProjectUI>(() => {
@@ -2543,6 +2642,16 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                     } as React.CSSProperties}
                 >
                     {showSnapGuides && <SnapGuideOverlay gridSize={5} />}
+                    {/* Smart-snap alignment guides (live during a drag/resize). */}
+                    <CanvasSnapGuides guides={inGameSnapGuides} />
+                    {/* Smart-snap toggle. */}
+                    <button
+                        onMouseDown={(e) => { e.stopPropagation(); setSnapEnabled(s => !s); }}
+                        title={t('inGameUi.snapTip', 'Smart snapping to edges, centers & other elements. Hold Alt while dragging to place freely.')}
+                        className={`absolute top-2 left-2 z-30 px-2 py-0.5 rounded text-[10px] font-medium border ${snapEnabled ? 'bg-sky-500/80 border-sky-400/50 text-white' : 'bg-slate-800/80 border-slate-600/50 text-slate-200'}`}
+                    >
+                        {t('inGameUi.snap', 'Snap')}
+                    </button>
 
                     {/* When editing the Quick Menu, show the dialogue box (non-interactive, dimmed)
                         for context so the author can see how the buttons sit relative to it. */}
@@ -2573,6 +2682,9 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                             onSelect={e => { e.stopPropagation(); }}
                             onUpdate={u => handleDragQuickMenuButton(b.key, b.isCustom, u)}
                             snapGrid={1}
+                            snapEnabled={snapEnabled}
+                            siblings={quickMenuButtonRects.filter(o => o.key !== b.key).map(o => ({ x: o.rect.x, y: o.rect.y, width: o.rect.width, height: o.rect.height }))}
+                            onGuides={setInGameSnapGuides}
                             label={lbl}
                         >
                             <QuickMenuButtonPreview ui={ui} project={project} label={lbl}
@@ -2594,6 +2706,9 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                             onSelect={e => { e.stopPropagation(); }}
                             onUpdate={activeEl.handler}
                             snapGrid={1}
+                            snapEnabled={snapEnabled}
+                            siblings={inGameSiblings}
+                            onGuides={setInGameSnapGuides}
                             label={selectedElement ? t('inGameUi.'+selectedElement) : undefined}
                         >
                             {activeEl.preview}
@@ -2619,7 +2734,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                                     x={phoneRect.x} y={phoneRect.y} width={phoneRect.width} height={phoneRect.height}
                                     anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
                                     onSelect={e => e.stopPropagation()} onUpdate={handleDragPhone}
-                                    snapGrid={1} label="Phone">
+                                    snapGrid={1} snapEnabled={snapEnabled} onGuides={setInGameSnapGuides} label="Phone">
                                     <PhonePreview ui={ui} project={project} hideFreeButtons />
                                 </ResizableDraggable>
                             )}
@@ -2631,7 +2746,9 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                                     x={b.rect.x} y={b.rect.y} width={b.rect.width} height={b.rect.height}
                                     anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
                                     onSelect={e => e.stopPropagation()} onUpdate={u => handleDragPhoneButton(b.id, u)}
-                                    snapGrid={1} label={b.label || 'App'}>
+                                    snapGrid={1} snapEnabled={snapEnabled} onGuides={setInGameSnapGuides}
+                                    siblings={phoneButtonRects.filter(o => o.id !== b.id).map(o => ({ x: o.rect.x, y: o.rect.y, width: o.rect.width, height: o.rect.height }))}
+                                    label={b.label || 'App'}>
                                     <div style={{ width: '100%', height: '100%', containerType: 'size', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1cqmin', color: ui.phoneButtonIconColor || '#cbd5e1' } as React.CSSProperties}>
                                         {ci ? <img src={ci} alt="" style={{ width: '82cqmin', height: '82cqmin', objectFit: 'contain' }} /> : <span style={{ fontSize: '74cqmin', lineHeight: 1 }}>{(cfg?.builtinIcon && PHONE_GLYPHS[cfg.builtinIcon]) || '●'}</span>}
                                         {cfg?.label && <span style={{ fontSize: '18cqmin', lineHeight: 1, whiteSpace: 'nowrap' }}>{cfg.label}</span>}
@@ -2645,7 +2762,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                                     x={ui.phoneNotifX ?? 20} y={ui.phoneNotifY ?? 4} width={60} height={12}
                                     anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
                                     onSelect={e => e.stopPropagation()} onUpdate={u => handleDragBanner(u)}
-                                    snapGrid={1} label="Banner">
+                                    snapGrid={1} snapEnabled={snapEnabled} onGuides={setInGameSnapGuides} label="Banner">
                                     <PhoneBannerPreview ui={ui} project={project} fill />
                                 </ResizableDraggable>
                             )}
@@ -2656,7 +2773,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                                     width={((ui.phoneBadgeSize ?? 16) / gameH) * 100} height={((ui.phoneBadgeSize ?? 16) / gameH) * 100}
                                     anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
                                     onSelect={e => e.stopPropagation()} onUpdate={u => handleDragBadge(u)}
-                                    snapGrid={1} label="Badge">
+                                    snapGrid={1} snapEnabled={snapEnabled} onGuides={setInGameSnapGuides} label="Badge">
                                     <PhoneBadgePreview ui={ui} fill />
                                 </ResizableDraggable>
                             )}
@@ -2671,7 +2788,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                                         width={portW} height={portW * (gameW / gameH)}
                                         anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
                                         onSelect={e => e.stopPropagation()} onUpdate={u => handleDragCallPortrait(u)}
-                                        snapGrid={1} label="Caller portrait">
+                                        snapGrid={1} snapEnabled={snapEnabled} onGuides={setInGameSnapGuides} label="Caller portrait">
                                         <div style={{ width: '100%', height: '100%', borderRadius: callShape === 'circle' ? '9999px' : '16px', overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
                                             {callSample?.baseImageUrl && <img src={callSample.baseImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: ui.phoneCallPortraitFit || 'cover', objectPosition: ui.phoneCallPortraitPosition || 'center' }} />}
                                         </div>
@@ -2693,14 +2810,14 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                                         x={phoneRect.x} y={phoneRect.y} width={phoneRect.width} height={phoneRect.height}
                                         anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
                                         onSelect={e => e.stopPropagation()} onUpdate={handleDragPhone}
-                                        snapGrid={1} label="Phone">
+                                        snapGrid={1} snapEnabled={snapEnabled} onGuides={setInGameSnapGuides} label="Phone">
                                         <PhonePreview ui={ui} project={project} view="contacts" />
                                     </ResizableDraggable>
                                     <ResizableDraggable
                                         x={regionRect.x} y={regionRect.y} width={regionRect.width} height={regionRect.height}
                                         anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
                                         onSelect={e => e.stopPropagation()} onUpdate={handleDragContactsRegion}
-                                        snapGrid={1} label="Contacts list">
+                                        snapGrid={1} snapEnabled={snapEnabled} onGuides={setInGameSnapGuides} label="Contacts list">
                                         <div style={{ width: '100%', height: '100%', border: '1px dashed rgba(124,131,253,0.7)', borderRadius: 8, background: 'rgba(124,131,253,0.08)' }} />
                                     </ResizableDraggable>
                                 </>);
@@ -2739,6 +2856,9 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                                             onSelect={e => { e.stopPropagation(); }}
                                             onUpdate={u => handleDragConfirmRect(d.which, u)}
                                             snapGrid={1}
+                                            snapEnabled={snapEnabled}
+                                            siblings={([confirmEff.boxRect, confirmEff.cancelRect, confirmEff.confirmRect].filter(Boolean) as Array<{x:number;y:number;width:number;height:number}>).filter(r => r !== d.rect).map(r => ({ x: r.x, y: r.y, width: r.width, height: r.height }))}
+                                            onGuides={setInGameSnapGuides}
                                             label={d.label}
                                         >
                                             <ConfirmFreePart ui={ui} project={project} variant={confirmPreviewVariant} part={d.part} />

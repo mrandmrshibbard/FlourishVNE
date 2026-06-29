@@ -8,10 +8,11 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProject } from '../../contexts/ProjectContext';
-import { VNUIAction, UIActionType } from '../../types/shared';
+import { VNUIAction } from '../../types/shared';
 import { CollapsibleSection } from '../ui/CollapsibleSection';
 import { XMarkIcon } from '../icons';
 import ActionEditor from './ActionEditor';
+import { actionLabel, actionSummaryDetail } from '../../utils/actionMeta';
 
 export const ActionCard: React.FC<{
     action: VNUIAction;
@@ -23,24 +24,10 @@ export const ActionCard: React.FC<{
     const { t } = useTranslation('ui');
     const { project } = useProject();
 
-    const typeLabel = (type: string): string => {
-        const key = 'actions.' + (type.charAt(0).toLowerCase() + type.slice(1));
-        const translated = t(key);
-        return translated === key ? type : translated;
-    };
-
     const summary = React.useMemo(() => {
         if (!action) return '';
-        const label = typeLabel(action.type);
-        const a = action as any;
-        let detail = '';
-        if (action.type === UIActionType.SetVariable || action.type === UIActionType.ResetVariable) {
-            detail = project.variables[a.variableId]?.name || '';
-        } else if (action.type === UIActionType.JumpToScene) {
-            detail = project.scenes[a.targetSceneId]?.name || '';
-        } else if (action.type === UIActionType.GoToScreen || action.type === UIActionType.ToggleScreen) {
-            detail = (project.uiScreens[a.targetScreenId] as any)?.name || '';
-        }
+        const label = actionLabel(action.type, t);
+        const detail = actionSummaryDetail(action, project);
         return detail ? `${label}: ${detail}` : label;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [action, project]);

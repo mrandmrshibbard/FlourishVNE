@@ -13,6 +13,8 @@ import {
 import { fileToBase64 } from '../utils/file';
 import { formatBytes, LARGE_ASSET_WARN_BYTES } from '../utils/projectAssetSize';
 import { ingestUpload, resolveFieldUrl, refToRelPath, getProjectAssetSizes, isElectronAssetStore } from '../utils/assetStore';
+import TrimmedVideo from './ui/TrimmedVideo';
+import VideoTrimFields from './ui/VideoTrimFields';
 import { AssetType } from '../features/assets/state/assetReducer';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -847,6 +849,7 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                     <AssetInspector
                         asset={selectedAssetForInspector} assetType={selectedCategory} project={project}
                         onClose={() => setSelectedAssetIds(new Set())}
+                        onUpdate={(updates) => dispatch({ type: 'UPDATE_ASSET', payload: { assetType: selectedCategory, assetId: selectedAssetForInspector.id, updates } })}
                         onReplace={() => handleReplaceAsset(selectedAssetForInspector.id, selectedCategory)}
                         onRename={() => setRenamingId(selectedAssetForInspector.id)}
                         onDelete={() => handleDeleteAsset(selectedAssetForInspector.id, selectedAssetForInspector.name)}
@@ -939,7 +942,7 @@ const AssetCard: React.FC<{
         if (asset.imageUrl) return <img src={rImg} alt={asset.name} className="w-full h-full object-cover" loading="lazy" />;
         if (asset.videoUrl) return (
             <div className="w-full h-full relative">
-                <video src={rVid} className="w-full h-full object-cover" muted preload="metadata" />
+                <TrimmedVideo src={rVid} className="w-full h-full object-cover" muted preload="metadata" trimStart={asset.trimStart} trimEnd={asset.trimEnd} />
                 <div className="absolute bottom-1 right-1 bg-black/70 rounded px-1 py-0.5"><FilmIcon className="w-3 h-3 text-white" /></div>
             </div>
         );
@@ -949,7 +952,7 @@ const AssetCard: React.FC<{
             </div>
         );
         return <div className="w-full h-full flex items-center justify-center bg-[var(--bg-secondary)]"><PhotoIcon className="w-10 h-10 text-[var(--text-muted)]" /></div>;
-    }, [asset.imageUrl, asset.videoUrl, asset.audioUrl, asset.name]);
+    }, [asset.imageUrl, asset.videoUrl, asset.audioUrl, asset.name, asset.trimStart, asset.trimEnd, rImg, rVid]);
 
     if (viewMode === 'grid') {
         return (
@@ -1243,10 +1246,11 @@ const AssetInspector: React.FC<{
     assetType: AssetType;
     project: VNProject;
     onClose: () => void;
+    onUpdate: (updates: any) => void;
     onReplace: () => void;
     onRename: () => void;
     onDelete: () => void;
-}> = ({ asset, assetType, project, onClose, onReplace, onRename, onDelete }) => {
+}> = ({ asset, assetType, project, onClose, onUpdate, onReplace, onRename, onDelete }) => {
     const { t } = useTranslation('assets');
     const size = estimateDataUrlSize(getAssetUrl(asset));
     const usage = useMemo(() => findAssetUsage(project, asset.id), [project, asset.id]);
@@ -1263,9 +1267,19 @@ const AssetInspector: React.FC<{
                 {(asset.imageUrl || asset.videoUrl) && (
                     <div className="bg-[var(--bg-primary)] rounded-lg overflow-hidden">
                         {asset.videoUrl
-                            ? <video src={resolveFieldUrl(project.id, asset.videoUrl) || undefined} controls loop={asset.loop} className="w-full rounded-lg" />
+                            ? <TrimmedVideo src={resolveFieldUrl(project.id, asset.videoUrl) || undefined} controls loop={asset.loop} trimStart={asset.trimStart} trimEnd={asset.trimEnd} className="w-full rounded-lg" />
                             : <img src={resolveFieldUrl(project.id, asset.imageUrl) || undefined} alt={asset.name} className="w-full rounded-lg object-contain max-h-[300px]" />
                         }
+                    </div>
+                )}
+
+                {/* Default video trim — trim this asset once; every use inherits it unless the
+                    command/element sets its own per-use trim. */}
+                {asset.videoUrl && (
+                    <div className="bg-[var(--bg-primary)] rounded-lg p-3">
+                        <VideoTrimFields label={t('defaultTrim', 'Default trim (seconds)')} start={asset.trimStart} end={asset.trimEnd}
+                            onChange={patch => onUpdate(patch)} />
+                        <p className="text-[10px] text-[var(--text-muted)] mt-1">{t('defaultTrimHint', 'Applies to every use of this video unless a command/element overrides it.')}</p>
                     </div>
                 )}
                 {asset.audioUrl && (

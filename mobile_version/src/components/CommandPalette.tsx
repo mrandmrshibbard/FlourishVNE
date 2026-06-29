@@ -14,7 +14,7 @@ export const COMMAND_CATEGORIES = {
     'Characters': {
         color: 'bg-blue-500/20 border-blue-500 text-blue-300',
         headerColor: 'bg-blue-600/30 text-blue-200',
-        commands: [CommandType.ShowCharacter, CommandType.HideCharacter, CommandType.SetCharacterLayer]
+        commands: [CommandType.ShowCharacter, CommandType.HideCharacter, CommandType.SetCharacterLayer, CommandType.MoveCharacter]
     },
     'Scenes': {
         color: 'bg-green-500/20 border-green-500 text-green-300',
@@ -54,7 +54,7 @@ export const COMMAND_CATEGORIES = {
     'Flow Control': {
         color: 'bg-indigo-500/20 border-indigo-500 text-indigo-300',
         headerColor: 'bg-indigo-600/30 text-indigo-200',
-        commands: [CommandType.BranchStart, CommandType.BranchEnd, CommandType.Wait, CommandType.RunScript, CommandType.CallCommonEvent]
+        commands: [CommandType.BranchStart, CommandType.BranchEnd, CommandType.Wait, CommandType.StartTimer, CommandType.StopTimer, CommandType.RunScript, CommandType.CallCommonEvent]
     },
     'Phone': {
         color: 'bg-rose-500/20 border-rose-500 text-rose-300',

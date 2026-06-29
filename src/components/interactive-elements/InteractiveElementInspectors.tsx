@@ -30,6 +30,7 @@ import { UIActionType } from '../../types/shared';
 import { PlusIcon, TrashIcon } from '../icons';
 import Panel from '../ui/Panel';
 import ConditionsEditor from '../ui/ConditionsEditor';
+import VideoTrimFields from '../ui/VideoTrimFields';
 import UIActionsListEditor from '../ui/UIActionsListEditor';
 
 const generateId = (prefix: string): VNID =>
@@ -78,6 +79,8 @@ function hotZoneElementPatchToTyped(
             }
             if ('videoLoop' in patch) (out as any).videoLoop = patch.videoLoop;
             if ('videoMuted' in patch) (out as any).videoMuted = patch.videoMuted;
+            if ('videoTrimStart' in patch) (out as any).videoTrimStart = patch.videoTrimStart;
+            if ('videoTrimEnd' in patch) (out as any).videoTrimEnd = patch.videoTrimEnd;
             break;
         }
         case UIElementType.Button: {
@@ -149,6 +152,7 @@ function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
                 imageId: (isImage ? assetId : '') as VNID,
                 videoId: isVideo ? (assetId ?? undefined) as VNID | undefined : undefined,
                 videoLoop: anyEl.videoLoop, videoMuted: anyEl.videoMuted,
+                videoTrimStart: anyEl.videoTrimStart, videoTrimEnd: anyEl.videoTrimEnd,
                 x: el.x, y: el.y, width: el.width, height: el.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
                 snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
@@ -573,6 +577,8 @@ export const InteractiveElementProperties: React.FC<{
                             Muted
                         </label>
                     </div>
+                    <VideoTrimFields className="mt-2" start={(element as any).videoTrimStart} end={(element as any).videoTrimEnd}
+                        onChange={patch => onUpdate({ videoTrimStart: patch.trimStart, videoTrimEnd: patch.trimEnd } as any)} />
                 </>
             )}
 

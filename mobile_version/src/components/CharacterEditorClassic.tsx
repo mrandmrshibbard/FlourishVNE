@@ -16,6 +16,8 @@ import { fileToBase64 } from '../utils/file';
 import { ingestUpload, resolveFieldUrl } from '../utils/assetStore';
 import { PlusIcon, TrashIcon, UploadIcon, PencilIcon } from './icons';
 import { FormField, TextInput, Select, ColorInput } from './ui/Form';
+import VideoTrimFields from './ui/VideoTrimFields';
+import TrimmedVideo from './ui/TrimmedVideo';
 import TextboxStyleFields from './ui/TextboxStyleFields';
 import { popularFonts as _sharedFonts } from './ui/FontEditor';
 import ConfirmationModal from './ui/ConfirmationModal';
@@ -255,7 +257,7 @@ const CharacterEditorClassic: React.FC<{
 
     /* ── Handlers ── */
 
-    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop' | 'textbox' | 'textboxThemeId' | 'defaultVoiceId' | 'phoneRingtoneAudioId' | 'textEffect'>>) => {
+    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop' | 'baseVideoTrimStart' | 'baseVideoTrimEnd' | 'textbox' | 'textboxThemeId' | 'defaultVoiceId' | 'phoneRingtoneAudioId' | 'textEffect'>>) => {
         dispatch({ type: 'UPDATE_CHARACTER', payload: { characterId: activeCharacterId, updates } });
     };
 
@@ -402,7 +404,7 @@ const CharacterEditorClassic: React.FC<{
                         
                         {/* Base Image */}
                         {character.baseVideoUrl ? (
-                            <video src={resolveFieldUrl(project.id, character.baseVideoUrl) || undefined} autoPlay muted loop={character.baseVideoLoop} playsInline className="absolute inset-0 w-full h-full object-contain" />
+                            <TrimmedVideo src={resolveFieldUrl(project.id, character.baseVideoUrl) || undefined} autoPlay muted loop={character.baseVideoLoop} trimStart={(character as any).baseVideoTrimStart} trimEnd={(character as any).baseVideoTrimEnd} playsInline className="absolute inset-0 w-full h-full object-contain" />
                         ) : character.baseImageUrl ? (
                             <img src={resolveFieldUrl(project.id, character.baseImageUrl) || undefined} alt="Base" className="absolute inset-0 w-full h-full object-contain" />
                         ) : null}
@@ -640,6 +642,10 @@ const CharacterEditorClassic: React.FC<{
                         </div>
                         <input type="file" ref={baseImageInputRef} onChange={handleBaseImageUpload} accept="image/*,video/*" className="hidden" />
                     </div>
+                    {character.baseVideoUrl && (
+                        <VideoTrimFields className="mt-2" start={(character as any).baseVideoTrimStart} end={(character as any).baseVideoTrimEnd}
+                            onChange={patch => updateCharacter({ baseVideoTrimStart: patch.trimStart, baseVideoTrimEnd: patch.trimEnd } as any)} />
+                    )}
                 </div>
 
                 <hr style={{ borderColor: 'var(--border-subtle)' }} />

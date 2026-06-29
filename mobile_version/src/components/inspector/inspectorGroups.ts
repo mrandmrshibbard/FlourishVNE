@@ -119,6 +119,14 @@ export function getCommandGroups(command: VNCommand | null | undefined): Inspect
         case CommandType.TweenElement:
             // target/duration/easing/wait; tweened transform props; opacity/colours; conditions.
             return order(['content', 'transform', 'appearance', 'conditions']);
+        case CommandType.MoveCharacter:
+            // character + from/to position + duration/easing/wait + optional scale/opacity/rotation.
+            return order(['content', 'conditions']);
+        case CommandType.StartTimer:
+            // timer id + variable + mode/duration/interval/loop + on-complete actions.
+            return order(['content', 'conditions']);
+        case CommandType.StopTimer:
+            return order(['content', 'conditions']);
         case CommandType.SetBackground:
             return order(['content', 'animation', 'conditions']);
         case CommandType.PlayMusic:

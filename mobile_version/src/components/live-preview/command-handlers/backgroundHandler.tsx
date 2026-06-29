@@ -1,6 +1,7 @@
 import React from 'react';
 import { SetBackgroundCommand } from '../../../features/scene/types';
 import { CommandContext, CommandResult } from './types';
+import { resolveVideoTrim } from '../../../utils/videoTrim';
 
 /**
  * Handles background changes with transitions
@@ -11,11 +12,17 @@ export async function handleSetBackground(
   command: SetBackgroundCommand,
   context: CommandContext
 ): Promise<CommandResult> {
-  const { assetResolver, getAssetMetadata, setPlayerState, playerState, advance } = context;
+  const { assetResolver, getAssetMetadata, setPlayerState, playerState, advance, project } = context;
+
+  // Per-use trim wins; otherwise fall back to the asset's own DEFAULT trim (set in Asset Manager).
+  const bgAssetRec: any = command.backgroundId
+    ? (project.backgrounds?.[command.backgroundId] || project.images?.[command.backgroundId] || project.videos?.[command.backgroundId])
+    : undefined;
+  const bgTrim = resolveVideoTrim(command, bgAssetRec);
 
   // Parallax depth + stacking layer for the background (additive-optional; carried onto
   // stageState at every commit site so the renderer can drift/order the backdrop).
-  const bgFx = { backgroundParallaxDepth: command.parallaxDepth, backgroundLayer: command.layer };
+  const bgFx = { backgroundParallaxDepth: command.parallaxDepth, backgroundLayer: command.layer, backgroundTrimStart: bgTrim.start, backgroundTrimEnd: bgTrim.end };
 
   // Live (reactive) background: register/replace a conditional layer instead of
   // committing a single background. The renderer picks the last layer whose conditions
@@ -30,6 +37,8 @@ export async function handleSetBackground(
       color: command.backgroundColor,
       isVideo: meta.isVideo,
       loop: meta.loop,
+      trimStart: bgTrim.start,
+      trimEnd: bgTrim.end,
       parallaxDepth: command.parallaxDepth,
       layer: command.layer,
     };
@@ -57,6 +66,8 @@ export async function handleSetBackground(
       color: command.backgroundColor,
       isVideo: meta.isVideo,
       loop: meta.loop,
+      trimStart: bgTrim.start,
+      trimEnd: bgTrim.end,
       parallaxDepth: command.parallaxDepth,
       layer: command.layer,
       transition: command.transition,

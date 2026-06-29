@@ -111,6 +111,11 @@ export enum UIActionType {
     BuySelectedItem = 'BuySelectedItem',
     /** Sells whichever grid item the player has selected to a shop list (no fixed item id). */
     SellSelectedItem = 'SellSelectedItem',
+    // ─── Timers (let a button start/stop a countdown or stopwatch) ─── //
+    /** Starts a countdown/stopwatch (optionally ticking a number variable). */
+    StartTimer = 'StartTimer',
+    /** Stops a running timer by id. */
+    StopTimer = 'StopTimer',
 }
 
 export interface BaseUIAction {
@@ -156,5 +161,9 @@ export interface BuyItemAction extends BaseUIAction { type: UIActionType.BuyItem
 export interface SellItemAction extends BaseUIAction { type: UIActionType.SellItem; itemId: VNID; collectionId: VNID; quantity?: number; }
 export interface BuySelectedItemAction extends BaseUIAction { type: UIActionType.BuySelectedItem; collectionId: VNID; }
 export interface SellSelectedItemAction extends BaseUIAction { type: UIActionType.SellSelectedItem; collectionId: VNID; }
+/** Start a timer from a button. `variableId` is optional (only to show it on a Meter / conditions);
+ *  the timer runs regardless. For on-finish ACTIONS or pausing the story, use the Start Timer COMMAND. */
+export interface StartTimerAction extends BaseUIAction { type: UIActionType.StartTimer; timerId?: string; variableId?: VNID; mode?: 'countdown' | 'stopwatch'; duration: number; from?: number; interval?: number; loop?: boolean; onComplete?: VNUIAction[]; }
+export interface StopTimerAction extends BaseUIAction { type: UIActionType.StopTimer; timerId?: string; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | StartTimerAction | StopTimerAction;

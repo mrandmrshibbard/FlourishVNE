@@ -29,6 +29,7 @@ import FontEditor from '../ui/FontEditor';
 import ActionEditor from '../menu-editor/ActionEditor';
 import ActionCard from '../menu-editor/ActionCard';
 import AssetSelector from '../ui/AssetSelector';
+import VideoTrimFields from '../ui/VideoTrimFields';
 import ConditionsEditor from '../ui/ConditionsEditor';
 import CollapsibleSection from '../ui/CollapsibleSection';
 import { InspectorGroupId, GROUP_ORDER } from './inspectorGroups';
@@ -413,6 +414,17 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                 Loop video <span className="text-[10px] text-slate-500">(off = play once, hold last frame)</span>
                             </label>
                         )}
+                        {bgType === 'video' && (
+                            <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer mt-1">
+                                <input type="checkbox" checked={(el.background as any)?.muted ?? false}
+                                    onChange={e => updateElement({ background: { ...(el.background as any), muted: e.target.checked } })} />
+                                Mute audio <span className="text-[10px] text-slate-500">(on = silent decorative loop)</span>
+                            </label>
+                        )}
+                        {bgType === 'video' && (
+                            <VideoTrimFields className="mt-2" start={(el.background as any)?.trimStart} end={(el.background as any)?.trimEnd}
+                                onChange={patch => updateElement({ background: { ...(el.background as any), ...patch } })} />
+                        )}
                         <p className="text-xs text-slate-400 mt-1">{t('elementInspector.coverHint')}</p>
                     </>,
                 };
@@ -792,7 +804,20 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                 const el = element as UIInventoryGridElement;
                 const itemList = Object.values(project.items || {});
                 const categories = [...new Set(itemList.map((it: any) => it.category).filter(Boolean))] as string[];
-                const itemLists = Object.values(project.itemCollections || {}) as { id: string; name: string }[];
+                const allColls = Object.values(project.itemCollections || {}) as any[];
+                const itemLists = allColls as { id: string; name: string }[];
+                // Data-source kind (mirrors the runtime): a shop list is a collection that is NOT the
+                // player's owned-items view. Slot-button options are filtered to what actually works.
+                const boundColl = el.collectionId ? (project.itemCollections as any)?.[el.collectionId] : undefined;
+                const isPlayerSource = !boundColl || !!boundColl.tracksOwnedItems;
+                const allowedBtns = isPlayerSource ? ['none', 'use', 'sell'] : ['none', 'buy'];
+                const curBtn = el.slotButton ?? 'none';
+                const btnOpts = allowedBtns.includes(curBtn) ? allowedBtns : [...allowedBtns, curBtn];
+                const btnLabel = (m: string) => m === 'use' ? 'Use (consume the item)' : m === 'buy' ? 'Buy (from this shop)' : m === 'sell' ? 'Sell (player’s items → a shop)' : 'None';
+                // Sell-to candidates: real shops (have a currency), excluding this grid's own list.
+                const sellShops = allColls.filter(c => c.id !== el.collectionId && !c.tracksOwnedItems && c.currencyVariableId);
+                const sellTargetMissing = curBtn === 'sell' && (!el.sellToCollectionId || !sellShops.some(c => c.id === el.sellToCollectionId));
+                const buyNoCurrency = curBtn === 'buy' && !!boundColl && !boundColl.currencyVariableId;
                 return {
                     content: <>
                         <h4 className="font-bold my-1 text-slate-400 text-xs">Data source</h4>
@@ -819,31 +844,42 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                 {categories.map(c => <option key={c} value={c}>{c}</option>)}
                             </Select>
                         </FormField>
+                        <p className="text-[9px] text-slate-500 -mt-1">Shows only ONE category. To group items under category headers, use grouping in Systems → Player Inventory.</p>
                         <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.display')}</h4>
+                        {!el.collectionId && <p className="text-[9px] text-slate-500 -mt-1">These override the defaults in Systems → Player Inventory.</p>}
                         {el.collectionId
                             ? <p className="text-[9px] text-slate-500">A bound list always shows its full stock (0 = sold out). "Hide unowned" only applies to the player's inventory.</p>
                             : <FormField label="Hide unowned items"><input type="checkbox" checked={el.hideUnowned !== false} onChange={e => updateElement({ hideUnowned: e.target.checked })} /></FormField>}
                         <FormField label={t('elementInspector.showNames')}><input type="checkbox" checked={el.showNames !== false} onChange={e => updateElement({ showNames: e.target.checked })} /></FormField>
                         <FormField label="Show quantity badge"><input type="checkbox" checked={el.showQuantity !== false} onChange={e => updateElement({ showQuantity: e.target.checked })} /></FormField>
                         <FormField label="Slot button">
-                            <Select value={el.slotButton ?? (el.showUseButton ? 'use' : 'none')}
-                                onChange={e => { const m = e.target.value as 'use' | 'buy' | 'sell' | 'none'; updateElement({ slotButton: m, showUseButton: m === 'use' || undefined }); }}>
-                                <option value="none">None</option>
-                                <option value="use">Use (consume the item)</option>
-                                <option value="buy">Buy (from this list — a shop)</option>
-                                <option value="sell">Sell (player's items → a shop)</option>
+                            <Select value={curBtn}
+                                onChange={e => { const m = e.target.value as 'use' | 'buy' | 'sell' | 'none'; updateElement({ slotButton: m }); }}>
+                                {btnOpts.map(m => <option key={m} value={m}>{btnLabel(m)}{allowedBtns.includes(m) ? '' : ' (not valid for this data source)'}</option>)}
                             </Select>
                         </FormField>
-                        {(el.slotButton ?? (el.showUseButton ? 'use' : 'none')) === 'buy' && (
-                            <p className="text-[9px] text-slate-500 -mt-1">Buys from this grid's bound list. Price & currency come from that list's shop settings (Systems → Inventory).</p>
+                        {!allowedBtns.includes(curBtn) && (
+                            <p className="text-[9px] text-amber-400 -mt-1">{isPlayerSource ? 'Buy only works on a shop list.' : 'Use/Sell only work on the player’s inventory.'} This button is ignored at runtime.</p>
                         )}
-                        {(el.slotButton ?? (el.showUseButton ? 'use' : 'none')) === 'sell' && (
-                            <FormField label="Sell to shop">
-                                <Select value={el.sellToCollectionId || ''} onChange={e => updateElement({ sellToCollectionId: e.target.value || undefined })}>
-                                    <option value="">Select a shop list…</option>
-                                    {itemLists.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </Select>
-                            </FormField>
+                        {curBtn === 'buy' && allowedBtns.includes('buy') && (
+                            buyNoCurrency
+                                ? <p className="text-[9px] text-amber-400 -mt-1">This shop has no currency variable — Buy will do nothing. Set one in Systems → Inventory → this list → Shop.</p>
+                                : <p className="text-[9px] text-slate-500 -mt-1">Buys from this grid's bound shop. Price & currency come from that list's shop settings (Systems → Inventory).</p>
+                        )}
+                        {curBtn === 'sell' && allowedBtns.includes('sell') && (
+                            <>
+                                <FormField label="Sell to shop">
+                                    <Select value={el.sellToCollectionId || ''} onChange={e => updateElement({ sellToCollectionId: e.target.value || undefined })}>
+                                        <option value="">Select a shop list…</option>
+                                        {sellShops.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        {el.sellToCollectionId && !sellShops.some(c => c.id === el.sellToCollectionId) && (
+                                            <option value={el.sellToCollectionId}>{(project.itemCollections as any)?.[el.sellToCollectionId]?.name || el.sellToCollectionId} (not a currency shop)</option>
+                                        )}
+                                    </Select>
+                                </FormField>
+                                {sellTargetMissing && <p className="text-[9px] text-amber-400 -mt-1">Pick a shop list with a currency for the sale to go through.</p>}
+                                {sellShops.length === 0 && <p className="text-[9px] text-slate-500 -mt-1">No shops yet — a shop is an item list with a currency variable (Systems → Inventory).</p>}
+                            </>
                         )}
                         <FormField label="Player can rearrange"><input type="checkbox" checked={el.allowReorder !== false} onChange={e => updateElement({ allowReorder: e.target.checked })} /></FormField>
                         <FormField label="Empty text"><TextInput value={el.emptyText || ''} onChange={e => updateElement({ emptyText: e.target.value })} placeholder="Your bag is empty" /></FormField>
@@ -865,8 +901,8 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                 <FontEditor font={el.nameFont} onFontChange={(prop, value) => updateElement({ nameFont: { ...el.nameFont!, [prop]: value } })} />
                             </>
                         )}
-                        {(el.slotButton ?? (el.showUseButton ? 'use' : 'none')) !== 'none' && (() => {
-                            const mode = el.slotButton ?? (el.showUseButton ? 'use' : 'none');
+                        {(el.slotButton ?? 'none') !== 'none' && (() => {
+                            const mode = el.slotButton ?? 'none';
                             const defLabel = mode === 'buy' ? 'Buy' : mode === 'sell' ? 'Sell' : 'Use';
                             return (
                             <>

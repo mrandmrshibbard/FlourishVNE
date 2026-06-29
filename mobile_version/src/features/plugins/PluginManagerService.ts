@@ -158,6 +158,48 @@ export class PluginManagerService {
         this.notifyListeners();
     }
 
+    /**
+     * Update an installed plugin to a new version from source — WITHOUT uninstall/reinstall, so the
+     * user's config + stored data survive. Validates the new manifest, requires the SAME plugin id,
+     * tears down the running old instance, swaps code/manifest/resources in state, then re-loads and
+     * re-enables if it was enabled. Returns the new manifest (throws on error). Allows downgrades
+     * (the UI warns); does not force a version bump.
+     */
+    updatePlugin(pluginId: string, source: string, project: VNProject, dispatch: (action: any) => void, resources?: Record<string, string>): PluginManifest {
+        const existing = (project.plugins || {})[pluginId];
+        if (!existing) throw new Error('That plugin is not installed.');
+
+        const manifest = this.extractManifest(source);
+        if (!manifest) throw new Error('Plugin must define a `manifest` object.');
+        const { valid, errors } = validatePluginManifest(manifest);
+        if (!valid) throw new Error(errors.join(' '));
+        if (manifest.id !== pluginId) {
+            throw new Error(`This file is a different plugin ("${manifest.id}"), not an update for "${existing.manifest.name}" ("${pluginId}").`);
+        }
+        if (manifest.engineVersion && compareVersions(manifest.engineVersion, ENGINE_VERSION) > 0) {
+            throw new Error(`Requires engine ${manifest.engineVersion}+ (current: ${ENGINE_VERSION}).`);
+        }
+
+        const wasEnabled = existing.state === 'enabled';
+        // Tear down the running old instance (best-effort).
+        const loaded = this.loadedPlugins.get(pluginId);
+        try { loaded?.hooks.onDisable?.(loaded.api); } catch (e) { console.error(`[Plugin ${pluginId}] onDisable failed:`, e); }
+        this.unregisterFor(pluginId);
+        this.loadedPlugins.delete(pluginId);
+
+        // Swap code/manifest/resources in state (config + enabled state + pluginStorage preserved).
+        dispatch({ type: 'UPDATE_PLUGIN', payload: { pluginId, manifest, source, ...(resources !== undefined ? { resources } : {}) } });
+
+        // Re-load the new code; re-enable if it was enabled before.
+        const api = this.createPluginAPI(manifest);
+        const hooks = this.parsePluginSource(source, api, manifest.target);
+        this.loadedPlugins.set(pluginId, { hooks, api });
+        try { hooks.onLoad?.(api); } catch (e) { console.error(`[Plugin ${pluginId}] onLoad failed:`, e); }
+        if (wasEnabled) { try { hooks.onEnable?.(api); } catch (e) { console.error(`[Plugin ${pluginId}] onEnable failed:`, e); } }
+        this.notifyListeners();
+        return manifest;
+    }
+
     uninstallPlugin(pluginId: string, dispatch: (action: any) => void): void {
         const loaded = this.loadedPlugins.get(pluginId);
         try { loaded?.hooks.onUninstall?.(loaded.api); } catch (e) { console.error(`[Plugin ${pluginId}] onUninstall failed:`, e); }

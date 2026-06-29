@@ -9,6 +9,7 @@ import { VNUIScreen } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import Panel from './ui/Panel';
+import TrimmedVideo from './ui/TrimmedVideo';
 import { PlusIcon, TrashIcon, PhotoIcon, MusicalNoteIcon, FilmIcon, SparkleIcon, BookmarkSquareIcon, BookOpenIcon, Cog6ToothIcon, PencilIcon, DuplicateIcon, LockClosedIcon } from './icons';
 import { fileToBase64 } from '../utils/file';
 import { AssetType } from '../features/assets/state/assetReducer';
@@ -114,6 +115,8 @@ const ResourceItem: React.FC<{
     icon: React.ReactNode;
     thumbnailUrl?: string | null;
     isVideo?: boolean;
+    trimStart?: number;
+    trimEnd?: number;
     isSelected: boolean;
     isRenaming: boolean;
     isStartScene?: boolean;
@@ -125,7 +128,7 @@ const ResourceItem: React.FC<{
     onContextMenu: (e: React.MouseEvent) => void;
     onDuplicate?: () => void;
     onDelete?: () => void;
-}> = ({ item, icon, thumbnailUrl, isVideo, isSelected, isRenaming, isStartScene, isLocked, colorSwatch, onSelect, onStartRenaming, onCommitRename, onContextMenu, onDuplicate, onDelete }) => {
+}> = ({ item, icon, thumbnailUrl, isVideo, trimStart, trimEnd, isSelected, isRenaming, isStartScene, isLocked, colorSwatch, onSelect, onStartRenaming, onCommitRename, onContextMenu, onDuplicate, onDelete }) => {
     const [renameValue, setRenameValue] = useState(item.name);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -163,7 +166,7 @@ const ResourceItem: React.FC<{
         >
             {thumbnailUrl ? (
                 isVideo ? (
-                    <video src={thumbnailUrl} className="w-8 h-8 rounded-md object-cover flex-shrink-0 bg-[var(--bg-secondary)]" muted playsInline />
+                    <TrimmedVideo src={thumbnailUrl} className="w-8 h-8 rounded-md object-cover flex-shrink-0 bg-[var(--bg-secondary)]" muted playsInline trimStart={trimStart} trimEnd={trimEnd} />
                 ) : (
                     <img src={thumbnailUrl} alt={item.name} className="w-8 h-8 rounded-md object-cover flex-shrink-0 bg-[var(--bg-secondary)]"/>
                 )
@@ -682,6 +685,8 @@ const ResourceManager: React.FC<{
                             icon={<PhotoIcon />}
                             thumbnailUrl={char.baseVideoUrl || char.baseImageUrl}
                             isVideo={!!char.isBaseVideo}
+                            trimStart={(char as any).baseVideoTrimStart}
+                            trimEnd={(char as any).baseVideoTrimEnd}
                             colorSwatch={char.color}
                             isSelected={activeCharacterId === char.id}
                             isRenaming={renamingId === char.id}
@@ -724,6 +729,8 @@ const ResourceManager: React.FC<{
                                                         icon={icon}
                                                         thumbnailUrl={asset.videoUrl || asset.imageUrl}
                                                         isVideo={!!asset.isVideo}
+                                                        trimStart={asset.trimStart}
+                                                        trimEnd={asset.trimEnd}
                                                         isSelected={false}
                                                         isRenaming={renamingId === asset.id}
                                                         onSelect={() => {}}

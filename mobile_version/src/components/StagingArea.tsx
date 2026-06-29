@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { VNID, VNPosition, VNTransition, VNPositionPreset } from '../types';
+import { VNID, VNPosition, VNTransition, VNPositionPreset, VNContentBox } from '../types';
 import type { VNScreenOverlayEffect } from '../types';
 import { VNProject } from '../types/project';
 import {
@@ -10,6 +10,11 @@ import {
 } from '../features/scene/types';
 import { useProject } from '../contexts/ProjectContext';
 import ResizableDraggable from './menu-editor/ResizableDraggable';
+import CanvasSnapGuides from './menu-editor/CanvasSnapGuides';
+import { snapRect, insetRect, SnapGuide, SnapRect } from '../utils/canvasSnap';
+import { computeCharacterFitPlacement } from '../utils/characterFit';
+import ContentBoxEditor from './menu-editor/ContentBoxEditor';
+import { computeAlphaBounds } from '../utils/alphaBounds';
 
 /** Drag-only marker for positioning a placed light on the scene preview (editor only). */
 const LightMarker: React.FC<{ light: VNLight; index: number; onMove: (x: number, y: number) => void }> = ({ light, index, onMove }) => {
@@ -39,6 +44,23 @@ const LightMarker: React.FC<{ light: VNLight; index: number; onMove: (x: number,
         </div>
     );
 };
+
+/** A corner resize grab-handle for a stage overlay. Shared by image / text / hot-spot / button / movie.
+ *  When a content `box` is given, the handle sits at the matching corner of the visible content box
+ *  (so it's reachable on an image with lots of transparent padding) instead of the element corner. */
+const ResizeHandle: React.FC<{ onMouseDown: (e: React.MouseEvent) => void; title?: string; corner?: 'br' | 'tr' | 'bl' | 'tl'; box?: VNContentBox }> = ({ onMouseDown, title, corner = 'br', box }) => {
+    const cursor = (corner === 'br' || corner === 'tl') ? 'nwse-resize' : 'nesw-resize';
+    const hasBox = !!box && ((box.left || 0) > 0.005 || (box.top || 0) > 0.005 || (box.right || 0) > 0.005 || (box.bottom || 0) > 0.005);
+    let pos: React.CSSProperties;
+    if (hasBox && box) {
+        const x = corner.includes('l') ? box.left : 1 - box.right;
+        const y = corner.includes('t') ? box.top : 1 - box.bottom;
+        pos = { left: `${x * 100}%`, top: `${y * 100}%`, transform: 'translate(-50%, -50%)' };
+    } else {
+        pos = corner === 'br' ? { right: -6, bottom: -6 } : corner === 'tr' ? { right: -6, top: -6 } : corner === 'bl' ? { left: -6, bottom: -6 } : { left: -6, top: -6 };
+    }
+    return <div onMouseDown={onMouseDown} title={title} style={{ position: 'absolute', width: 12, height: 12, borderRadius: 3, background: '#0ea5e9', border: '2px solid #fff', boxShadow: '0 0 3px rgba(0,0,0,0.6)', cursor, zIndex: 60, ...pos }} />;
+};
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
 import { combineConditions } from '../utils/conditionLogic';
@@ -48,6 +70,8 @@ import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { EyeIcon, EyeSlashIcon, FilmIcon, VariablesIcon } from './icons';
 import { computeArrangedPositions } from '../utils/characterArrange';
 import Panel from './ui/Panel';
+import TrimmedVideo from './ui/TrimmedVideo';
+import { canvasPointPick, useCanvasPointPick } from '../utils/canvasPointPick';
 import { useCommandRadial } from './inspector/CommandRadialContext';
 import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform } from '../utils/styleUtils';
 import { GradientText } from './ui/GradientText';
@@ -127,6 +151,7 @@ interface ImageOverlay {
     flipX?: boolean;
     flipY?: boolean;
     fitToContent?: boolean;
+    contentBox?: VNContentBox;
 }
 
 interface ButtonOverlay {
@@ -150,6 +175,7 @@ interface ButtonOverlay {
     rotation?: number;
     flipX?: boolean;
     flipY?: boolean;
+    contentBox?: VNContentBox;
 }
 
 interface StageCharacterState {
@@ -163,6 +189,7 @@ interface StageCharacterState {
     inverted?: boolean;
     rotation?: number;
     flipY?: boolean;
+    contentBox?: VNContentBox;
     /** Resolved per-layer asset selection so SetCharacterLayer can patch one layer in the editor preview. */
     layerSelections?: Record<VNID, VNID | null>;
 }
@@ -171,8 +198,11 @@ interface StageState {
     backgroundUrl: string | null;
     /** True when backgroundUrl points at a video asset (render <video>, not <img>). */
     backgroundIsVideo?: boolean;
+    /** Per-use video trim (seconds) for the base background, mirrored from the SetBackground command. */
+    backgroundTrimStart?: number;
+    backgroundTrimEnd?: number;
     /** Stacked background planes (SetBackground with `stack`) — shown in editor at their layer. */
-    backgroundStack?: { commandId: string; url: string | null; color?: string; parallaxDepth?: number; layer?: number; isVideo?: boolean }[];
+    backgroundStack?: { commandId: string; url: string | null; color?: string; parallaxDepth?: number; layer?: number; isVideo?: boolean; trimStart?: number; trimEnd?: number }[];
     characters: Record<VNID, StageCharacterState>;
     textOverlays: TextOverlay[];
     imageOverlays: ImageOverlay[];
@@ -203,6 +233,8 @@ interface StageState {
         opacity: number;
         objectFit: string;
         sourceCommandId?: string;
+        trimStart?: number;
+        trimEnd?: number;
     } | null;
     flash: { color: string } | null;
     choices: ChoiceOption[] | null;
@@ -221,12 +253,23 @@ const StagingArea: React.FC<{
     style?: React.CSSProperties;
     /** Chromeless: render just the stage (no surrounding Panel header) — used by the popped-out canvas window. */
     bare?: boolean;
-}> = ({ project, activeSceneId, selectedCommandIndex, className, style, bare }) => {
+    /** Optional: select a command by index when its overlay is grabbed on the canvas (click-to-select). */
+    onSelectCommand?: (index: number | null) => void;
+}> = ({ project, activeSceneId, selectedCommandIndex, className, style, bare, onSelectCommand }) => {
     const { dispatch } = useProject();
     const { t } = useTranslation('staging');
     const commandRadial = useCommandRadial();
     const [showCommandIndicators, setShowCommandIndicators] = React.useState(true);
     const [showVariableState, setShowVariableState] = React.useState(false);
+    // Canvas point-picker (Move Character "pick A/B on canvas"): when armed, an overlay intercepts
+    // the next stage click and writes the {x,y}% back to the command field; Esc cancels.
+    const activePick = useCanvasPointPick();
+    React.useEffect(() => {
+        if (!activePick) return;
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') canvasPointPick.cancel(); };
+        window.addEventListener('keydown', onKey, true);
+        return () => window.removeEventListener('keydown', onKey, true);
+    }, [activePick]);
     // Bumped when Test Play closes so the canvas <video> remounts (the browser evicts a video
     // that sat behind the fullscreen preview and won't auto-resume otherwise).
     const [videoReloadNonce, setVideoReloadNonce] = React.useState(0);
@@ -326,6 +369,8 @@ const StagingArea: React.FC<{
         // Initialize states
         let backgroundUrl: string | null = null;
         let backgroundIsVideo = false;
+        let backgroundTrimStart: number | undefined;
+        let backgroundTrimEnd: number | undefined;
         let backgroundStack: NonNullable<StageState['backgroundStack']> = [];
         let characters: Record<VNID, StageCharacterState> = {};
         let textOverlays: TextOverlay[] = [];
@@ -380,11 +425,13 @@ const StagingArea: React.FC<{
                         // shows every stacked backdrop.
                         backgroundStack = [
                             ...backgroundStack.filter(p => p.commandId !== command.id),
-                            { commandId: command.id, url: resolvedBgUrl, color: command.backgroundColor, parallaxDepth: command.parallaxDepth, layer: command.layer, isVideo: bgIsVid },
+                            { commandId: command.id, url: resolvedBgUrl, color: command.backgroundColor, parallaxDepth: command.parallaxDepth, layer: command.layer, isVideo: bgIsVid, trimStart: (command as any).trimStart, trimEnd: (command as any).trimEnd },
                         ];
                     } else {
                         backgroundUrl = resolvedBgUrl;
                         backgroundIsVideo = bgIsVid;
+                        backgroundTrimStart = (command as any).trimStart;
+                        backgroundTrimEnd = (command as any).trimEnd;
                     }
                     break;
                 }
@@ -411,7 +458,7 @@ const StagingArea: React.FC<{
                         const keptPosition = command.keepPosition && characters[command.characterId]
                             ? characters[command.characterId].position
                             : command.position;
-                        characters[command.characterId] = { charId: command.characterId, layer: command.layer, position: keptPosition, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY, layerSelections: sel };
+                        characters[command.characterId] = { charId: command.characterId, layer: command.layer, position: keptPosition, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY, contentBox: command.contentBox, layerSelections: sel };
                     }
                     break;
                 case CommandType.HideCharacter:
@@ -477,6 +524,7 @@ const StagingArea: React.FC<{
                             width: command.width, height: command.height, rotation: command.rotation, opacity: command.opacity,
                             scaleX: command.scaleX ?? 1, scaleY: command.scaleY ?? 1,
                             flipX: command.flipX, flipY: command.flipY, fitToContent: command.fitToContent,
+                            contentBox: command.contentBox,
                         });
                     }
                     break;
@@ -520,6 +568,7 @@ const StagingArea: React.FC<{
                             imageUrl,
                             hoverImageUrl,
                             rotation: buttonCmd.rotation, flipX: buttonCmd.flipX, flipY: buttonCmd.flipY,
+                            contentBox: buttonCmd.contentBox,
                         });
                     }
                     break;
@@ -608,6 +657,8 @@ const StagingArea: React.FC<{
                         opacity: movieCmd.opacity ?? 1,
                         objectFit: movieCmd.objectFit || 'cover',
                         sourceCommandId: movieCmd.id,
+                        trimStart: (movieCmd as any).trimStart,
+                        trimEnd: (movieCmd as any).trimEnd,
                     };
                     break;
                 }
@@ -632,7 +683,7 @@ const StagingArea: React.FC<{
             }
         }
 
-        setStageState({ backgroundUrl, backgroundIsVideo, backgroundStack, characters, textOverlays, imageOverlays, buttonOverlays, hotSpotOverlays, screen, dialogue, movie, flash, choices, choiceLayout, choiceCommandId, textInput, commandIndicator, variables: currentVariables });
+        setStageState({ backgroundUrl, backgroundIsVideo, backgroundTrimStart, backgroundTrimEnd, backgroundStack, characters, textOverlays, imageOverlays, buttonOverlays, hotSpotOverlays, screen, dialogue, movie, flash, choices, choiceLayout, choiceCommandId, textInput, commandIndicator, variables: currentVariables });
 
     }, [activeSceneId, selectedCommandIndex, project]);
 
@@ -646,6 +697,10 @@ const StagingArea: React.FC<{
         startMouseY: number;
         startPosX: number;
         startPosY: number;
+        /** The element's TRUE on-screen rect (stage %, top-left) measured at drag start. Used for
+         *  snapping so the alignment guide sits at the real visible centre regardless of scale /
+         *  transform-origin (the analytical scale math drifted). Translated by the drag delta. */
+        startVisualRect?: { x: number; y: number; width: number; height: number };
     } | null>(null);
     const [overlayDragOffset, setOverlayDragOffset] = useState<{ x: number; y: number } | null>(null);
     // Latest live drag offset, mirrored in a ref so the commit (onUp) reads it WITHOUT
@@ -672,6 +727,26 @@ const StagingArea: React.FC<{
     // that makes a resize drag feel slow, especially with many sprites on stage).
     const overlayResizeSizeRef = useRef<{ width: number; height: number } | null>(null);
 
+    // Grab-to-select: when an overlay/character is grabbed, select its command (so the inspector
+    // follows and the resize handles appear) — without needing to click it in the command list first.
+    const selectBySourceId = useCallback((sourceCommandId: string) => {
+        if (!onSelectCommand) return;
+        const cmds = project.scenes[activeSceneId]?.commands || [];
+        const idx = cmds.findIndex((c: VNCommand) => c.id === sourceCommandId);
+        if (idx >= 0) onSelectCommand(idx);
+    }, [onSelectCommand, project.scenes, activeSceneId]);
+
+    // Measure a DOM element's true on-screen rect in stage-% (top-left). Ground truth for snapping —
+    // immune to the character scale/transform-origin math that made the analytical centre drift.
+    const measureStageRect = useCallback((el: HTMLElement): { x: number; y: number; width: number; height: number } | undefined => {
+        const stage = stageRef.current;
+        if (!stage) return undefined;
+        const sr = stage.getBoundingClientRect();
+        if (!sr.width || !sr.height) return undefined;
+        const r = el.getBoundingClientRect();
+        return { x: ((r.left - sr.left) / sr.width) * 100, y: ((r.top - sr.top) / sr.height) * 100, width: (r.width / sr.width) * 100, height: (r.height / sr.height) * 100 };
+    }, []);
+
     const handleOverlayResizeMouseDown = useCallback((e: React.MouseEvent, kind: DragKind, overlayId: string, width: number, height: number, sourceCommandId?: string, corner?: string) => {
         e.preventDefault();
         e.stopPropagation();
@@ -692,8 +767,19 @@ const StagingArea: React.FC<{
 
     const handleCharMouseDown = useCallback((e: React.MouseEvent, char: StageCharacterState) => {
         if (!char.sourceCommandId) return;
+        // When a content box is set, only the VISIBLE region grabs the sprite — clicking the
+        // transparent padding outside the box does nothing (so it can't be moved by accident).
+        const cb = char.contentBox;
+        if (cb && (cb.left > 0.005 || cb.top > 0.005 || cb.right > 0.005 || cb.bottom > 0.005)) {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) {
+                const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+                if (fx < cb.left || fx > 1 - cb.right || fy < cb.top || fy > 1 - cb.bottom) return;
+            }
+        }
         e.preventDefault();
         e.stopPropagation();
+        selectBySourceId(char.sourceCommandId);
         const isCustom = typeof char.position === 'object';
         const presetToCoords: Record<string, { x: number; y: number }> = {
             'left': { x: 25, y: 10 }, 'center': { x: 50, y: 10 }, 'right': { x: 75, y: 10 },
@@ -719,13 +805,23 @@ const StagingArea: React.FC<{
             startMouseY: e.clientY,
             startPosX: startPos.x,
             startPosY: startPos.y,
+            startVisualRect: measureStageRect(e.currentTarget as HTMLElement),
         });
         setOverlayDragOffset(null);
-    }, [stageSize]);
+    }, [stageSize, selectBySourceId, measureStageRect]);
 
-    const handleOverlayMouseDown = useCallback((e: React.MouseEvent, kind: DragKind, id: string, x: number, y: number) => {
+    const handleOverlayMouseDown = useCallback((e: React.MouseEvent, kind: DragKind, id: string, x: number, y: number, cb?: VNContentBox) => {
+        // Content box set → only the visible region grabs the element (transparent padding ignored).
+        if (cb && (cb.left > 0.005 || cb.top > 0.005 || cb.right > 0.005 || cb.bottom > 0.005)) {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) {
+                const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+                if (fx < cb.left || fx > 1 - cb.right || fy < cb.top || fy > 1 - cb.bottom) return;
+            }
+        }
         e.preventDefault();
         e.stopPropagation();
+        selectBySourceId(id);
         setOverlayDrag({
             kind,
             overlayId: id,
@@ -734,23 +830,207 @@ const StagingArea: React.FC<{
             startMouseY: e.clientY,
             startPosX: x,
             startPosY: y,
+            startVisualRect: measureStageRect(e.currentTarget as HTMLElement),
         });
         setOverlayDragOffset(null);
-    }, []);
+    }, [selectBySourceId, measureStageRect]);
+
+    // Start a resize from the element's CURRENTLY RENDERED size (in %), measured from the DOM.
+    // Used for image/text overlays whose stored size is px (or 'auto' for text) — measuring keeps
+    // the box from jumping on the first resize and works for auto-sized text.
+    const startMeasuredResize = useCallback((e: React.MouseEvent, kind: DragKind, id: string, corner?: string) => {
+        const el = (e.currentTarget as HTMLElement).parentElement;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        const wPct = (r.width / (stageSize.width || 1)) * 100;
+        const hPct = (r.height / (stageSize.height || 1)) * 100;
+        handleOverlayResizeMouseDown(e, kind, id, wPct, hPct, id, corner);
+    }, [stageSize, handleOverlayResizeMouseDown]);
+
+    // Commit a character's scale (used by the Fit-to-screen toolbar). Finds the ShowCharacter
+    // command by id across scenes and patches `scale` — one dispatch = one undo step.
+    const commitCharScale = useCallback((sourceCommandId: string, scale: number) => {
+        for (const scene of Object.values(project.scenes) as VNScene[]) {
+            const idx = scene.commands.findIndex((c: VNCommand) => c.id === sourceCommandId);
+            if (idx < 0) continue;
+            dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: scene.id, commandIndex: idx, command: { ...scene.commands[idx], scale } } });
+            break;
+        }
+    }, [project.scenes, dispatch]);
+
+    // Fit-to-screen: set scale AND a custom position so the visible content fills the screen and stays
+    // on it (planted at the floor, centred). Converts a preset character to a custom {x,y} position.
+    const commitCharFit = useCallback((sourceCommandId: string, mode: 'height' | 'width', box?: VNContentBox) => {
+        const placement = computeCharacterFitPlacement(mode, stageSize, box);
+        for (const scene of Object.values(project.scenes) as VNScene[]) {
+            const idx = scene.commands.findIndex((c: VNCommand) => c.id === sourceCommandId);
+            if (idx < 0) continue;
+            dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: scene.id, commandIndex: idx, command: { ...scene.commands[idx], scale: placement.scale, position: { x: placement.x, y: placement.y } } } });
+            break;
+        }
+    }, [project.scenes, dispatch, stageSize]);
+
+    // Content box (visible/interactive sub-region) commit + auto-trim, by command id across scenes.
+    const commitContentBox = useCallback((sourceCommandId: string, box: VNContentBox | undefined) => {
+        for (const scene of Object.values(project.scenes) as VNScene[]) {
+            const idx = scene.commands.findIndex((c: VNCommand) => c.id === sourceCommandId);
+            if (idx < 0) continue;
+            dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: scene.id, commandIndex: idx, command: { ...scene.commands[idx], contentBox: box } } });
+            break;
+        }
+    }, [project.scenes, dispatch]);
+    const trimContentBox = useCallback(async (sourceCommandId: string, imageUrl: string | undefined, boxAspect: number) => {
+        if (!imageUrl) return;
+        const box = await computeAlphaBounds(imageUrl, { boxAspect });
+        if (box) commitContentBox(sourceCommandId, box);
+    }, [commitContentBox]);
+
+    // Live alignment-guide lines drawn during a drag/resize (smart snapping). Cleared on release.
+    const [overlaySnapGuides, setOverlaySnapGuides] = useState<SnapGuide[]>([]);
+    // Smart-snap toggle (editor-only UI pref; default ON). Hold Alt to bypass per-interaction.
+    const [snapEnabled, setSnapEnabled] = useState(false);
+
+    // Top-left-% rect + anchor for every snappable overlay, keyed by command id. Used both as the
+    // sibling set for alignment snapping and to convert a dragged overlay's anchor → top-left.
+    // Characters are intentionally excluded (their bottom-centre anchor + 90%/aspect sizing makes a
+    // reliable rect fragile, and their carefully-tuned drag must not regress).
+    // For each overlay: `rect` = the trimmed CONTENT rect at the current position (used as a snap
+    // SIBLING); `fullW/fullH/anchor/box` describe the full element so a DRAGGED overlay can be snapped
+    // by its content rect and the positional delta applied back to its stored coord.
+    type OverlayMetaEntry = { rect: SnapRect; fullW: number; fullH: number; anchor: 'center' | 'topleft'; box?: VNContentBox };
+    const overlayMeta = React.useMemo(() => {
+        const map = new Map<string, OverlayMetaEntry>();
+        const RW = 1280, RH = 720;
+        const add = (id: string, fullX: number, fullY: number, w: number, h: number, anchor: 'center' | 'topleft', box?: VNContentBox) => {
+            map.set(id, { rect: insetRect({ x: fullX, y: fullY, width: w, height: h }, box), fullW: w, fullH: h, anchor, box });
+        };
+        for (const o of stageState.textOverlays) {
+            const w = o.width ? (o.width / RW) * 100 : 0;
+            const h = o.height ? (o.height / RH) * 100 : 0;
+            add(o.id, o.x - w / 2, o.y - h / 2, w, h, 'center');
+        }
+        for (const o of stageState.imageOverlays) {
+            const w = (o.width / RW) * 100, h = (o.height / RH) * 100;
+            add(o.id, o.x - w / 2, o.y - h / 2, w, h, 'center', o.contentBox);
+        }
+        for (const b of stageState.buttonOverlays) {
+            add(b.id, b.x - b.width / 2, b.y - b.height / 2, b.width, b.height, 'center', b.contentBox);
+        }
+        for (const hs of stageState.hotSpotOverlays) {
+            add(hs.id, hs.x, hs.y, hs.width, hs.height, 'topleft');
+        }
+        const m = stageState.movie;
+        if (m && m.objectFit === 'custom' && m.sourceCommandId) {
+            add(m.sourceCommandId, m.x ?? 0, m.y ?? 0, m.width ?? 0, m.height ?? 0, 'topleft');
+        }
+        return map;
+    }, [stageState]);
+
+    // Character snap rects (keyed by charId), in % top-left. Characters render at 90%×scale of stage
+    // height with a 3:4 aspect, so width/height derive from scale. y is approximate (bottom-anchored);
+    // characters snap on the X axis only, so y is used only for guide spans. Left-edge x mirrors
+    // handleCharMouseDown (preset centre → left edge via the computed width).
+    const characterRects = React.useMemo(() => {
+        const map = new Map<string, { rect: SnapRect; fullW: number; fullH: number; leftX: number; box?: VNContentBox }>();
+        const sw = stageSize.width || 1, sh = stageSize.height || 1;
+        const presetCenters: Record<string, number> = { 'left': 25, 'center': 50, 'right': 75, 'off-left': -25, 'off-right': 125 };
+        for (const ch of Object.values(stageState.characters) as StageCharacterState[]) {
+            const scale = ch.scale ?? 1;
+            const heightPct = 90 * scale;
+            const widthPct = ((0.9 * sh * scale * 0.75) / sw) * 100;
+            const leftX = typeof ch.position === 'object'
+                ? (ch.position as { x: number }).x
+                : (presetCenters[ch.position as string] ?? 50) - widthPct / 2;
+            // Visual top: the sprite is a 90%-height box scaled around its bottom-centre, so
+            // visualTop = layoutTop + (90 - scaledHeight). layoutTop = position.y (custom) or 10 (preset).
+            const layoutTop = typeof ch.position === 'object' ? (ch.position as { y: number }).y : 10;
+            const topY = layoutTop + (90 - heightPct);
+            const full = { x: leftX, y: topY, width: widthPct, height: heightPct };
+            map.set(ch.charId, { rect: insetRect(full, ch.contentBox), fullW: widthPct, fullH: heightPct, leftX, box: ch.contentBox });
+        }
+        return map;
+    }, [stageState.characters, stageSize]);
 
     useEffect(() => {
         if (!overlayDrag) return;
         const sw = stageSize.width || 1;
         const sh = stageSize.height || 1;
         const SNAP = 5;
+        // Measure EVERY element's true on-screen rect once at drag start (stage %), keyed by id, so
+        // both the guides and the snap targets match what's actually rendered (the analytical char
+        // rects drift with scale). Inset each by its content box so we align by the VISIBLE region.
+        const boxFor = (id: string) => overlayMeta.get(id)?.box ?? characterRects.get(id)?.box;
+        const measuredRects = new Map<string, SnapRect>();
+        const stageEl = stageRef.current;
+        if (stageEl) {
+            const sr = stageEl.getBoundingClientRect();
+            if (sr.width && sr.height) {
+                stageEl.querySelectorAll('[data-vn-id]').forEach(el => {
+                    const id = (el as HTMLElement).dataset.vnId;
+                    if (!id) return;
+                    const r = (el as HTMLElement).getBoundingClientRect();
+                    measuredRects.set(id, { x: ((r.left - sr.left) / sr.width) * 100, y: ((r.top - sr.top) / sr.height) * 100, width: (r.width / sr.width) * 100, height: (r.height / sr.height) * 100 });
+                });
+            }
+        }
+        // Sibling content rects (measured ∪ analytical fallback), excluding the dragged element.
+        const siblings: SnapRect[] = [];
+        if (measuredRects.size > 0) {
+            measuredRects.forEach((rect, id) => { if (id !== overlayDrag.overlayId) siblings.push(insetRect(rect, boxFor(id))); });
+        } else {
+            overlayMeta.forEach((v, key) => { if (key !== overlayDrag.overlayId) siblings.push(v.rect); });
+            characterRects.forEach((r, key) => { if (key !== overlayDrag.overlayId) siblings.push(r.rect); });
+        }
+        const meta = overlayMeta.get(overlayDrag.overlayId);
+        const measuredSelf = measuredRects.get(overlayDrag.overlayId);
         const onMove = (e: MouseEvent) => {
             const dx = ((e.clientX - overlayDrag.startMouseX) / sw) * 100;
             const dy = ((e.clientY - overlayDrag.startMouseY) / sh) * 100;
             let nx = overlayDrag.startPosX + dx;
             let ny = overlayDrag.startPosY + dy;
             if (e.shiftKey) {
+                // Legacy coarse grid (muscle memory) — takes precedence over smart snap.
                 nx = Math.round(nx / SNAP) * SNAP;
                 ny = Math.round(ny / SNAP) * SNAP;
+                setOverlaySnapGuides([]);
+            } else if (snapEnabled && !e.altKey && (measuredSelf || overlayDrag.startVisualRect)) {
+                // Snap by the element's TRUE on-screen rect (measured at drag start, translated by the
+                // drag delta) — exact centre regardless of scale / transform-origin. Siblings are
+                // measured too (above), so the guides + snap line up with what's actually rendered.
+                const svr = measuredSelf || overlayDrag.startVisualRect!;
+                const box = boxFor(overlayDrag.overlayId);
+                const visual = { x: svr.x + dx, y: svr.y + dy, width: svr.width, height: svr.height };
+                const content = insetRect(visual, box);
+                const res = snapRect(content, siblings, { mode: 'move' });
+                nx += res.rect.x - content.x;
+                ny += res.rect.y - content.y;
+                setOverlaySnapGuides(res.guides.map(g => ({ ...g, span: undefined })));
+            } else if (snapEnabled && !e.altKey && overlayDrag.kind === 'character') {
+                // Fallback (no measured rect): analytical visible content rect.
+                const dragged = characterRects.get(overlayDrag.overlayId);
+                const fullW = dragged?.fullW ?? 0, fullH = dragged?.fullH ?? 0;
+                const charSiblings: SnapRect[] = [];
+                overlayMeta.forEach(v => charSiblings.push(v.rect));
+                characterRects.forEach((r, k) => { if (k !== overlayDrag.overlayId) charSiblings.push(r.rect); });
+                const visualTop = ny + 90 - fullH;
+                const content = insetRect({ x: nx, y: visualTop, width: fullW, height: fullH }, dragged?.box);
+                const res = snapRect(content, charSiblings, { mode: 'move' });
+                nx += res.rect.x - content.x;
+                ny += res.rect.y - content.y;
+                setOverlaySnapGuides(res.guides.map(g => ({ ...g, span: undefined })));
+            } else if (snapEnabled && !e.altKey && meta) {
+                // Snap by the element's CONTENT rect (visible region), then apply the positional delta
+                // back to its stored coord. Full top-left from the live position + anchor.
+                const ftl = meta.anchor === 'center'
+                    ? { x: nx - meta.fullW / 2, y: ny - meta.fullH / 2 }
+                    : { x: nx, y: ny };
+                const content = insetRect({ x: ftl.x, y: ftl.y, width: meta.fullW, height: meta.fullH }, meta.box);
+                const res = snapRect(content, siblings, { mode: 'move' });
+                nx += res.rect.x - content.x;
+                ny += res.rect.y - content.y;
+                setOverlaySnapGuides(res.guides);
+            } else {
+                setOverlaySnapGuides([]);
             }
             nx = Math.round(nx * 10) / 10;
             ny = Math.round(ny * 10) / 10;
@@ -787,12 +1067,13 @@ const StagingArea: React.FC<{
             setOverlayDrag(null);
             setOverlayDragOffset(null);
             overlayDragOffsetRef.current = null;
+            setOverlaySnapGuides([]);
         };
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
         return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
         // overlayDragOffset intentionally not a dep — latest read via ref (listeners attach once per drag).
-    }, [overlayDrag, project.scenes, dispatch, stageSize]);
+    }, [overlayDrag, project.scenes, dispatch, stageSize, overlayMeta, characterRects, snapEnabled]);
 
     // Resize drag: the overlay is center-anchored, so growing width/height by 2× the
     // mouse delta keeps the dragged corner under the cursor.
@@ -820,8 +1101,12 @@ const StagingArea: React.FC<{
                 setOverlayResizeSize(next);
                 return;
             }
-            let nw = overlayResize.startW + dx * 2;
-            let nh = overlayResize.startH + dy * 2;
+            // Hot spots are TOP-LEFT anchored (no centring transform), so a bottom-right handle grows
+            // by 1× the delta (left/top edges stay put). Image/text/button/movie are centre-anchored
+            // (translate(-50%,-50%)), so the corner grows 2× to keep the centre fixed.
+            const mult = overlayResize.kind === 'hotspot' ? 1 : 2;
+            let nw = overlayResize.startW + dx * mult;
+            let nh = overlayResize.startH + dy * mult;
             if (e.shiftKey) { nw = Math.round(nw); nh = Math.round(nh); }
             nw = Math.max(MIN, Math.round(nw * 10) / 10);
             nh = Math.max(MIN, Math.round(nh * 10) / 10);
@@ -840,9 +1125,13 @@ const StagingArea: React.FC<{
                 const idx = scene.commands.findIndex((c: VNCommand) => c.id === resize.sourceCommandId);
                 if (idx < 0) continue;
                 const cmd = scene.commands[idx];
+                // Per-kind units: characters store a uniform `scale`; image/text store px (relative to
+                // the 1280×720 reference); button/item/hotspot/movie store % directly.
                 const patch = resize.kind === 'character'
                     ? { scale: size.width }
-                    : { width: size.width, height: size.height };
+                    : (resize.kind === 'image' || resize.kind === 'text')
+                        ? { width: Math.round((size.width * 1280) / 100), height: Math.round((size.height * 720) / 100) }
+                        : { width: size.width, height: size.height };
                 dispatch({
                     type: 'UPDATE_COMMAND',
                     payload: { sceneId: scene.id, commandIndex: idx, command: { ...cmd, ...patch } },
@@ -1382,6 +1671,10 @@ const StagingArea: React.FC<{
         return fontSize * scale;
     };
 
+    // The currently-selected command (drives selection-gated resize handles + the character Fit toolbar).
+    const selectedCmd = selectedCommandIndex != null ? (project.scenes[activeSceneId]?.commands[selectedCommandIndex] as VNCommand | undefined) : undefined;
+    const selectedCmdId = selectedCmd?.id ?? null;
+
     const stageInner = (
             <div ref={containerRef} className="w-full h-full flex items-center justify-center p-2">
                 <div
@@ -1392,8 +1685,26 @@ const StagingArea: React.FC<{
                     // context) and never float overlays above the editor chrome.
                     style={{ isolation: 'isolate', width: stageSize.width, height: stageSize.height, '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}
                 >
+                    {activePick && activePick.sceneId === activeSceneId && (
+                        <div
+                            className="absolute inset-0 z-[99999] cursor-crosshair"
+                            onClick={(e) => {
+                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                const x = Math.round(((e.clientX - rect.left) / rect.width) * 1000) / 10;
+                                const y = Math.round(((e.clientY - rect.top) / rect.height) * 1000) / 10;
+                                const sc = project.scenes[activePick.sceneId];
+                                const cmd = sc?.commands?.[activePick.commandIndex];
+                                if (cmd) dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: activePick.sceneId, commandIndex: activePick.commandIndex, command: { ...cmd, [activePick.field]: { x, y } } } });
+                                canvasPointPick.cancel();
+                            }}
+                        >
+                            <div className="absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-[var(--accent-lavender)] text-white text-xs shadow-lg pointer-events-none whitespace-nowrap">
+                                {activePick.label || 'Click to set point'} — Esc to cancel
+                            </div>
+                        </div>
+                    )}
                     {stageState.backgroundUrl && (stageState.backgroundIsVideo
-                        ? <video key={`stage-bg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={stageState.backgroundUrl} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" />
+                        ? <TrimmedVideo key={`stage-bg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={stageState.backgroundUrl} autoPlay loop muted trimStart={stageState.backgroundTrimStart} trimEnd={stageState.backgroundTrimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" />
                         : <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" />
                     )}
 
@@ -1406,7 +1717,7 @@ const StagingArea: React.FC<{
                         return (
                             <div key={plane.commandId} className="absolute inset-0 overflow-hidden" style={{ zIndex: plane.layer ?? 0, backgroundColor: plane.color }}>
                                 {plane.url && (plane.isVideo
-                                    ? <video key={`stage-bgplane-${plane.commandId}-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={plane.url} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" style={plane.parallaxDepth ? { transform: 'scale(1.15)', transformOrigin: 'center' } : undefined} />
+                                    ? <TrimmedVideo key={`stage-bgplane-${plane.commandId}-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={plane.url} autoPlay loop muted trimStart={plane.trimStart} trimEnd={plane.trimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" style={plane.parallaxDepth ? { transform: 'scale(1.15)', transformOrigin: 'center' } : undefined} />
                                     : <img src={plane.url} alt="background layer" className="absolute inset-0 w-full h-full object-cover" style={plane.parallaxDepth ? { transform: 'scale(1.15)', transformOrigin: 'center' } : undefined} />
                                 )}
                             </div>
@@ -1416,13 +1727,15 @@ const StagingArea: React.FC<{
                 {/* Movie/video - renders BEHIND characters (z-index 2) */}
                 {stageState.movie && stageState.movie.videoUrl && (
                     stageState.movie.displayMode === 'fullscreen' ? (
-                        <video
+                        <TrimmedVideo
                             key={`stage-movie-fs-${videoReloadNonce}`}
                             ref={(el) => { if (el) el.play().catch(() => {}); }}
                             src={stageState.movie.videoUrl}
                             autoPlay
                             muted
                             loop
+                            trimStart={stageState.movie.trimStart}
+                            trimEnd={stageState.movie.trimEnd}
                             playsInline
                             className="absolute pointer-events-none"
                             style={{
@@ -1455,10 +1768,11 @@ const StagingArea: React.FC<{
                                     zIndex: (isDragging || isResizing) ? 100000 : 2,
                                     cursor: isResizing ? 'nwse-resize' : (isDragging ? 'grabbing' : 'grab'),
                                 }}
+                                data-vn-id={cmdId}
                                 onMouseDown={cmdId ? (e) => handleOverlayMouseDown(e, 'movie', cmdId, m.x, m.y) : undefined}
                                 onContextMenu={commandRadial && cmdId ? (e) => { e.preventDefault(); commandRadial.openById(cmdId, e.clientX, e.clientY); } : undefined}
                             >
-                                <video key={`stage-movie-custom-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={m.videoUrl} autoPlay muted loop playsInline
+                                <TrimmedVideo key={`stage-movie-custom-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={m.videoUrl} autoPlay muted loop trimStart={m.trimStart} trimEnd={m.trimEnd} playsInline
                                     style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }} />
                                 {cmdId && (
                                     <div
@@ -1470,13 +1784,15 @@ const StagingArea: React.FC<{
                             </div>
                         );
                     })() : (
-                        <video
+                        <TrimmedVideo
                             key={`stage-movie-nc-${videoReloadNonce}`}
                             ref={(el) => { if (el) el.play().catch(() => {}); }}
                             src={stageState.movie.videoUrl}
                             autoPlay
                             muted
                             loop
+                            trimStart={stageState.movie.trimStart}
+                            trimEnd={stageState.movie.trimEnd}
                             playsInline
                             className="absolute pointer-events-none"
                             style={{
@@ -1545,6 +1861,7 @@ const StagingArea: React.FC<{
                     return (
                         <div
                             key={char.charId}
+                            data-vn-id={char.charId}
                             className="absolute w-auto aspect-[3/4]"
                             style={{
                                 ...finalStyle,
@@ -1555,24 +1872,31 @@ const StagingArea: React.FC<{
                             onContextMenu={(commandRadial && char.sourceCommandId) ? (e) => { e.preventDefault(); commandRadial.openById(char.sourceCommandId!, e.clientX, e.clientY); } : undefined}
                         >
                             {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: index }} />)}
-                            {/* Resize handles — grab ANY corner to scale the sprite uniformly. */}
-                            {char.sourceCommandId && ([
-                                { c: 'tl', pos: { top: -2, left: -2 }, cursor: 'nwse-resize' },
-                                { c: 'tr', pos: { top: -2, right: -2 }, cursor: 'nesw-resize' },
-                                { c: 'bl', pos: { bottom: -2, left: -2 }, cursor: 'nesw-resize' },
-                                { c: 'br', pos: { bottom: -2, right: -2 }, cursor: 'nwse-resize' },
-                            ].map(h => (
-                                <div
-                                    key={h.c}
-                                    onMouseDown={e => handleOverlayResizeMouseDown(e, 'character', char.charId, char.scale ?? 1, char.scale ?? 1, char.sourceCommandId, h.c)}
-                                    title={t('dragToResizeScale')}
-                                    style={{
-                                        position: 'absolute', width: 14, height: 14,
-                                        borderRadius: 3, background: '#0ea5e9', border: '2px solid #fff',
-                                        boxShadow: '0 0 3px rgba(0,0,0,0.6)', zIndex: 60, cursor: h.cursor, ...h.pos,
-                                    }}
-                                />
-                            )))}
+                            {/* Resize handles — grab ANY corner to scale the sprite uniformly. Placed at the
+                                CONTENT BOX corners (the visible art) so they stay reachable even when the
+                                sprite has large transparent padding; fall back to the frame corners when
+                                no content box is set. */}
+                            {char.sourceCommandId && (() => {
+                                const cb = char.contentBox || { left: 0, top: 0, right: 0, bottom: 0 };
+                                return ([
+                                    { c: 'tl', x: cb.left, y: cb.top, cursor: 'nwse-resize' },
+                                    { c: 'tr', x: 1 - cb.right, y: cb.top, cursor: 'nesw-resize' },
+                                    { c: 'bl', x: cb.left, y: 1 - cb.bottom, cursor: 'nesw-resize' },
+                                    { c: 'br', x: 1 - cb.right, y: 1 - cb.bottom, cursor: 'nwse-resize' },
+                                ].map(h => (
+                                    <div
+                                        key={h.c}
+                                        onMouseDown={e => handleOverlayResizeMouseDown(e, 'character', char.charId, char.scale ?? 1, char.scale ?? 1, char.sourceCommandId, h.c)}
+                                        title={t('dragToResizeScale')}
+                                        style={{
+                                            position: 'absolute', left: `${h.x * 100}%`, top: `${h.y * 100}%`,
+                                            transform: 'translate(-50%, -50%)', width: 14, height: 14,
+                                            borderRadius: 3, background: '#0ea5e9', border: '2px solid #fff',
+                                            boxShadow: '0 0 3px rgba(0,0,0,0.6)', zIndex: 60, cursor: h.cursor,
+                                        }}
+                                    />
+                                )));
+                            })()}
                             {isDragging && overlayDragOffset && (
                                 <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none z-50">
                                     {overlayDragOffset.x}%, {overlayDragOffset.y}%
@@ -1582,6 +1906,14 @@ const StagingArea: React.FC<{
                                 <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none z-50">
                                     {overlayResizeSize.width.toFixed(2)}×
                                 </div>
+                            )}
+                            {char.sourceCommandId && char.sourceCommandId === selectedCmdId && (
+                                <ContentBoxEditor
+                                    box={char.contentBox}
+                                    onChange={b => commitContentBox(char.sourceCommandId!, b)}
+                                    onTrim={(aspect) => trimContentBox(char.sourceCommandId!, char.imageUrls[char.imageUrls.length - 1] || char.imageUrls[0], aspect)}
+                                    onReset={() => commitContentBox(char.sourceCommandId!, undefined)}
+                                />
                             )}
                         </div>
                     );
@@ -1593,14 +1925,15 @@ const StagingArea: React.FC<{
                      // value at the selected command.
                      const overlayText = project ? interpolateVariables(o.text, currentVariables, project) : o.text;
                      const isDragging = overlayDrag?.kind === 'text' && overlayDrag.overlayId === o.id;
+                     const isResizing = overlayResize?.kind === 'text' && overlayResize.overlayId === o.id;
                      const displayX = isDragging && overlayDragOffset ? overlayDragOffset.x : o.x;
                      const displayY = isDragging && overlayDragOffset ? overlayDragOffset.y : o.y;
                      const textStyle: React.CSSProperties = {
-                        position: 'absolute', 
-                        left: `${displayX}%`, 
+                        position: 'absolute',
+                        left: `${displayX}%`,
                         top: `${displayY}%`,
-                        width: o.width ? `${pxToPercentWidth(o.width)}%` : 'auto', 
-                        height: o.height ? `${pxToPercentHeight(o.height)}%` : 'auto',
+                        width: isResizing && overlayResizeSize ? `${overlayResizeSize.width}%` : (o.width ? `${pxToPercentWidth(o.width)}%` : 'auto'),
+                        height: isResizing && overlayResizeSize ? `${overlayResizeSize.height}%` : (o.height ? `${pxToPercentHeight(o.height)}%` : 'auto'),
                         transform: `translate(-50%, -50%) ${buildOrientationTransform({ rotation: o.rotation, flipX: o.flipX, flipY: o.flipY })}`.trim(),
                         ...fontSettingsToStyle({ family: o.fontFamily, size: o.fontSize, color: o.color, weight: o.fontWeight || 'normal', italic: o.fontStyle === 'italic' }),
                         fontSize: `${scaleFontSize(o.fontSize)}px`,
@@ -1620,10 +1953,11 @@ const StagingArea: React.FC<{
                      Object.assign(textStyle, effectsContainerStyle);
                      return (
                          <React.Fragment key={o.id}>
-                             <div style={textStyle} onMouseDown={e => handleOverlayMouseDown(e, 'text', o.id, o.x, o.y)}
+                             <div data-vn-id={o.id} style={textStyle} onMouseDown={e => handleOverlayMouseDown(e, 'text', o.id, o.x, o.y)}
                                  onContextMenu={commandRadial ? (e) => { e.preventDefault(); commandRadial.openById(o.id, e.clientX, e.clientY); } : undefined}>
                                  {/* GradientText forces Chromium to re-clip the gradient when colors change live. */}
                                  {gradientSpanStyle ? <GradientText style={gradientSpanStyle}>{overlayText}</GradientText> : <span>{overlayText}</span>}
+                                 {o.id === selectedCmdId && <ResizeHandle onMouseDown={e => startMeasuredResize(e, 'text', o.id)} title={t('dragToResize')} />}
                              </div>
                              {isDragging && overlayDragOffset && (
                                  <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
@@ -1636,6 +1970,7 @@ const StagingArea: React.FC<{
                 })}
                  {stageState.imageOverlays.map(o => {
                      const isDragging = overlayDrag?.kind === 'image' && overlayDrag.overlayId === o.id;
+                     const isResizing = overlayResize?.kind === 'image' && overlayResize.overlayId === o.id;
                      const displayX = isDragging && overlayDragOffset ? overlayDragOffset.x : o.x;
                      const displayY = isDragging && overlayDragOffset ? overlayDragOffset.y : o.y;
                      return (
@@ -1645,21 +1980,34 @@ const StagingArea: React.FC<{
                                      position: 'absolute',
                                      left: `${displayX}%`,
                                      top: `${displayY}%`,
-                                     // "Fit to content": box shrinks to the fitted art (width/height become a max bound).
-                                     ...(o.fitToContent
-                                         ? { width: 'auto', height: 'auto', maxWidth: `${pxToPercentWidth(o.width)}%`, maxHeight: `${pxToPercentHeight(o.height)}%` }
-                                         : { width: `${pxToPercentWidth(o.width)}%`, height: `${pxToPercentHeight(o.height)}%` }),
+                                     // While resizing, show explicit live size (in %); otherwise honor the stored px
+                                     // size, and "Fit to content" treats width/height as a max bound around the art.
+                                     ...(isResizing && overlayResizeSize
+                                         ? { width: `${overlayResizeSize.width}%`, height: `${overlayResizeSize.height}%` }
+                                         : o.fitToContent
+                                             ? { width: 'auto', height: 'auto', maxWidth: `${pxToPercentWidth(o.width)}%`, maxHeight: `${pxToPercentHeight(o.height)}%` }
+                                             : { width: `${pxToPercentWidth(o.width)}%`, height: `${pxToPercentHeight(o.height)}%` }),
                                      transform: `translate(-50%, -50%) rotate(${o.rotation}deg) scale(${o.scaleX * (o.flipX ? -1 : 1)}, ${o.scaleY * (o.flipY ? -1 : 1)})`,
                                      opacity: o.opacity,
                                      cursor: isDragging ? 'grabbing' : 'grab',
                                      zIndex: isDragging ? 100000 : 1 + (o.layer ?? 0) * 100,
                                  }}
-                                 onMouseDown={e => handleOverlayMouseDown(e, 'image', o.id, o.x, o.y)}
+                                 data-vn-id={o.id}
+                                 onMouseDown={e => handleOverlayMouseDown(e, 'image', o.id, o.x, o.y, o.contentBox)}
                                  onContextMenu={commandRadial ? (e) => { e.preventDefault(); commandRadial.openById(o.id, e.clientX, e.clientY); } : undefined}
                              >
                                  {o.fitToContent
                                      ? <img src={o.imageUrl} alt="" style={{ display: 'block', maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain' }} />
                                      : <img src={o.imageUrl} alt="" className="w-full h-full object-contain" />}
+                                 {o.id === selectedCmdId && <ResizeHandle onMouseDown={e => startMeasuredResize(e, 'image', o.id)} title={t('dragToResize')} box={o.contentBox} />}
+                                 {o.id === selectedCmdId && (
+                                     <ContentBoxEditor
+                                         box={o.contentBox}
+                                         onChange={b => commitContentBox(o.id, b)}
+                                         onTrim={(aspect) => trimContentBox(o.id, o.imageUrl, aspect)}
+                                         onReset={() => commitContentBox(o.id, undefined)}
+                                     />
+                                 )}
                              </div>
                              {isDragging && overlayDragOffset && (
                                  <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
@@ -1695,26 +2043,16 @@ const StagingArea: React.FC<{
                                     cursor: isResizing ? 'nwse-resize' : (isDragging ? 'grabbing' : 'grab'),
                                     zIndex: (isDragging || isResizing) ? 100000 : 1 + (btn.layer ?? 0) * 100,
                                 }}
-                                onMouseDown={e => handleOverlayMouseDown(e, 'button', btn.id, btn.x, btn.y)}
+                                data-vn-id={btn.id}
+                                onMouseDown={e => handleOverlayMouseDown(e, 'button', btn.id, btn.x, btn.y, btn.contentBox)}
                                 onContextMenu={commandRadial ? (e) => { e.preventDefault(); commandRadial.openById(btn.id, e.clientX, e.clientY); } : undefined}
                             >
-                                {/* Resize handle (bottom-right corner) — drag to scale the button. */}
-                                <div
+                                {/* Resize handle — drag to scale the button. Sits at the content box
+                                    corner when one is set (reachable on image buttons with padding). */}
+                                <ResizeHandle
                                     onMouseDown={e => handleOverlayResizeMouseDown(e, 'button', btn.id, btn.width, btn.height)}
                                     title={t('dragToResize')}
-                                    style={{
-                                        position: 'absolute',
-                                        right: -6,
-                                        bottom: -6,
-                                        width: 12,
-                                        height: 12,
-                                        borderRadius: 3,
-                                        background: '#0ea5e9',
-                                        border: '2px solid #fff',
-                                        boxShadow: '0 0 3px rgba(0,0,0,0.6)',
-                                        cursor: 'nwse-resize',
-                                        zIndex: 60,
-                                    }}
+                                    box={btn.contentBox}
                                 />
                                 {btn.imageUrl ? (
                                     <div className="relative" style={{ width: '100%' }}>
@@ -1746,6 +2084,14 @@ const StagingArea: React.FC<{
                                         {btn.text}
                                     </div>
                                 )}
+                                {btn.id === selectedCmdId && (
+                                    <ContentBoxEditor
+                                        box={btn.contentBox}
+                                        onChange={b => commitContentBox(btn.id, b)}
+                                        onTrim={btn.imageUrl ? (aspect) => trimContentBox(btn.id, btn.imageUrl, aspect) : undefined}
+                                        onReset={() => commitContentBox(btn.id, undefined)}
+                                    />
+                                )}
                             </div>
                             {isDragging && overlayDragOffset && (
                                 <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
@@ -1768,8 +2114,11 @@ const StagingArea: React.FC<{
                     anchored to match the runtime. */}
                 {stageState.hotSpotOverlays.map(hs => {
                     const isDragging = overlayDrag?.kind === 'hotspot' && overlayDrag.overlayId === hs.id;
+                    const isResizing = overlayResize?.kind === 'hotspot' && overlayResize.overlayId === hs.id;
                     const displayX = isDragging && overlayDragOffset ? overlayDragOffset.x : hs.x;
                     const displayY = isDragging && overlayDragOffset ? overlayDragOffset.y : hs.y;
+                    const displayW = isResizing && overlayResizeSize ? overlayResizeSize.width : hs.width;
+                    const displayH = isResizing && overlayResizeSize ? overlayResizeSize.height : hs.height;
                     const outline = hs.highlightColor || 'rgba(99,102,241,0.9)';
                     return (
                         <React.Fragment key={hs.id}>
@@ -1777,7 +2126,7 @@ const StagingArea: React.FC<{
                                 style={{
                                     position: 'absolute',
                                     left: `${displayX}%`, top: `${displayY}%`,
-                                    width: `${hs.width}%`, height: `${hs.height}%`,
+                                    width: `${displayW}%`, height: `${displayH}%`,
                                     borderRadius: hs.shape === 'circle' ? '50%' : 6,
                                     border: `2px dashed ${outline}`,
                                     background: hs.visible ? (hs.highlightColor || 'rgba(99,102,241,0.25)') : 'rgba(99,102,241,0.08)',
@@ -1785,12 +2134,14 @@ const StagingArea: React.FC<{
                                     zIndex: isDragging ? 50 : 9,
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 }}
+                                data-vn-id={hs.id}
                                 onMouseDown={e => handleOverlayMouseDown(e, 'hotspot', hs.id, hs.x, hs.y)}
                                 title={`${hs.name} (${hs.trigger})`}
                             >
                                 <span className="text-[10px] text-white/90 px-1 py-0.5 rounded bg-black/50 pointer-events-none truncate max-w-full">
                                     🎯 {hs.name}
                                 </span>
+                                {hs.id === selectedCmdId && <ResizeHandle onMouseDown={e => handleOverlayResizeMouseDown(e, 'hotspot', hs.id, hs.width, hs.height)} title={t('dragToResize')} />}
                             </div>
                             {isDragging && overlayDragOffset && (
                                 <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
@@ -1842,9 +2193,35 @@ const StagingArea: React.FC<{
                     </div>
                 )}
 
+                 {/* Smart-snap alignment guides (drawn during a drag/resize). */}
+                 <CanvasSnapGuides guides={overlaySnapGuides} />
+
+                 {/* Character "fit to screen" toolbar — shown when a ShowCharacter command is selected.
+                     Anchored at the BOTTOM so it never overlaps the content-box Trim/Reset toolbar,
+                     which sits at the top of the (selected) sprite's content box. */}
+                 {selectedCmd?.type === CommandType.ShowCharacter && selectedCmdId && (
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-[var(--bg-primary)]/90 border border-[var(--border-default)]/60 rounded-lg px-1.5 py-1 z-[10000] shadow-lg">
+                        <span className="text-[10px] text-[var(--text-muted)] px-1">{t('characterSize')}</span>
+                        <button onClick={() => commitCharFit(selectedCmdId, 'height', (selectedCmd as ShowCharacterCommand).contentBox)} title={t('fitHeightTip')} className="text-[10px] px-2 py-1 rounded bg-[var(--bg-secondary)] hover:bg-sky-600/70 text-[var(--text-primary)]">{t('fitHeight')}</button>
+                        <button onClick={() => commitCharFit(selectedCmdId, 'width', (selectedCmd as ShowCharacterCommand).contentBox)} title={t('fitWidthTip')} className="text-[10px] px-2 py-1 rounded bg-[var(--bg-secondary)] hover:bg-sky-600/70 text-[var(--text-primary)]">{t('fitWidth')}</button>
+                        <button onClick={() => commitCharScale(selectedCmdId, 1)} title={t('resetSizeTip')} className="text-[10px] px-2 py-1 rounded bg-[var(--bg-secondary)] hover:bg-sky-600/70 text-[var(--text-primary)]">{t('resetSize')}</button>
+                    </div>
+                 )}
+
                  {/* Preview controls — kept above all per-layer stage content (characters/overlays can
                      reach z-index 100+, which previously covered these buttons and ate their clicks). */}
                  <div className="absolute top-2 right-2 flex flex-col gap-2 z-[10000]">
+                    <button
+                        onClick={() => setSnapEnabled(s => !s)}
+                        className={`flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                            snapEnabled
+                                ? 'bg-sky-500/80 border-sky-400/50 text-white shadow-lg shadow-sky-500/20'
+                                : 'bg-[var(--bg-primary)]/80 border-[var(--border-default)]/50 text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]/90 hover:border-slate-400/60'
+                        }`}
+                        title={t('snapTip')}
+                    >
+                        <span>{t('snapToggle')}</span>
+                    </button>
                     <button
                         onClick={() => setShowVariableState(s => !s)}
                         className={`flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${

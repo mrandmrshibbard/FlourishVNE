@@ -320,6 +320,32 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
             };
             return command;
         }
+        case CommandType.GiveItem: {
+            const firstItemId = Object.keys(project.items || {})[0] || '';
+            return { type, itemId: firstItemId, quantity: 1 } as Omit<VNCommand, 'id'>;
+        }
+        case CommandType.UseItem: {
+            const firstItemId = Object.keys(project.items || {})[0] || '';
+            return { type, itemId: firstItemId } as Omit<VNCommand, 'id'>;
+        }
+        case CommandType.DestroyItem: {
+            const firstItemId = Object.keys(project.items || {})[0] || '';
+            return { type, itemId: firstItemId, quantity: 1, all: false } as Omit<VNCommand, 'id'>;
+        }
+        case CommandType.RestockCollection: {
+            const firstCollectionId = Object.keys(project.itemCollections || {})[0] || '';
+            return { type, collectionId: firstCollectionId } as Omit<VNCommand, 'id'>;
+        }
+        case CommandType.BuyItem: {
+            const firstCollectionId = Object.keys(project.itemCollections || {})[0] || '';
+            const firstItemId = Object.keys(project.items || {})[0] || '';
+            return { type, itemId: firstItemId, collectionId: firstCollectionId, quantity: 1 } as Omit<VNCommand, 'id'>;
+        }
+        case CommandType.SellItem: {
+            const firstCollectionId = Object.keys(project.itemCollections || {})[0] || '';
+            const firstItemId = Object.keys(project.items || {})[0] || '';
+            return { type, itemId: firstItemId, collectionId: firstCollectionId, quantity: 1 } as Omit<VNCommand, 'id'>;
+        }
         case CommandType.HideButton: {
             const command = {
                 type,
@@ -442,7 +468,35 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
                 waitForCompletion: true,
             } as Omit<VNCommand, 'id'>;
         }
-        default: 
+        case CommandType.MoveCharacter: {
+            const firstCharId = Object.keys(project.characters || {})[0] || '';
+            return {
+                type,
+                characterId: firstCharId,
+                toPosition: 'center' as const,
+                duration: 1,
+                easing: 'easeInOutCubic',
+                waitForCompletion: true,
+            } as Omit<VNCommand, 'id'>;
+        }
+        case CommandType.StartTimer: {
+            const firstNumVar = (Object.values(project.variables || {}) as any[]).find(v => v.type === 'number');
+            return {
+                type,
+                timerId: '',
+                variableId: firstNumVar?.id || '',
+                mode: 'countdown' as const,
+                duration: 10,
+                from: 0,
+                interval: 1,
+                loop: false,
+                onComplete: [],
+            } as Omit<VNCommand, 'id'>;
+        }
+        case CommandType.StopTimer: {
+            return { type, timerId: '' } as Omit<VNCommand, 'id'>;
+        }
+        default:
             return null;
     }
 };

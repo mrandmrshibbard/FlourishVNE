@@ -4,7 +4,6 @@ import { createPortal } from 'react-dom';
 import { VNProject } from '../../types/project';
 import { VNID } from '../../types';
 import { VNItem } from '../../features/items/types';
-import { InteractionMode } from '../../features/systems/systemBuilder';
 import { SystemWizardResult, WizardItemSpec } from '../../features/systems/applySystem';
 import AssetSelector from '../ui/AssetSelector';
 import { SparklesIcon, CheckIcon, ChevronRightIcon, XMarkIcon, PlusIcon, TrashIcon } from '../icons';
@@ -23,35 +22,24 @@ interface ItemRow extends WizardItemSpec { _rowId: string; }
 
 const rid = () => Math.random().toString(36).substring(2, 9);
 
-const MODE_LABELS: Record<InteractionMode, string> = {
-    buttonGrid: 'Button grid — cards with click buttons',
-    draggableImageElement: 'Image map — clickable regions over one artwork',
-    dragDrop: 'Drag & drop — drag items onto a target',
-};
-
 const SystemWizard: React.FC<Props> = ({ isOpen, kind, project, onClose, onGenerate }) => {
     const isShop = kind === 'shop';
     const [step, setStep] = useState<Step>('basics');
     const [screenName, setScreenName] = useState(isShop ? 'Shop' : 'Inventory');
     const [backgroundColor, setBackgroundColor] = useState('#1a102c');
-    const [mode, setMode] = useState<InteractionMode>('buttonGrid');
     const [columns, setColumns] = useState(isShop ? 3 : 4);
-    const [boardImageAssetId, setBoardImageAssetId] = useState<VNID | null>(null);
     const [hideUnowned, setHideUnowned] = useState(true);
     const [addHudButton, setAddHudButton] = useState(false);
     const [inventoryOutput, setInventoryOutput] = useState<'screen' | 'hud' | 'both'>('both');
     const [currencyName, setCurrencyName] = useState('Gold');
     const [currencyIcon, setCurrencyIcon] = useState('💰');
     const [startAmount, setStartAmount] = useState(100);
-    const [items, setItems] = useState<ItemRow[]>([
-        { _rowId: rid(), name: isShop ? 'Health Potion' : 'Key', iconAssetId: null, price: 50, usable: !isShop, unique: false },
-    ]);
+    // Start empty: ONLY items the author explicitly adds get created (no surprise seed item).
+    const [items, setItems] = useState<ItemRow[]>([]);
 
     const registryItems = Object.values(project.items || {}) as VNItem[];
 
-    const reset = () => {
-        setStep('basics'); setItems([{ _rowId: rid(), name: isShop ? 'Health Potion' : 'Key', iconAssetId: null, price: 50, usable: !isShop, unique: false }]);
-    };
+    const reset = () => { setStep('basics'); setItems([]); };
 
     const addNewItem = () => setItems(prev => [...prev, { _rowId: rid(), name: `Item ${prev.length + 1}`, iconAssetId: null, price: isShop ? 50 : undefined, usable: !isShop, unique: false }]);
     const addExisting = (itemId: VNID) => {
@@ -64,8 +52,7 @@ const SystemWizard: React.FC<Props> = ({ isOpen, kind, project, onClose, onGener
 
     const handleGenerate = () => {
         const result: SystemWizardResult = {
-            kind, screenName, backgroundColor, mode, columns,
-            boardImageAssetId: (mode === 'draggableImageElement' || mode === 'dragDrop') ? boardImageAssetId : null,
+            kind, screenName, backgroundColor, columns,
             hideUnowned: !isShop ? hideUnowned : undefined,
             inventoryOutput: !isShop ? inventoryOutput : undefined,
             currency: isShop ? { name: currencyName, icon: currencyIcon, startAmount } : undefined,
@@ -98,28 +85,13 @@ const SystemWizard: React.FC<Props> = ({ isOpen, kind, project, onClose, onGener
                 </div>
             )}
 
-            <div>
-                <span className="text-sm text-slate-300">Interaction style</span>
-                <div className="mt-1 space-y-2">
-                    {(Object.keys(MODE_LABELS) as InteractionMode[]).map(m => (
-                        <label key={m} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer ${mode === m ? 'border-purple-500 bg-purple-500/10' : 'border-slate-700 hover:border-slate-500'}`}>
-                            <input type="radio" checked={mode === m} onChange={() => setMode(m)} className="w-4 h-4" />
-                            <span className="text-sm">{MODE_LABELS[m]}</span>
-                        </label>
-                    ))}
-                </div>
-            </div>
-
             <div className="grid grid-cols-2 gap-3">
                 <label className="block"><span className="text-xs text-slate-400">Columns</span>
                     <input type="number" min={1} max={8} value={columns} onChange={e => setColumns(Math.max(1, parseInt(e.target.value) || 1))} className="mt-1 w-full bg-slate-900 border border-slate-600 rounded px-2 py-1.5 outline-none" /></label>
                 <label className="block"><span className="text-xs text-slate-400">Background color</span>
                     <ColorInput value={backgroundColor} onChange={v => setBackgroundColor(v)} /></label>
             </div>
-
-            {(mode === 'draggableImageElement' || mode === 'dragDrop') && (
-                <AssetSelector label={mode === 'draggableImageElement' ? 'Board artwork (regions overlay this)' : 'Board artwork (optional backdrop)'} assetType="images" value={boardImageAssetId} onChange={setBoardImageAssetId} />
-            )}
+            <p className="text-[10px] text-slate-500">{isShop ? 'Builds a shop: an item list with your currency + a bound item grid you can buy from.' : 'Builds a player-inventory screen with an item grid (gets your sort / grouping / display settings).'}</p>
 
             {!isShop && (
                 <div>
@@ -152,6 +124,9 @@ const SystemWizard: React.FC<Props> = ({ isOpen, kind, project, onClose, onGener
         <div className="space-y-3">
             <p className="text-sm text-slate-400">Define the items. Each becomes a registry item backed by a count variable you can edit later, plus assets you can swap. {isShop ? 'Prices are paid in your currency.' : 'Usable items get a "Use" control that consumes one and runs its effect.'}</p>
             <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                {items.length === 0 && (
+                    <p className="text-sm text-slate-500 italic p-3 rounded-lg border border-dashed border-slate-700 text-center">No items yet — use “New item” or “Add existing item” below. Only items you add here are created.</p>
+                )}
                 {items.map((row, i) => (
                     <div key={row._rowId} className="p-3 rounded-lg border border-slate-700 bg-slate-800/50 space-y-2">
                         <div className="flex items-center gap-2">
@@ -196,7 +171,7 @@ const SystemWizard: React.FC<Props> = ({ isOpen, kind, project, onClose, onGener
         <div className="space-y-4">
             <p className="text-sm text-slate-400">Everything below is generated as ordinary screen elements + variables you can freely edit afterward.</p>
             <div className="bg-slate-900 rounded-lg p-4 space-y-2 text-sm">
-                <Row ok label={`Screen "${screenName}" (${MODE_LABELS[mode].split(' — ')[0]})`} />
+                <Row ok label={`Screen "${screenName}" with an item grid`} />
                 {isShop && <Row ok label={`Currency "${currencyName}" starting at ${startAmount}`} />}
                 <Row ok label={`${items.length} item${items.length === 1 ? '' : 's'} → ${items.filter(r => !r.itemId).length} new registry item(s)`} />
                 {!isShop && <Row ok label={hideUnowned ? 'Only owned items shown' : 'All item slots shown'} />}

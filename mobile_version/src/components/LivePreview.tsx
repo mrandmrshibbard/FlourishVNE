@@ -36,7 +36,7 @@ import {
     SpawnParticlesCommand, StopParticlesCommand,
     CallCommonEventCommand,
     ShowHotSpotCommand, HideHotSpotCommand,
-    TweenElementCommand, REACTIVE_VISUAL_TYPES,
+    TweenElementCommand, MoveCharacterCommand, StartTimerCommand, StopTimerCommand, REACTIVE_VISUAL_TYPES,
 } from '../features/scene/types';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
@@ -272,6 +272,7 @@ import {
     handleStopParticles,
     handleCallCommonEvent,
     handleTweenElement,
+    handleMoveCharacter,
 } from './live-preview/command-handlers';
 import { handleItemCommand, handleRestockCollectionCommand, handleBuyItemCommand, handleSellItemCommand } from './live-preview/command-handlers/itemCommandHandler';
 import { computeCollectionRestock } from '../features/items/restock';
@@ -500,6 +501,19 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
     );
 };
 
+/** Non-blocking VISUAL stage-setup commands replayed during a hot-reload fast-forward (to set up the
+ *  stage up to the edited line). Deliberately EXCLUDES dialogue/wait/choice (blocking) and
+ *  variable/item/jump/screen/movie/sound (so preserved variables stand and nothing blocks/double-fires). */
+const FF_VISUAL_TYPES = new Set<CommandType>([
+    CommandType.SetBackground, CommandType.ShowCharacter, CommandType.HideCharacter,
+    CommandType.SetCharacterLayer, CommandType.ShowImage, CommandType.HideImage,
+    CommandType.ShowText, CommandType.HideText,
+    CommandType.PlaceLights, CommandType.ClearLights, CommandType.SetScreenOverlayEffect,
+    CommandType.PlayMusic,
+]);
+// NOTE: ShowButton/ShowItem are intentionally excluded — they can set `waitForClick` and would stall
+// the fast-forward (the loop would block waiting for a click that never comes).
+
 const ButtonOverlayElement: React.FC<{
     overlay: ButtonOverlay;
     onAction: (action: VNUIAction) => void;
@@ -718,6 +732,18 @@ const ButtonOverlayElement: React.FC<{
             opacity: bOpacity ?? 1,
         };
 
+    // Content box: restrict the clickable hit-area to the visible sub-region (e.g. an image button
+    // with transparent corners). When set, the button itself becomes non-interactive and a hit layer
+    // positioned at the content box carries the interaction.
+    const cb = overlay.contentBox;
+    const hasCb = !!cb && ((cb.left || 0) > 0.005 || (cb.top || 0) > 0.005 || (cb.right || 0) > 0.005 || (cb.bottom || 0) > 0.005);
+    const interactiveProps = {
+        onClick: overlay.draggable ? undefined : handleClick,
+        onMouseDown: overlay.draggable ? startDrag : undefined,
+        onMouseEnter: () => setIsHovered(true),
+        onMouseLeave: () => setIsHovered(false),
+    };
+
     return (
         <div
             key={overlay.id}
@@ -729,11 +755,8 @@ const ButtonOverlayElement: React.FC<{
             {...(overlay.quickMenuMode ? { 'data-vn-no-advance': 'true' } : {})}
         >
             <button
-                onClick={overlay.draggable ? undefined : handleClick}
-                onMouseDown={overlay.draggable ? startDrag : undefined}
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
-                style={{ ...buttonStyle, cursor: overlay.draggable ? (dragging ? 'grabbing' : 'grab') : buttonStyle.cursor }}
+                {...(hasCb ? {} : interactiveProps)}
+                style={{ ...buttonStyle, pointerEvents: hasCb ? 'none' : buttonStyle.pointerEvents, cursor: overlay.draggable ? (dragging ? 'grabbing' : 'grab') : buttonStyle.cursor }}
             >
                 {/* Image drives the button size (width 100%, height auto = aspect-correct). */}
                 {displayImage && (
@@ -752,6 +775,18 @@ const ButtonOverlayElement: React.FC<{
                     </span>
                 )}
             </button>
+            {hasCb && cb && (
+                <div
+                    {...interactiveProps}
+                    style={{
+                        position: 'absolute',
+                        left: `${cb.left * 100}%`, top: `${cb.top * 100}%`,
+                        right: `${cb.right * 100}%`, bottom: `${cb.bottom * 100}%`,
+                        pointerEvents: 'auto', zIndex: 2,
+                        cursor: overlay.draggable ? (dragging ? 'grabbing' : 'grab') : 'pointer',
+                    }}
+                />
+            )}
         </div>
     );
 };
@@ -926,11 +961,13 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
     return (
         <div className={className} style={style}>
             {overlay.isVideo && overlay.videoUrl ? (
-                <video
+                <TrimmedVideo
                     src={overlay.videoUrl}
                     autoPlay
                     muted
                     loop={overlay.videoLoop}
+                    trimStart={overlay.videoTrimStart}
+                    trimEnd={overlay.videoTrimEnd}
                     playsInline
                     className={mediaCls}
                     style={imageStyle}
@@ -1307,11 +1344,12 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     const boxImage = charTb?.dialogueBoxImage ?? projectUI.dialogueBoxImage;
     const dialogueBoxUrl = boxImage
         ? resolveFieldUrl(project.id, boxImage.type === 'video'
-            ? project.videos[boxImage.id]?.videoUrl
+            ? (project.videos[boxImage.id]?.videoUrl || (project.images[boxImage.id] as any)?.videoUrl || (project.backgrounds[boxImage.id] as any)?.videoUrl)
             : (project.images[boxImage.id]?.imageUrl || project.backgrounds[boxImage.id]?.imageUrl)
           )
         : null;
     const isDialogueBoxVideo = boxImage?.type === 'video';
+    const dialogueBoxTrim = resolveVideoTrim(boxImage as any, boxImage?.id ? ((project.videos as any)[boxImage.id] || (project.images as any)[boxImage.id] || (project.backgrounds as any)[boxImage.id]) : undefined);
 
     // Resolve dialogue box border image URL (character override, else global)
     const borderImage = charTb?.dialogueBoxBorderImage ?? projectUI.dialogueBoxBorderImage;
@@ -1488,15 +1526,16 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                     }}
                 >
                     {isDialogueBoxVideo && dialogueBoxUrl && (
-                        <video 
-                            autoPlay 
-                            loop 
-                            muted 
+                        <TrimmedVideo
+                            src={dialogueBoxUrl}
+                            autoPlay
+                            loop
+                            muted
+                            trimStart={dialogueBoxTrim.start}
+                            trimEnd={dialogueBoxTrim.end}
                             className="absolute inset-0 w-full h-full -z-10"
                             style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(dialogueBorderRadius) }}
-                        >
-                            <source src={dialogueBoxUrl} />
-                        </video>
+                        />
                     )}
                     <div style={{
                         position: 'relative',
@@ -1562,13 +1601,42 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     );
 };
 
-const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: (choice: ChoiceOption) => void, variables: Record<VNID, string | number | boolean>, project: VNProject, layout?: 'vertical' | 'horizontal' | 'free' }> = ({ choices, projectUI, onSelect, variables, project, layout }) => {
+const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: (choice: ChoiceOption) => void, variables: Record<VNID, string | number | boolean>, project: VNProject, layout?: 'vertical' | 'horizontal' | 'free', timeLimit?: number, showTimer?: boolean, onTimeout?: () => void }> = ({ choices, projectUI, onSelect, variables, project, layout, timeLimit, showTimer, onTimeout }) => {
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-    
+
+    // Time-limited choice: count down while shown; fire onTimeout once at 0. The shrinking bar reads
+    // `remaining`. Restarts when the choice set or the limit changes (a new Choice command).
+    const [remaining, setRemaining] = useState<number>(timeLimit ?? 0);
+    useEffect(() => {
+        if (!timeLimit || timeLimit <= 0) return;
+        setRemaining(timeLimit);
+        const start = performance.now();
+        let raf = 0;
+        let fired = false;
+        const tick = () => {
+            const left = Math.max(0, timeLimit - (performance.now() - start) / 1000);
+            setRemaining(left);
+            if (left <= 0) { if (!fired) { fired = true; onTimeout?.(); } return; }
+            raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [timeLimit, choices]);
+    const showCountdown = !!(timeLimit && timeLimit > 0 && showTimer);
+    const countdownFrac = timeLimit && timeLimit > 0 ? Math.max(0, Math.min(1, remaining / timeLimit)) : 0;
+    const countdownOverlay = showCountdown ? (
+        <div className="absolute inset-0 z-40 pointer-events-none">
+            <div className="absolute left-1/2 -translate-x-1/2" style={{ top: '3%', width: '40%', height: scalePx(8), background: 'rgba(0,0,0,0.45)', borderRadius: 999, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>
+                <div style={{ height: '100%', width: `${countdownFrac * 100}%`, background: projectUI.choiceHoverColor || '#6B4C9A', transition: 'width 0.12s linear' }} />
+            </div>
+        </div>
+    ) : null;
+
     // Resolve choice button image/video URL
     const choiceButtonUrl = projectUI.choiceButtonImage
         ? resolveFieldUrl(project.id, projectUI.choiceButtonImage.type === 'video'
-            ? project.videos[projectUI.choiceButtonImage.id]?.videoUrl
+            ? (project.videos[projectUI.choiceButtonImage.id]?.videoUrl || (project.images[projectUI.choiceButtonImage.id] as any)?.videoUrl || (project.backgrounds[projectUI.choiceButtonImage.id] as any)?.videoUrl)
             : (project.images[projectUI.choiceButtonImage.id]?.imageUrl || project.backgrounds[projectUI.choiceButtonImage.id]?.imageUrl)
           )
         : null;
@@ -1628,6 +1696,9 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
         const optHoverImg = resolveChoiceImg(choice.hoverImage);
         const baseImg = optImg ?? choiceButtonUrl;
         const baseIsVideo = optImg ? choice.image?.type === 'video' : isChoiceButtonVideo;
+        const baseTrimRef: any = optImg ? choice.image : projectUI.choiceButtonImage;
+        const baseTrimAsset: any = baseTrimRef?.id ? ((project.videos as any)[baseTrimRef.id] || (project.images as any)[baseTrimRef.id] || (project.backgrounds as any)[baseTrimRef.id]) : undefined;
+        const baseTrim = resolveVideoTrim(baseTrimRef, baseTrimAsset); // per-use ref trim wins; else asset default
         const hoverImg = optHoverImg ?? choiceHoverUrl;
         const activeButtonUrl = (isHovered && hoverImg) ? hoverImg : baseImg;
         const optBg = choice.backgroundColor ? hexToRgba(choice.backgroundColor, choiceOpacity) : choiceBgColor;
@@ -1669,9 +1740,7 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                 }}
             >
                 {baseIsVideo && baseImg && (
-                    <video autoPlay loop muted className="absolute inset-0 w-full h-full -z-10" style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(optRadius) }}>
-                        <source src={baseImg} />
-                    </video>
+                    <TrimmedVideo src={baseImg} autoPlay loop muted trimStart={baseTrim.start} trimEnd={baseTrim.end} className="absolute inset-0 w-full h-full -z-10" style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(optRadius) }} />
                 )}
                 <span className="relative z-10" style={{ ...(extractTextGradientStyle(projectUI.choiceTextFont) || {}), ...(choice.textColor ? { color: choice.textColor } : {}) }}>{interpolatedText}</span>
             </button>
@@ -1688,6 +1757,8 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
     // ── Free layout: each option positioned/sized by its own x/y/width/height ──
     if (layout === 'free') {
         return (
+            <>
+            {countdownOverlay}
             <div className="absolute inset-0 z-30" style={{ pointerEvents: 'none', animation: 'vnChoiceOverlayIn 0.3s ease-out' }}>
                 {choices.map((choice, index) => {
                     const bx = choice.x ?? (34 + index * 2);
@@ -1706,12 +1777,15 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                 })}
                 {choiceKeyframes}
             </div>
+            </>
         );
     }
 
     // ── Vertical (default) or Horizontal stack ──
     const horizontal = layout === 'horizontal';
     return (
+        <>
+        {countdownOverlay}
         <div className={`absolute z-30 flex ${horizontal ? 'flex-row flex-wrap gap-3' : 'flex-col'} items-center justify-center`}
              style={{
                  left: `${choiceXPct}%`,
@@ -1737,6 +1811,7 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
             ))}
             {choiceKeyframes}
         </div>
+        </>
     );
 };
 
@@ -1753,11 +1828,12 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
     // Resolve input box image/video URL
     const inputBoxUrl = projectUI?.inputBoxImage
         ? resolveFieldUrl(project.id, projectUI.inputBoxImage.type === 'video'
-            ? project.videos[projectUI.inputBoxImage.id]?.videoUrl
+            ? (project.videos[projectUI.inputBoxImage.id]?.videoUrl || (project.images[projectUI.inputBoxImage.id] as any)?.videoUrl || (project.backgrounds[projectUI.inputBoxImage.id] as any)?.videoUrl)
             : (project.images[projectUI.inputBoxImage.id]?.imageUrl || project.backgrounds[projectUI.inputBoxImage.id]?.imageUrl)
           )
         : null;
     const isInputBoxVideo = projectUI?.inputBoxImage?.type === 'video';
+    const inputBoxTrim = resolveVideoTrim(projectUI?.inputBoxImage as any, projectUI?.inputBoxImage?.id ? ((project.videos as any)[projectUI.inputBoxImage.id] || (project.images as any)[projectUI.inputBoxImage.id] || (project.backgrounds as any)[projectUI.inputBoxImage.id]) : undefined);
 
     // Resolve input box border image URL
     const inputBorderUrl = projectUI?.inputBoxBorderImage
@@ -1839,15 +1915,16 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
                     }}
                 >
                     {isInputBoxVideo && inputBoxUrl && (
-                        <video
+                        <TrimmedVideo
+                            src={inputBoxUrl}
                             autoPlay
                             loop
                             muted
+                            trimStart={inputBoxTrim.start}
+                            trimEnd={inputBoxTrim.end}
                             className="absolute inset-0 w-full h-full -z-10"
                             style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(inputBorderRadius) }}
-                        >
-                            <source src={inputBoxUrl} />
-                        </video>
+                        />
                     )}
                     <div style={{ position: 'relative', zIndex: 1, padding: inputSizeMode === 'nine-slice' && inputBoxUrl ? scalePx(inputBoxPadding) : undefined }}>
                         <p className="mb-4" style={promptStyle}>
@@ -2168,14 +2245,20 @@ const ButtonElement: React.FC<{
         );
     }
 
+    // Content box: restrict the clickable hit-area to the visible art (image buttons with transparent
+    // corners). When set, the visual button goes non-interactive and a hit layer at the box carries it.
+    const cb = element.contentBox;
+    const hasCb = !!cb && ((cb.left || 0) > 0.005 || (cb.top || 0) > 0.005 || (cb.right || 0) > 0.005 || (cb.bottom || 0) > 0.005);
+    const hoverEnter = () => { try { playSound(element.hoverSoundId); } catch (e) {} setIsHovered(true); };
+
     return (
         <div key={element.id} style={{ ...wrapperStyle, transform }}>
             <button
-                style={{ width: '100%', height: '100%', position: 'relative', overflow, fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit', paddingLeft: `${element.paddingX ?? 0}%`, paddingRight: `${element.paddingX ?? 0}%`, boxSizing: 'border-box' }}
+                style={{ width: '100%', height: '100%', position: 'relative', overflow, fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit', paddingLeft: `${element.paddingX ?? 0}%`, paddingRight: `${element.paddingX ?? 0}%`, boxSizing: 'border-box', ...(hasCb ? { pointerEvents: 'none' } : {}) }}
                 className={`transition-transform transform hover:scale-105 flex items-center ${{ left: 'justify-start', center: 'justify-center', right: 'justify-end' }[element.font?.align || 'center']}`}
-                onMouseEnter={() => { try { playSound(element.hoverSoundId); } catch(e) {} setIsHovered(true); }}
-                onMouseLeave={() => setIsHovered(false)}
-                onClick={handleClick}
+                onMouseEnter={hasCb ? undefined : hoverEnter}
+                onMouseLeave={hasCb ? undefined : () => setIsHovered(false)}
+                onClick={hasCb ? undefined : handleClick}
             >
                 {displayUrl ? (
                     <img src={displayUrl} alt={element.text} className="absolute inset-0 w-full h-full object-fill" />
@@ -2189,6 +2272,14 @@ const ButtonElement: React.FC<{
                     {interpolatedText}
                 </span>
             </button>
+            {hasCb && interactive && cb && (
+                <div
+                    onMouseEnter={hoverEnter}
+                    onMouseLeave={() => setIsHovered(false)}
+                    onClick={handleClick}
+                    style={{ position: 'absolute', left: `${cb.left * 100}%`, top: `${cb.top * 100}%`, right: `${cb.right * 100}%`, bottom: `${cb.bottom * 100}%`, cursor: 'pointer', zIndex: 11 }}
+                />
+            )}
         </div>
     );
 };
@@ -2681,7 +2772,13 @@ const InventoryGridElement: React.FC<{
     selectedItemId?: VNID | null;
     selectedElementId?: VNID | null;
     onSelectItem?: (itemId: VNID | null, elementId: VNID) => void;
-}> = ({ element, items, variables, project, assetResolver, onAction, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem }) => {
+    /** Player-inventory grouping: render category sections (drag still reorders within the slots model). */
+    groupByCategory?: boolean;
+    categoryOrder?: string[];
+    /** True when an author sort (alpha/category) is active — the grid then shows the given sorted order
+     *  and ignores the player's saved drag layout (manual rearrange is disabled while auto-sorted). */
+    autoSort?: boolean;
+}> = ({ element, items, variables, project, assetResolver, onAction, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, groupByCategory, categoryOrder, autoSort }) => {
     const count = (it: VNItem) => Number(variables[it.countVariableId] ?? 0);
     const filteredAll = element.categoryFilter ? items.filter(it => it.category === element.categoryFilter) : items;
     // An item shows when owned (count >= 1). At 0 it's hidden if either the grid hides unowned items
@@ -2717,30 +2814,42 @@ const InventoryGridElement: React.FC<{
     const minSlots = (element.rows && element.rows > 0) ? cols * element.rows : cols * autoRows;
     const totalSlots = Math.max(shown.length, minSlots);
 
-    // Positional slot layout: honor the player's saved slots (dropping items no longer shown),
-    // then drop any remaining shown items into the first empty slots. Items can sit in any slot.
+    // Positional slot layout. When an author sort is active (autoSort), show the given sorted order and
+    // IGNORE the player's saved drag layout (otherwise a stale layout masks the sort). Otherwise honor
+    // the saved slots (dropping items no longer shown), then drop remaining shown items into empties.
     const slots: (VNID | null)[] = [];
-    const placed = new Set<VNID>();
-    for (let i = 0; i < totalSlots; i++) {
-        const saved = inventorySlots?.[i] ?? null;
-        if (saved && itemById.has(saved) && !placed.has(saved)) { slots.push(saved); placed.add(saved); }
-        else slots.push(null);
+    if (autoSort) {
+        for (let i = 0; i < shown.length; i++) slots.push(shown[i].id);
+        for (let i = shown.length; i < totalSlots; i++) slots.push(null); // keep the empty "backpack" padding
+    } else {
+        const placed = new Set<VNID>();
+        for (let i = 0; i < totalSlots; i++) {
+            const saved = inventorySlots?.[i] ?? null;
+            if (saved && itemById.has(saved) && !placed.has(saved)) { slots.push(saved); placed.add(saved); }
+            else slots.push(null);
+        }
+        const unplaced = shown.filter(it => !placed.has(it.id));
+        let u = 0;
+        for (let i = 0; i < slots.length && u < unplaced.length; i++) { if (!slots[i]) { slots[i] = unplaced[u].id; placed.add(unplaced[u].id); u++; } }
+        while (u < unplaced.length) { slots.push(unplaced[u].id); placed.add(unplaced[u].id); u++; }
     }
-    const unplaced = shown.filter(it => !placed.has(it.id));
-    let u = 0;
-    for (let i = 0; i < slots.length && u < unplaced.length; i++) { if (!slots[i]) { slots[i] = unplaced[u].id; placed.add(unplaced[u].id); u++; } }
-    while (u < unplaced.length) { slots.push(unplaced[u].id); placed.add(unplaced[u].id); u++; }
 
-    const reorderEnabled = element.allowReorder !== false && !!onReorderSlots;
+    // Manual rearrange is disabled while auto-sorted (a fixed order + freeform drag would fight).
+    const reorderEnabled = element.allowReorder !== false && !!onReorderSlots && !autoSort;
     const selectEnabled = !!onSelectItem;
     const [dragSlot, setDragSlot] = useState<number | null>(null);
     const [hoverUseId, setHoverUseId] = useState<VNID | null>(null);
+    // Reorder uses POINTER events (native HTML5 drag is unreliable in this preview/Electron context —
+    // same reason scene-command drag was moved off HTML5 DnD). suppressClick stops a drop from also
+    // firing the slot's select onClick.
+    const suppressClickRef = useRef(false);
     // Swap two slots — moves to an empty slot, or exchanges positions with another item.
     const swap = (a: number | null, b: number) => {
         if (!onReorderSlots || a == null || a === b) { setDragSlot(null); return; }
         const next = [...slots];
         const tmp = next[a]; next[a] = next[b]; next[b] = tmp;
         onReorderSlots(next);
+        suppressClickRef.current = true;
         setDragSlot(null);
     };
 
@@ -2765,8 +2874,8 @@ const InventoryGridElement: React.FC<{
         otherActions.forEach(a => onAction(a));
     };
 
-    // Per-slot button mode. Back-compat: unset → derive from the legacy showUseButton flag.
-    const slotButtonMode: 'use' | 'buy' | 'sell' | 'none' = element.slotButton ?? (element.showUseButton ? 'use' : 'none');
+    // Per-slot button mode (legacy showUseButton is migrated to slotButton on load).
+    const slotButtonMode: 'use' | 'buy' | 'sell' | 'none' = element.slotButton ?? 'none';
     const tradeCollectionId = slotButtonMode === 'buy' ? element.collectionId : slotButtonMode === 'sell' ? element.sellToCollectionId : undefined;
     const tradeCollection = tradeCollectionId ? project.itemCollections?.[tradeCollectionId] : undefined;
     // Fire a Buy/Sell action then commit (mirrors the screen Button var-mutation→commit flow).
@@ -2786,29 +2895,24 @@ const InventoryGridElement: React.FC<{
 
     const slotStyle: React.CSSProperties = { aspectRatio: '1 / 1', borderRadius: `${element.slotBorderRadius ?? 8}px`, border: `2px solid ${element.slotBorderColor || '#4D3273'}`, background: element.slotColor || 'transparent' };
     const selectedRing = element.selectedBorderColor || '#38bdf8';
+    const gridStyle: React.CSSProperties = { gridTemplateColumns: `repeat(${cols}, 1fr)`, columnGap: `${colGap}px`, rowGap: `${rowGap}px` };
 
-    return (
-        <div ref={gridContainerRef} className="w-full h-full overflow-y-auto p-2 rounded" style={{ backgroundColor: element.backgroundColor || 'rgba(15, 23, 42, 0.9)' }}>
-            {totalSlots === 0 && (
-                <div className="w-full h-full flex items-center justify-center text-center text-xs text-white/50 px-2">{element.emptyText || ''}</div>
-            )}
-            <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, columnGap: `${colGap}px`, rowGap: `${rowGap}px` }}>
-                {slots.map((slotId, i) => {
+    // One slot cell, reused by the flat grid AND each category section. Reorder is POINTER-based
+    // (HTML5 drag is unreliable in this preview/Electron context): pointerdown on the source slot,
+    // pointerup on the target slot → swap their positions in the shared global slots array.
+    const renderSlot = (slotId: VNID | null, i: number) => {
                     const it = slotId ? itemById.get(slotId) : undefined;
-                    if (!it) return <div key={`slot-${i}`} style={slotStyle}
-                        onDragOver={reorderEnabled ? (e => e.preventDefault()) : undefined}
-                        onDrop={reorderEnabled ? (() => swap(dragSlot, i)) : undefined} />;
+                    if (!it) return <div key={`slot-${i}`} style={{ ...slotStyle, touchAction: reorderEnabled ? 'none' : undefined }}
+                        onPointerUp={reorderEnabled ? (() => { if (dragSlot != null) swap(dragSlot, i); else setDragSlot(null); }) : undefined} />;
                     const url = it.icon?.id ? assetResolver(it.icon.id, it.icon.type === 'video' ? 'video' : 'image') : null;
                     const qty = count(it);
                     const selected = selectEnabled && selectedItemId === it.id && selectedElementId === element.id;
                     return (
                         <div key={`slot-${i}`} className="relative flex flex-col items-center justify-center p-1"
-                            style={{ ...slotStyle, cursor: reorderEnabled ? 'grab' : (selectEnabled ? 'pointer' : undefined), opacity: dragSlot === i ? 0.4 : 1, ...(selected ? { boxShadow: `0 0 0 2px ${selectedRing} inset`, borderColor: selectedRing } : {}) }}
-                            draggable={reorderEnabled}
-                            onDragStart={reorderEnabled ? () => setDragSlot(i) : undefined}
-                            onDragOver={reorderEnabled ? (e => e.preventDefault()) : undefined}
-                            onDrop={reorderEnabled ? (() => swap(dragSlot, i)) : undefined}
-                            onClick={selectEnabled ? (() => onSelectItem!(selected ? null : it.id, element.id)) : undefined}>
+                            style={{ ...slotStyle, cursor: reorderEnabled ? 'grab' : (selectEnabled ? 'pointer' : undefined), touchAction: reorderEnabled ? 'none' : undefined, opacity: dragSlot === i ? 0.4 : 1, ...(selected ? { boxShadow: `0 0 0 2px ${selectedRing} inset`, border: `2px solid ${selectedRing}` } : {}) }}
+                            onPointerDown={reorderEnabled ? (() => setDragSlot(i)) : undefined}
+                            onPointerUp={reorderEnabled ? (() => { if (dragSlot != null && dragSlot !== i) swap(dragSlot, i); else setDragSlot(null); }) : undefined}
+                            onClick={selectEnabled ? (() => { if (suppressClickRef.current) { suppressClickRef.current = false; return; } onSelectItem!(selected ? null : it.id, element.id); }) : undefined}>
                             {url
                                 ? <img src={url} alt={it.name} className="w-full flex-1 min-h-0 object-contain" draggable={false} />
                                 : <div className="w-full flex-1 min-h-0" />}
@@ -2857,8 +2961,40 @@ const InventoryGridElement: React.FC<{
                             })()}
                         </div>
                     );
-                })}
-            </div>
+    };
+
+    // Grouped (player inventory): category sections sharing the ONE slots array. A drag swaps global
+    // slot positions; items keep their category so they stay in their section (reorders within it).
+    const groupedSections = (() => {
+        if (!groupByCategory) return null;
+        const order = categoryOrder || [];
+        const rank = (c: string) => { const idx = order.indexOf(c); return idx >= 0 ? idx : order.length; };
+        const occ = slots.map((s, i) => ({ s, i })).filter(x => !!x.s) as { s: VNID; i: number }[];
+        const cats = Array.from(new Set(occ.map(o => itemById.get(o.s)?.category || '')));
+        const listed = cats.filter(Boolean).sort((a, b) => (rank(a) - rank(b)) || a.localeCompare(b));
+        const ordered = [...listed, ...(cats.includes('') ? [''] : [])];
+        return ordered.map(cat => {
+            const cells = occ.filter(o => (itemById.get(o.s)?.category || '') === cat);
+            if (cells.length === 0) return null;
+            return (
+                <div key={cat || '__uncat__'} className="mb-2">
+                    <div className="text-[10px] font-semibold text-white opacity-70 mb-1 px-0.5">{cat || 'Other'}</div>
+                    <div className="grid" style={gridStyle}>{cells.map(c => renderSlot(c.s, c.i))}</div>
+                </div>
+            );
+        });
+    })();
+
+    return (
+        <div ref={gridContainerRef} className="w-full h-full overflow-y-auto p-2 rounded"
+            style={{ backgroundColor: element.backgroundColor || 'rgba(15, 23, 42, 0.9)' }}
+            onPointerUp={reorderEnabled ? (() => setDragSlot(null)) : undefined}>
+            {totalSlots === 0 && (
+                <div className="w-full h-full flex items-center justify-center text-center text-xs text-white/50 px-2">{element.emptyText || ''}</div>
+            )}
+            {groupByCategory
+                ? groupedSections
+                : <div className="grid" style={gridStyle}>{slots.map((slotId, i) => renderSlot(slotId, i))}</div>}
         </div>
     );
 };
@@ -3346,12 +3482,14 @@ const InteractiveRuntime: React.FC<{
                             </div>
                         ) : elType === 'video' ? (
                             videoUrl ? (
-                                <video
+                                <TrimmedVideo
                                     src={videoUrl}
                                     className="w-full h-full object-contain pointer-events-none"
                                     autoPlay
                                     loop={(el as any).videoLoop ?? true}
                                     muted={(el as any).videoMuted ?? true}
+                                    trimStart={(el as any).videoTrimStart}
+                                    trimEnd={(el as any).videoTrimEnd}
                                     playsInline
                                 />
                             ) : (
@@ -3511,10 +3649,11 @@ const UIScreenRenderer: React.FC<{
             const asset: any = project.backgrounds[bg.assetId] || project.images?.[bg.assetId] || project.videos[bg.assetId];
             const isVid = bg.type === 'video' || !!(asset && (asset.isVideo || asset.videoUrl));
             const url = isVid ? assetResolver(bg.assetId, 'video') : assetResolver(bg.assetId, 'image');
+            const bgTrim = resolveVideoTrim(bg as any, asset); // per-use trim wins; else the asset's default trim
             if (url) {
                 // `loop` defaults to true (preserves existing behavior); off = play once and hold last frame.
                 node = isVid
-                    ? <video ref={videoRef} src={url} autoPlay loop={bg.loop ?? true} muted playsInline className="absolute inset-0 w-full h-full object-cover" />
+                    ? <TrimmedVideo ref={videoRef} src={url} autoPlay loop={bg.loop ?? true} muted trimStart={bgTrim.start} trimEnd={bgTrim.end} playsInline className="absolute inset-0 w-full h-full object-cover" />
                     : <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover" />;
             }
         }
@@ -3678,7 +3817,10 @@ const UIScreenRenderer: React.FC<{
                 }
                 
                 const isVideo = bgType === 'video';
-                
+                // Per-use trim (on the element's background) wins; else the asset's default trim.
+                const elVidAsset: any = (typeof bgValue === 'string') ? (project.videos?.[bgValue] || project.images?.[bgValue] || project.backgrounds?.[bgValue]) : undefined;
+                const elVidTrim = resolveVideoTrim(el.background as any, elVidAsset);
+
                 // Media fills container using object-fit — unless "fit to content", where it shrinks
                 // to its own fitted rect (no surrounding dead-space).
                 const mediaStyle: React.CSSProperties = fit
@@ -3688,7 +3830,7 @@ const UIScreenRenderer: React.FC<{
                 if (isVideo) {
                     return (
                         <div key={el.id} style={containerStyle}>
-                            <video 
+                            <TrimmedVideo
                                 ref={(videoEl) => {
                                     if (videoEl && url) {
                                         // Fix for React Strict Mode calling ref twice with empty src
@@ -3714,13 +3856,15 @@ const UIScreenRenderer: React.FC<{
                                 style={mediaStyle}
                                 autoPlay
                                 loop={(el.background as any)?.loop ?? true}
-                                muted
+                                muted={(el.background as any)?.muted ?? false}
+                                trimStart={elVidTrim.start}
+                                trimEnd={elVidTrim.end}
                                 playsInline
                             >
                                 <source src={url} type="video/webm" />
                                 <source src={url} type="video/mp4" />
                                 Your browser doesn't support this video format.
-                            </video>
+                            </TrimmedVideo>
                         </div>
                     );
                 } else {
@@ -3899,12 +4043,14 @@ const UIScreenRenderer: React.FC<{
                 
                 const imageUrls: string[] = [];
                 const videoUrls: string[] = [];
+                const videoTrims: Array<{ start?: number; end?: number }> = [];
                 let hasVideo = false;
                 let videoLoop = false;
-                
+
                 // Add base image/video (managed refs → flourish-asset:// URLs)
                 if (character.baseVideoUrl) {
                     videoUrls.push(resolveFieldUrl(project.id, character.baseVideoUrl) || character.baseVideoUrl);
+                    videoTrims.push({ start: (character as any).baseVideoTrimStart, end: (character as any).baseVideoTrimEnd });
                     hasVideo = true;
                     videoLoop = !!character.baseVideoLoop;
                 } else if (character.baseImageUrl) {
@@ -3949,6 +4095,7 @@ const UIScreenRenderer: React.FC<{
                     if (asset) {
                         if (asset.videoUrl) {
                             videoUrls.push(resolveFieldUrl(project.id, asset.videoUrl) || asset.videoUrl);
+                            videoTrims.push({});
                             hasVideo = true;
                             videoLoop = videoLoop || !!asset.loop;
                         } else if (asset.imageUrl) {
@@ -3968,14 +4115,16 @@ const UIScreenRenderer: React.FC<{
                         <div className="relative w-full h-full">
                             {hasVideo && videoUrls.length > 0 ? (
                                 videoUrls.map((url, index) => (
-                                    <video 
+                                    <TrimmedVideo
                                         key={index}
-                                        src={url} 
-                                        autoPlay 
-                                        muted 
-                                        loop={videoLoop} 
+                                        src={url}
+                                        autoPlay
+                                        muted
+                                        loop={videoLoop}
+                                        trimStart={videoTrims[index]?.start}
+                                        trimEnd={videoTrims[index]?.end}
                                         playsInline
-                                        className="absolute top-0 left-0 w-full h-full object-contain" 
+                                        className="absolute top-0 left-0 w-full h-full object-contain"
                                         style={{ zIndex: index }}
                                     />
                                 ))
@@ -4360,7 +4509,26 @@ const UIScreenRenderer: React.FC<{
                 // stock — by swapping each item's countVariableId to the entry's backing var, the grid's
                 // existing count logic "just works". Unset = the player's own inventory (global owned set).
                 const boundCollection = el.collectionId ? project.itemCollections?.[el.collectionId] : undefined;
-                const allOwnedItems = () => (Object.values(project.items || {}) as VNItem[]).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
+                const isPlayerInv = !boundCollection || (boundCollection.tracksOwnedItems && boundCollection.entries.length === 0);
+                // Player-inventory sort (author default; bound lists keep their own entry order).
+                const invUI = project.ui || ({} as typeof project.ui);
+                const catOrder = invUI.inventoryCategoryOrder || [];
+                // Listed categories sort by author order; unlisted ones come after (grouped by name).
+                const catRank = (c?: string) => { const i = catOrder.indexOf(c || ''); return (c && i >= 0) ? i : catOrder.length; };
+                const sortMode = invUI.inventoryDefaultSort || 'manual';
+                const byCategory = (a: VNItem, b: VNItem) => {
+                    const ca = a.category || '', cb = b.category || '';
+                    if (!ca !== !cb) return ca ? -1 : 1;            // uncategorized always last
+                    const ra = catRank(ca), rb = catRank(cb);
+                    if (ra !== rb) return ra - rb;                  // author-ordered (listed) categories first
+                    if (ca !== cb) return ca.localeCompare(cb);     // same rank / unlisted → group by category name
+                    return a.name.localeCompare(b.name);            // within a category → by item name
+                };
+                const sortItems = (arr: VNItem[]) => [...arr].sort((a, b) =>
+                    sortMode === 'alpha' ? a.name.localeCompare(b.name)
+                    : sortMode === 'category' ? byCategory(a, b)
+                    : (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
+                const allOwnedItems = () => sortItems(Object.values(project.items || {}) as VNItem[]);
                 const invItems = !boundCollection
                     ? allOwnedItems()
                     : (boundCollection.tracksOwnedItems && boundCollection.entries.length === 0)
@@ -4372,7 +4540,19 @@ const UIScreenRenderer: React.FC<{
                 // A SHOP list shows its FULL catalogue (0 = sold out), so force "hide unowned" off. A player-
                 // inventory list behaves like the player's bag, so it keeps the grid's hide-unowned setting.
                 const isShopList = !!boundCollection && !boundCollection.tracksOwnedItems;
-                const gridEl = isShopList ? { ...el, hideUnowned: false } : el;
+                // Player-inventory grids inherit project-level display defaults for fields they haven't set
+                // (?? only fills the truly-unset case, so already-configured grids are untouched).
+                const effEl: UIInventoryGridElement = isPlayerInv ? {
+                    ...el,
+                    hideUnowned: el.hideUnowned ?? invUI.inventoryDefaultHideUnowned,
+                    showNames: el.showNames ?? invUI.inventoryDefaultShowNames,
+                    showQuantity: el.showQuantity ?? invUI.inventoryDefaultShowQuantity,
+                    columns: el.columns ?? invUI.inventoryDefaultColumns ?? 4,
+                } : el;
+                const gridEl = isShopList ? { ...effEl, hideUnowned: false } : effEl;
+                // Category grouping (player inventory only) is handled INSIDE InventoryGridElement so it
+                // shares the one slots model — drag still reorders within/across category sections.
+                const groupByCategory = isPlayerInv && !!invUI.inventoryGroupByCategory;
                 return (
                     <div key={el.id} style={style}>
                         <InventoryGridElement
@@ -4388,6 +4568,9 @@ const UIScreenRenderer: React.FC<{
                             selectedItemId={selectedItemId}
                             selectedElementId={selectedElementId}
                             onSelectItem={onSelectItem}
+                            groupByCategory={groupByCategory}
+                            categoryOrder={catOrder}
+                            autoSort={isPlayerInv && sortMode !== 'manual'}
                         />
                     </div>
                 );
@@ -5013,7 +5196,7 @@ const PhonePanel: React.FC<{
     const resolvePhoneBg = (ref?: { type: 'image' | 'video'; id: VNID } | null) => {
         if (!ref) return null;
         const url = assetResolver(ref.id, ref.type === 'video' ? 'video' : 'image');
-        return url ? { url, isVideo: ref.type === 'video' } : null;
+        return url ? { url, isVideo: ref.type === 'video', trimStart: (ref as any).trimStart, trimEnd: (ref as any).trimEnd } : null;
     };
     const wallpaper = resolvePhoneBg(ui.phoneWallpaperImage);
     const chatBg = resolvePhoneBg(activeContact?.chatBackground || ui.phoneChatBackgroundImage);
@@ -5074,10 +5257,9 @@ const PhonePanel: React.FC<{
             {/* Looping video backdrop (wallpaper or per-thread chat background). zIndex -1 so it sits
                 above the screen's base color but behind all content. */}
             {screenBg?.isVideo && (
-                <video autoPlay loop muted playsInline key={screenBg.url}
-                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1, pointerEvents: 'none' }}>
-                    <source src={screenBg.url} />
-                </video>
+                <TrimmedVideo src={screenBg.url} autoPlay loop muted playsInline key={screenBg.url}
+                    trimStart={(screenBg as any).trimStart} trimEnd={(screenBg as any).trimEnd}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1, pointerEvents: 'none' }} />
             )}
             {/* Status bar */}
             {ui.phoneShowStatusBar !== false && (
@@ -5541,6 +5723,41 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const variableStoreRef = useRef<RuntimeVariableStore | null>(null);
     const uiDirtyVariableIdsRef = useRef<Set<VNID>>(new Set());
     const activeEffectTimeoutsRef = useRef<number[]>([]);
+    // ── Background timers (Start Timer / Stop Timer) ──────────────────────────────────────────────
+    // Variable-backed countdown/stopwatch: each tick writes the running value to the bound number
+    // variable (so a Meter shows it + conditions/{var} text react); on finish it runs onComplete
+    // actions. Runtime-only (not serialized in saves) — the bound VARIABLE persists, the ticking does
+    // not survive save/load (acceptable for v1). Keyed by timerId.
+    // `value` is the timer's own source of truth (so it runs even with NO bound variable); `variableId`
+    // (optional) just mirrors `value` for a Meter bar / conditions / {var} text.
+    type TimerRuntime = { variableId?: VNID; mode: 'countdown' | 'stopwatch'; intervalSec: number; target: number; accMs: number; value: number; resetTo: number; loop: boolean; onComplete?: VNUIAction[] };
+    const timersRef = useRef<Map<string, TimerRuntime>>(new Map());
+    // When a Start Timer command pauses the story (blockEngine), this holds the resume (advance) to call
+    // when the timer finishes OR is stopped early by a button. Only one block at a time (the story is
+    // sequential). Cleared on scene change / new game / load so a stale resume never fires.
+    const blockingTimerRef = useRef<{ key: string; resume: () => void } | null>(null);
+    // Hot-reload fast-forward target: when set, the command loop replays only VISUAL setup commands
+    // from the scene start up to this index (skipping dialogue/wait/variable/item/choice so the
+    // preserved variables stand and nothing blocks), so "Reload to line" lands on the edited line with
+    // the stage set up. Cleared once reached.
+    const fastForwardTargetRef = useRef<number | null>(null);
+    /** Register/replace a timer. Shared by the Start Timer command AND the Start Timer button action. */
+    const startTimer = (cfg: { timerId?: string; variableId?: VNID; mode?: 'countdown' | 'stopwatch'; duration?: number; from?: number; interval?: number; loop?: boolean; onComplete?: VNUIAction[] }): string => {
+        const key = (cfg.timerId || '').trim() || 'default';
+        const mode: 'countdown' | 'stopwatch' = cfg.mode === 'stopwatch' ? 'stopwatch' : 'countdown';
+        const intervalSec = Math.max(0.05, cfg.interval ?? 1);
+        const startVal = mode === 'countdown' ? (cfg.duration ?? 0) : (cfg.from ?? 0);
+        const target = mode === 'countdown' ? 0 : (cfg.duration ?? 0); // stopwatch cap; 0 = run until stopped
+        timersRef.current.set(key, { variableId: cfg.variableId || undefined, mode, intervalSec, target, accMs: 0, value: startVal, resetTo: startVal, loop: !!cfg.loop, onComplete: cfg.onComplete });
+        if (cfg.variableId) updatePlayerState(p => p ? { ...p, variables: { ...p.variables, [cfg.variableId as string]: startVal } } : null);
+        return key;
+    };
+    /** Stop a timer; if it was the one pausing the story, resume the story (no onComplete). */
+    const stopTimer = (timerId?: string) => {
+        const key = (timerId || '').trim() || 'default';
+        timersRef.current.delete(key);
+        if (blockingTimerRef.current?.key === key) { const r = blockingTimerRef.current.resume; blockingTimerRef.current = null; try { r(); } catch { /* no-op */ } }
+    };
     // Phone dynamic events: the active incoming-call command (for accept/decline actions), its
     // ringtone audio + timeout id, and pending follow-up/typing timers (cleared on teardown).
     const activeCallCmdRef = useRef<PhoneIncomingCallCommand | null>(null);
@@ -6000,6 +6217,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             setScreenStack([]);
             setHudStack([]);
             setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
+            timersRef.current.clear(); blockingTimerRef.current = null; fastForwardTargetRef.current = null; // stop any running background timers / hot-reload fast-forward from a prior session
             setIsJustLoaded(true);
             // Re-arm a call that was ringing when the game was saved (ringtone + timeout restart).
             const savedCall = saveData.playerStateData.phone?.incomingCall;
@@ -6103,6 +6321,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         setScreenStack([]);
         setHudStack([]);
         setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
+        timersRef.current.clear(); blockingTimerRef.current = null; fastForwardTargetRef.current = null; // stop any running background timers / hot-reload fast-forward from a prior session
     }, [project, stopAndResetMusic, menuVariables]);
 
     // Start a new game with a fade: title fades to black (≈400ms), the scene loads behind the
@@ -6115,6 +6334,51 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             window.setTimeout(() => setGameStartFade('none'), 450);
         }, 400);
     }, [startNewGame]);
+
+    // ─── Hot reload (editor tooling) ───────────────────────────────────────────
+    // The popped-out Test Play window dispatches a `flourish:hotReload` DOM event (detail:
+    // { sceneId, commandIndex }) to jump the RUNNING engine to the scene/command the author is
+    // editing, with the latest edits, WITHOUT a full restart — preserving variables, inventory,
+    // history and music. Stage + dialogue/UI reset (the jump may land mid-scene, so visuals set up
+    // by earlier commands won't be present — that's the chosen trade-off for "jump to my line").
+    // No effect in shipped games (nothing dispatches the event there).
+    useEffect(() => {
+        const onHotReload = (e: Event) => {
+            const detail = (e as CustomEvent).detail || {};
+            const sceneId = detail.sceneId as VNID;
+            const targetScene = sceneId ? project.scenes[sceneId] : undefined;
+            if (!targetScene) return;
+            const cmds = targetScene.commands || [];
+            const requested = typeof detail.commandIndex === 'number' ? detail.commandIndex : 0;
+            const idx = Math.max(0, Math.min(requested, Math.max(0, cmds.length - 1)));
+            // Fast-forward (default on): replay the scene's visual setup from the top up to the line so
+            // the stage is composed (background/characters/images), then stop on the edited line. When
+            // off, jump straight to the line with a bare stage.
+            const fastForward = detail.fastForward !== false && idx > 0;
+            fastForwardTargetRef.current = fastForward ? idx : null;
+            const startIndex = fastForward ? 0 : idx;
+            updatePlayerState(p => {
+                if (!p) return p; // engine not initialized yet
+                return {
+                    ...p, // preserves variables, inventorySlots, selectedItemId, pickedUpItems, history, savedInputs, musicState
+                    mode: 'playing',
+                    currentSceneId: sceneId,
+                    currentCommands: cmds,
+                    currentIndex: startIndex,
+                    commandStack: [],
+                    stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
+                    uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: null },
+                };
+            });
+            setScreenStack([]);
+            setHudStack([]);
+            setClosingScreens(new Set());
+            timersRef.current.clear();
+            blockingTimerRef.current = null;
+        };
+        window.addEventListener('flourish:hotReload', onHotReload as EventListener);
+        return () => window.removeEventListener('flourish:hotReload', onHotReload as EventListener);
+    }, [project, updatePlayerState]);
 
     // Helper function to get asset name from ID
     const getAssetNameFromId = useCallback((assetId: string): string | null => {
@@ -7462,6 +7726,22 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return;
         }
 
+        // Hot-reload fast-forward: while replaying toward the edited line, EXECUTE only visual setup
+        // commands (they build the stage and auto-advance); SKIP everything else (dialogue/wait/choice
+        // would block; variable/item/jump would mutate the preserved state). Mirrors the conditions-skip
+        // pattern above. Clears itself once the target line is reached.
+        {
+            const ffTarget = fastForwardTargetRef.current;
+            if (ffTarget != null) {
+                if (playerState.currentIndex >= ffTarget) {
+                    fastForwardTargetRef.current = null; // reached the edited line → process it normally
+                } else if (!FF_VISUAL_TYPES.has(command.type)) {
+                    updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+                    return;
+                }
+            }
+        }
+
         const advance = () => {
             runtimeDebugLog('[DEBUG advance()] Called from command:', command.type, 'Current index:', playerState.currentIndex);
             // Guard: Don't advance if we've already moved past this command
@@ -7608,6 +7888,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     case 'SpawnParticles': result = handleSpawnParticles(cmd, hctx); break;
                     case 'StopParticles': result = handleStopParticles(cmd, hctx); break;
                     case 'TweenElement': result = handleTweenElement(cmd, hctx); break;
+                    case 'MoveCharacter': result = handleMoveCharacter(cmd, hctx); break;
                     // Additional pure handlers (Phase A): each returns a CommandResult applied via the
                     // decoupled applier below (stage/ui/music/variables + stagePatch). Safe to bridge
                     // because none depend on the main loop's advance/index.
@@ -8188,17 +8469,35 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const cmd = command as any;
                     const durationMs = ((cmd.duration ?? 1) * 1000);
 
-                    // Wait until the player has collected the target item(s), then advance. Items are
-                    // owned when their count variable is >= 1; polled so Show Item / button pickups during
-                    // the wait release it. Indefinite (no duration), like waitIndefinitelyForInput.
-                    if (cmd.waitForItems) {
+                    // Wait until a live condition becomes true, then advance. Polled every 150ms against
+                    // the current variables (uses the standard and/or conditions logic). No duration.
+                    if (cmd.waitForCondition) {
+                        const conditionMet = (): boolean =>
+                            evaluateConditions(cmd.waitConditions, playerStateRef.current?.variables ?? {});
+                        if (conditionMet()) {
+                            advance();
+                        } else {
+                            const poll = () => {
+                                if (conditionMet()) { advance(); return; }
+                                const tid = window.setTimeout(poll, 150);
+                                activeEffectTimeoutsRef.current.push(tid);
+                            };
+                            const tid = window.setTimeout(poll, 150);
+                            activeEffectTimeoutsRef.current.push(tid);
+                        }
+                    }
+                    // Wait until the player has collected the target item(s), then advance. Each item is
+                    // satisfied when its count variable reaches the required quantity (default 1); polled
+                    // so Show Item / button pickups during the wait release it. Indefinite (no duration).
+                    else if (cmd.waitForItems) {
                         const targets: VNID[] = Array.isArray(cmd.targetItemIds) ? cmd.targetItemIds.filter(Boolean) : [];
                         const mode: 'all' | 'any' = cmd.itemsMode === 'any' ? 'any' : 'all';
                         const isCollected = (itemId: VNID): boolean => {
                             const item = project.items?.[itemId];
                             if (!item) return true; // unknown item → satisfied, so we never deadlock on a stale id
+                            const need = Math.max(1, Number(cmd.targetItemCounts?.[itemId] ?? 1) || 1);
                             const c = Number((playerStateRef.current?.variables ?? {})[item.countVariableId] ?? 0);
-                            return c >= 1;
+                            return c >= need;
                         };
                         const conditionMet = (): boolean =>
                             targets.length === 0 ? true : (mode === 'any' ? targets.some(isCollected) : targets.every(isCollected));
@@ -8635,6 +8934,30 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 case CommandType.TweenElement: {
                     const result = handleTweenElement(command as TweenElementCommand, commandContext);
                     applyResult(result);
+                    break;
+                }
+                case CommandType.MoveCharacter: {
+                    const result = handleMoveCharacter(command as MoveCharacterCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.StartTimer: {
+                    const cmd = command as StartTimerCommand;
+                    // Register the timer ALWAYS (the variable is optional — for a Meter/conditions). The
+                    // countdown runs and fires onComplete regardless of whether a variable is bound.
+                    // A blocking timer must end to resume the story, so loop is ignored while blocking.
+                    const key = startTimer(cmd.blockEngine ? { ...cmd, loop: false } : cmd);
+                    if (cmd.blockEngine) {
+                        // Pause the story here; on-screen buttons stay clickable. The tick (on finish) or a
+                        // Stop Timer button resumes via blockingTimerRef; a scene jump clears it.
+                        instantAdvance = false;
+                        blockingTimerRef.current = { key, resume: advance };
+                    }
+                    // non-blocking: instantAdvance stays true → the loop advances past us automatically.
+                    break;
+                }
+                case CommandType.StopTimer: {
+                    stopTimer((command as StopTimerCommand).timerId);
                     break;
                 }
                 default: {
@@ -10135,6 +10458,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             } else {
                 performJumpToLabel();
             }
+        } else if (action.type === UIActionType.StartTimer) {
+            startTimer(action as any); // button-started timers never pause the story (no blockEngine)
+        } else if (action.type === UIActionType.StopTimer) {
+            stopTimer((action as any).timerId);
         } else if (action.type === UIActionType.OpenURL) {
             const openUrlAction = action as OpenURLAction;
             if (openUrlAction.url) {
@@ -10698,6 +11025,64 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const handleUIActionRef = useRef(handleUIAction);
     handleUIActionRef.current = handleUIAction;
 
+    // Background timer tick (Start Timer / Stop Timer). Master 250ms interval; each timer advances
+    // its bound number variable by 1 per `intervalSec`, and on finish runs onComplete via the live
+    // UI-action pipeline (or loops). Placed after handleUIActionRef so the closure has the latest.
+    useEffect(() => {
+        const TICK_MS = 250;
+        const id = window.setInterval(() => {
+            const timers = timersRef.current;
+            if (timers.size === 0) return;
+            const varWrites: Record<string, number> = {};
+            const toRun: VNUIAction[] = [];
+            const toRemove: string[] = [];
+            const resumes: Array<() => void> = [];
+            timers.forEach((t, key) => {
+                t.accMs += TICK_MS;
+                const stepMs = Math.max(0.05, t.intervalSec) * 1000;
+                while (t.accMs >= stepMs) {
+                    t.accMs -= stepMs;
+                    t.value += (t.mode === 'countdown' ? -1 : 1); // value is the timer's own source of truth
+                    const finished = t.mode === 'countdown' ? t.value <= t.target : (t.target > 0 && t.value >= t.target);
+                    if (finished) {
+                        t.value = t.target;
+                        if (t.variableId) varWrites[t.variableId] = t.value;
+                        if (t.onComplete && t.onComplete.length) toRun.push(...t.onComplete);
+                        if (t.loop) { t.value = t.resetTo; if (t.variableId) varWrites[t.variableId] = t.value; t.accMs = 0; }
+                        else {
+                            toRemove.push(key);
+                            // If this timer was pausing the story, queue its resume (after onComplete runs).
+                            if (blockingTimerRef.current?.key === key) { resumes.push(blockingTimerRef.current.resume); blockingTimerRef.current = null; }
+                            break;
+                        }
+                    } else {
+                        if (t.variableId) varWrites[t.variableId] = t.value;
+                    }
+                }
+            });
+            toRemove.forEach(k => timers.delete(k));
+            if (Object.keys(varWrites).length) {
+                updatePlayerState(p => p ? { ...p, variables: { ...p.variables, ...varWrites } } : null);
+            }
+            if (toRun.length) {
+                const run = handleUIActionRef.current;
+                if (run) toRun.forEach(a => { try { run(a); } catch { /* no-op */ } });
+            }
+            // Resume the paused story AFTER its onComplete actions ran (advance is guarded against double-run).
+            resumes.forEach(r => { try { r(); } catch { /* no-op */ } });
+        }, TICK_MS);
+        return () => window.clearInterval(id);
+    }, [updatePlayerState]);
+
+    // A scene change abandons any story-pausing (blocking) timer — e.g. the player clicked a button that
+    // jumped scenes — so its onComplete/resume never fires in the new scene. (Non-blocking timers persist.)
+    useEffect(() => {
+        if (blockingTimerRef.current) {
+            timersRef.current.delete(blockingTimerRef.current.key);
+            blockingTimerRef.current = null;
+        }
+    }, [playerState?.currentSceneId]);
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (!playerState) return;
@@ -10875,6 +11260,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const effBgColor = matchedBgLayer ? matchedBgLayer.color : state.backgroundColor;
         const effBgIsVideo = matchedBgLayer ? matchedBgLayer.isVideo : state.backgroundIsVideo;
         const effBgLoop = matchedBgLayer ? matchedBgLayer.loop : state.backgroundLoop;
+        const effBgTrimStart = matchedBgLayer ? matchedBgLayer.trimStart : state.backgroundTrimStart;
+        const effBgTrimEnd = matchedBgLayer ? matchedBgLayer.trimEnd : state.backgroundTrimEnd;
         const effBgDepth = (matchedBgLayer ? matchedBgLayer.parallaxDepth : state.backgroundParallaxDepth) ?? 0;
         // Over-scale a parallaxed background just enough that its max drift never reveals the
         // edges. Max shift (px) = depth × PARALLAX_MAX_PX × intensity; the margin each side is
@@ -10948,11 +11335,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     <div className={`w-full h-full ${shakeClass} z-10`} style={{ ...shakeIntensityStyle, backgroundColor: effBgColor }}>
                         {effBgUrl && (() => {
                             const bgMedia = effBgIsVideo ? (
-                                <video
-                                    src={effBgUrl}
+                                <TrimmedVideo
+                                    src={effBgUrl || undefined}
                                     autoPlay
                                     muted
                                     loop={effBgLoop}
+                                    trimStart={effBgTrimStart}
+                                    trimEnd={effBgTrimEnd}
                                     playsInline
                                     className="absolute w-full h-full object-cover"
                                 />
@@ -10976,7 +11365,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         {(state.backgroundStack || []).map(plane => {
                             if (!plane.url && !plane.color) return null;
                             const planeMedia = plane.url ? (plane.isVideo ? (
-                                <video src={plane.url} autoPlay muted loop={plane.loop} playsInline className="absolute w-full h-full object-cover" />
+                                <TrimmedVideo src={plane.url || undefined} autoPlay muted loop={plane.loop} trimStart={plane.trimStart} trimEnd={plane.trimEnd} playsInline className="absolute w-full h-full object-cover" />
                             ) : (
                                 <img src={plane.url} alt="background layer" className="absolute w-full h-full object-cover" />
                             )) : null;
@@ -11287,14 +11676,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 <>
                                     {char.isVideo && char.videoUrls ? (
                                         char.videoUrls.map((url, index) => (
-                                            <video 
-                                                key={index} 
-                                                src={url} 
-                                                autoPlay 
-                                                muted 
-                                                loop={char.videoLoop} 
+                                            <TrimmedVideo
+                                                key={index}
+                                                src={url}
+                                                autoPlay
+                                                muted
+                                                loop={char.videoLoop}
+                                                trimStart={char.videoTrims?.[index]?.start}
+                                                trimEnd={char.videoTrims?.[index]?.end}
                                                 playsInline
-                                                className="absolute top-0 left-0 w-full h-full object-contain" 
+                                                className="absolute top-0 left-0 w-full h-full object-contain"
                                                 style={{ zIndex: index }}
                                             />
                                         ))
@@ -11351,7 +11742,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             const charOpacity = charTween?.opacity;
                             const charInverted = (char as any).inverted ?? false;
                             const charFlipY = (char as any).flipY ?? false;
-                            const charRotation = (char as any).rotation ?? 0;
+                            const charRotation = charTween?.rotation ?? (char as any).rotation ?? 0;
 
                             // Build transform: combine position, rotation, scale, and flips
                             let transformStr = positionStyle.transform || '';
@@ -11684,7 +12075,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : 'none',
             };
             if (meta.isVideo) {
-                return <video src={url} autoPlay muted loop={meta.loop} playsInline style={style} />;
+                return <TrimmedVideo src={url} autoPlay muted loop={meta.loop} trimStart={(slide as any).trimStart} trimEnd={(slide as any).trimEnd} playsInline style={style} />;
             }
             return <img src={url} alt="" style={style} />;
         };
@@ -11759,7 +12150,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         pointerEvents: 'none',
                     };
                     if (meta.isVideo) {
-                        return <video key={`credit-media-${idx}`} src={url} autoPlay muted loop playsInline style={mediaStyle} />;
+                        return <TrimmedVideo key={`credit-media-${idx}`} src={url} autoPlay muted loop trimStart={(item as any).trimStart} trimEnd={(item as any).trimEnd} playsInline style={mediaStyle} />;
                     }
                     return <img key={`credit-media-${idx}`} src={url} alt="" style={mediaStyle} />;
                 })}
@@ -12218,7 +12609,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} reactiveState={pickReactiveTextboxState(project.ui.dialogueReactiveStates, playerState.variables, evaluateConditions)} />
                 </>
             )}
-            {uiState.choices && <ChoiceMenu choices={uiState.choices} projectUI={project.ui} onSelect={handleChoiceSelect} variables={playerState.variables} project={project} layout={uiState.choiceLayout} />}
+            {uiState.choices && <ChoiceMenu choices={uiState.choices} projectUI={project.ui} onSelect={handleChoiceSelect} variables={playerState.variables} project={project} layout={uiState.choiceLayout}
+                timeLimit={uiState.choiceTimeLimit} showTimer={uiState.choiceShowTimer}
+                onTimeout={() => {
+                    // Reuse the normal selection pipeline (records history, runs actions, clears + advances).
+                    const opts = uiState.choices || [];
+                    if ((uiState.choiceTimeoutBehavior || 'option') === 'actions') {
+                        handleChoiceSelect({ id: '__timeout__', text: '', actions: (uiState.choiceTimeoutActions || []) as any } as ChoiceOption);
+                    } else {
+                        const picked = opts.find(o => o.id === uiState.choiceTimeoutOptionId) || opts[0];
+                        if (picked) handleChoiceSelect(picked);
+                    }
+                }} />}
             {uiState.textInput && <TextInputForm textInput={uiState.textInput} onSubmit={handleTextInputSubmit} variables={playerState.variables} project={project} projectUI={project.ui} />}
             {activeFlashRef.current && <div 
                 key={activeFlashRef.current.key}

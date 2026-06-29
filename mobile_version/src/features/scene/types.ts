@@ -1,4 +1,5 @@
-import { VNID, VNPosition, VNTransition } from '../../types';
+import { VNID, VNPosition, VNTransition, VNContentBox } from '../../types';
+export type { VNContentBox } from '../../types';
 import { VNSetVariableOperator } from '../variables/types';
 import { JumpToSceneAction, SetVariableAction, VNTextAlign, VNVAlign, VNCondition, VNUIAction, VNParallaxSettings } from '../../types/shared';
 import type { VNScreenOverlayEffectType, VNSnowAshVariant } from '../../types';
@@ -87,6 +88,7 @@ export enum CommandType {
     ShowHotSpot = 'ShowHotSpot', // Place an interactive hot spot on the scene (click / hover / drop target)
     HideHotSpot = 'HideHotSpot', // Remove a scene hot spot
     TweenElement = 'TweenElement', // Animate position/size/opacity/etc. of an on-stage element over time
+    MoveCharacter = 'MoveCharacter', // Move an on-stage character from its current spot (A) to a destination (B), optionally scale/fade/rotate
     GiveItem = 'GiveItem',     // Give the player N of an inventory item
     UseItem = 'UseItem',       // Consume one of an item (+ run its use-effect)
     DestroyItem = 'DestroyItem', // Remove N (or all) of an item
@@ -105,6 +107,8 @@ export enum CommandType {
     HidePhoneText = 'HidePhoneText', // Clear the chat conversation. Labeled "Hide Text"
     PhoneIncomingText = 'PhoneIncomingText', // A text "arrives": banner+ding (or auto-open), with replies/follow-ups
     PhoneIncomingCall = 'PhoneIncomingCall', // A call rings: accept/decline overlay (or non-blocking ring)
+    StartTimer = 'StartTimer', // Start a countdown/stopwatch that ticks a number variable; runs actions when it finishes
+    StopTimer = 'StopTimer',   // Stop a running timer (by id)
 }
 
 /**
@@ -253,6 +257,8 @@ export interface ShowCharacterCommand extends BaseCommand {
      *  or null to clear that layer. Lets a look compose (e.g. happy face + school outfit + blush on)
      *  without a dedicated expression. Additive-optional; empty = today's behavior. */
     layerOverrides?: Record<VNID, VNID | null>;
+    /** Visible/interactive sub-region for snapping/fit/guide (see VNContentBox). Additive-optional. */
+    contentBox?: VNContentBox;
 }
 
 export interface HideCharacterCommand extends BaseCommand {
@@ -305,6 +311,54 @@ export interface ChoiceCommand extends BaseCommand {
      *  (unchanged default); 'horizontal' = a centered row; 'free' = each option positioned by its
      *  own x/y/width/height (drag/resize on the canvas). Additive-optional. */
     layout?: 'vertical' | 'horizontal' | 'free';
+    /** Time limit in seconds. 0/undefined = no limit (classic, waits forever). When set, a countdown
+     *  runs while the choices are shown and auto-resolves on expiry per `timeoutBehavior`. */
+    timeLimit?: number;
+    /** Show a shrinking countdown bar above the choices while timed. Default true when timeLimit is set. */
+    showTimer?: boolean;
+    /** What happens when the time runs out: pick a designated option, or run `timeoutActions`. */
+    timeoutBehavior?: 'option' | 'actions';
+    /** Option to auto-select on timeout (when timeoutBehavior = 'option'). */
+    timeoutOptionId?: VNID;
+    /** Actions to run on timeout (when timeoutBehavior = 'actions'); the choice then clears + advances. */
+    timeoutActions?: VNUIAction[];
+}
+
+/**
+ * Start Timer — a variable-backed countdown or stopwatch. Each tick it writes the running value to
+ * `variableId` (so a Meter shows it as a bar, conditions/{var} text react), and when a countdown
+ * reaches 0 (or a stopwatch reaches `target`) it runs `onComplete` actions. Non-blocking (runs in
+ * the background while the story continues). Multiple named timers can run at once.
+ */
+export interface StartTimerCommand extends BaseCommand {
+    type: CommandType.StartTimer;
+    /** Identifier so Stop Timer / a second Start can target THIS timer. Blank = 'default'. */
+    timerId?: string;
+    /** The number variable the timer ticks (source of truth for display + conditions). */
+    variableId: VNID;
+    /** 'countdown' (from `duration` down to 0) or 'stopwatch' (from `from` up to `duration` as the cap). */
+    mode?: 'countdown' | 'stopwatch';
+    /** Countdown: seconds to count down from. Stopwatch: the cap it counts up to (0 = no cap, runs until stopped). */
+    duration: number;
+    /** Stopwatch start value (default 0). */
+    from?: number;
+    /** Tick granularity in seconds (default 1). The variable changes by 1 each tick. */
+    interval?: number;
+    /** Restart automatically when it finishes (countdown→duration, stopwatch→from). */
+    loop?: boolean;
+    /** Actions run when the timer finishes (countdown hits 0 / stopwatch hits the cap). */
+    onComplete?: VNUIAction[];
+    /** Pause the STORY on this command until the timer finishes — but keep on-screen buttons/hot spots
+     *  clickable, so the player can act against a deadline. A button that jumps scenes ends it; a button
+     *  with a Stop Timer action ends it early (and the story continues); otherwise onComplete fires + the
+     *  story advances when time's up. (Ignored by the Start Timer ACTION — buttons never pause the story.) */
+    blockEngine?: boolean;
+}
+
+export interface StopTimerCommand extends BaseCommand {
+    type: CommandType.StopTimer;
+    /** Which timer to stop. Blank = 'default'. */
+    timerId?: string;
 }
 
 export interface BranchStartCommand extends BaseCommand {
@@ -440,8 +494,15 @@ export interface WaitCommand extends BaseCommand {
     waitForItems?: boolean;
     /** Items to wait for (collected = the item's count variable is >= 1). */
     targetItemIds?: VNID[];
+    /** Per-item required quantity (owned count >= this). Missing/unset = 1. Lets a wait require e.g. 6× Keys. */
+    targetItemCounts?: Record<VNID, number>;
     /** Whether ALL target items must be collected (default) or ANY one of them. */
     itemsMode?: 'all' | 'any';
+    /** Wait until a live condition becomes true (re-checked continuously), then advance. Like
+     *  waitForItems it ignores duration. Pairs with Set Variable / gameplay state changes. */
+    waitForCondition?: boolean;
+    /** The condition(s) polled live while waiting (uses the standard conditions logic incl. and/or). */
+    waitConditions?: VNCondition[];
 }
 export interface ShakeScreenCommand extends BaseCommand {
     type: CommandType.ShakeScreen;
@@ -643,6 +704,8 @@ export interface ShowImageCommand extends BaseCommand {
     /** When true, width/height act as a max bound and the displayed image + its footprint shrink
      *  to the fitted (undistorted) art — no empty margin around it. Additive-optional. */
     fitToContent?: boolean;
+    /** Visible sub-region for snapping/fit/guide (see VNContentBox). Additive-optional. */
+    contentBox?: VNContentBox;
 }
 
 export interface HideTextCommand extends BaseCommand {
@@ -701,6 +764,9 @@ export interface ShowButtonCommand extends BaseCommand {
     flipY?: boolean;    // mirror vertically
     // Conditions
     showConditions?: VNCondition[];
+    /** Visible/clickable sub-region (see VNContentBox). Drives snapping/fit/guide AND the in-game
+     *  click hit-area for image buttons (so transparent corners aren't clickable). Additive-optional. */
+    contentBox?: VNContentBox;
 }
 
 export interface HideButtonCommand extends BaseCommand {
@@ -1039,6 +1105,34 @@ export interface TweenElementCommand extends BaseCommand {
     panY?: number;
 }
 
+/**
+ * Move Character — a friendly, character-first wrapper over the tween system: animates a
+ * character from point A (its current on-stage spot by default, or an explicit `fromPosition`)
+ * to point B (`toPosition`) over `duration`, optionally also changing scale / opacity / rotation.
+ * Runs on the same TweenManager as TweenElement (character targetType).
+ */
+export interface MoveCharacterCommand extends BaseCommand {
+    type: CommandType.MoveCharacter;
+    /** The on-stage character to move. */
+    characterId: VNID;
+    /** Destination (point B). Preset ('left'/'center'/'right'/…) or custom {x,y} percentage. */
+    toPosition: VNPosition;
+    /** Optional start override (point A). Unset = animate from wherever the character currently is. */
+    fromPosition?: VNPosition;
+    /** Duration in seconds. */
+    duration: number;
+    /** Easing function (default: 'easeInOutCubic'). */
+    easing?: EasingType;
+    /** Wait for the move to finish before advancing (default true). */
+    waitForCompletion?: boolean;
+    /** Optional target uniform scale (1 = 100%). Unset = unchanged. */
+    scale?: number;
+    /** Optional target opacity (0-1). Unset = unchanged. */
+    opacity?: number;
+    /** Optional target rotation in degrees. Unset = unchanged. */
+    rotation?: number;
+}
+
 export type VNCommand =
   | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand | SetCharacterLayerCommand
     | ChoiceCommand | BranchStartCommand | BranchElseIfCommand | BranchElseCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
@@ -1048,10 +1142,11 @@ export type VNCommand =
   | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | ShowItemCommand | CreditRollCommand | GroupCommand | RunScriptCommand
   | SpawnParticlesCommand | StopParticlesCommand | CallCommonEventCommand
   | ShowHotSpotCommand | HideHotSpotCommand
-  | TweenElementCommand
+  | TweenElementCommand | MoveCharacterCommand
   | GiveItemCommand | UseItemCommand | DestroyItemCommand | RestockCollectionCommand | BuyItemCommand | SellItemCommand
   | ShowPhoneCommand | HidePhoneCommand | ShowPhoneTextCommand | HidePhoneTextCommand
-  | PhoneIncomingTextCommand | PhoneIncomingCallCommand;
+  | PhoneIncomingTextCommand | PhoneIncomingCallCommand
+  | StartTimerCommand | StopTimerCommand;
 
 /** Phone (in-game cellphone) commands. */
 export interface ShowPhoneCommand extends BaseCommand { type: CommandType.ShowPhone; }

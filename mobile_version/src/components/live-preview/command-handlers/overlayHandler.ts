@@ -9,6 +9,7 @@ import {
 } from '../../../features/scene/types';
 import { TextOverlay, ImageOverlay, ButtonOverlay } from '../types/gameState';
 import { interpolateVariables } from '../../../utils/variableInterpolation';
+import { resolveVideoTrim } from '../../../utils/videoTrim';
 import { UIActionType, VNUIAction } from '../../../types/shared';
 import { CommandContext, CommandResult } from './types';
 import { TweenManager } from '../systems/tweenManager';
@@ -141,17 +142,23 @@ export function handleShowImage(
   command: ShowImageCommand,
   context: CommandContext
 ): CommandResult {
-  const { assetResolver, getAssetMetadata, playerState } = context;
-  
+  const { assetResolver, getAssetMetadata, playerState, project } = context;
+
   const imageUrl = assetResolver(command.imageId, 'image');
   const { isVideo, loop } = getAssetMetadata(command.imageId, 'image');
-  
+
   if (!imageUrl) {
     console.warn(`Image not found: ${command.imageId}`);
     return { advance: true };
   }
 
   TweenManager.cancelForTarget(command.id, 'image');
+
+  // Per-use trim wins; else fall back to the asset's DEFAULT trim (set in Asset Manager).
+  const imgAssetRec: any = command.imageId
+    ? ((project as any).images?.[command.imageId] || (project as any).backgrounds?.[command.imageId] || (project as any).videos?.[command.imageId])
+    : undefined;
+  const imgTrim = resolveVideoTrim(command, imgAssetRec);
 
   const overlay: ImageOverlay = {
     id: command.id,
@@ -161,6 +168,8 @@ export function handleShowImage(
     videoUrl: isVideo ? imageUrl : undefined,
     isVideo,
     videoLoop: loop,
+    videoTrimStart: imgTrim.start,
+    videoTrimEnd: imgTrim.end,
     x: command.x,
     y: command.y,
     width: command.width,
@@ -301,6 +310,7 @@ export function handleShowButton(
     clickSound: command.clickSound,
     waitForClick: command.waitForClick,
     quickMenuMode: command.quickMenuMode,
+    contentBox: command.contentBox,
     rotation: command.rotation,
     flipX: command.flipX,
     flipY: command.flipY,

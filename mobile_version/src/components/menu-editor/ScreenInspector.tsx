@@ -7,6 +7,7 @@ import { VNUIScreen, VNScreenCategory, VNHotZoneWinCondition, VNUIElement, UIEle
 import { getScreenCategory, getScreenCategoryColor, SCREEN_CATEGORY_ORDER, SCREEN_CATEGORY_LABEL_KEY } from '../../utils/screenCategory';
 import { FormField, TextInput, Select, ColorInput, RangeInput } from '../ui/Form';
 import AssetSelector from '../ui/AssetSelector';
+import VideoTrimFields from '../ui/VideoTrimFields';
 import WinConditionEditor from '../ui/WinConditionEditor';
 import UIActionsListEditor from '../ui/UIActionsListEditor';
 import { isInteractiveElement } from '../../utils/interactiveElements';
@@ -185,6 +186,10 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                             {t('screenInspector.loopVideo')} <span className="text-[10px] text-slate-500">{t('screenInspector.loopVideoHint')}</span>
                         </label>
                     )}
+                    {screen.background.type === 'video' && (
+                        <VideoTrimFields className="mt-2" start={(screen.background as any).trimStart} end={(screen.background as any).trimEnd}
+                            onChange={patch => updateScreen({ background: { ...(screen.background as any), ...patch } })} />
+                    )}
                     {/* Background entry transition (fade/crossfade/dissolve/slide/iris/wipe) */}
                     <div className="grid grid-cols-2 gap-2 mt-2">
                         <FormField label={t('screenInspector.bgTransition')}>
@@ -262,6 +267,10 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                                 onChange={e => updateAddlBg(b.id, { background: { ...(b.background as any), loop: e.target.checked } })} />
                                             {t('screenInspector.loopVideo')}
                                         </label>
+                                    )}
+                                    {b.background.type === 'video' && (
+                                        <VideoTrimFields className="mt-1" start={(b.background as any).trimStart} end={(b.background as any).trimEnd}
+                                            onChange={patch => updateAddlBg(b.id, { background: { ...(b.background as any), ...patch } })} />
                                     )}
                                     <div className="grid grid-cols-2 gap-2 mt-1">
                                         <FormField label={t('screenInspector.layerN', { n: b.layer ?? 0 })}>

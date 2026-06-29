@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { snapRect, insetRect, SnapRect, SnapGuide } from '../../utils/canvasSnap';
 
 /** Snap a value to the nearest grid line when shift is held */
 function snapToGrid(value: number, gridSize: number, shiftHeld: boolean): number {
@@ -28,11 +29,24 @@ export interface ResizableDraggableProps {
     onContextMenu?: (e: React.MouseEvent) => void;
     /** Stacking order on the canvas (mirrors the element's `layer`). */
     zIndex?: number;
+    /** Other elements' VISUAL top-left rects (in % of the canvas) for smart alignment snapping. */
+    siblings?: SnapRect[];
+    /** Smart snapping on/off (default on). Hold Alt while dragging to bypass per-interaction. */
+    snapEnabled?: boolean;
+    /** Lifts the live alignment-guide lines up so the parent can draw them at canvas level. */
+    onGuides?: (guides: SnapGuide[]) => void;
+    /** Visible content box (inset fractions). When set, DRAG snapping aligns by the visible content
+     *  region instead of the full element box. */
+    contentBox?: { left: number; top: number; right: number; bottom: number };
+    /** Extra overlay rendered inside the element box, OUTSIDE the pointer-events-gated children
+     *  wrapper (so its own handles can receive events) — used for the on-canvas content-box editor. */
+    overlay?: React.ReactNode;
 }
 
 const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
     x, y, width, height, anchorX, anchorY, parentSize, isSelected, onSelect, onUpdate, children,
     snapGrid = 1, showSnapGuides, label, locked, allowChildInteraction, onContextMenu, zIndex,
+    siblings, snapEnabled = true, onGuides, contentBox, overlay,
 }) => {
 
     const ref = useRef<HTMLDivElement>(null);
@@ -110,21 +124,58 @@ const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
             }
         }
 
-        const next = { x: newX, y: newY, width: Math.max(2, newWidth), height: Math.max(2, newHeight) };
+        let next = { x: newX, y: newY, width: Math.max(2, newWidth), height: Math.max(2, newHeight) };
+
+        // Smart alignment snapping (default on; Shift = legacy grid above takes precedence; Alt bypasses).
+        // Snaps to canvas edges/center even with no siblings; sibling alignment when provided.
+        if (!isSnapping && snapEnabled && !e.altKey) {
+            // Use SAFE anchors here: an undefined anchor (common on buttons) would make
+            // `anchor * width` NaN, which silently kills both the snap AND the guide lines.
+            const aX = Number.isFinite(anchorX) ? anchorX : 0;
+            const aY = Number.isFinite(anchorY) ? anchorY : 0;
+            // Convert the anchor-based geometry to the element's VISUAL top-left rect.
+            const vx = next.x - aX * next.width;
+            const vy = next.y - aY * next.height;
+            if (isDragging && contentBox) {
+                // Snap by the VISIBLE content rect, then apply the positional delta back (move only).
+                const full = { x: vx, y: vy, width: next.width, height: next.height };
+                const content = insetRect(full, contentBox);
+                const res = snapRect(content, siblings || [], { mode: 'move' });
+                next = { ...next, x: next.x + (res.rect.x - content.x), y: next.y + (res.rect.y - content.y) };
+                onGuides?.(res.guides);
+            } else {
+                const res = snapRect(
+                    { x: vx, y: vy, width: next.width, height: next.height },
+                    siblings || [],
+                    { mode: isDragging ? 'move' : 'resize', activeEdges: typeof isResizing === 'string' ? isResizing : '' },
+                );
+                next = {
+                    x: res.rect.x + aX * res.rect.width,
+                    y: res.rect.y + aY * res.rect.height,
+                    width: res.rect.width,
+                    height: res.rect.height,
+                };
+                onGuides?.(res.guides);
+            }
+        } else {
+            onGuides?.([]);
+        }
+
         liveRectRef.current = next;
         setLiveRect(next);
 
-    }, [isDragging, isResizing, parentSize, snapGrid]);
+    }, [isDragging, isResizing, parentSize, snapGrid, snapEnabled, siblings, anchorX, anchorY, onGuides, contentBox]);
 
     const handleMouseUp = useCallback(() => {
         setIsDragging(false);
         setIsResizing(null);
+        onGuides?.([]);
         // Commit the final geometry once (single dispatch + single undo step).
         const final = liveRectRef.current;
         liveRectRef.current = null;
         setLiveRect(null);
         if (final) onUpdate(final);
-    }, [onUpdate]);
+    }, [onUpdate, onGuides]);
 
     useEffect(() => {
         if (isDragging || isResizing) {
@@ -201,6 +252,9 @@ const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
                         ))}
                     </>
                 )}
+                {/* Extra overlay (e.g. content-box editor) — outside the children wrapper so its own
+                    handles receive pointer events. It manages its own pointer-events internally. */}
+                {overlay}
             </div>
         </div>
     );

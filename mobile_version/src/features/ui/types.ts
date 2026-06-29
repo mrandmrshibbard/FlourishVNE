@@ -1,4 +1,4 @@
-import { VNID } from '../../types';
+import { VNID, VNContentBox } from '../../types';
 import type { VNScreenOverlayEffect } from '../../types';
 import { VNCondition, VNConditionOperator, VNUIAction, VNTextAlign, VNVAlign, VNParallaxSettings } from '../../types/shared';
 
@@ -406,6 +406,15 @@ export interface VNProjectUI {
     // Contacts list placement: when set, the scrollable roster occupies this sub-region of the
     // phone screen (% of the phone, like free app buttons); unset = fills the content area.
     phoneContactsRegion?: { x: number; y: number; width: number; height: number };
+
+    // ─── Player Inventory (the implicit, unbound item grid) ─── additive; unset = current behavior
+    inventoryDefaultSort?: 'manual' | 'alpha' | 'category';  // unset → 'manual' (sort by item.order)
+    inventoryDefaultHideUnowned?: boolean;                    // unset → true
+    inventoryDefaultShowNames?: boolean;                      // unset → true
+    inventoryDefaultShowQuantity?: boolean;                   // unset → true
+    inventoryDefaultColumns?: number;                         // unset → 4
+    inventoryCategoryOrder?: string[];                        // author-ordered category names; uncategorized always last
+    inventoryGroupByCategory?: boolean;                       // unset/false → flat positional grid (unchanged)
 }
 
 /**
@@ -610,6 +619,9 @@ export interface UIButtonElement extends BaseUIElement {
     /** Inner horizontal padding in % of the button width (default 0). Keeps left/right-aligned
      *  text off the edge. */
     paddingX?: number;
+    /** Visible/clickable sub-region (see VNContentBox): snapping/fit/guide + in-game click hit-area
+     *  for image buttons. Additive-optional. */
+    contentBox?: VNContentBox;
 }
 
 export interface UITextShadow {
@@ -640,9 +652,11 @@ export interface UITextElement extends BaseUIElement {
 }
 export interface UIImageElement extends BaseUIElement {
     type: UIElementType.Image;
-    background?: { type: 'image' | 'video', assetId: VNID, loop?: boolean, trimStart?: number, trimEnd?: number } | { type: 'color', value: string }; // Image/video from assets or solid color. `loop` (video only, default true): off = play once and hold last frame. trimStart/trimEnd (seconds) play only a slice.
+    background?: { type: 'image' | 'video', assetId: VNID, loop?: boolean, trimStart?: number, trimEnd?: number, muted?: boolean } | { type: 'color', value: string }; // Image/video from assets or solid color. `loop` (video only, default true): off = play once and hold last frame. trimStart/trimEnd (seconds) play only a slice. `muted` (video only, default false): play the video's audio; set true for a silent decorative loop.
     image: UIAsset | null; // Deprecated, kept for backward compatibility
     objectFit?: 'contain' | 'cover' | 'fill'; // How the image/video should fit in the element
+    /** Visible sub-region (see VNContentBox): snapping/fit/guide. Additive-optional. */
+    contentBox?: VNContentBox;
 }
 /**
  * A single freely-positioned slot rectangle, in screen-percent coordinates
@@ -848,8 +862,9 @@ export interface UIInventoryGridElement extends BaseUIElement {
     type: UIElementType.Inventory;
     /** Columns in the item grid. */
     columns: number;
-    /** Gap between slots in pixels (legacy/base — used when columnGap/rowGap are unset). */
-    gap: number;
+    /** @deprecated Legacy single spacing — read only as a fallback for old projects.
+     *  New grids use columnGap/rowGap; do not write this. */
+    gap?: number;
     /** Minimum number of rows — pads the grid with empty slots up to columns×rows (a fixed
      *  "backpack" look). Unset/0 = auto-grow with the number of items. */
     rows?: number;
@@ -869,7 +884,8 @@ export interface UIInventoryGridElement extends BaseUIElement {
     showNames?: boolean;
     /** Show a quantity badge (default true; only shows when qty > 1). */
     showQuantity?: boolean;
-    /** Show a "Use" button on usable items (default false). */
+    /** @deprecated Superseded by `slotButton`. Migrated to `slotButton:'use'` on load; no longer
+     *  read or written. Kept so pre-migration projects still type-check. */
     showUseButton?: boolean;
     /** Allow the player to drag-rearrange items in-game (their order persists per save). Default true. */
     allowReorder?: boolean;

@@ -231,6 +231,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({
                                 project={project}
                                 activeSceneId={activeSceneId}
                                 selectedCommandIndex={selectedCommandIndex}
+                                onSelectCommand={setSelectedCommandIndex}
                                 className="h-full w-full border-2 border-[var(--border-subtle)] rounded-lg"
                                 style={{ height: '100%' }}
                             />

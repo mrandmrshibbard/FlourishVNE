@@ -13,7 +13,7 @@ import { VNStat } from '../features/stats/types';
 import { useProject } from '../contexts/ProjectContext';
 import { getScreenCategory } from '../utils/screenCategory';
 import { createUIElement } from '../utils/uiElementFactory';
-import { UIElementType, UIInventoryGridElement, UIMeterElement } from '../features/ui/types';
+import { UIElementType, UIInventoryGridElement, UIMeterElement, VNProjectUI } from '../features/ui/types';
 import { findSystemScreenLinks, SystemScreenLink } from '../utils/systemScreenLinks';
 import SystemWizard from './menu-editor/SystemWizard';
 import { applySystemWizardResult } from '../features/systems/applySystem';
@@ -23,6 +23,7 @@ import { FormField, TextInput, TextArea, Select, ColorInput } from './ui/Form';
 import AssetSelector from './ui/AssetSelector';
 import UIActionsListEditor from './ui/UIActionsListEditor';
 import ConditionsEditor from './ui/ConditionsEditor';
+import { CollapsibleSection } from './ui/CollapsibleSection';
 import { PlusIcon, TrashIcon, SparklesIcon, ArchiveBoxIcon, GridIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon, AdjustmentsIcon } from './icons';
 
 type SystemId = 'inventory' | 'items' | 'stats';
@@ -205,6 +206,23 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
     const iconUrlFor = (it: VNItem): string | null =>
         it.icon?.id ? ((project.images[it.icon.id] as any)?.imageUrl || (project.videos?.[it.icon.id] as any)?.videoUrl || null) : null;
 
+    // ── Player Inventory settings (project.ui) ──
+    const pui = project.ui || ({} as VNProjectUI);
+    const updateUI = (u: Partial<VNProjectUI>) => dispatch({ type: 'UPDATE_UI', payload: u });
+    const setItemStartQty = (it: VNItem, n: number) => dispatch({ type: 'UPDATE_VARIABLE', payload: { variableId: it.countVariableId, updates: { defaultValue: Math.max(0, Math.floor(n) || 0) } } });
+    const usedCategories = useMemo(() => Array.from(new Set(items.map(i => i.category).filter(Boolean))) as string[], [items]);
+    const orderedCategories = useMemo(() => {
+        const o = pui.inventoryCategoryOrder || [];
+        return [...o.filter(c => usedCategories.includes(c)), ...usedCategories.filter(c => !o.includes(c))];
+    }, [pui.inventoryCategoryOrder, usedCategories]);
+    const moveCategory = (cat: string, dir: -1 | 1) => {
+        const arr = [...orderedCategories];
+        const i = arr.indexOf(cat); const j = i + dir;
+        if (i < 0 || j < 0 || j >= arr.length) return;
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+        updateUI({ inventoryCategoryOrder: arr });
+    };
+
     const sysBtn = (id: SystemId, icon: React.ReactNode, label: string, badge?: React.ReactNode) => (
         <button onClick={() => { setSelectedSystem(id); setSelectedListId(null); }}
             className={`w-full flex items-center gap-2.5 p-3 rounded-lg text-left transition-all border ${selectedSystem === id ? 'bg-gradient-to-r from-[var(--accent-lavender)]/20 to-transparent border-[var(--accent-lavender)]/50' : 'bg-[var(--bg-secondary)]/40 border-transparent hover:bg-[var(--bg-secondary)]'}`}>
@@ -240,7 +258,7 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                                 {/* Built-in player inventory = the global item counts (not a collection) */}
                                 <button onClick={() => { setSelectedSystem('inventory'); setSelectedListId(null); }}
                                     className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs transition-colors ${selectedSystem === 'inventory' && !selectedListId ? 'bg-[var(--accent-lavender)]/15 text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'}`}>
-                                    🎒 <span className="flex-1 truncate">Player Inventory</span>
+                                    🎒 <span className="flex-1 truncate">Player Inventory (all owned items)</span>
                                     <span className="text-[9px] text-[var(--text-muted)]">built-in</span>
                                 </button>
                                 {collections.map(col => (
@@ -306,76 +324,86 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                                 </div>
                             </div>
                         ) : (
-                            <div className="max-w-2xl mx-auto p-5 space-y-4">
+                            <div className="max-w-2xl mx-auto p-5 space-y-3">
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-xl font-bold text-white">{selected.name}</h3>
                                     <button onClick={() => remove(selected.id)} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 font-medium"><TrashIcon className="w-4 h-4" /> Delete</button>
                                 </div>
 
-                                <FormField label="Name"><TextInput value={selected.name} onChange={e => update(selected.id, { name: e.target.value })} /></FormField>
-                                <FormField label="Description (optional)"><TextArea value={selected.description || ''} onChange={e => update(selected.id, { description: e.target.value })} placeholder="Shown in tooltips / detail panes." /></FormField>
-                                <AssetSelector label="Icon" assetType="images" allowVideo value={selected.icon?.id || null}
-                                    onChange={id => update(selected.id, { icon: id ? { type: 'image', id } : null })} />
+                                <CollapsibleSection title="Basics" defaultOpen>
+                                    <div className="space-y-3">
+                                        <FormField label="Name"><TextInput value={selected.name} onChange={e => update(selected.id, { name: e.target.value })} /></FormField>
+                                        <FormField label="Description (optional)"><TextArea value={selected.description || ''} onChange={e => update(selected.id, { description: e.target.value })} placeholder="Shown in tooltips / detail panes." /></FormField>
+                                        <AssetSelector label="Icon" assetType="images" allowVideo value={selected.icon?.id || null}
+                                            onChange={id => update(selected.id, { icon: id ? { type: 'image', id } : null })} />
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <FormField label="Category (optional)"><TextInput value={selected.category || ''} onChange={e => update(selected.id, { category: e.target.value })} placeholder="e.g. Consumables" /></FormField>
+                                            <FormField label="Shop price (optional)"><TextInput type="number" value={selected.price ?? ''} onChange={e => update(selected.id, { price: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0) })} /></FormField>
+                                        </div>
+                                    </div>
+                                </CollapsibleSection>
 
-                                <div className="grid grid-cols-3 gap-3">
-                                    <FormField label="Category (optional)"><TextInput value={selected.category || ''} onChange={e => update(selected.id, { category: e.target.value })} placeholder="e.g. Consumables" /></FormField>
-                                    <FormField label="Shop price (optional)"><TextInput type="number" value={selected.price ?? ''} onChange={e => update(selected.id, { price: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0) })} /></FormField>
-                                    <FormField label="Starts with"><TextInput type="number" min={0} value={startQty} onChange={e => setStartQty(parseFloat(e.target.value))} /></FormField>
-                                </div>
-                                <p className="text-[10px] text-[var(--text-muted)] -mt-2">"Starts with" is how many the player begins a new game holding (0 = not in their inventory at the start).</p>
-
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" checked={!!selected.unique} onChange={e => update(selected.id, { unique: e.target.checked || undefined })} className="w-4 h-4" />
-                                    <span className="text-sm text-[var(--text-primary)]">Unique (owned 0 or 1 — a key item, not stackable)</span>
-                                </label>
-
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" checked={!!selected.usable} onChange={e => update(selected.id, { usable: e.target.checked })} className="w-4 h-4" />
-                                    <span className="text-sm text-[var(--text-primary)]">Usable (player can "Use" it from an inventory)</span>
-                                </label>
-
-                                {selected.usable && (
-                                    <div className="pl-2 border-l-2 border-[var(--accent-lavender)]/40 space-y-2">
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input type="checkbox" checked={selected.consumeOnUse !== false} onChange={e => update(selected.id, { consumeOnUse: e.target.checked ? undefined : false })} className="w-4 h-4" />
-                                            <span className="text-sm text-[var(--text-primary)]">Using decreases the count by one (consumable)</span>
-                                        </label>
-                                        <p className="text-[11px] text-[var(--text-muted)] -mt-1">Uncheck for a reusable item (a tool/key) that runs its effect without being spent.</p>
-                                        <p className="text-[11px] text-[var(--text-muted)] mb-1">Extra actions when used{selected.consumeOnUse !== false ? ' (the count is decremented automatically on use)' : ''}:</p>
-                                        <UIActionsListEditor actions={selected.useEffect || []} project={project} onChange={acts => update(selected.id, { useEffect: acts })} label="Use effect" />
-
-                                        {/* Carry-to-use: point-and-click "pick up and click a spot" usage */}
+                                <CollapsibleSection title="Quantity & rarity" defaultOpen>
+                                    <div className="space-y-2">
+                                        <FormField label="Starts with"><TextInput type="number" min={0} value={startQty} onChange={e => setStartQty(parseFloat(e.target.value))} /></FormField>
+                                        <p className="text-[11px] text-[var(--text-muted)] -mt-1">How many the player is holding when a new game begins (0 = not in their inventory at the start).</p>
                                         <label className="flex items-center gap-2 cursor-pointer pt-1">
-                                            <input type="checkbox" checked={!!selected.carryToUse} onChange={e => update(selected.id, { carryToUse: e.target.checked || undefined })} className="w-4 h-4" />
-                                            <span className="text-sm text-[var(--text-primary)]">Click and drag to use </span>
+                                            <input type="checkbox" checked={!!selected.unique} onChange={e => update(selected.id, { unique: e.target.checked || undefined })} className="w-4 h-4" />
+                                            <span className="text-sm text-[var(--text-primary)]">Unique (owned 0 or 1 — a key item, not stackable)</span>
                                         </label>
-                                        <p className="text-[11px] text-[var(--text-muted)] -mt-1">When on, pressing “Use” picks the item up onto the cursor and closes the inventory. The player then clicks a drop-zone hot spot to use it there (the effect above + consume happen on a successful drop). Great for keys, tools, etc.</p>
-                                        {selected.carryToUse && (
-                                            <label className="block">
-                                                <span className="text-xs font-semibold text-[var(--text-secondary)]">Drag tag</span>
-                                                <input
-                                                    type="text"
-                                                    value={selected.dragTag || ''}
-                                                    placeholder="e.g. key"
-                                                    onChange={e => update(selected.id, { dragTag: e.target.value || undefined })}
-                                                    className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
-                                                />
-                                                <span className="block text-[11px] text-[var(--text-muted)] mt-0.5">A drop-zone hot spot accepts this item when its “Accept objects tagged” matches this word. Give several items the same tag to make them interchangeable (e.g. all keys “key”).</span>
-                                            </label>
+                                        <p className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-secondary)]/40 rounded-lg p-2.5 mt-1">
+                                            Tip: show how many the player owns by writing <span className="font-mono">{'{'}{selected.name}{'}'}</span> in any dialogue or label, or check the count in conditions. <span className="opacity-70">(Advanced: it's stored in the number variable <span className="font-mono">{countVarName}</span>.)</span>
+                                        </p>
+                                    </div>
+                                </CollapsibleSection>
+
+                                <CollapsibleSection title="Use & interaction" defaultOpen={!!selected.usable}>
+                                    <div className="space-y-2">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={!!selected.usable} onChange={e => update(selected.id, { usable: e.target.checked })} className="w-4 h-4" />
+                                            <span className="text-sm text-[var(--text-primary)]">Usable (player can "Use" it from an inventory)</span>
+                                        </label>
+                                        {selected.usable && (
+                                            <div className="pl-2 border-l-2 border-[var(--accent-lavender)]/40 space-y-2">
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" checked={selected.consumeOnUse !== false} onChange={e => update(selected.id, { consumeOnUse: e.target.checked ? undefined : false })} className="w-4 h-4" />
+                                                    <span className="text-sm text-[var(--text-primary)]">Using decreases the count by one (consumable)</span>
+                                                </label>
+                                                <p className="text-[11px] text-[var(--text-muted)] -mt-1">Uncheck for a reusable item (a tool/key) that runs its effect without being spent.</p>
+                                                <p className="text-[11px] text-[var(--text-muted)] mb-1">What happens when it's used{selected.consumeOnUse !== false ? ' (the count is decremented automatically)' : ''}:</p>
+                                                <UIActionsListEditor actions={selected.useEffect || []} project={project} onChange={acts => update(selected.id, { useEffect: acts })} label="Use effect" />
+
+                                                {/* Carry-to-use: point-and-click "pick up and click a spot" usage */}
+                                                <label className="flex items-center gap-2 cursor-pointer pt-1">
+                                                    <input type="checkbox" checked={!!selected.carryToUse} onChange={e => update(selected.id, { carryToUse: e.target.checked || undefined })} className="w-4 h-4" />
+                                                    <span className="text-sm text-[var(--text-primary)]">Click and drag to use</span>
+                                                </label>
+                                                <p className="text-[11px] text-[var(--text-muted)] -mt-1">When on, pressing “Use” picks the item up onto the cursor and closes the inventory. The player then clicks a drop-zone hot spot to use it there (the effect above + consume happen on a successful drop). Great for keys, tools, etc.</p>
+                                                {selected.carryToUse && (
+                                                    <label className="block">
+                                                        <span className="text-xs font-semibold text-[var(--text-secondary)]">Drag tag</span>
+                                                        <input
+                                                            type="text"
+                                                            value={selected.dragTag || ''}
+                                                            placeholder="e.g. key"
+                                                            onChange={e => update(selected.id, { dragTag: e.target.value || undefined })}
+                                                            className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
+                                                        />
+                                                        <span className="block text-[11px] text-[var(--text-muted)] mt-0.5">A drop-zone hot spot accepts this item when its “Accept objects tagged” matches this word. Give several items the same tag to make them interchangeable (e.g. all keys “key”).</span>
+                                                    </label>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
-                                )}
+                                </CollapsibleSection>
 
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" checked={!!selected.hideWhenEmpty} onChange={e => update(selected.id, { hideWhenEmpty: e.target.checked || undefined })} className="w-4 h-4" />
-                                    <span className="text-sm text-[var(--text-primary)]">Hide from inventory when the count reaches 0</span>
-                                </label>
-                                <p className="text-[11px] text-[var(--text-muted)] -mt-1">Vanishes this item from an inventory grid once the player runs out — even on a grid that otherwise shows empty/unowned slots. (Grids set to "hide unowned items" already hide every 0-count item.)</p>
-
-
-                                <div className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-secondary)]/40 rounded-lg p-2.5 mt-2">
-                                    Quantity is tracked by the number variable <span className="font-mono text-[var(--text-secondary)]">{countVarName}</span>. Use <span className="font-mono">{'{'}{countVarName}{'}'}</span> in any text to show how many the player owns, or check it in conditions.
-                                </div>
+                                <CollapsibleSection title="Inventory display">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" checked={!!selected.hideWhenEmpty} onChange={e => update(selected.id, { hideWhenEmpty: e.target.checked || undefined })} className="w-4 h-4" />
+                                        <span className="text-sm text-[var(--text-primary)]">Hide from inventory when the count reaches 0</span>
+                                    </label>
+                                    <p className="text-[11px] text-[var(--text-muted)] mt-1">Vanishes this item from an inventory grid once the player runs out — even on a grid that otherwise shows empty/unowned slots. (Grids set to "hide unowned items" already hide every 0-count item.)</p>
+                                </CollapsibleSection>
                             </div>
                         )}
                     </div>
@@ -513,11 +541,15 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                             <input type="checkbox" checked={!!selectedList.tracksOwnedItems} disabled={selectedList.entries.length > 0} onChange={e => updateList(selectedList!.id, { tracksOwnedItems: e.target.checked || undefined })} className="w-4 h-4" />
                             <span className="text-sm text-[var(--text-primary)]">This is the player's inventory (tracks owned items, not a separate shop stock)</span>
                         </label>
+                        {selectedList.tracksOwnedItems && (
+                            <p className="text-[11px] text-[var(--text-muted)] -mt-1">Shows the player's OWNED counts — the <b>same items as Player Inventory</b>. Use this for a filtered/curated view, not a separate stockpile (that's why currency / sell / restock are hidden).{(Object.values(project.itemCollections || {}) as any[]).filter(c => c.tracksOwnedItems && c.id !== selectedList!.id).length > 0 ? ' ⚠ You have more than one owned-items view — they all show the same global counts.' : ''}</p>
+                        )}
 
                         <button onClick={() => createInventoryScreen(selectedList!.id, selectedList!.name)}
                             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--accent-mint)]/20 hover:bg-[var(--accent-mint)]/30 text-[var(--accent-mint)] rounded-lg font-medium transition-all border border-[var(--accent-mint)]/40">
-                            <PlusIcon className="w-4 h-4" /> Create screen for this list
+                            <PlusIcon className="w-4 h-4" /> Build a screen for this list
                         </button>
+                        <p className="text-[11px] text-[var(--text-muted)] mt-1">Makes a screen with an item grid bound to this list, and opens it in the UI editor. (To set up items + currency from scratch instead, use the Create inventory/shop wizard on the Inventory overview.)</p>
 
                         {/* ── Items in this list ── */}
                         <div>
@@ -567,73 +599,71 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                             })()}
                         </div>
 
-                        {/* ── Restock rule (shops/storage only) ── */}
+                        {/* ── Shop: currency/sell + stock restock, grouped into one task ── */}
                         {!selectedList.tracksOwnedItems && (
-                        <div className="border-t border-[var(--border-subtle)] pt-3">
-                            <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Restock</h4>
-                            {!selectedList.restock ? (
-                                <button onClick={() => updateList(selectedList!.id, { restock: { amount: 'reset', trigger: 'manual' } })} className="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1"><PlusIcon className="w-3.5 h-3.5" /> Add a restock rule</button>
-                            ) : (
-                                <div className="space-y-3 bg-[var(--bg-secondary)]/40 rounded-lg p-3">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <FormField label="Amount">
-                                            <Select value={selectedList.restock.amount} onChange={e => updateList(selectedList!.id, { restock: { ...selectedList!.restock!, amount: e.target.value as RestockAmountMode } })}>
-                                                <option value="reset">Reset to restock amount</option>
-                                                <option value="randomRange">Random (min–max per item)</option>
-                                            </Select>
-                                        </FormField>
-                                        <FormField label="Trigger">
-                                            <Select value={selectedList.restock.trigger} onChange={e => updateList(selectedList!.id, { restock: { ...selectedList!.restock!, trigger: e.target.value as RestockTrigger } })}>
-                                                <option value="manual">Manual (command / button)</option>
-                                                <option value="condition">Auto when a condition is true</option>
-                                                <option value="variableChange">When a variable changes</option>
-                                            </Select>
-                                        </FormField>
-                                    </div>
-                                    {selectedList.restock.trigger === 'condition' && (
-                                        <div>
-                                            <p className="text-[11px] text-[var(--text-muted)] mb-1">Restocks once each time these conditions become true:</p>
-                                            <ConditionsEditor conditions={selectedList.restock.condition} project={project} onChange={(conds: VNCondition[] | undefined) => updateList(selectedList!.id, { restock: { ...selectedList!.restock!, condition: conds } })} />
+                        <CollapsibleSection title="Shop (buy, sell & restock)">
+                            <div className="space-y-3">
+                                <p className="text-[11px] text-[var(--text-muted)]">Set a currency to make this list a shop. On a screen, give the shop's grid a <span className="font-mono">Buy</span> slot button, and a player-inventory grid a <span className="font-mono">Sell</span> button pointed at this list. Item prices: each item's base "Shop price", overridable per-item above.</p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <FormField label="Currency variable">
+                                        <Select value={selectedList.currencyVariableId || ''} onChange={e => updateList(selectedList!.id, { currencyVariableId: e.target.value || undefined })}>
+                                            <option value="">None (free / not a shop)</option>
+                                            {(Object.values(project.variables) as any[]).filter(v => v.type === 'number' && !v.isInternal).map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                                        </Select>
+                                    </FormField>
+                                    <FormField label="Sell rate (× price)">
+                                        <TextInput type="number" min={0} max={2} step={0.05} value={selectedList.sellMultiplier ?? 0.5} onChange={e => updateList(selectedList!.id, { sellMultiplier: Math.max(0, parseFloat(e.target.value) || 0) })} />
+                                    </FormField>
+                                </div>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={!!selectedList.sellRestocksShop} onChange={e => updateList(selectedList!.id, { sellRestocksShop: e.target.checked || undefined })} className="w-4 h-4" />
+                                    <span className="text-xs text-[var(--text-primary)]">Sold items go back into this shop's stock</span>
+                                </label>
+
+                                <div className="border-t border-[var(--border-subtle)] pt-3">
+                                    <h5 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Restock</h5>
+                                    {!selectedList.restock ? (
+                                        <button onClick={() => updateList(selectedList!.id, { restock: { amount: 'reset', trigger: 'manual' } })} className="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1"><PlusIcon className="w-3.5 h-3.5" /> Add a restock rule</button>
+                                    ) : (
+                                        <div className="space-y-3 bg-[var(--bg-secondary)]/40 rounded-lg p-3">
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <FormField label="Amount">
+                                                    <Select value={selectedList.restock.amount} onChange={e => updateList(selectedList!.id, { restock: { ...selectedList!.restock!, amount: e.target.value as RestockAmountMode } })}>
+                                                        <option value="reset">Reset to restock amount</option>
+                                                        <option value="randomRange">Random (min–max per item)</option>
+                                                    </Select>
+                                                </FormField>
+                                                <FormField label="Trigger">
+                                                    <Select value={selectedList.restock.trigger} onChange={e => updateList(selectedList!.id, { restock: { ...selectedList!.restock!, trigger: e.target.value as RestockTrigger } })}>
+                                                        <option value="manual">Manual (command / button)</option>
+                                                        <option value="condition">Auto when a condition is true</option>
+                                                        <option value="variableChange">When a variable changes</option>
+                                                    </Select>
+                                                </FormField>
+                                            </div>
+                                            {selectedList.restock.trigger === 'condition' && (
+                                                <div>
+                                                    <p className="text-[11px] text-[var(--text-muted)] mb-1">Restocks once each time these conditions become true:</p>
+                                                    <ConditionsEditor conditions={selectedList.restock.condition} project={project} onChange={(conds: VNCondition[] | undefined) => updateList(selectedList!.id, { restock: { ...selectedList!.restock!, condition: conds } })} />
+                                                </div>
+                                            )}
+                                            {selectedList.restock.trigger === 'variableChange' && (
+                                                <FormField label="Watch variable">
+                                                    <Select value={selectedList.restock.watchVariableId || ''} onChange={e => updateList(selectedList!.id, { restock: { ...selectedList!.restock!, watchVariableId: e.target.value } })}>
+                                                        <option value="">Select a variable…</option>
+                                                        {Object.values(project.variables).filter((v: any) => !v.isInternal).map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                                                    </Select>
+                                                </FormField>
+                                            )}
+                                            <div className="flex justify-between items-center">
+                                                <p className="text-[10px] text-[var(--text-muted)]">Manual lists restock via the <span className="font-mono">Restock Item List</span> command/action.</p>
+                                                <button onClick={() => updateList(selectedList!.id, { restock: undefined })} className="text-[11px] text-red-400 hover:text-red-300">Remove rule</button>
+                                            </div>
                                         </div>
                                     )}
-                                    {selectedList.restock.trigger === 'variableChange' && (
-                                        <FormField label="Watch variable">
-                                            <Select value={selectedList.restock.watchVariableId || ''} onChange={e => updateList(selectedList!.id, { restock: { ...selectedList!.restock!, watchVariableId: e.target.value } })}>
-                                                <option value="">Select a variable…</option>
-                                                {Object.values(project.variables).filter((v: any) => !v.isInternal).map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                                            </Select>
-                                        </FormField>
-                                    )}
-                                    <div className="flex justify-between items-center">
-                                        <p className="text-[10px] text-[var(--text-muted)]">Manual lists restock via the <span className="font-mono">Restock Item List</span> command/action.</p>
-                                        <button onClick={() => updateList(selectedList!.id, { restock: undefined })} className="text-[11px] text-red-400 hover:text-red-300">Remove rule</button>
-                                    </div>
                                 </div>
-                            )}
-                        </div>
-                        )}
-
-                        {/* ── Shop settings (shops/storage only) ── */}
-                        {!selectedList.tracksOwnedItems && (
-                        <div className="border-t border-[var(--border-subtle)] pt-3">
-                            <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Shop (buy / sell)</h4>
-                            <p className="text-[11px] text-[var(--text-muted)] mb-2">Set a currency to make this list a shop. On a screen, give the shop's grid a <span className="font-mono">Buy</span> slot button, and a player-inventory grid a <span className="font-mono">Sell</span> button pointed at this list. Item prices: each item's base "Shop price", overridable per-item above.</p>
-                            <div className="grid grid-cols-2 gap-3">
-                                <FormField label="Currency variable">
-                                    <Select value={selectedList.currencyVariableId || ''} onChange={e => updateList(selectedList!.id, { currencyVariableId: e.target.value || undefined })}>
-                                        <option value="">None (free / not a shop)</option>
-                                        {(Object.values(project.variables) as any[]).filter(v => v.type === 'number' && !v.isInternal).map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                                    </Select>
-                                </FormField>
-                                <FormField label="Sell rate (× price)">
-                                    <TextInput type="number" min={0} max={2} step={0.05} value={selectedList.sellMultiplier ?? 0.5} onChange={e => updateList(selectedList!.id, { sellMultiplier: Math.max(0, parseFloat(e.target.value) || 0) })} />
-                                </FormField>
                             </div>
-                            <label className="flex items-center gap-2 cursor-pointer mt-2">
-                                <input type="checkbox" checked={!!selectedList.sellRestocksShop} onChange={e => updateList(selectedList!.id, { sellRestocksShop: e.target.checked || undefined })} className="w-4 h-4" />
-                                <span className="text-xs text-[var(--text-primary)]">Sold items go back into this shop's stock</span>
-                            </label>
-                        </div>
+                        </CollapsibleSection>
                         )}
 
                         <ConnectedScreens links={findSystemScreenLinks(project, { kind: 'collection', id: selectedList.id })}
@@ -659,24 +689,21 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                                 <div className="text-xs text-[var(--text-secondary)] mt-0.5">inventory screen{systemScreenCount === 1 ? '' : 's'}</div>
                             </div>
                         </div>
-                        <button onClick={() => createInventoryScreen()}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--accent-mint)]/20 hover:bg-[var(--accent-mint)]/30 text-[var(--accent-mint)] rounded-lg font-medium transition-all border border-[var(--accent-mint)]/40">
-                            <PlusIcon className="w-4 h-4" /> Create inventory screen
-                        </button>
-                        <p className="text-[11px] text-[var(--text-muted)] mt-1.5">Creates a System-categorized screen with an item grid (opens paused + dimmed over the scene) and takes you to the UI editor to arrange it. Open it in-game with a button's <span className="font-mono">Toggle Screen</span> action.</p>
-
-                        {/* Guided setup — the wizards walk through items, currency, and layout in 3 steps. */}
-                        <div className="grid grid-cols-2 gap-2 mt-3">
+                        {/* Guided setup is the PRIMARY path — builds items, currency, and a finished (editable) screen. */}
+                        <div className="grid grid-cols-2 gap-2">
                             <button onClick={() => setWizardKind('inventory')}
-                                className="flex items-center justify-center gap-2 px-3 py-2 bg-[var(--accent-lavender)]/15 hover:bg-[var(--accent-lavender)]/25 text-[var(--accent-lavender)] rounded-lg font-medium transition-all border border-[var(--accent-lavender)]/40 text-sm">
-                                <SparklesIcon className="w-4 h-4" /> Inventory wizard
+                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--accent-mint)]/20 hover:bg-[var(--accent-mint)]/30 text-[var(--accent-mint)] rounded-lg font-medium transition-all border border-[var(--accent-mint)]/40">
+                                <SparklesIcon className="w-4 h-4" /> Create inventory
                             </button>
                             <button onClick={() => setWizardKind('shop')}
-                                className="flex items-center justify-center gap-2 px-3 py-2 bg-[var(--accent-lavender)]/15 hover:bg-[var(--accent-lavender)]/25 text-[var(--accent-lavender)] rounded-lg font-medium transition-all border border-[var(--accent-lavender)]/40 text-sm">
-                                <SparklesIcon className="w-4 h-4" /> Shop wizard
+                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--accent-mint)]/20 hover:bg-[var(--accent-mint)]/30 text-[var(--accent-mint)] rounded-lg font-medium transition-all border border-[var(--accent-mint)]/40">
+                                <SparklesIcon className="w-4 h-4" /> Create shop
                             </button>
                         </div>
-                        <p className="text-[11px] text-[var(--text-muted)] mt-1">New here? The wizards set up items, currency, and a finished screen in three guided steps — everything they generate is a normal screen you can re-style afterwards.</p>
+                        <p className="text-[11px] text-[var(--text-muted)] mt-1.5">Guided setup: items, currency, and a finished screen in three steps — everything it makes is a normal screen you can re-style afterwards. Open it in-game with a button's <span className="font-mono">Toggle Screen</span> action.</p>
+                        <button onClick={() => createInventoryScreen()} className="text-[11px] text-sky-400 hover:text-sky-300 mt-2 flex items-center gap-1">
+                            <PlusIcon className="w-3 h-3" /> Quick blank screen (empty item grid, no setup)
+                        </button>
 
                         {systemScreens.length > 0 && (
                             <div className="mt-4">
@@ -692,6 +719,69 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                                 </div>
                             </div>
                         )}
+
+                        {/* ── Player Inventory settings (apply to the player's own item grids) ── */}
+                        <div className="mt-5">
+                            <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Player Inventory settings</h4>
+                            <div className="space-y-2">
+                                <CollapsibleSection title="Starting items">
+                                    {items.length === 0
+                                        ? <p className="text-[11px] text-[var(--text-muted)]">No items yet — add them in the Items tab.</p>
+                                        : <div className="space-y-1">
+                                            {items.map(it => { const u = iconUrlFor(it); return (
+                                                <div key={it.id} className="flex items-center gap-2">
+                                                    {u ? <img src={u} alt="" className="w-6 h-6 object-contain rounded flex-shrink-0" /> : <div className="w-6 h-6 rounded bg-[var(--bg-secondary)] flex-shrink-0" />}
+                                                    <span className="text-sm text-[var(--text-primary)] flex-1 truncate">{it.name}</span>
+                                                    <input type="number" min={0} value={Number(project.variables[it.countVariableId]?.defaultValue ?? 0)}
+                                                        onChange={e => setItemStartQty(it, parseFloat(e.target.value))}
+                                                        className="w-16 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs" />
+                                                </div>
+                                            ); })}
+                                        </div>}
+                                    <p className="text-[11px] text-[var(--text-muted)] mt-1">How many of each item the player owns at the start of a new game.</p>
+                                </CollapsibleSection>
+
+                                <CollapsibleSection title="Default sort order">
+                                    <Select value={(pui.inventoryDefaultSort === 'category' ? 'manual' : (pui.inventoryDefaultSort || 'manual'))} onChange={e => updateUI({ inventoryDefaultSort: e.target.value as VNProjectUI['inventoryDefaultSort'] })}>
+                                        <option value="manual">Manual (your drag order)</option>
+                                        <option value="alpha">Alphabetical (A–Z)</option>
+                                    </Select>
+                                    <p className="text-[11px] text-[var(--text-muted)] mt-1">How items are ordered in player-inventory grids (and within each section when grouping is on). To organize by category, use <b>Group by category</b> below. Shop / bound lists keep their own order.</p>
+                                </CollapsibleSection>
+
+                                <CollapsibleSection title="Default display">
+                                    <p className="text-[11px] text-[var(--text-muted)] mb-1">Applied to player-inventory grids that haven't overridden the setting; won't change grids you've already configured.</p>
+                                    <label className="flex items-center gap-2 cursor-pointer text-sm text-[var(--text-primary)]">
+                                        <input type="checkbox" checked={pui.inventoryDefaultHideUnowned !== false} onChange={e => updateUI({ inventoryDefaultHideUnowned: e.target.checked })} className="w-4 h-4" /> Hide unowned items
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer text-sm text-[var(--text-primary)]">
+                                        <input type="checkbox" checked={pui.inventoryDefaultShowNames !== false} onChange={e => updateUI({ inventoryDefaultShowNames: e.target.checked })} className="w-4 h-4" /> Show names
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer text-sm text-[var(--text-primary)]">
+                                        <input type="checkbox" checked={pui.inventoryDefaultShowQuantity !== false} onChange={e => updateUI({ inventoryDefaultShowQuantity: e.target.checked })} className="w-4 h-4" /> Show quantity badge
+                                    </label>
+                                    <FormField label="Default columns"><TextInput type="number" min={1} max={10} value={String(pui.inventoryDefaultColumns ?? 4)} onChange={e => updateUI({ inventoryDefaultColumns: Math.max(1, parseInt(e.target.value, 10) || 4) })} /></FormField>
+                                </CollapsibleSection>
+
+                                <CollapsibleSection title="Categories & grouping">
+                                    <label className="flex items-center gap-2 cursor-pointer text-sm text-[var(--text-primary)]">
+                                        <input type="checkbox" checked={!!pui.inventoryGroupByCategory} onChange={e => updateUI({ inventoryGroupByCategory: e.target.checked || undefined })} className="w-4 h-4" /> Group items under category headers
+                                    </label>
+                                    {orderedCategories.length === 0
+                                        ? <p className="text-[11px] text-[var(--text-muted)] mt-1">No categories yet — set an item's Category in the Items tab.</p>
+                                        : <div className="space-y-1 mt-2">
+                                            {orderedCategories.map((c, i) => (
+                                                <div key={c} className="flex items-center gap-1 bg-[var(--bg-secondary)]/40 rounded px-2 py-1">
+                                                    <span className="text-sm text-[var(--text-primary)] flex-1 truncate">{c}</span>
+                                                    <button onClick={() => moveCategory(c, -1)} disabled={i === 0} className="text-xs px-1 text-[var(--text-secondary)] hover:text-white disabled:opacity-30">↑</button>
+                                                    <button onClick={() => moveCategory(c, 1)} disabled={i === orderedCategories.length - 1} className="text-xs px-1 text-[var(--text-secondary)] hover:text-white disabled:opacity-30">↓</button>
+                                                </div>
+                                            ))}
+                                        </div>}
+                                    <p className="text-[11px] text-[var(--text-muted)] mt-1">Order categories appear in (uncategorized always last). Grouping shows each category under its own header.</p>
+                                </CollapsibleSection>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -700,6 +790,7 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                 variables, then jumps straight to the UI editor on the fresh screen. */}
             {wizardKind && (
                 <SystemWizard
+                    key={wizardKind}
                     isOpen
                     kind={wizardKind}
                     project={project}

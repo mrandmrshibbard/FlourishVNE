@@ -4,10 +4,11 @@
  */
 
 import { VNProject } from '../../../types/project';
-import { VNPlugin, PluginRegistryEntry } from '../../../types/plugins';
+import { VNPlugin, PluginRegistryEntry, PluginManifest } from '../../../types/plugins';
 
 export type PluginAction =
     | { type: 'INSTALL_PLUGIN'; payload: { plugin: VNPlugin } }
+    | { type: 'UPDATE_PLUGIN'; payload: { pluginId: string; manifest: PluginManifest; source: string; resources?: Record<string, string> } }
     | { type: 'UNINSTALL_PLUGIN'; payload: { pluginId: string } }
     | { type: 'ENABLE_PLUGIN'; payload: { pluginId: string } }
     | { type: 'DISABLE_PLUGIN'; payload: { pluginId: string } }
@@ -41,6 +42,29 @@ export const pluginReducer = (state: VNProject, action: PluginAction): VNProject
                         registeredEffects: [],
                     },
                 },
+            };
+        }
+
+        case 'UPDATE_PLUGIN': {
+            // Replace an installed plugin's code/manifest/resources IN PLACE, preserving the user's
+            // config, enabled state, install date, build/test-play flags, AND its pluginStorage data
+            // (untouched here). This is the "update without uninstall/reinstall" path.
+            const { pluginId, manifest, source, resources } = action.payload;
+            const plugins = state.plugins || {};
+            const existing = plugins[pluginId];
+            if (!existing) return state;
+            return {
+                ...state,
+                plugins: {
+                    ...plugins,
+                    [pluginId]: {
+                        ...existing,
+                        manifest,
+                        source,
+                        ...(resources !== undefined ? { resources } : {}),
+                    },
+                },
+                // pluginRegistry (enabled + config) and pluginStorage (data) intentionally untouched.
             };
         }
 

@@ -31,6 +31,7 @@ import KeyboardShortcutsModal from './ui/KeyboardShortcutsModal';
 import GuidedTour from './GuidedTour';
 import { PhotoIcon, Cog6ToothIcon } from './icons';
 import { toggleBackgroundMusic, isBgmPlaying } from '../utils/hubAudio';
+import { testPlayState } from '../utils/testPlayState';
 import { TemplateService } from '../features/templates/TemplateService';
 import { TemplateGenerator } from '../features/templates/TemplateGenerator';
 import { Template, TemplateConfig as TConfig } from '../types/template';
@@ -66,7 +67,10 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const [selectedVariableId, setSelectedVariableId] = useState<VNID | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     // Suspend any extensions flagged "Hide during test play" while the preview is open, restore after.
-    useEffect(() => { pluginManager.setTestPlayActive(isPlaying); }, [isPlaying]);
+    // Also flip the global test-play flag so editor previews UNMOUNT their <video> backgrounds while
+    // the full-screen preview is up (the browser evicts an off-screen video and won't auto-resume,
+    // leaving it blank on return — unmount/remount fixes it). See utils/testPlayState.
+    useEffect(() => { pluginManager.setTestPlayActive(isPlaying); testPlayState.set(isPlaying); }, [isPlaying]);
     const [activeTab, setActiveTab] = useState<NavigationTab>(initialTab || 'scenes');
     const [isSceneEditorCollapsed, setIsSceneEditorCollapsed] = useState(false);
     const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
