@@ -230,8 +230,8 @@ export const CompareMergeModal: React.FC<{ project: VNProject; onClose: () => vo
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-subtle)]">
                     <div>
-                        <h2 className="text-base font-bold text-[var(--text-primary)]">Compare &amp; Merge <span className="text-[10px] font-normal text-[var(--accent-cyan)] align-middle ml-1">preview</span></h2>
-                        <p className="text-[11px] text-[var(--text-muted)]">See what differs between your project and a collaborator's. (Importing comes next — this is view-only.)</p>
+                        <h2 className="text-base font-bold text-[var(--text-primary)]">Compare &amp; Merge</h2>
+                        <p className="text-[11px] text-[var(--text-muted)]">See what differs between your project and a collaborator's, then pick what to import. Every import is a single undoable step (Ctrl+Z).</p>
                     </div>
                     <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)]"><XMarkIcon className="w-5 h-5" /></button>
                 </div>

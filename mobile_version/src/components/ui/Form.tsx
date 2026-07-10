@@ -49,13 +49,39 @@ export const TextInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttri
     />
 ));
 
-// Throttled color input — prevents lag when dragging the color picker
+// ── color-with-transparency helpers (for the non-coder-friendly `allowAlpha` mode) ──
+// Parse a hex OR rgb()/rgba() string into a hex swatch color + a 0..1 alpha, so a non-coder can
+// drive both from a swatch + a slider (no typing rgba() by hand).
+const parseColorAlpha = (raw: string): { hex: string; alpha: number } => {
+    const s = (raw || '').trim();
+    const m = s.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/i);
+    if (m) {
+        const clamp255 = (n: number) => Math.max(0, Math.min(255, n));
+        const hex = '#' + [+m[1], +m[2], +m[3]].map(n => clamp255(n).toString(16).padStart(2, '0')).join('');
+        return { hex, alpha: m[4] != null ? Math.max(0, Math.min(1, +m[4])) : 1 };
+    }
+    let h = s.replace(/^#/, '');
+    if (/^[0-9a-fA-F]{3}$/.test(h)) h = h.split('').map(c => c + c).join('');
+    if (/^[0-9a-fA-F]{6}$/.test(h)) return { hex: '#' + h.toLowerCase(), alpha: 1 };
+    return { hex: '#000000', alpha: 1 };
+};
+const buildColorAlpha = (hex: string, alpha: number): string => {
+    if (alpha >= 0.999) return hex;
+    const h = hex.replace(/^#/, '');
+    const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${Math.round(alpha * 100) / 100})`;
+};
+
+// Throttled color input — prevents lag when dragging the color picker.
+// `allowAlpha` swaps the hex text box for a transparency slider (emits rgba() under the hood) so
+// non-coders can set see-through colors without ever typing a value.
 export const ColorInput: React.FC<{
     value: string;
     onChange: (value: string) => void;
     className?: string;
     disabled?: boolean;
-}> = ({ value, onChange, className, disabled }) => {
+    allowAlpha?: boolean;
+}> = ({ value, onChange, className, disabled, allowAlpha }) => {
     const [localValue, setLocalValue] = useState(value); // normalized hex (drives the swatch)
     const [text, setText] = useState(value);             // raw text the user is typing (may be partial)
     const latestValueRef = useRef(value);
@@ -133,6 +159,37 @@ export const ColorInput: React.FC<{
             setLocalValue(value);
         }
     };
+
+    // Non-coder mode: a color swatch + a "how solid" transparency slider (no hex typing).
+    if (allowAlpha) {
+        const { hex: curHex, alpha: curAlpha } = parseColorAlpha(value);
+        const pct = Math.round(curAlpha * 100);
+        return (
+            <div className={`flex items-center gap-2 ${className || 'w-full'} ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                <input
+                    type="color"
+                    value={curHex}
+                    onChange={e => commitThrottled(buildColorAlpha(e.target.value, curAlpha))}
+                    onBlur={flush}
+                    disabled={disabled}
+                    title="Pick a colour"
+                    className="h-9 w-11 flex-shrink-0 rounded-lg border border-[var(--border-default)] bg-transparent cursor-pointer p-0.5"
+                />
+                <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={pct}
+                    onChange={e => commitThrottled(buildColorAlpha(curHex, Number(e.target.value) / 100))}
+                    onBlur={flush}
+                    disabled={disabled}
+                    title="How solid (drag left to make it see-through)"
+                    className="flex-1 min-w-0 accent-[var(--accent-lavender)] cursor-pointer"
+                />
+                <span className="text-xs text-[var(--text-muted)] w-14 text-right tabular-nums flex-shrink-0">{pct}% solid</span>
+            </div>
+        );
+    }
 
     return (
         <div className={`flex items-center gap-2 ${className || 'w-full'} ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>

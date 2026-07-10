@@ -27,6 +27,10 @@ export interface VNItem {
     consumeOnUse?: boolean;
     /** Extra actions run when the item is used (the count is decremented automatically alongside these). */
     useEffect?: VNUIAction[];
+    /** Actions run when THIS item's inventory slot button (Use/Buy/Sell) is clicked. When set, these
+     *  REPLACE the grid's element-level slot-button actions for this item. Runs after the built-in
+     *  Use/Buy/Sell behaviour. Additive-optional. */
+    slotButtonActions?: VNUIAction[];
     /** When true, "using" this item picks it up onto the cursor (point-and-click style) so the player
      *  can click a drop-zone hot spot to use it there, instead of firing the use-effect immediately.
      *  The use-effect + consume happen only on a successful drop. Additive-optional. */

@@ -14,6 +14,24 @@ export interface AnimatedDialogueTextProps {
     textStyle?: React.CSSProperties;
     /** Gradient style for text (if any) */
     gradientStyle?: React.CSSProperties;
+    /** Reveal highlight ("karaoke"): emphasize chars in [start, end) — the word currently
+     *  being typed (typewriter driver, end absent = to the end of displayText) or spoken
+     *  (voice driver). Null/absent = no highlight (line finished or feature off). */
+    revealHighlight?: { start: number; end?: number; color: string; style: 'color' | 'glow' | 'underline' } | null;
+}
+
+/** Style applied to the word being revealed. Kept subtle enough to read at typewriter speed. */
+function revealHighlightStyle(hl: { color: string; style: 'color' | 'glow' | 'underline' }): React.CSSProperties {
+    switch (hl.style) {
+        case 'glow':
+            return { textShadow: `0 0 8px ${hl.color}, 0 0 14px ${hl.color}` };
+        case 'underline':
+            return { textDecoration: 'underline', textDecorationColor: hl.color, textUnderlineOffset: '3px', textDecorationThickness: '2px' } as React.CSSProperties;
+        case 'color':
+        default:
+            // Also reset any text-gradient fill so the color actually shows through.
+            return { color: hl.color, WebkitTextFillColor: hl.color } as React.CSSProperties;
+    }
 }
 
 /**
@@ -174,14 +192,28 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
     textEffect,
     textStyle,
     gradientStyle,
+    revealHighlight,
 }) => {
     // Inject keyframe styles once
     useMemo(() => {
         injectTextEffectStyles();
     }, []);
 
-    // If no effect or 'none', render plain text
+    // If no effect or 'none', render plain text (with the optional karaoke word split off).
     if (!textEffect || textEffect.type === 'none') {
+        if (revealHighlight && revealHighlight.start < displayText.length) {
+            const hlEnd = Math.min(revealHighlight.end ?? displayText.length, displayText.length);
+            const before = displayText.slice(0, revealHighlight.start);
+            const word = displayText.slice(revealHighlight.start, hlEnd);
+            const after = displayText.slice(hlEnd);
+            return (
+                <span style={gradientStyle || undefined}>
+                    {before}
+                    <span style={revealHighlightStyle(revealHighlight)}>{word}</span>
+                    {after}
+                </span>
+            );
+        }
         return (
             <span style={gradientStyle || undefined}>{displayText}</span>
         );
@@ -213,6 +245,10 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
                     <span key={ti} style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>
                         {token.split('').map((char, ci) => {
                             const charStyle = getCharacterStyle(textEffect, wordStart + ci, totalChars);
+                            // Karaoke: chars in the currently revealed/spoken word carry the highlight.
+                            const gi = wordStart + ci;
+                            const hlStyle = revealHighlight && gi >= revealHighlight.start && gi < (revealHighlight.end ?? displayText.length)
+                                ? revealHighlightStyle(revealHighlight) : undefined;
                             return (
                                 <span
                                     key={ci}
@@ -224,6 +260,7 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
                                             backgroundClip: undefined,
                                             WebkitTextFillColor: undefined,
                                         } : {}),
+                                        ...(hlStyle || {}),
                                     }}
                                 >
                                     {char}

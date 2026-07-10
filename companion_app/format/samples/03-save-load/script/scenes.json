@@ -1,0 +1,38 @@
+{
+  "scenes": [
+    {
+      "id": "start",
+      "name": "Prologue",
+      "commands": [
+        { "id": "ti", "type": "textInput", "var": "player_name", "prompt": "What's your name?", "maxLength": 24 },
+        { "id": "d1", "type": "say", "text": "Nice to meet you, {player_name}." },
+        { "id": "s1", "type": "set", "var": "chapter", "value": 1 },
+        { "id": "c1", "type": "choice", "prompt": "Ready?", "options": [
+          { "text": "Save and continue", "actions": [
+            { "action": "save", "slot": 1 },
+            { "action": "jumpToScene", "scene": "ch2" }
+          ] },
+          { "text": "Just continue", "goto": "ch2" }
+        ] }
+      ]
+    },
+    {
+      "id": "ch2",
+      "name": "Chapter Two",
+      "commands": [
+        { "id": "d2", "type": "say", "text": "Chapter {chapter}. The story goes on, {player_name}." },
+        { "id": "c2", "type": "choice", "prompt": "Now what?", "options": [
+          { "text": "Load my save", "actions": [ { "action": "load", "slot": 1 } ] },
+          { "text": "End here", "goto": "theend" }
+        ] }
+      ]
+    },
+    {
+      "id": "theend",
+      "name": "End",
+      "commands": [
+        { "id": "e1", "type": "say", "text": "Thanks for playing." }
+      ]
+    }
+  ]
+}

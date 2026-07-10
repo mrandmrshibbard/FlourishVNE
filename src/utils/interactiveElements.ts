@@ -57,7 +57,7 @@ export function isInteractiveElement(el: VNUIElement): boolean {
  *  internally by `deriveHotSpotsFromScreen`. Field names already match. */
 function hotSpotElementToLegacy(el: UIHotSpotElement): VNHotSpot {
     return {
-        id: el.id, name: el.name, shape: el.shape, trigger: el.trigger,
+        id: el.id, name: el.name, shape: el.shape, trigger: el.trigger || 'click',
         x: el.x, y: el.y, width: el.width, height: el.height,
         acceptedElementIds: el.acceptedElementIds,
         actions: el.actions || [],

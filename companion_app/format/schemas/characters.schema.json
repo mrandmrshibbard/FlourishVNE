@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flourishvne.dev/vnbundle/0.1.0/characters.schema.json",
+  "title": "vnbundle characters",
+  "type": "object",
+  "required": ["characters"],
+  "properties": {
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "sprites"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Za-z0-9_\\-]+$" },
+          "name": { "type": "string" },
+          "nameColor": { "type": "string" },
+          "defaultSprite": { "type": "string" },
+          "sprites": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id"],
+              "properties": {
+                "id": { "type": "string" },
+                "image": { "type": "string", "description": "single flat sprite image" },
+                "layers": {
+                  "type": "array",
+                  "description": "layered sprite: image paths drawn bottom-to-top (base first). Use instead of `image` for composited characters.",
+                  "items": { "type": "string" }
+                }
+              },
+              "anyOf": [ { "required": ["image"] }, { "required": ["layers"] } ],
+              "additionalProperties": false
+            }
+          },
+          "font": { "type": ["string", "null"] },
+          "textbox": {}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

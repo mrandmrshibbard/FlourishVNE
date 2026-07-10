@@ -100,6 +100,26 @@ export function validateProjectForBuild(project: VNProject): ValidationResult {
         }
     }
 
+    // Validate travel maps (locations jump to scenes) + the phone's Map app pointer.
+    for (const map of Object.values(project.maps || {})) {
+        for (const locEntry of map.locations || []) {
+            if (locEntry.targetSceneId && !sceneIds.has(locEntry.targetSceneId)) {
+                errors.push({
+                    severity: 'error',
+                    message: `Map "${map.name}" location "${locEntry.name}" travels to a scene that doesn't exist (ID: ${locEntry.targetSceneId}).`,
+                    location: `Map: ${map.name}`
+                });
+            }
+        }
+    }
+    if (project.ui.phoneMapId && !project.maps?.[project.ui.phoneMapId]) {
+        warnings.push({
+            severity: 'warning',
+            message: `The phone's Map app points at a deleted map — the app will be hidden in-game.`,
+            location: 'In-Game UI → Phone'
+        });
+    }
+
     return {
         isValid: errors.length === 0,
         errors,
@@ -224,6 +244,89 @@ function validateCommand(
                     message: `Choice command has no options. Players will be stuck.`,
                     location: loc
                 });
+            }
+            break;
+        }
+        case CommandType.ShowMap: {
+            const m = (project.maps || {})[(cmd as any).mapId];
+            if (!m) {
+                errors.push({
+                    severity: 'error',
+                    message: `Show Map references a map that doesn't exist (ID: ${(cmd as any).mapId || 'none'}).`,
+                    location: loc
+                });
+            }
+            break;
+        }
+        case CommandType.ShowMiniGame: {
+            const g = (project.miniGames || {})[(cmd as any).gameId];
+            if (!g) {
+                errors.push({
+                    severity: 'error',
+                    message: `Show Mini Game references a mini game that doesn't exist (ID: ${(cmd as any).gameId || 'none'}).`,
+                    location: loc
+                });
+            } else if (!g.stages?.length) {
+                warnings.push({
+                    severity: 'warning',
+                    message: `Mini game "${g.name}" has no stages — it will be skipped at runtime.`,
+                    location: loc
+                });
+            } else {
+                // Per-stage config sanity: half-configured stages fall back to a tap-through
+                // placeholder at runtime (never brick), but the author should know.
+                g.stages.forEach((st: any, i: number) => {
+                    const where = `Mini game "${g.name}" stage ${i + 1}`;
+                    if (st.stageType === 'memory' && !(st.faces?.length)) {
+                        warnings.push({ severity: 'warning', message: `${where} (memory match) has no card faces — it shows a tap-to-continue placeholder.`, location: loc });
+                    }
+                    if (st.stageType === 'hidden') {
+                        if (!st.sceneImageId) warnings.push({ severity: 'warning', message: `${where} (hidden objects) has no scene image — it shows a tap-to-continue placeholder.`, location: loc });
+                        else if (!(st.hotspots?.length)) warnings.push({ severity: 'warning', message: `${where} (hidden objects) has no objects placed — it shows a tap-to-continue placeholder.`, location: loc });
+                    }
+                    if (st.stageType === 'sliding' && !st.imageId) {
+                        warnings.push({ severity: 'warning', message: `${where} (sliding puzzle) has no image — it shows a tap-to-continue placeholder.`, location: loc });
+                    }
+                    if (st.stageType === 'assemble') {
+                        const mode = st.sourceMode || (st.sliceImageId ? 'slice' : 'pieces');
+                        if (mode === 'slice' && !st.sliceImageId) warnings.push({ severity: 'warning', message: `${where} (assemble) has no image to cut up — it shows a tap-to-continue placeholder.`, location: loc });
+                        if (mode === 'pieces' && !(st.pieces?.length)) warnings.push({ severity: 'warning', message: `${where} (assemble) has no pieces — it shows a tap-to-continue placeholder.`, location: loc });
+                    }
+                    if (st.stageType === 'paint' && !(st.regions?.length)) {
+                        warnings.push({ severity: 'warning', message: `${where} (painting) has no paintable areas — it shows a tap-to-continue placeholder.`, location: loc });
+                    }
+                    if (st.stageType === 'qte') {
+                        if (!(st.prompts?.length)) {
+                            warnings.push({ severity: 'warning', message: `${where} (quick taps) has no prompts — it shows a tap-to-continue placeholder.`, location: loc });
+                        } else if ((st.prompts || []).some((p: any) => p.kind === 'key')) {
+                            warnings.push({ severity: 'warning', message: `${where} (quick taps) uses keyboard prompts — players on phones/tablets can't press keys. Prefer tap targets for mobile builds.`, location: loc });
+                        }
+                    }
+                });
+                // Reacting character must reference a real character.
+                if (g.character?.characterId && !project.characters[g.character.characterId]) {
+                    warnings.push({ severity: 'warning', message: `Mini game "${g.name}" reacting character references a character that doesn't exist — it won't appear.`, location: loc });
+                }
+                // Score export variables must exist.
+                if (g.score) {
+                    (['hitsVariableId', 'missesVariableId', 'accuracyVariableId'] as const).forEach(k => {
+                        const vid = (g.score as any)[k];
+                        if (vid && !project.variables[vid]) warnings.push({ severity: 'warning', message: `Mini game "${g.name}" score exports to a variable that doesn't exist (${k}).`, location: loc });
+                    });
+                }
+                // Palette→UI mappings must point at slots that actually exist in some stage.
+                if (g.paletteToUi?.length) {
+                    const slots = new Set<string>();
+                    g.stages.forEach((s2: any) => {
+                        (s2.regions || []).forEach((r: any) => r.colorSlot && slots.add(r.colorSlot));
+                        (s2.pieces || []).forEach((pc: any) => pc.colorSlot && slots.add(pc.colorSlot));
+                    });
+                    g.paletteToUi.forEach((m: any) => {
+                        if (m.slot && !slots.has(m.slot)) {
+                            warnings.push({ severity: 'warning', message: `Mini game "${g.name}" maps color slot "${m.slot}" to the UI, but no paint area / piece has that slot name.`, location: loc });
+                        }
+                    });
+                }
             }
             break;
         }

@@ -24,7 +24,7 @@ const SceneConfigEditor: React.FC<{
         );
     }
 
-    const updateScene = (updates: Partial<Pick<VNScene, 'conditions' | 'fallbackSceneId' | 'outTransition' | 'outTransitionDuration' | 'parallax'>>) => {
+    const updateScene = (updates: Partial<Pick<VNScene, 'conditions' | 'fallbackSceneId' | 'outTransition' | 'outTransitionDuration' | 'parallax' | 'dayNight'>>) => {
         dispatch({ type: 'UPDATE_SCENE_CONFIG', payload: { sceneId: activeSceneId, updates } });
     };
     const px = activeScene.parallax;
@@ -104,6 +104,32 @@ const SceneConfigEditor: React.FC<{
                             <p className="text-[10px] text-[var(--text-secondary)] mt-1">Camera parallax is driven by <em>Pan/Zoom Screen</em> commands — depth-0 layers move with the camera, higher-depth layers move more. Add some pan to see it.</p>
                         )}
                     </div>
+
+                    {project.dayNightCycle?.enabled && (() => {
+                        const dn = activeScene.dayNight;
+                        const mode = dn?.mode || 'cycle';
+                        return (
+                            <div className="mb-4">
+                                <h3 className="font-bold mb-2 text-[var(--accent-cyan)]">{t('config.dayNight', 'Day / Night')}</h3>
+                                <p className="text-xs text-[var(--text-secondary)] mb-3">{t('config.dayNightDesc', 'How this scene reacts to the day/night cycle.')}</p>
+                                <FormField label={t('config.dayNightMode', 'Mode')}>
+                                    <Select value={mode} onChange={e => {
+                                        const m = e.target.value as 'cycle' | 'fixed' | 'off';
+                                        updateScene({ dayNight: m === 'cycle' ? undefined : { mode: m, fixedHour: dn?.fixedHour ?? 12 } });
+                                    }}>
+                                        <option value="cycle">{t('config.dayNightCycle', 'Follow the cycle')}</option>
+                                        <option value="fixed">{t('config.dayNightFixed', 'Fixed time')}</option>
+                                        <option value="off">{t('config.dayNightOff', 'No grading')}</option>
+                                    </Select>
+                                </FormField>
+                                {mode === 'fixed' && (
+                                    <FormField label={t('config.dayNightFixedHour', 'Fixed hour (0–24)')}>
+                                        <TextInput type="number" min={0} max={24} step={0.5} value={dn?.fixedHour ?? 12} onChange={e => updateScene({ dayNight: { mode: 'fixed', fixedHour: Math.max(0, Math.min(24, parseFloat(e.target.value) || 0)) } })} />
+                                    </FormField>
+                                )}
+                            </div>
+                        );
+                    })()}
 
                     <hr className="border-[var(--border-subtle)] mb-4" />
 

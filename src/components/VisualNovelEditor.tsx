@@ -24,6 +24,7 @@ const VariableManager = React.lazy(() => import('./VariableManager'));
 const SettingsManager = React.lazy(() => import('./SettingsManager'));
 const CommonEventsManager = React.lazy(() => import('./CommonEventsManager'));
 const SystemsManager = React.lazy(() => import('./SystemsManager'));
+const MiniGamesManager = React.lazy(() => import('./MiniGamesManager'));
 const TemplateGallery = React.lazy(() => import('./templates/TemplateGallery'));
 const TemplateConfigComponent = React.lazy(() => import('./templates/TemplateConfig').then(m => ({ default: m.TemplateConfigComponent })));
 import InfoModal from './ui/InfoModal';
@@ -66,6 +67,9 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const [selectedExpressionId, setSelectedExpressionId] = useState<VNID | null>(null);
     const [selectedVariableId, setSelectedVariableId] = useState<VNID | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    // "Play from here": test play starting at a specific scene + command (set by the ▶ button on
+    // a command row; cleared when the preview closes so the normal Play button is unaffected).
+    const [playStartAt, setPlayStartAt] = useState<{ sceneId: VNID; index: number } | null>(null);
     // Suspend any extensions flagged "Hide during test play" while the preview is open, restore after.
     // Also flip the global test-play flag so editor previews UNMOUNT their <video> backgrounds while
     // the full-screen preview is up (the browser evicts an off-screen video and won't auto-resume,
@@ -275,6 +279,12 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
         setSelectedCommandIndex(null);
         setSelectedUIElementIds([]);
     }
+    // UI editor → Characters tab with a specific character open (used by the Customizer's
+    // "Edit this character's layers & art" jump). Mirrors handleOpenInSystems.
+    const handleOpenCharacter = (charId: VNID) => {
+        setActiveTab('characters');
+        handleSetActiveCharacter(charId);
+    };
 
     const renderInspector = () => (
         <InspectorPanel
@@ -290,6 +300,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             selectedVariableId={selectedVariableId}
             setSelectedVariableId={setSelectedVariableId}
             onOpenInSystems={handleOpenInSystems}
+            onOpenCharacters={handleOpenCharacter}
         />
     );
 
@@ -304,6 +315,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const variableCount = project.variables ? Object.keys(project.variables).length : 0;
     const commonEventCount = (project as any).commonEvents ? Object.keys((project as any).commonEvents).length : 0;
     const systemItemCount = project.items ? Object.keys(project.items).length : 0;
+    const miniGameCount = project.miniGames ? Object.keys(project.miniGames).length : 0;
     
     // Template system integration
     const [selectedTemplateId, setSelectedTemplateId] = useState<VNID | undefined>(undefined);
@@ -494,7 +506,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                 '4': 'assets',
                 '5': 'variables',
                 '6': 'commonEvents',
-                '7': 'settings'
+                '7': 'settings',
+                '8': 'miniGames'
             };
 
             const newTab = tabMap[e.key];
@@ -543,6 +556,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                         variableCount={variableCount}
                         commonEventCount={commonEventCount}
                         systemItemCount={systemItemCount}
+                        miniGameCount={miniGameCount}
                     />
                 }
                 onShowKeyboardShortcuts={() => setShowKeyboardShortcuts(true)}
@@ -594,6 +608,12 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                 }}
                                 isCollapsed={isSceneEditorCollapsed}
                                 onToggleCollapse={() => setIsSceneEditorCollapsed(prev => !prev)}
+                                onPlayFromHere={(index: number) => {
+                                    if (!activeSceneId) return;
+                                    if (isBgmPlaying()) toggleBackgroundMusic(false);
+                                    setPlayStartAt({ sceneId: activeSceneId, index });
+                                    setIsPlaying(true);
+                                }}
                             />
                         </ErrorBoundary>
                     ) : activeTab === 'characters' ? (
@@ -615,6 +635,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                 selectedUIElementIds={selectedUIElementIds}
                                 setSelectedUIElementIds={setSelectedUIElementIds}
                                 onEditorModeChange={setUiEditorMode}
+                                initialEditorMode={uiEditorMode}
                                 isPlaying={isPlaying}
                             />
                         </ErrorBoundary>
@@ -645,7 +666,13 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                     ) : activeTab === 'systems' ? (
                         <ErrorBoundary panelName="Systems">
                             <Suspense fallback={<div className="text-slate-300 p-4">Loading systems…</div>}>
-                                <SystemsManager project={project} onOpenScreenInEditor={handleOpenScreenInUIEditor} initialSelection={systemsSelection} onSelectionConsumed={() => setSystemsSelection(null)} />
+                                <SystemsManager project={project} onOpenScreenInEditor={handleOpenScreenInUIEditor} onOpenInGameUI={() => { setActiveTab('ui'); setUiEditorMode('ingame'); }} initialSelection={systemsSelection} onSelectionConsumed={() => setSystemsSelection(null)} />
+                            </Suspense>
+                        </ErrorBoundary>
+                    ) : activeTab === 'miniGames' ? (
+                        <ErrorBoundary panelName="Mini Games">
+                            <Suspense fallback={<div className="text-slate-300 p-4">Loading mini games…</div>}>
+                                <MiniGamesManager project={project} />
                             </Suspense>
                         </ErrorBoundary>
                     ) : null}
@@ -682,8 +709,9 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             </main>
             {isPlaying && (
                 <ErrorBoundary panelName="Live Preview">
-                    <LivePreview onClose={() => {
+                    <LivePreview startAt={playStartAt} onClose={() => {
                         setIsPlaying(false);
+                        setPlayStartAt(null);
                         // Tell the editor canvases to remount their <video> backgrounds — the browser
                         // evicts videos that sat behind the fullscreen preview and won't auto-resume.
                         try { window.dispatchEvent(new CustomEvent('flourish:playended')); } catch { /* no-op */ }

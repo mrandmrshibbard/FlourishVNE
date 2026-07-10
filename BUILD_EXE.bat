@@ -24,6 +24,11 @@ if "%~1"=="" (
     cd /d "%~1"
 )
 
+:: Read the app version from package.json so the success message points at the real file.
+:: (electron-builder names the installer Flourish-VNE-Setup-<version>-x64.exe — see package.json build.win.artifactName)
+set "APP_VERSION=unknown"
+for /f "usebackq delims=" %%v in (`node -p "require('./package.json').version" 2^>nul`) do set "APP_VERSION=%%v"
+
 echo ====================================
 echo  Flourish Visual Novel Engine - Build Desktop App
 echo ====================================
@@ -70,11 +75,11 @@ echo ====================================
 echo  BUILD COMPLETE!
 echo ====================================
 echo.
-echo Your desktop app is ready:
-echo Location: release\Flourish Visual Novel Engine-2.0.0-x64.exe
+echo Your desktop app installer is ready:
+echo Location: release\Flourish-VNE-Setup-%APP_VERSION%-x64.exe
 echo.
 echo You can now:
-echo 1. Test it by double-clicking the .exe
+echo 1. Test it by running the installer (it installs, then launches)
 echo 2. Upload it to itch.io
 echo 3. Share it with others!
 echo.

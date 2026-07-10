@@ -235,7 +235,7 @@ export const HotSpotProperties: React.FC<{
 
     return (
         <Panel title={t('hotZone.propsHotSpot')} className="w-96 flex-shrink-0">
-            <div className="flex-grow overflow-y-auto pr-1 space-y-3 text-sm">
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3 text-sm">
             <h4 className="font-bold text-sky-300 flex items-center gap-2">
                 Hot Spot Properties
                 <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400">
@@ -481,7 +481,7 @@ export const InteractiveElementProperties: React.FC<{
 
     return (
         <Panel title={panelTitle} className="w-96 flex-shrink-0">
-            <div className="flex-grow overflow-y-auto pr-1 space-y-3 text-sm">
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3 text-sm">
             <h4 className="font-bold text-purple-300 flex items-center gap-2">
                 Element Properties
                 {element.draggable && (

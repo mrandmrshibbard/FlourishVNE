@@ -1,0 +1,38 @@
+{
+  "bundle_format_version": "0.1.0",
+  "generator": {
+    "name": "flourish-vnbundle-exporter",
+    "version": "0.1.0"
+  },
+  "game": {
+    "id": "proj-1760399227295",
+    "title": "Always and Forever",
+    "author": "",
+    "version": "2.0.0",
+    "description": ""
+  },
+  "entry": {
+    "scene": "scene-start"
+  },
+  "resolution": {
+    "width": 1280,
+    "height": 720
+  },
+  "capabilities": {
+    "scripts": false,
+    "plugins": false,
+    "miniGames": false,
+    "phone": false,
+    "inventory": false,
+    "maps": false,
+    "video": false,
+    "particles": true
+  },
+  "files": {
+    "scenes": "script/scenes.json",
+    "variables": "script/variables.json",
+    "characters": "characters/characters.json",
+    "ui": "ui/layout.json",
+    "save": "save-format.json"
+  }
+}

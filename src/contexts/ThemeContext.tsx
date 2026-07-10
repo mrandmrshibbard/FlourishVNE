@@ -10,6 +10,10 @@ export interface HolidayMeta {
   decoration: 'usa-fireworks';
   windowStart: [number, number];
   windowEnd: [number, number];
+  /** The holiday ITSELF ([month, day]): the theme re-applies once more on this exact day even
+   *  if it already auto-applied earlier in the window (or the user switched away) — the big
+   *  day shouldn't slip past just because the window opened a week early. */
+  peak?: [number, number];
 }
 
 export interface ThemeColors {
@@ -278,7 +282,7 @@ const themes: Record<ThemeName, Theme> = {
     name: 'july4',
     label: '4th of July',
     emoji: '🎆',
-    holiday: { id: 'july4', decoration: 'usa-fireworks', windowStart: [6, 28], windowEnd: [7, 7] },
+    holiday: { id: 'july4', decoration: 'usa-fireworks', windowStart: [6, 28], windowEnd: [7, 7], peak: [7, 4] },
     colors: {
       // Deep night-sky navy so the bold red/white/blue + fireworks really pop.
       bgPrimary: '#070a1c',
@@ -437,8 +441,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (!t.holiday) continue;
         if (!isWithinHolidayWindow(t.holiday, now)) continue;
         const seenKey = `flourish-holiday-seen-${t.holiday.id}-${year}`;
-        if (localStorage.getItem(seenKey)) continue; // already auto-applied this year
+        const isPeakDay = !!t.holiday.peak && now.getMonth() + 1 === t.holiday.peak[0] && now.getDate() === t.holiday.peak[1];
+        const peakKey = `flourish-holiday-seen-${t.holiday.id}-peak-${year}`;
+        // Skip only if the window ALREADY fired this year AND today isn't an unfired peak day.
+        if (localStorage.getItem(seenKey) && !(isPeakDay && !localStorage.getItem(peakKey))) continue;
         localStorage.setItem(seenKey, '1');
+        if (isPeakDay) localStorage.setItem(peakKey, '1');
         if (themeName !== t.name) {
           localStorage.setItem(PRE_HOLIDAY_KEY, themeName); // remember what to restore
           setTheme(t.name);

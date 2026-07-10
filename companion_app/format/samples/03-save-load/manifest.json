@@ -1,0 +1,24 @@
+{
+  "bundle_format_version": "0.1.0",
+  "generator": { "name": "hand-authored", "version": "0" },
+  "game": {
+    "id": "save_load",
+    "title": "Save & Load",
+    "author": "Flourish",
+    "version": "1.0.0",
+    "description": "Demonstrates the declared save schema: a persistent variable, text input, and save/load actions on choices. Narration-only (no assets)."
+  },
+  "entry": { "scene": "start" },
+  "resolution": { "width": 1280, "height": 720 },
+  "capabilities": {
+    "scripts": false, "plugins": false,
+    "miniGames": false, "phone": false, "inventory": false, "maps": false,
+    "video": false, "particles": false
+  },
+  "files": {
+    "scenes": "script/scenes.json",
+    "variables": "script/variables.json",
+    "ui": "ui/layout.json",
+    "save": "save-format.json"
+  }
+}

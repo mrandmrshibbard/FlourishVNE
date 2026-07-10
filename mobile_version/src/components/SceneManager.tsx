@@ -24,6 +24,8 @@ interface SceneManagerProps {
     onConfigureScene: () => void;
     isCollapsed: boolean;
     onToggleCollapse: () => void;
+    /** "Play from here": start test play at this command index in the active scene. */
+    onPlayFromHere?: (index: number) => void;
 }
 
 const SceneManager: React.FC<SceneManagerProps> = ({
@@ -35,7 +37,8 @@ const SceneManager: React.FC<SceneManagerProps> = ({
     setSelectedVariableId,
     onConfigureScene,
     isCollapsed,
-    onToggleCollapse
+    onToggleCollapse,
+    onPlayFromHere
 }) => {
     const { dispatch } = useProject();
     const toast = useToast();
@@ -250,6 +253,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({
                             onConfigureScene={onConfigureScene}
                             isCollapsed={false}
                             onToggleCollapse={onToggleCollapse}
+                            onPlayFromHere={onPlayFromHere}
                             className="h-full"
                         />
                     </div>

@@ -226,7 +226,10 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                         top: coords.openUp ? coords.upTop : coords.downTop,
                         transform: coords.openUp ? 'translateY(-100%)' : undefined,
                         margin: 0,
-                        zIndex: 9999,
+                        // Above modal body-portals (z-[10000] — MapEditor, MiniGamesManager,
+                        // Conversation Studio) so a dropdown opened INSIDE a modal isn't hidden
+                        // behind the panel (it looked "empty"). Popover-always-on-top convention.
+                        zIndex: 100000,
                     }}
                 >
                     {/* Search input */}

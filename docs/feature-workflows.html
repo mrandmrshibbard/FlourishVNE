@@ -95,7 +95,7 @@
     <a href="#1-character-setup--scene-usage">1. Character Setup &amp; Scene Usage</a>
     <a href="#2-branching-story-paths-with-variables">2. Branching Story Paths with Variables</a>
     <a href="#3-customizing-ui-screens">3. Customizing UI Screens</a>
-    <a href="#4-character-customization-system">4. Character Customization System</a>
+    <a href="#4-character-creator--dress-up">4. Character Creator &amp; Dress-Up</a>
     <a href="#5-cg-gallery-system">5. CG Gallery System</a>
     <a href="#6-audio--music-workflow">6. Audio &amp; Music Workflow</a>
     <a href="#7-screen-effects--overlay-effects">7. Screen Effects &amp; Overlay Effects</a>
@@ -126,8 +126,10 @@
     <a href="#32-variables-conditions--the-live-variable-tracker">32. Variables, Conditions &amp; the Live Variable Tracker</a>
     <a href="#33-interactive-hot-spots-scenes--screens">33. Interactive Hot Spots (Scenes &amp; Screens)</a>
     <a href="#34-inventory-items--stats--the-systems-hub">34. Inventory, Items &amp; Stats — the Systems Hub</a>
-    <a href="#35-the-in-game-phone-overview--work-in-progress">35. The In-Game Phone (Overview — Work in Progress)</a>
+    <a href="#35-the-in-game-phone-texting-calls-map-gallery-notifications">35. The In-Game Phone (Texting, Calls, Map, Gallery, Notifications)</a>
     <a href="#36-interactive-elements-clickable--draggable-images-buttons--regions">36. Interactive Elements (Clickable &amp; Draggable Images, Buttons &amp; Regions)</a>
+    <a href="#37-mini-games-wipe-away-reveals--more">37. Mini Games (Wipe-Away Reveals &amp; More)</a>
+    <a href="#38-art-studio-draw-your-own-game-art">38. Art Studio (Draw Your Own Game Art)</a>
     <div class="doc-links">
       <div class="nav-section">Other Docs</div>
       <a href="getting-started.html">Getting Started</a>
@@ -325,70 +327,47 @@
   <h3>Restoring defaults</h3>
   <p>If you accidentally break a built-in screen, click <strong>Restore Default Screens</strong> at the bottom of the screen list. This adds fresh default screens without deleting your existing ones.</p>
   <hr>
-  <h2 id="4-character-customization-system">4. Character Customization System</h2>
-  <div class="tabs-involved">Assets → Characters → Variables → UI Screens → Scenes</div>
-  <p>This is the most complex multi-step workflow. It creates a screen where players customize their character's appearance by cycling through sprite parts.</p>
+  <h2 id="4-character-creator--dress-up">4. Character Creator &amp; Dress-Up</h2>
+  <div class="tabs-involved">Assets → Characters → Systems (or UI Screens) → Scenes</div>
+  <p>One unified tool covers both jobs:</p>
+  <ul>
+  <li><strong>Player character creator</strong> — players choose who they'll play as, dress them up, and type a name. Your story then shows them (and speaks as them) anywhere via the <strong>⟨ Player's Character ⟩</strong> option on Show Character, Dialogue, Move, Hide, and the Character screen element.</li>
+  <li><strong>Story-character dress-up</strong> — a dress-up screen for any character. Players change hair, outfits and more, and the character wears their new look in your scenes automatically.</li>
+</ul>
   <h3>Step 1: Upload character parts (Assets tab)</h3>
   <ol>
   <li>Upload all character sprite parts organized by category:
   <ul>
   <li>Hair styles: hair_1.png, hair_2.png, hair_3.png</li>
-  <li>Eye types: eyes_1.png, eyes_2.png, eyes_3.png</li>
-  <li>Outfit options: outfit_1.png, outfit_2.png, outfit_3.png</li>
+  <li>Outfit options: outfit_slim.png, outfit_curvy.png</li>
 </ul></li>
 </ol>
+  <p>&gt; <strong>Tip:</strong> name related pieces with shared words (e.g. <code>jacket_slim</code> and <code>body_slim</code>). The wizard reads these names and offers <strong>smart fit rules</strong> — automatically hiding pieces that don't fit the player's other choices.</p>
   <h3>Step 2: Create the character with layers (Characters tab)</h3>
   <ol>
-  <li>Create a new character (e.g., "Player Character")</li>
-  <li>Add layers matching your categories:
-  <ul>
-  <li>Layer: "Hair" → add all hair assets</li>
-  <li>Layer: "Eyes" → add all eye assets</li>
-  <li>Layer: "Outfit" → add all outfit assets</li>
-</ul></li>
+  <li>Create the character (e.g., "Player Character" or the cast member to dress up)</li>
+  <li>Add layers matching your categories (Hair, Eyes, Outfit…) and put each category's art in its layer</li>
   <li>Create a default expression that uses one asset from each layer</li>
 </ol>
-  <h3>Step 3: Create selection variables (Variables tab)</h3>
+  <h3>Step 3: Run the wizard (Systems tab → Character Creator &amp; Dress-Up)</h3>
   <ol>
-  <li>Create a <strong>String</strong> variable for each customizable layer:
+  <li>Open the <strong>Systems</strong> tab → <strong>Character Creator &amp; Dress-Up</strong> (or, in the UI editor, <strong>Template Wizard → Character Creator &amp; Dress-Up</strong>)</li>
+  <li>Choose who it's for:
   <ul>
-  <li><code>selected_hair</code> (String, Global)</li>
-  <li><code>selected_eyes</code> (String, Global)</li>
-  <li><code>selected_outfit</code> (String, Global)</li>
+  <li><strong>🎮 The player's own character</strong> — pick which character(s) the player can choose from, whether they can customize the outfit and type a name, and Generate. ⟨Player's Character⟩ is wired up automatically.</li>
+  <li><strong>🧥 A story character (dress-up)</strong> — pick the character, choose which parts players can change (with the picker style for each), review the suggested <strong>smart fit rules</strong>, and choose where it goes: a new ready-to-use screen, or dropped onto the screen you're editing.</li>
 </ul></li>
+  <li>Everything it makes is an ordinary screen with a Customizer element — restyle or rearrange it freely afterwards. The Systems hub lists every creator/dress-up screen in your project with an Edit link.</li>
 </ol>
-  <h3>Step 4: Build the customization screen (UI Screens tab)</h3>
-  <p><strong>Option A: Use the Character Customization Wizard</strong></p>
+  <h3>Step 4: Open it from your story (Scenes tab)</h3>
   <ol>
-  <li>Click the <strong>Character Customization Wizard</strong> button</li>
-  <li>Follow the guided steps — the wizard automatically creates the screen, elements, and variable bindings</li>
+  <li>Add a <strong>Show Screen</strong> command pointing at the generated screen (e.g., at the very start of your first scene, or from a wardrobe hotspot)</li>
+  <li>The player makes their choices; the <strong>Start / Done</strong> button closes the screen and the story continues</li>
 </ol>
-  <p><strong>Option B: Manual setup</strong></p>
-  <ol>
-  <li>Create a new UI screen (e.g., "Character Creator")</li>
-  <li>Add <strong>AssetCycler</strong> elements for each customizable layer:
-  <ul>
-  <li>Set the <strong>Layer</strong> to the character layer (e.g., "Hair")</li>
-  <li>Set the <strong>Variable</strong> to the tracking variable (e.g., <code>selected_hair</code>)</li>
-  <li>Each AssetCycler shows left/right arrows to browse layer assets</li>
-</ul></li>
-  <li>Add a <strong>CharacterPreview</strong> element:
-  <ul>
-  <li>Assign the <strong>Character</strong></li>
-  <li>Set the <strong>Default Expression</strong></li>
-  <li>Map each layer to its corresponding variable (Hair → <code>selected_hair</code>, Eyes → <code>selected_eyes</code>, etc.)</li>
-  <li>The preview updates in real-time as the player cycles through assets</li>
-</ul></li>
-  <li>Add a <strong>Button</strong> to proceed (e.g., "Confirm" → action: JumpToScene → "Chapter 1")</li>
-</ol>
-  <h3>Step 5: Show the creator from a scene (Scenes tab)</h3>
-  <ol>
-  <li>In your starting scene, add a <strong>ShowScreen</strong> command</li>
-  <li>Set it to show your character creator screen</li>
-  <li>The player interacts with the creator, then the button's action jumps them into the story</li>
-</ol>
-  <h3>Step 6: Use the customized character in scenes</h3>
-  <p>When you use <strong>ShowCharacter</strong> in later scenes, the character will display with the assets the player selected, because the character's layers are bound to the selection variables.</p>
+  <h3>Step 5: The look carries into scenes automatically</h3>
+  <p><strong>Show Character</strong> automatically displays whatever the player picked — the outfit choices live in variables the engine detects on its own. For the player's own character, use the <strong>⟨ Player's Character ⟩</strong> option in any character dropdown.</p>
+  <h3>Legacy: AssetCycler elements</h3>
+  <p>Older projects built with the previous Character Customization Wizard use <strong>AssetCycler</strong> + <strong>CharacterPreview</strong> elements bound to selection variables. Those keep working exactly as before (and can still be configured in the Properties inspector) — but new dress-ups are built on the one-element <strong>Customizer</strong>, which bundles the preview and all pickers with zero manual wiring.</p>
   <hr>
   <h2 id="5-cg-gallery-system">5. CG Gallery System</h2>
   <div class="tabs-involved">Variables → Assets → UI Screens → Settings → Scenes</div>
@@ -505,7 +484,7 @@
 <tbody>
 <tr><td><strong>ShakeScreen</strong></td><td>Camera shake</td><td>Duration, Intensity</td></tr>
 <tr><td><strong>FlashScreen</strong></td><td>Brief color flash</td><td>Color, Duration</td></tr>
-<tr><td><strong>TintScreen</strong></td><td>Color overlay</td><td>Color, Duration</td></tr>
+<tr><td><strong>TintScreen</strong></td><td>Color overlay</td><td>Color, Opacity (how strongly it covers the screen), Duration</td></tr>
 <tr><td><strong>PanZoomScreen</strong></td><td>Camera movement</td><td>Zoom level, Pan X/Y (%), Duration</td></tr>
 <tr><td><strong>ResetScreenEffects</strong></td><td>Clear all effects</td><td>Duration (transition time)</td></tr>
 </tbody>
@@ -529,6 +508,17 @@
   <ol>
   <li>All effects share: Intensity (0-1), Speed, Blend mode (screen/overlay/soft-light/normal), Color, Duration (0 = persistent)</li>
 </ol>
+  <h3>Driving effects with variables (⚡ Follow a variable)</h3>
+  <p>Every Screen FX command has small <strong>⚡ "Follow a number variable"</strong> pickers under its strength fields. Bind one and the variable controls the value:</p>
+  <ul>
+  <li><strong>Live effects</strong> react <strong>while on screen</strong> — tint opacity, overlay intensity (rain/fog/snow…),</li>
+</ul>
+  <p>flashlight radius &amp; darkness, <strong>particle density/wind/gravity/opacity</strong> (Spawn Particles), and placed-lights brightness (a 0–2 multiplier). E.g. bind rain intensity to a <code>storm</code> variable and every Set Variable (or a settings slider) thickens or calms the rain in real time; bind particle density to <code>snowfall</code> and the blizzard grows as the variable climbs.</p>
+  <ul>
+  <li><strong>One-shot effects</strong> read the variable <strong>when the command runs</strong> — shake intensity, lightning</li>
+</ul>
+  <p>brightness, fireworks intensity/bursts/burst height, flash duration, pan/zoom level &amp; position. E.g. a shake whose strength is the player's <code>fear</code> at that moment.</p>
+  <p>The manual slider value stays as the fallback when the variable is missing. Each field's hint shows the expected range (e.g. 0–1 or 0–100).</p>
   <h3>Combining effects</h3>
   <ul>
   <li>Effects can stack — multiple overlays active simultaneously</li>
@@ -837,6 +827,13 @@ game.notify("Critical hit!", "success");</code></pre>
 </ol>
   <h3>Reset to defaults</h3>
   <p>If you want to start over, click <strong>Reset to Defaults</strong> in the UI Assets section.</p>
+  <h3>Timed dialogue (per-line time limit)</h3>
+  <p>Any Dialogue command can carry a <strong>Time limit (seconds)</strong> — once the text finishes typing, the countdown runs and the story <strong>moves on by itself</strong>. Great for letting the novel "play itself" during dream sequences, panic moments, or unreliable-narrator tricks.</p>
+  <ul>
+  <li><strong>"Players can still click ahead"</strong> (default on): the timer is just a maximum — clicking still advances early. Untick it to <strong>lock</strong> the line: clicking only reveals the text, and ONLY the timer moves the story (skip mode stops on these lines too).</li>
+  <li><strong>"Show countdown bar"</strong> draws a shrinking strip along the top of the dialogue box (same style as timed choices).</li>
+  <li>A short limit can cut off a long voice clip — time the limit to the clip when the line is voiced.</li>
+</ul>
   <hr>
   <h2 id="15-saveload-system-setup">15. Save/Load System Setup</h2>
   <div class="tabs-involved">UI Screens → Settings</div>
@@ -1689,6 +1686,14 @@ game.notify("Critical hit!", "success");</code></pre>
   <div class="tip"><strong>Tip:</strong> If the tracker says "No variables yet," head back to the <strong>Variables</strong> tab and add one. Note that some auto-managed variables (like a shop's stock count) are hidden from the Variables list to keep it tidy, but they still appear in the live tracker so you can debug them.</div>
   <h3>A note on hidden (internal) variables</h3>
   <p>Some variables are created and managed automatically by other systems — for example the per-list stock count behind a shop. These are flagged as internal and are <strong>hidden from the Variables list</strong> so it stays calm. They still work everywhere by name: you can reference them in conditions, show them in text with <code>{name}</code>, and change them with Set Variable. You'll also see them in the live Variable Tracker during test-play.</p>
+  <h3>Test play from any line (▶ Play from here)</h3>
+  <p>Hover any command row in the Scenes tab and a small <strong>▶</strong> button appears — click it to launch test play <strong>starting at that exact line</strong>, skipping the title screen. The scene's visual setup (background, characters on stage, music, lights, overlays) up to that point is applied automatically so the stage looks right.</p>
+  <p>Two things to know:</p>
+  <ul>
+  <li>It's a <strong>fresh run with default variables</strong> — anything a player would normally set on the title screen (like a created character) uses defaults. For testing deep story state, combine it with the Variable Tracker's −/＋ buttons.</li>
+  <li>Only <strong>this scene's</strong> setup is replayed; story flow (variables set in earlier scenes, jumps) is not simulated.</li>
+</ul>
+  <p>The popped-out Test Play window's <strong>⟲ Reload to line</strong> does the opposite job: it jumps an <em>already-running</em> game to the line you're editing while keeping your variables.</p>
   <hr>
   <h2 id="33-interactive-hot-spots-scenes--screens">33. Interactive Hot Spots (Scenes &amp; Screens)</h2>
   <div class="tabs-involved">Scenes (Show Hot Spot command) and/or UI/Screens (Screen Properties → Interactivity)</div>
@@ -1808,32 +1813,38 @@ game.notify("Critical hit!", "success");</code></pre>
   <p>You can also open these screens from a button using the <strong>Toggle Screen</strong> action, or from the story with the <strong>Show Screen</strong> command. <strong>Full details (and which built-in keys to avoid) are in section 27, Steps 4–5.</strong></p>
   <div class="tip"><strong>Tip:</strong> Give an inventory both an <strong>I</strong> hotkey <em>and</em> a <strong>Toggle Screen</strong> button on your HUD, so players can open it whichever way they like — both respect the same Overlay Behavior.</div>
   <hr>
-  <h2 id="35-the-in-game-phone-overview--work-in-progress">35. The In-Game Phone (Overview — Work in Progress)</h2>
-  <div class="tabs-involved">UI/Screens → In-Game UI (Phone panel) → Scenes (Phone commands) → buttons (Phone actions)</div>
-  <blockquote><strong>Heads up:</strong> The Phone is a <strong>work in progress</strong>. The core — texting, themeable look, incoming texts and calls, and a Contacts app — is in and usable, but expect rough edges and more features (and polish) to come. Treat it as a preview while you experiment.</blockquote>
-  <p>The <strong>Phone</strong> is a built-in, themeable cellphone overlay with story-scripted messaging — think Himura-style texting scenes. It is <strong>not</strong> a screen you assemble yourself; like the Quick Menu and confirmation dialogs, it's built-in <strong>chrome</strong> you style in one place and drive from the story.</p>
-  <h3>Where to find it</h3>
+  <h2 id="35-the-in-game-phone-texting-calls-map-gallery-notifications">35. The In-Game Phone (Texting, Calls, Map, Gallery, Notifications)</h2>
+  <div class="tabs-involved">Systems (Phone quick setup) → UI/Screens → In-Game UI (Phone panel) → Scenes (Phone commands) → buttons (Phone actions)</div>
+  <p>The <strong>Phone</strong> is a full, built-in, themeable cellphone your players use inside the story — texting (with photos), voiced calls, a contacts roster, a travel map, a photo/CG gallery, notifications, and a player-customizable home screen. It is <strong>not</strong> a screen you assemble yourself; like the Quick Menu and confirmation dialogs, it's built-in <strong>chrome</strong> you style in one place and drive from the story.</p>
+  <h3>The fast way: the Phone quick setup</h3>
+  <p>Open the <strong>Systems</strong> tab and choose <strong>📱 Phone</strong>. The quick setup walks you through: pick a <strong>look</strong> (or keep your current styling), choose which <strong>apps</strong> go on the home screen, seed <strong>contacts</strong> from your characters, and offer starter <strong>wallpapers</strong>. It's safe to re-run — it only fills gaps and never overwrites what you've already customized. The done screen links straight to the deep editors.</p>
+  <h3>Where everything lives</h3>
   <ul>
-  <li><strong>Style it:</strong> open the <strong>UI/Screens</strong> tab, switch to the <strong>In-Game UI</strong> editor, and choose <strong>Phone</strong> in the left sidebar. There you'll find accordions for the <strong>shell &amp; position</strong>, <strong>status bar</strong>, <strong>header &amp; bubbles</strong>, <strong>app buttons</strong>, <strong>fonts</strong>, <strong>incoming text/call theming</strong>, <strong>Contacts</strong>, <strong>backgrounds</strong>, and <strong>sounds</strong>, with a live preview (use the <strong>Phone / Banner / Badge / Call</strong> view switcher on the canvas to style each state).</li>
+  <li><strong>Style it:</strong> open the <strong>UI/Screens</strong> tab, switch to the <strong>In-Game UI</strong> editor, and choose <strong>Phone</strong> in the left sidebar — accordions for the <strong>shell &amp; position</strong>, <strong>status bar</strong>, <strong>header &amp; bubbles</strong>, <strong>app buttons &amp; home grid</strong>, <strong>fonts</strong>, <strong>incoming text/call theming</strong>, <strong>call transcripts</strong>, <strong>Contacts</strong>, <strong>Wallpapers &amp; Settings app</strong>, <strong>Home widgets</strong>, <strong>Map app</strong>, <strong>Gallery app</strong>, <strong>backgrounds</strong>, and <strong>sounds</strong>, with a live preview (use the <strong>Phone / Banner / Badge / Call / Contacts</strong> view switcher on the canvas to style each state).</li>
   <li><strong>Script it:</strong> in the <strong>Scenes</strong> tab, the command palette's <strong>Phone</strong> category has the phone commands.</li>
-  <li><strong>Drive it from buttons:</strong> any button can use the phone <strong>actions</strong> (Show Phone, Hide Phone, Show Text, etc.).</li>
+  <li><strong>Drive it from buttons:</strong> any button can use the phone <strong>actions</strong> (Show Phone, Open Phone App, Show Map, etc.).</li>
 </ul>
-  <h3>What it can do today</h3>
+  <h3>The apps</h3>
+  <p>The phone's home screen holds <strong>app icons</strong> (bottom bar, free-placed, or a real-phone <strong>home grid</strong>). Each icon opens a built-in app — or runs a custom action:</p>
   <ul>
-  <li><strong>Show Text</strong> (the <code>Show Phone Text</code> command) — appends a chat bubble from a character (or the player) and auto-opens the phone. Add <strong>reply choices</strong> to pause for the player to text back; follow-up messages can arrive with a typing "…" indicator.</li>
-  <li><strong>Incoming Text</strong> — a text "arrives" as a non-blocking banner + ding (and an unread badge), or auto-opens the phone.</li>
-  <li><strong>Incoming Call</strong> — a ringing accept/decline overlay (modal or a non-blocking corner card), with a ringtone and a "missed call" outcome if ignored.</li>
-  <li><strong>Contacts app</strong> — a roster of characters with per-contact <strong>Call</strong> and <strong>Message</strong> buttons; <strong>Recents</strong> shows the call/chat history.</li>
-  <li><strong>Show / Hide Phone</strong> — open or close the phone from the story or a button.</li>
-  <li>It saves with the game (open chats, messages, call log, and unread state persist through save/load).</li>
+  <li><strong>Messages</strong> — story-scripted chat threads. <strong>Show Text</strong> appends a bubble (text and/or a <strong>photo</strong>) and can pause for tappable <strong>replies</strong>; <strong>Incoming Text</strong> arrives as a banner + ding or auto-opens the phone. Received photos collect into the Gallery automatically.</li>
+  <li><strong>Contacts</strong> — a roster of characters with per-contact <strong>Call</strong>/<strong>Message</strong> buttons, status lines that interpolate variables, and unlock conditions.</li>
+  <li><strong>Calls</strong> — incoming calls ring with accept/decline; accepted calls (and outgoing <strong>Make Phone Call</strong> commands or a contact's Call button) can play a <strong>scripted, voiced conversation</strong>: chat-style transcript lines with per-line voice clips, conditions that react to variables, tappable replies that steer later lines, and an End Call flow. Missed calls notify.</li>
+  <li><strong>Recents</strong> — the notification center + call log (who called, direction, duration).</li>
+  <li><strong>Gallery</strong> — two tabs: <strong>Photos</strong> the player received in texts, and your project's <strong>CG collection</strong> (same unlocks as the CG Gallery screen), with albums by category.</li>
+  <li><strong>Map</strong> — assign a travel map (built in the <strong>Systems → Maps &amp; Travel</strong> editor) as the phone's Map app for <strong>free-roam travel</strong>: players tap an unlocked location to travel there. Gate free-roam with conditions (e.g. only between story beats). For story moments, use the <strong>Show Map</strong> command instead — it pauses the scene until the player picks a destination.</li>
+  <li><strong>Settings</strong> — the player picks their own <strong>wallpaper</strong> from options you provide (choice persists in saves; entries can unlock over the story).</li>
 </ul>
+  <h3>Notifications</h3>
+  <p>The <strong>Phone Notification</strong> command posts a banner + badge + an entry in the Recents notification list — with an icon, optional custom sound, silent mode (badge/list only), and <strong>tap actions</strong>. Incoming texts and missed calls notify automatically. The unread <strong>badge</strong> can show a live count.</p>
   <h3>How to open the phone (and the phone hotkey)</h3>
   <ul>
   <li>From the <strong>story</strong>: drag a <strong>Show Phone</strong> command into a scene (or any <strong>Show Text</strong> command, which opens it automatically).</li>
-  <li>From a <strong>button</strong>: add a <strong>Show Phone</strong> action.</li>
+  <li>From a <strong>button</strong>: add a <strong>Show Phone</strong> or <strong>Open Phone App</strong> action (the latter deep-links an app, e.g. straight into the Gallery).</li>
   <li>With a <strong>key</strong>: in the <strong>In-Game UI → Phone</strong> panel's <strong>Shell &amp; position</strong> section, set the <strong>Open hotkey</strong>. Pressing that key in-game toggles the phone open and closed. (This is the phone's <em>own</em> hotkey field — separate from the per-screen keyboard shortcut described in section 27, because the phone is built-in chrome, not a normal screen.)</li>
 </ul>
-  <div class="tip"><strong>Tip:</strong> Because the Phone is still evolving, keep your phone scenes simple for now and re-test after updates. If something looks off in an exported game after an editor update, re-export — the phone is part of the game engine.</div>
+  <p>Everything saves with the game: open chats, messages, photos, the call log, notifications, the player's wallpaper, and even a call in progress persist through save/load.</p>
+  <div class="tip"><strong>Tip:</strong> The phone lives inside the game engine — after updating the editor, <strong>re-export</strong> your game so exported builds pick up the newest phone.</div>
   <hr>
   <h2 id="36-interactive-elements-clickable--draggable-images-buttons--regions">36. Interactive Elements (Clickable &amp; Draggable Images, Buttons &amp; Regions)</h2>
   <div class="tabs-involved">UI/Screens (Screen Properties → Interactivity)</div>
@@ -1886,6 +1897,122 @@ game.notify("Critical hit!", "success");</code></pre>
 </ol>
   <p>This is ideal for a world map (each location is a region that jumps to a scene) or a control panel (each switch is a region that sets a variable).</p>
   <div class="tip"><strong>Tip:</strong> Regions and a draggable image are two different jobs: <strong>regions</strong> = many click targets on one static picture; <strong>draggable</strong> = the whole element moves. Pick the one that matches what the player does.</div>
+  <h2 id="37-mini-games-wipe-away-reveals--more">37. Mini Games (Wipe-Away Reveals &amp; More)</h2>
+  <p>Mini games are playable moments that pop up over your story — wipe dust off an old photograph, assemble the torn pieces, color them in, match cards, find hidden things, race a quick-tap sequence. Build them in the <strong>Mini Games</strong> tab; show them with the <strong>Show Mini Game</strong> command (scenes) or the <strong>Show Mini Game</strong> action (buttons).</p>
+  <h3>Step 1: Create a mini game</h3>
+  <ol>
+  <li>Open the <strong>Mini Games</strong> tab and click <strong>New Mini Game</strong>.</li>
+  <li>Pick a game type — all seven are live: <strong>Wipe away</strong>, <strong>Assemble</strong>, <strong>Painting</strong>, <strong>Memory match</strong>, <strong>Hidden objects</strong>, <strong>Sliding puzzle</strong>, and <strong>Quick taps</strong>.</li>
+  <li>Play it immediately in the <strong>live preview</strong> on the right — it's the real game engine, so what you play there is exactly what players get. Use <strong>⟲ Replay</strong> to restart.</li>
+</ol>
+  <h3>Step 2: Set up a wipe-away game</h3>
+  <p>In the stage settings:</p>
+  <ul>
+  <li><strong>Picture underneath</strong> — the image revealed by wiping. Leave it empty and the <em>running scene itself</em> shows through the cleared areas.</li>
+  <li><strong>Cover</strong> — what gets wiped off: a solid color, your own image (dust, grime, fog art), or a frost/steam haze.</li>
+  <li><strong>Where is the cover?</strong> — by default the whole area is covered. Click <strong>Draw the covered area…</strong> to airbrush exactly where the dirt sits instead — even one small smudge. You get an <strong>airbrush</strong> (soft, buildable — light passes make thinner cover), a <strong>marker</strong> (solid), and an <strong>eraser</strong>, drawn right over your reveal image. The win % then counts only the area you drew, so "clear 70%" means 70% <em>of the smudge</em>.</li>
+  <li><strong>Brush feel</strong> — soft cloth, hard squeegee, thin scratcher streaks, dabby sponge, or your own custom brush image.</li>
+  <li><strong>Brush size</strong> and <strong>Cleared % needed to win</strong> — how big each swipe is, and how much must be cleared.</li>
+  <li><strong>Player cursor</strong> — give the stage a custom cursor image (a rag, a sponge…) that follows the pointer while playing. Per stage, so a wipe stage can show a rag while a later paint stage shows a brush.</li>
+</ul>
+  <h3>Step 2b: Set up a memory match game</h3>
+  <ol>
+  <li>Add <strong>card faces</strong> — each face appears twice in the shuffled deck (3 faces = 6 cards, 6 = 12). Faces without an image show a number, so you can test before the art is ready.</li>
+  <li>Optional: a <strong>card back</strong> image (default is a generated pattern), a fixed <strong>column count</strong> (default auto), the <strong>flip-back delay</strong> for failed pairs, and a <strong>pair-matched sound</strong>.</li>
+  <li>Cards always shrink to fit the screen — no scrolling mid-game.</li>
+</ol>
+  <h3>Step 2c: Set up a hidden objects game</h3>
+  <ol>
+  <li>Pick the <strong>busy scene image</strong> players will search.</li>
+  <li>Click <strong>Place objects…</strong> — drag and resize each object's tap area straight onto the image (circle/oval or rectangle; bigger = easier). Name them for yourself, and optionally give each one <strong>found art</strong> (default is a ✓ ring).</li>
+  <li>Optional: toggle the found markers and the "3 / 5" counter, and enable a <strong>Hint button</strong> (custom label + cooldown) that pulses one unfound object.</li>
+</ol>
+  <h3>Step 2d: Set up a sliding puzzle</h3>
+  <ol>
+  <li>Pick the <strong>puzzle image</strong> and a <strong>grid size</strong> (3×3 easy → 5×5 hard). The image auto-slices; one corner is the gap.</li>
+  <li>Tap a tile next to the gap to slide it. The scramble uses only legal moves, so <strong>every board is solvable</strong>.</li>
+  <li>Optional: <strong>number the tiles</strong>, show the <strong>finished picture</strong> in the corner, and tune the <strong>shuffle strength</strong>. Solving fades the missing tile back in to complete the picture.</li>
+</ol>
+  <h3>Step 2e: Set up an assemble game</h3>
+  <ol>
+  <li>Choose the piece source:
+  <ul>
+  <li><strong>Cut one image into a grid</strong> — pick the image and columns/rows; the editor shows the cut instantly and pieces come out shuffled in play. A faint finished picture guides the player.</li>
+  <li><strong>My own piece images</strong> — add each piece's art, then click <strong>Place where each piece lands…</strong> to drag/resize the landing spots on the board image (optional faint silhouettes mark the spots).</li>
+</ul></li>
+  <li>Players drag pieces from a <strong>tray</strong> (bottom or right) onto the board. Dropping near a piece's own spot snaps and locks it; dropping on the <em>wrong</em> spot counts as a mistake (see Losing); dropping in empty space is free.</li>
+  <li>Tune the <strong>snap distance</strong> (bigger = more forgiving).</li>
+  <li><strong>Build &amp; Color</strong> (optional) turns the stage into a workshop: players also <em>color</em> what they build. Choose <strong>after it's built</strong> (guided two-step — assemble first, then a swatch bar appears) or <strong>while building</strong> (freeform). Pick the color schemes (inline palettes and/or Art Studio palettes), whether coloring keeps the art's shading or paints flat, whether <em>every</em> piece must be colored to win (off = a Done button), and optionally let players <strong>paint brush strokes</strong> — strokes are clipped to each piece's own art, so nothing goes outside the lines.</li>
+</ol>
+  <h3>Step 2f: Set up a painting game</h3>
+  <ol>
+  <li>Pick the <strong>picture to color in</strong>, then add <strong>paintable areas</strong>:
+  <ul>
+  <li><strong>Mask areas</strong> follow curvy outlines exactly — a white-on-transparent PNG made in the <strong>Art Studio's mask mode</strong> ("the dress", "the sky"). Their painted pixels <em>are</em> the tappable area.</li>
+  <li><strong>Shape areas</strong> are simple rectangles/ovals you drag into place with <strong>Place the shape areas…</strong>.</li>
+</ul></li>
+  <li>Pick the <strong>color choices</strong> players get: quick inline palettes and/or your saved <strong>Art Studio palettes</strong> (no palette = a default rainbow set). Players tap a swatch, then tap an area — areas stay recolorable until the stage ends.</li>
+  <li>Choose the <strong>paint style</strong> — keep the art's shading (multiply) or flat color — and whether <strong>every area must be painted</strong> to win (off = a Done button).</li>
+  <li>Optional: allow <strong>brush strokes</strong> (clipped to the area the stroke starts in) with a size you pick, and give each area a <strong>color slot</strong> name for the palette→UI feature below.</li>
+</ol>
+  <h3>Step 2g: Set up a quick-taps (QTE) game</h3>
+  <ol>
+  <li>Add <strong>prompts</strong> — hit each one, in order, before its shrinking ring closes:
+  <ul>
+  <li><strong>Tap target</strong> — a circle at a screen position you choose (works everywhere, including phones).</li>
+  <li><strong>Keyboard key</strong> — press a key (E, Space…). The editor flags these: phones have no keyboard, so prefer tap targets for mobile builds.</li>
+</ul></li>
+  <li>Each prompt can carry its own <strong>art</strong>, <strong>label</strong>, <strong>time window</strong>, and <strong>position</strong>; tune the <strong>pause between prompts</strong>.</li>
+  <li>Choose what a <strong>miss</strong> does: <strong>restart the sequence</strong> (and spend a try, if the game has a mistake limit) or <strong>lose the game</strong> outright. Progress dots show how far along the player is.</li>
+</ol>
+  <h3>Step 3b: Player colors → story UI (palette→UI)</h3>
+  <p>A coloring game can leave a permanent mark on your story's look:</p>
+  <ol>
+  <li>Give paint areas / Build &amp; Color pieces a <strong>color slot</strong> name (e.g. <code>dress</code>, <code>sky</code>).</li>
+  <li>In the game's <strong>Player colors → story UI</strong> section, map each slot to a UI target — dialogue box background/border/text, name box, or choice button background/border/text.</li>
+  <li>When the game is <strong>won</strong>, the color the player left in each slot restyles that part of the in-game UI — and it <strong>persists</strong>, across scenes <em>and</em> saves. Every captured slot also lands in a <strong>text variable with the same name</strong> (<code>{dress}</code> interpolates the hex color, and conditions can read it).</li>
+  <li>To undo the restyle, run the <strong>Reset UI Colors</strong> action from any button or event.</li>
+</ol>
+  <div class="tip"><strong>Note:</strong> the restyle recolors the <em>default</em> dialogue/choice look. Boxes skinned with your own images keep their art — those are your authored pixels.</div>
+  <h3>Step 3: Choose the exits</h3>
+  <ul>
+  <li><strong>Winning</strong> — actions that run when the game is won (give an item, set a variable, jump somewhere…). From a scene command the story also continues on its own.</li>
+  <li><strong>Win message</strong> — what the player sees at the moment of victory. Three modes: the <strong>default</strong> big ✓, a <strong>custom message</strong> — your own text (with <code>{variable}</code> interpolation), optional art above it (sticker, trophy), font, size, color, bold/italic, an optional panel behind it, how long it stays, and a pop/fade entrance — or <strong>none</strong>, where the game simply continues instantly.</li>
+  <li><strong>Skip button</strong> — optional. Shows a skip button with its own label and actions, for players who'd rather not play.</li>
+  <li><strong>Losing</strong> — two optional lose conditions, each with its own display:
+  <ul>
+  <li>a <strong>time limit</strong> (one countdown across the whole game, with a hideable bar), and</li>
+  <li>an <strong>allowed-mistakes limit</strong> — a failed card pair, a wrong tap, or a wrong piece placement uses up one try, shown as hearts ♥ that dim as they're spent. Run out and the game is lost. By default one pool spans the whole game; tick <strong>"Tries refill on each stage"</strong> for a per-puzzle allowance instead.</li>
+</ul></li>
+</ul>
+  <p>Either one triggers the <strong>lose actions</strong>, a <strong>lose sound</strong>, and a <strong>lose message</strong> that's just as customizable as the win message (default ⏰/✖ glyph, fully custom text + art + style, or none).</p>
+  <h3>Step 4: Mix game types with stages</h3>
+  <p>A mini game is a <strong>sequence of stages</strong> — each stage is its own mechanic with its own settings. "Wipe the dust away → assemble the torn photo → color it in." Use <strong>+ Add another stage</strong> in the Stages strip, reorder with ◀ ▶, and give each stage its own instructions line. One timer and one Skip cover the whole sequence; winning the <strong>last</strong> stage wins the game.</p>
+  <h3>Step 5: Show it in your story</h3>
+  <ul>
+  <li><strong>In a scene:</strong> drag in a <strong>Show Mini Game</strong> command. The story pauses (like a Choice) until the player wins, skips, or fails — then that exit's actions run and the story continues.</li>
+  <li><strong>From a button:</strong> add a <strong>Show Mini Game</strong> action to any button or hot spot. The game plays as an overlay and simply closes when resolved.</li>
+</ul>
+  <div class="tip"><strong>Note:</strong> Mini-game progress is intentionally <strong>not saved</strong>. If the player saves mid-game and loads later, the game re-presents fresh — no half-wiped covers in save files.</div>
+  <div class="tip"><strong>Tip:</strong> An intro splash (in <em>How it looks</em>) shows tap-to-start text first — handy with a time limit, since the timer only starts after the tap.</div>
+  <h2 id="38-art-studio-draw-your-own-game-art">38. Art Studio (Draw Your Own Game Art)</h2>
+  <p>The <strong>Art Studio</strong> (Mini Games tab → 🎨 Art Studio) is a built-in drawing surface for making game art without leaving FlourishVNE — touch-up art, wipe-game cover areas, paint-region masks, stamps, and scribbles.</p>
+  <h3>Step 1: Start a canvas</h3>
+  <ul>
+  <li>Pick a size — <strong>1280×720</strong> (scene-sized), <strong>1024×1024</strong> (square), or custom — for a blank transparent canvas, <strong>or</strong></li>
+  <li><strong>Open one of your images as a base.</strong> The base stays locked underneath; you paint on a layer above it, and your original asset is never modified.</li>
+</ul>
+  <h3>Step 2: Paint</h3>
+  <ul>
+  <li><strong>🖌️ Brush</strong> (soft or hard edge), <strong>💨 Airbrush</strong> (soft spray that builds up while held), <strong>🪣 Paint can</strong> (flood-fills a same-colored area — line art on the base bounds the fill), <strong>🧼 Eraser</strong>, and <strong>💉 Pick color</strong> (eyedropper).</li>
+  <li>Size and opacity sliders, unlimited-ish <strong>undo/redo</strong>, and Clear.</li>
+</ul>
+  <h3>Step 3: Color palettes</h3>
+  <p>Build named <strong>color palettes</strong> (swatch chips; click to pick, + to capture the current color). Palettes are saved with the project — painting and Build &amp; Color mini games offer them to players as their swatch bar, and through <strong>Player colors → story UI</strong> the player's picks can restyle your dialogue and choice buttons (see the Mini Games section).</p>
+  <h3>Step 4: Mask mode</h3>
+  <p>Toggle <strong>Mask mode</strong> to paint pure white on transparency with the base image dimmed for tracing — exactly the format wipe-game cover areas and paint-region masks expect.</p>
+  <h3>Step 5: Save</h3>
+  <p><strong>Save to Assets</strong> exports a PNG into Assets → Images — flattened with the base, or the drawing alone (default for masks). Every save is a new asset; nothing is overwritten.</p>
 </main>
 
 <script>

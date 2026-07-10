@@ -882,17 +882,22 @@ function performQuitAndInstall() {
   // Remove any custom 'window-all-closed' listener that might interfere
   // with electron-updater's shutdown sequence.
   app.removeAllListeners('window-all-closed');
-  logUpdate('debug', 'Removed window-all-closed listeners; calling autoUpdater.quitAndInstall(false, true)');
+  logUpdate('debug', 'Removed window-all-closed listeners; calling autoUpdater.quitAndInstall(true, true)');
 
   // Let electron-updater gracefully close the app and run the installer.
-  // isSilent = false → allows the NSIS installer to briefly show its progress
-  //   bar UI, which gives Windows the few milliseconds it needs to fully
-  //   release file locks before the installer overwrites files.  With
-  //   oneClick: true in package.json no wizard/prompts appear — just a
-  //   small progress bar that vanishes automatically.
+  // isSilent = true → run the installer silently for the UPDATE. This matters
+  //   because the installer is now an ASSISTED installer (package.json nsis
+  //   oneClick:false, allowToChangeInstallationDirectory:true) so first-time
+  //   users can pick their drive/folder. If we passed isSilent=false here the
+  //   FULL wizard (welcome + directory page + …) would appear on every
+  //   auto-update — users could even accidentally relocate the app. Silent
+  //   update mode reinstalls in place at the existing $INSTDIR recorded in the
+  //   registry (no prompts, no directory page) and electron-updater's own NSIS
+  //   template waits for this app's PID to exit before overwriting files, so
+  //   the file-lock timing the old progress-bar hack guarded against is handled.
   // isForceRunAfter = true → automatically restart the app after installing.
   try {
-    autoUpdater.quitAndInstall(false, true);
+    autoUpdater.quitAndInstall(true, true);
     logUpdate('info', 'autoUpdater.quitAndInstall returned (app should be exiting now)');
   } catch (err) {
     logUpdate('error', 'autoUpdater.quitAndInstall threw', {

@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flourishvne.dev/vnbundle/0.1.0/ui-layout.schema.json",
+  "title": "vnbundle ui layout",
+  "description": "Declarative UI. v1 specs the dialogue box, choice menu, backlog and settings; other regions are added as the runtime implements them, so unspecified keys are permitted (additive/forward-compatible).",
+  "type": "object",
+  "properties": {
+    "dialogueBox": {
+      "type": "object",
+      "properties": {
+        "position": { "enum": ["bottom", "top", "center", "custom"] },
+        "rect": { "$ref": "#/$defs/rect" },
+        "background": { "type": ["string", "null"], "description": "asset path, CSS-free color string, or null" },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "textColor": { "type": "string" },
+        "font": { "type": ["string", "null"] },
+        "fontSize": { "type": "number" },
+        "namePlate": {
+          "type": "object",
+          "properties": {
+            "show": { "type": "boolean" },
+            "background": { "type": ["string", "null"] },
+            "textColor": { "type": "string" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "choiceMenu": {
+      "type": "object",
+      "properties": {
+        "layout": { "enum": ["list", "grid", "custom"] },
+        "buttonColor": { "type": "string" },
+        "textColor": { "type": "string" },
+        "font": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "backlog": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" }, "maxEntries": { "type": "number" } },
+      "additionalProperties": true
+    },
+    "settings": {
+      "type": "object",
+      "description": "Default player-facing settings (text speed, volumes, etc.).",
+      "additionalProperties": true
+    },
+    "titleScreen": { "type": "string", "description": "screen id shown on launch (the main menu)" },
+    "saveScreen": { "type": "string" },
+    "loadScreen": { "type": "string" },
+    "settingsScreen": { "type": "string" },
+    "pauseScreen": { "type": "string" },
+    "screens": {
+      "type": "array",
+      "description": "Custom UI screens (title/menu/pause/…). v1 renders image/text/button elements; other element types are ignored.",
+      "items": { "$ref": "#/$defs/screen" }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "screen": {
+      "type": "object",
+      "required": ["id", "elements"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "background": { "type": ["string", "null"], "description": "asset path" },
+        "backgroundColor": { "type": "string" },
+        "music": { "type": "string" },
+        "elements": { "type": "array", "items": { "$ref": "#/$defs/element" } }
+      },
+      "additionalProperties": true
+    },
+    "element": {
+      "type": "object",
+      "required": ["type"],
+      "description": "Positioned by x/y/w/h (percent of the screen) + anchorX/anchorY (0..1, the element's own pivot).",
+      "properties": {
+        "type": { "enum": ["image", "text", "button", "saveSlotGrid", "settingsSlider", "settingsToggle"] },
+        "x": { "type": "number" }, "y": { "type": "number" },
+        "w": { "type": "number" }, "h": { "type": "number" },
+        "anchorX": { "type": "number" }, "anchorY": { "type": "number" },
+        "text": { "type": "string" },
+        "font": { "type": "string", "description": "custom font asset path" },
+        "fontSize": { "type": "number" },
+        "color": { "type": "string" },
+        "image": { "type": ["string", "null"] },
+        "hoverImage": { "type": "string" },
+        "objectFit": { "type": "string" },
+        "action": { "type": "object", "properties": { "action": { "type": "string" } }, "additionalProperties": true }
+      },
+      "additionalProperties": true
+    }
+  }
+}

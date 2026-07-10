@@ -3,6 +3,7 @@ import type { VNScreenOverlayEffect } from '../../types';
 import { VNCondition, VNConditionOperator, VNUIAction, VNTextAlign, VNVAlign, VNParallaxSettings } from '../../types/shared';
 
 import { VNTextShadow, VNTextGradient, VNTextBorder, draggableImageElementRegion } from '../scene/types';
+import type { PhoneCallConversation, PhoneConversationEntry } from '../scene/types';
 import type { VNCharacterTextbox } from '../character/types';
 
 /**
@@ -110,7 +111,12 @@ export interface PhoneButtonConfig {
     builtinIcon?: string;
     /** Custom icon image — overrides builtinIcon when set. */
     iconImage?: { type: 'image' | 'video'; id: VNID } | null;
-    /** What clicking does — any UI action (e.g. ShowPhoneText to open chat, HidePhone to close). */
+    /** Opens a built-in phone app (registry id: 'chat','contacts','history','gallery','map',
+     *  'settings'…). WINS over `action` when set — the simple, non-coder path. Additive-optional:
+     *  older buttons only have `action` and behave exactly as before. */
+    appId?: string;
+    /** What clicking does — any UI action (e.g. ShowPhoneText to open chat, HidePhone to close).
+     *  Used when `appId` is unset ("custom action" mode). */
     action?: VNUIAction;
     /** Only shown when all conditions pass. */
     conditions?: VNCondition[];
@@ -141,6 +147,17 @@ export interface PhoneContact {
     /** What the Call button does after the "Calling…" screen shows (e.g. Call Common Event / Jump To
      *  Scene to run the conversation). Optional — without it, Call just shows the calling screen. */
     callAction?: VNUIAction;
+    /** Scripted in-call conversation for the Contacts "Call" button (voiced transcript with
+     *  replies) — WINS over callAction when set. Additive-optional.
+     *  LEGACY single slot: when `callConversations` (the gated LIST) has a passing entry, the
+     *  list wins; this remains the always-eligible fallback. */
+    callConversation?: PhoneCallConversation;
+    /** Condition-gated CALL conversations — first entry whose conditions pass (and isn't a
+     *  played-out `once`) plays when the player calls. Additive-optional. */
+    callConversations?: PhoneConversationEntry[];
+    /** Condition-gated TEXT conversations — first passing entry auto-plays (typing dots, lines,
+     *  replies) when the player opens this contact's message thread. Additive-optional. */
+    textConversations?: PhoneConversationEntry[];
     /** Hide the Call button for this contact (text-only). */
     hideCall?: boolean;
     /** Hide the Message button for this contact (call-only). */
@@ -156,6 +173,15 @@ export interface VNProjectUI {
     loadScreenId: VNID | null;
     pauseScreenId: VNID | null;
     gameHudScreenId: VNID | null;
+    /** "Player's Character" pointers — the persistent string variables that remember the character
+     *  the player created in a Character Creator: which base character (a character id) and their
+     *  chosen name. Set by the Character Creator wizard. Read by commands/elements whose
+     *  `characterSource === 'player'`. Additive-optional (older projects/saves unaffected). */
+    playerCharacterVarId?: VNID | null;
+    playerCharacterNameVarId?: VNID | null;
+    /** The screen generated as THE player-character creator (Systems hub "Edit" link).
+     *  Editor-only bookkeeping; nothing reads it at runtime. Additive-optional. */
+    characterCreatorScreenId?: VNID | null;
     dialogueBoxImage: UIAsset | null;
     dialogueBoxBorderImage: UIAsset | null;
     dialogueBorderPadding?: number; // px of border visible around the background (default 12)
@@ -189,6 +215,24 @@ export interface VNProjectUI {
     speakerEmphasisDim?: number;
     /** Scale multiplier applied to the speaking character (default 1.04). */
     speakerEmphasisScale?: number;
+    /** Reveal highlight ("karaoke"): while a line types out, the word currently being revealed
+     *  is emphasized. Off by default; all additive-optional. */
+    dialogueRevealHighlight?: {
+        enabled?: boolean;
+        /** 'color' recolors the word; 'glow' adds a soft glow; 'underline' underlines it. */
+        style?: 'color' | 'glow' | 'underline';
+        /** Highlight color (default '#facc15'). Ignored when useSpeakerColor is on and the line has a speaker. */
+        color?: string;
+        /** Use the speaking character's name color as the highlight color. */
+        useSpeakerColor?: boolean;
+        /** On voiced lines, drive the highlight from the CLIP's estimated word timings
+         *  (loudness-envelope analysis — highlights surge and pause with the actor)
+         *  instead of the typewriter. Unvoiced lines fall back to typewriter tracking. */
+        syncToVoice?: boolean;
+    };
+    /** On voiced lines, pace the typewriter so the reveal finishes together with the clip
+     *  (per-line textSpeed overrides still win). Off by default. */
+    voicePacedText?: boolean;
     choiceButtonImage: UIAsset | null;
     choiceButtonBorderImage: UIAsset | null;
     choiceBorderPadding?: number; // px of border visible around the background (default 8)
@@ -327,11 +371,23 @@ export interface VNProjectUI {
     // Bottom button bar
     phoneButtons?: PhoneButtonConfig[];
     /** App-button layout: 'bar' (default) = fixed bottom bar; 'free' = each button placed by its
-     *  own x/y on the phone screen (home-screen app icons the player can be given anywhere). */
-    phoneButtonLayout?: 'bar' | 'free';
+     *  own x/y on the phone screen; 'grid' = a full-screen home grid of app icons (real phone
+     *  style — icons flow into rows, sized/labelled by the phoneHomeGrid* fields below). */
+    phoneButtonLayout?: 'bar' | 'free' | 'grid';
     phoneButtonBarColor?: string;
     phoneButtonIconColor?: string;
     phoneButtonActiveColor?: string;
+    // ── Home grid ('grid' layout) ──────────────────────────────────────────────
+    /** Icons per row (default 3). */
+    phoneHomeGridColumns?: number;
+    /** Icon tile size as % of the screen width (default 18). */
+    phoneHomeIconSize?: number;
+    /** Show app labels under icons (default true). */
+    phoneHomeShowLabels?: boolean;
+    phoneHomeLabelFont?: VNFontSettings;
+    /** Icon tile backing (unset = transparent, icon floats on the wallpaper). */
+    phoneHomeIconBgColor?: string;
+    phoneHomeIconRadius?: number;
     // ─── Dynamic events: incoming-text banner, badge, typing dots, call screen, history (Track B/C/D/E) ─── //
     // Incoming-text notification banner (non-blocking arrival)
     phoneNotifPosition?: 'top' | 'bottom';     // where the banner slides in (default top)
@@ -368,10 +424,67 @@ export interface VNProjectUI {
     phoneCallDeclineIcon?: string;
     phoneCallDeclineImage?: { type: 'image'; id: VNID } | null;
     phoneCallPortraitShape?: 'circle' | 'square';
+    // In-call transcript (scripted call conversations)
+    /** End Call button styling/label (defaults: "End Call", red). */
+    phoneCallEndLabel?: string;
+    phoneCallEndColor?: string;
+    phoneCallEndIcon?: string;
+    phoneCallEndImage?: { type: 'image'; id: VNID } | null;
+    /** Live call timer color (default dimmed white). */
+    phoneCallTimerColor?: string;
+    /** Transcript line bubbles (voice-styled). Defaults follow the chat bubble colors. */
+    phoneCallLineIncomingColor?: string;
+    phoneCallLineOutgoingColor?: string;
+    /** "Calling…" text on the outgoing dialing screen (default "Calling…"). */
+    phoneCallDialingText?: string;
+    // Settings app: player wallpaper picker + decorative home widgets
+    /** Wallpapers the PLAYER can pick from in the phone's Settings app (choice persists in
+     *  saves). Entries with conditions unlock over the story. Unset/empty = Settings app hidden. */
+    phoneWallpapers?: Array<{
+        id: VNID;
+        name?: string;
+        image: { type: 'image' | 'video'; id: VNID };
+        thumbnail?: { type: 'image'; id: VNID } | null;
+        conditions?: VNCondition[];
+    }>;
+    phoneSettingsHeader?: string;              // default "Settings"
+    phoneSettingsWallpaperLabel?: string;      // default "Wallpaper"
+    /** Decorative widgets on the phone's HOME screen (clock/text/image), % of the screen. */
+    phoneHomeWidgets?: Array<{
+        id: VNID;
+        type: 'clock' | 'text' | 'image';
+        x: number; y: number; width: number; height?: number;
+        text?: string;                          // interpolates {variables}; clock uses phoneClockText
+        font?: VNFontSettings;
+        color?: string;
+        image?: { type: 'image' | 'video'; id: VNID } | null;
+        conditions?: VNCondition[];
+    }>;
+    // Map app (free-roam travel from the phone; the map itself lives in project.maps)
+    /** Which map the phone's Map app shows. Unset = Map app disabled. */
+    phoneMapId?: VNID | null;
+    phoneMapHeader?: string;                   // default "Map"
+    /** The travel gate: tapping a location only travels when these pass (browsing always works).
+     *  E.g. `can_travel is true` — flip it with Set Variable when the story allows moving. */
+    phoneMapTravelConditions?: VNCondition[];
+    phoneMapTravelLockedText?: string;         // default "You can't leave right now."
+    // Gallery app (Photos tab = camera roll from texts; Collection tab = the project's CG gallery)
+    phoneGalleryHeader?: string;               // default "Gallery"
+    phoneGalleryColumns?: number;              // default = cgGallery.columns or 3
+    /** Show the CG-gallery Collection tab (default true when the project has a CG gallery). */
+    phoneGalleryShowCG?: boolean;
+    phoneGalleryPhotosLabel?: string;          // default "Photos"
+    phoneGalleryCGLabel?: string;              // default "Collection"
+    phoneGalleryEmptyText?: string;            // default "No photos yet"
     // Recents / history view
     phoneHistoryHeader?: string;               // default "Recents"
     phoneHistoryRowColor?: string;
     phoneHistoryTextColor?: string;
+
+    // Messages app (threads inbox — the screen the Messages icon opens to)
+    phoneMessagesHeader?: string;              // default "Messages"
+    phoneMessagesEmptyText?: string;           // default "No messages yet"
+    phoneMessagesNewHint?: string;             // preview on a thread with an unplayed scripted conversation (default "New conversation")
 
     // Contacts app
     phoneContacts?: PhoneContact[];
@@ -515,6 +628,8 @@ export enum UIElementType {
     draggableImageElement = 'draggableImageElement',
     Meter = 'Meter',
     Customizer = 'Customizer',
+    /** An invisible (or countdown) element that runs actions after a delay once its screen opens. */
+    Timer = 'Timer',
     /** An element type contributed by an extension (rendered via a registered HTML renderer). */
     Custom = 'Custom',
 }
@@ -616,6 +731,9 @@ export interface UIButtonElement extends BaseUIElement {
     hoverSoundId: VNID | null;
     backgroundColor?: string; // Background color when no image is set
     hoverBackgroundColor?: string; // Background color on hover when no image is set
+    /** Corner rounding in px (matches the scene Show Button's borderRadius). Absent = the
+     *  legacy default (~4px) so existing buttons are unchanged. Additive-optional. */
+    borderRadius?: number;
     /** Inner horizontal padding in % of the button width (default 0). Keeps left/right-aligned
      *  text off the edge. */
     paddingX?: number;
@@ -741,6 +859,11 @@ export interface UISettingsToggleElement extends BaseUIElement {
 export interface UICharacterPreviewElement extends BaseUIElement {
     type: UIElementType.CharacterPreview;
     characterId: VNID;
+    /** ⟨Player's Character⟩ targeting. When 'player', this element displays whichever character the
+     *  player created (project.ui.playerCharacterVarId) and auto-detects that character's customizer
+     *  outfit variables — no manual layerVariableMap needed. Absent/'fixed' = show `characterId`.
+     *  Additive-optional. */
+    characterSource?: 'fixed' | 'player';
     expressionId?: VNID; // Default expression to show (for layers without variable mappings)
     layerVariableMap: Record<VNID, VNID>; // layerId -> variableId
 }
@@ -917,6 +1040,26 @@ export interface UIInventoryGridElement extends BaseUIElement {
     /** For a 'sell' grid (the player's inventory shown on a shop screen): which shop list receives the
      *  sale — provides the currency, sell rate, and optional restock target. */
     sellToCollectionId?: VNID;
+    /** Extra actions run when the slot button is clicked, AFTER the built-in Use/Buy/Sell — lets a
+     *  purchase also play a sound, set a variable, jump, call a Common Event, etc. Element-level
+     *  (applies to every slot's button). Additive-optional. */
+    slotButtonActions?: VNUIAction[];
+    // ── Free placement (parity with Save/Load + CG Gallery) ──
+    /** 'grid' (default) auto-arranges; 'free' places each slot via `slotRects`. */
+    slotLayout?: 'grid' | 'free';
+    /** Per-slot rectangles (screen-%) when `slotLayout==='free'`; items fill them in order. */
+    slotRects?: UISlotRect[];
+    /** Drop the grid's background panel so the inventory floats over custom art (like CG Gallery). */
+    hideBackgroundPanel?: boolean;
+    /** Force square (1:1) slots. Undefined/true = today's look; false = slot fills its cell/rect. */
+    squareSlots?: boolean;
+    /** Drop each slot's box/border/fill so only the item (icon, name, button) shows. */
+    hideSlotBox?: boolean;
+    // ── Quantity badge appearance (when showQuantity) — defaults match today's top-right black ×N ──
+    quantityFont?: VNFontSettings;
+    quantityColor?: string;
+    quantityBgColor?: string;
+    quantityPosition?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 }
 
 /** Hot spot — a trigger zone that fires actions on click, hover, or drag-drop.
@@ -1027,8 +1170,18 @@ export interface UICustomizerElement extends BaseUIElement {
     characterId: VNID;
     expressionId?: VNID;          // fallback look for layers without a category/selection
     categories: UICustomizerCategory[];
-    layout?: 'preview-left' | 'preview-right' | 'preview-top';
+    layout?: 'preview-left' | 'preview-right' | 'preview-top' | 'free';
     previewPercent?: number;      // % of the element devoted to the live preview (default 45)
+    // ── Free placement (layout === 'free'): preview + pickers panel are two independently
+    //    positioned/sized boxes (screen-%), like the Save/Load + Inventory free-slot system. ──
+    previewRect?: UISlotRect;     // the character-preview box (free mode only)
+    pickersRect?: UISlotRect;     // the controls/pickers panel box (free mode only)
+    // Preview "box" styling — ALL default unset = NO box (the sprite floats over the author's own art).
+    previewBackgroundColor?: string;
+    previewBackgroundImage?: UIAsset | null;
+    previewBorderColor?: string;
+    previewBorderRadius?: number;
+    hidePickersPanel?: boolean;   // drop the controls panel's bg/border/frame so the pickers float too
     showLabels?: boolean;         // show category labels (default true)
     font?: VNFontSettings;        // labels + asset names
     backgroundColor?: string;     // element panel background
@@ -1067,10 +1220,27 @@ export interface UICustomElement extends BaseUIElement {
     props: Record<string, any>;
 }
 
+/**
+ * A Timer element: when its screen opens, it waits `durationSeconds` and then runs `actions`.
+ * Great for a static screen that fires actions after some time (auto-advance, ambience, etc.).
+ * Gated by the inherited `conditions` (if they fail the element never mounts, so the timer never starts).
+ */
+export interface UITimerElement extends BaseUIElement {
+    type: UIElementType.Timer;
+    /** Delay in seconds before the actions fire (after the screen opens). */
+    durationSeconds: number;
+    /** Show a small live countdown on the element (otherwise it's invisible during play). */
+    showCountdown?: boolean;
+    /** Re-arm and fire again every `durationSeconds` instead of once. */
+    loop?: boolean;
+    /** Actions run when the timer elapses (BaseUIElement already declares `actions?` optional). */
+    actions?: VNUIAction[];
+}
+
 export type VNUIElement =
     | UIButtonElement | UITextElement | UIImageElement | UISaveSlotGridElement
     | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement | UICGGalleryElement | UIInventoryGridElement
-    | UIHotSpotElement | UIdraggableImageElementElement | UIMeterElement | UICustomizerElement | UICustomElement;
+    | UIHotSpotElement | UIdraggableImageElementElement | UIMeterElement | UICustomizerElement | UITimerElement | UICustomElement;
 
 /** An extra background plane on a screen (for multi-plane parallax backdrops). */
 export interface VNScreenBackgroundLayer {

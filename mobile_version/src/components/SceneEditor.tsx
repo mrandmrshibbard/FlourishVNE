@@ -9,7 +9,7 @@ import { CommandType, VNCommand, ShowCharacterCommand, SetCharacterLayerCommand,
 import { VNProject } from '../types/project';
 import { VNImage } from '../features/assets/types';
 import Panel from './ui/Panel';
-import { PlusIcon, GripVerticalIcon, ChevronDownIcon, AdjustmentsIcon, FolderIcon } from './icons';
+import { PlusIcon, GripVerticalIcon, ChevronDownIcon, AdjustmentsIcon, FolderIcon, PlayIcon } from './icons';
 import { createCommand } from '../utils/commandFactory';
 import { describeConditions } from '../utils/conditionLogic';
 import { getCommandColor } from './CommandPalette';
@@ -36,16 +36,18 @@ const cloneCommand = <T extends VNCommand>(command: T): T => {
     return JSON.parse(JSON.stringify(command)) as T;
 };
 
-const CommandItem: React.FC<{ 
-    command: VNCommand, 
-    project: VNProject, 
+const CommandItem: React.FC<{
+    command: VNCommand,
+    project: VNProject,
     isSelected: boolean,
     isInMultiSelection?: boolean,
-    depth: number, 
+    depth: number,
     onToggleCollapse?: () => void,
     onRename?: (newName: string) => void,
-    collapsedBranches?: Set<string>
-}> = ({ command, project, isSelected, isInMultiSelection, depth, onToggleCollapse, onRename, collapsedBranches }) => {
+    collapsedBranches?: Set<string>,
+    /** "Play from here": hover-reveal ▶ that starts test play at this command. */
+    onPlayFromHere?: () => void
+}> = ({ command, project, isSelected, isInMultiSelection, depth, onToggleCollapse, onRename, collapsedBranches, onPlayFromHere }) => {
     const { t } = useTranslation('commands');
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState('');
@@ -258,7 +260,7 @@ const CommandItem: React.FC<{
     return (
         <div
             data-command-id={command.id}
-            className={`py-1 px-2 rounded flex items-center gap-1.5 border ${groupClasses} ${branchClasses} ${isSelected ? selectedClass : multiSelectClass} ${isGroup || isBranch ? '' : commandColor || 'bg-[var(--bg-secondary)] border-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)]'}`}
+            className={`group py-1 px-2 rounded flex items-center gap-1.5 border ${groupClasses} ${branchClasses} ${isSelected ? selectedClass : multiSelectClass} ${isGroup || isBranch ? '' : commandColor || 'bg-[var(--bg-secondary)] border-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)]'}`}
             style={{ 
                 paddingLeft: leftPadding,
                 borderColor: isGroup ? 'rgb(245, 158, 11)' : isBranch ? branchColor : undefined,
@@ -310,6 +312,15 @@ const CommandItem: React.FC<{
                     </>
                 )}
             </div>
+            {onPlayFromHere && (
+                <button
+                    onClick={(e) => { e.stopPropagation(); onPlayFromHere(); }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 p-0.5 rounded text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15"
+                    title="Play from here — test the game starting at this line (fresh run; this scene's visual setup is applied)"
+                >
+                    <PlayIcon className="w-3.5 h-3.5" />
+                </button>
+            )}
         </div>
     );
 };
@@ -405,7 +416,9 @@ const SceneEditor: React.FC<{
     className?: string;
     isCollapsed?: boolean;
     onToggleCollapse?: () => void;
-}> = ({ activeSceneId, selectedCommandIndex, setSelectedCommandIndex, setSelectedVariableId, onConfigureScene, className, isCollapsed, onToggleCollapse }) => {
+    /** "Play from here": start test play at this command index in the active scene. */
+    onPlayFromHere?: (index: number) => void;
+}> = ({ activeSceneId, selectedCommandIndex, setSelectedCommandIndex, setSelectedVariableId, onConfigureScene, className, isCollapsed, onToggleCollapse, onPlayFromHere }) => {
     const { project, dispatch } = useProject();
     const toast = useToast();
     const { t } = useTranslation(['scenes', 'common']);
@@ -1901,11 +1914,12 @@ const SceneEditor: React.FC<{
                                                 />
                                             )}
                                             <CommandItem
-                                                command={cmd} 
-                                                project={project} 
+                                                command={cmd}
+                                                project={project}
                                                 isSelected={index === selectedCommandIndex}
                                                 isInMultiSelection={selectedCommands.has(cmd.id) && selectedCommands.size > 1}
                                                 depth={0}
+                                                onPlayFromHere={onPlayFromHere ? () => onPlayFromHere(index) : undefined}
                                                 collapsedBranches={collapsedBranches}
                                                 onToggleCollapse={(isGroup || isBranchStart) ? () => {
                                                     if (isGroup) {
@@ -2144,6 +2158,7 @@ const SceneEditor: React.FC<{
                                                                                 isSelected={childIndex === selectedCommandIndex}
                                                                                 isInMultiSelection={selectedCommands.has(branchChildCmd.id) && selectedCommands.size > 1}
                                                                                 depth={1}
+                                                                                onPlayFromHere={onPlayFromHere ? () => onPlayFromHere(childIndex) : undefined}
                                                                                 collapsedBranches={collapsedBranches}
                                                                             />
                                                                         </div>
@@ -2296,12 +2311,13 @@ const SceneEditor: React.FC<{
                                                                     }
                                                                 />
                                                             )}
-                                                            <CommandItem 
-                                                                command={childCmd} 
-                                                                project={project} 
+                                                            <CommandItem
+                                                                command={childCmd}
+                                                                project={project}
                                                                 isSelected={childIndex === selectedCommandIndex}
                                                                 isInMultiSelection={selectedCommands.has(childCmd.id) && selectedCommands.size > 1}
                                                                 depth={1}
+                                                                onPlayFromHere={onPlayFromHere ? () => onPlayFromHere(childIndex) : undefined}
                                                                 collapsedBranches={collapsedBranches}
                                                             />
                                                         </div>

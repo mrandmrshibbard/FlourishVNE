@@ -8,9 +8,60 @@
  */
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { VNTransition, VNPosition, VNPositionPreset } from '../../types';
+import { VNTransition, VNPosition, VNPositionPreset, VNID } from '../../types';
 import { FormField, Select, TextInput, RangeInput, ColorInput } from '../ui/Form';
 import TransitionPreview from '../ui/TransitionPreview';
+import SearchableSelect from '../ui/SearchableSelect';
+
+/**
+ * "⚡ Follow a number variable" — an optional variable binding that composes UNDER any numeric
+ * FX field. Unbound = the manual value applies exactly as before; bound = the variable drives
+ * the value (live for continuous FX like tint/fog/flashlight, read-at-run for one-shots like
+ * shake — the field's hint says which). Pattern copied from the Timer variable picker.
+ */
+export const VarFollowSelect: React.FC<{
+    value?: VNID | null;
+    onChange: (id: VNID | null) => void;
+    project: any;
+    /** Expected range shown while bound, e.g. "0–1" or "0–100". */
+    range: string;
+    /** 'live' = updates while the effect is active; 'run' = read when the command runs. */
+    mode: 'live' | 'run';
+}> = ({ value, onChange, project, range, mode }) => {
+    const { t } = useTranslation('ui');
+    const numberVars = (Object.values(project.variables || {}) as any[]).filter(v => v.type === 'number');
+    const bound = value ? (project.variables || {})[value] : null;
+    // No number variables yet: stay VISIBLE with a pointer (hiding made the feature undiscoverable).
+    if (numberVars.length === 0 && !value) {
+        return (
+            <p className="text-[10px] text-[var(--text-muted)] mt-1" title={t('varFollow.tip', 'Let a number variable control this value')}>
+                ⚡ {t('varFollow.noVars', 'Want a variable to control this? Add a number variable in the Variables tab, then pick it here.')}
+            </p>
+        );
+    }
+    return (
+        <div className="mt-1">
+            <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-[var(--text-muted)] flex-shrink-0" title={t('varFollow.tip', 'Let a number variable control this value')}>⚡</span>
+                <div className="flex-1 min-w-0">
+                    <SearchableSelect
+                        options={[{ value: '', label: t('varFollow.none', '— manual value —') }, ...numberVars.map(v => ({ value: v.id, label: v.name }))]}
+                        value={value || ''}
+                        onChange={(v: any) => onChange(v || null)}
+                        placeholder={t('varFollow.placeholder', 'Follow a number variable (optional)')}
+                    />
+                </div>
+            </div>
+            {value && (
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5 ml-5">
+                    {mode === 'live'
+                        ? t('varFollow.liveHint', { defaultValue: `Follows "{{name}}" live while the effect is on screen (expected ${range}).`, name: bound?.name || '?', range })
+                        : t('varFollow.runHint', { defaultValue: `Reads "{{name}}" when the command runs (expected ${range}).`, name: bound?.name || '?', range })}
+                </p>
+            )}
+        </div>
+    );
+};
 
 /**
  * Bidirectional rotation slider (-180°..180°) plus horizontal/vertical flip

@@ -187,7 +187,15 @@ const LayerCard: React.FC<{
                                         <img src={resolveFieldUrl(project.id, asset.imageUrl) || undefined} alt={asset.name} className="w-full h-full object-contain" />
                                     ) : null}
                                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 py-1">
-                                        <span className="text-[10px] text-white truncate block">{asset.name}</span>
+                                        {/* Editable sprite name — rename freely after upload (id unchanged). */}
+                                        <input
+                                            value={asset.name}
+                                            onChange={e => dispatch({ type: 'UPDATE_LAYER_ASSET', payload: { characterId, layerId: layer.id, assetId: asset.id, updates: { name: e.target.value } } })}
+                                            onClick={e => e.stopPropagation()}
+                                            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                            title={t('editor.renameSprite', 'Rename this sprite')}
+                                            className="text-[10px] text-white truncate block w-full bg-transparent outline-none rounded px-0.5 focus:bg-black/70 focus:ring-1 focus:ring-sky-500"
+                                        />
                                     </div>
                                     <button
                                         onClick={() => handleDeleteAsset(asset.id, asset.name)}
@@ -257,7 +265,7 @@ const CharacterEditorClassic: React.FC<{
 
     /* ── Handlers ── */
 
-    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop' | 'baseVideoTrimStart' | 'baseVideoTrimEnd' | 'textbox' | 'textboxThemeId' | 'defaultVoiceId' | 'phoneRingtoneAudioId' | 'textEffect'>>) => {
+    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop' | 'baseVideoTrimStart' | 'baseVideoTrimEnd' | 'textbox' | 'textboxThemeId' | 'defaultVoiceId' | 'phoneRingtoneAudioId' | 'textEffect' | 'dialogueTextColorMode' | 'dialogueTextColor'>>) => {
         dispatch({ type: 'UPDATE_CHARACTER', payload: { characterId: activeCharacterId, updates } });
     };
 
@@ -747,6 +755,23 @@ const CharacterEditorClassic: React.FC<{
                     <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>
                         Create and edit themes in the In-Game UI Editor → Textbox Themes.
                     </p>
+                    <FormField label="Speak in color">
+                        <Select value={character.dialogueTextColorMode || 'off'} onChange={e => updateCharacter({ dialogueTextColorMode: (e.target.value === 'off' ? undefined : e.target.value) as any })}>
+                            <option value="off">Off — use the textbox text color</option>
+                            <option value="character">My name color ({character.color})</option>
+                            <option value="custom">A custom color…</option>
+                        </Select>
+                    </FormField>
+                    {character.dialogueTextColorMode === 'custom' && (
+                        <FormField label="Dialogue text color">
+                            <ColorInput value={character.dialogueTextColor || character.color} onChange={(v: string) => updateCharacter({ dialogueTextColor: v })} />
+                        </FormField>
+                    )}
+                    {(character.dialogueTextColorMode === 'character' || character.dialogueTextColorMode === 'custom') && (
+                        <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>
+                            Every line this character speaks renders in this color — an instant “who’s talking” cue.
+                        </p>
+                    )}
                     <label className="flex items-center gap-2 text-xs cursor-pointer mb-2" style={{ color: 'var(--text-secondary)' }}>
                         <input
                             type="checkbox"

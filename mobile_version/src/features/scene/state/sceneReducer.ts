@@ -8,7 +8,7 @@ const generateId = () => Math.random().toString(36).substring(2, 9);
 export type SceneAction =
     | { type: 'ADD_SCENE'; payload: { name: string } }
     | { type: 'UPDATE_SCENE'; payload: { sceneId: VNID; name: string } }
-    | { type: 'UPDATE_SCENE_CONFIG'; payload: { sceneId: VNID; updates: Partial<Pick<VNScene, 'conditions' | 'fallbackSceneId' | 'outTransition' | 'outTransitionDuration' | 'parallax'>> } }
+    | { type: 'UPDATE_SCENE_CONFIG'; payload: { sceneId: VNID; updates: Partial<Pick<VNScene, 'conditions' | 'fallbackSceneId' | 'outTransition' | 'outTransitionDuration' | 'parallax' | 'dayNight'>> } }
     | { type: 'DELETE_SCENE'; payload: { sceneId: VNID } }
     | { type: 'DUPLICATE_SCENE'; payload: { sceneId: VNID } }
     | { type: 'REORDER_SCENES'; payload: { sceneIds: VNID[] } }

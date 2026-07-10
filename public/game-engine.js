@@ -18,6 +18,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIElementType2["draggableImageElement"] = "draggableImageElement";
     UIElementType2["Meter"] = "Meter";
     UIElementType2["Customizer"] = "Customizer";
+    UIElementType2["Timer"] = "Timer";
     UIElementType2["Custom"] = "Custom";
     return UIElementType2;
   })(UIElementType || {});
@@ -34,6 +35,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["HidePhoneText"] = "HidePhoneText";
     UIActionType2["ShowPhoneHistory"] = "ShowPhoneHistory";
     UIActionType2["ShowPhoneContacts"] = "ShowPhoneContacts";
+    UIActionType2["OpenPhoneApp"] = "OpenPhoneApp";
+    UIActionType2["ShowMap"] = "ShowMap";
+    UIActionType2["ShowMiniGame"] = "ShowMiniGame";
     UIActionType2["ReturnToGame"] = "ReturnToGame";
     UIActionType2["ReturnToPreviousScreen"] = "ReturnToPreviousScreen";
     UIActionType2["QuitToTitle"] = "QuitToTitle";
@@ -43,6 +47,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["SetVariable"] = "SetVariable";
     UIActionType2["ResetVariable"] = "ResetVariable";
     UIActionType2["PlaySound"] = "PlaySound";
+    UIActionType2["PlayMusic"] = "PlayMusic";
+    UIActionType2["StopMusic"] = "StopMusic";
+    UIActionType2["ShowSpotlight"] = "ShowSpotlight";
+    UIActionType2["HideSpotlight"] = "HideSpotlight";
+    UIActionType2["ShowFlashlight"] = "ShowFlashlight";
+    UIActionType2["HideFlashlight"] = "HideFlashlight";
     UIActionType2["CycleLayerAsset"] = "CycleLayerAsset";
     UIActionType2["ToggleScreen"] = "ToggleScreen";
     UIActionType2["OpenURL"] = "OpenURL";
@@ -69,6 +79,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["SellSelectedItem"] = "SellSelectedItem";
     UIActionType2["StartTimer"] = "StartTimer";
     UIActionType2["StopTimer"] = "StopTimer";
+    UIActionType2["SetTimeOfDay"] = "SetTimeOfDay";
+    UIActionType2["ClearUiPalette"] = "ClearUiPalette";
     return UIActionType2;
   })(UIActionType || {});
   const RESET_ALL_VARIABLES = "__ALL_VARIABLES__";
@@ -187,7 +199,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       anchorY: 0,
       interactive: true,
       shape: spot.shape,
-      trigger: spot.trigger,
+      trigger: spot.trigger || "click",
       acceptedElementIds: spot.acceptedElementIds,
       actions: spot.actions,
       conditions: spot.conditions,
@@ -474,6 +486,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["FlashScreen"] = "FlashScreen";
     CommandType2["SetScreenOverlayEffect"] = "SetScreenOverlayEffect";
     CommandType2["ShowScreen"] = "ShowScreen";
+    CommandType2["HideScreen"] = "HideScreen";
     CommandType2["ShowText"] = "ShowText";
     CommandType2["ShowImage"] = "ShowImage";
     CommandType2["HideText"] = "HideText";
@@ -499,6 +512,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["SellItem"] = "SellItem";
     CommandType2["Lightning"] = "Lightning";
     CommandType2["Flashlight"] = "Flashlight";
+    CommandType2["Spotlight"] = "Spotlight";
     CommandType2["Fireworks"] = "Fireworks";
     CommandType2["PlaceLights"] = "PlaceLights";
     CommandType2["ClearLights"] = "ClearLights";
@@ -508,8 +522,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["HidePhoneText"] = "HidePhoneText";
     CommandType2["PhoneIncomingText"] = "PhoneIncomingText";
     CommandType2["PhoneIncomingCall"] = "PhoneIncomingCall";
+    CommandType2["StartPhoneCall"] = "StartPhoneCall";
+    CommandType2["ShowMap"] = "ShowMap";
+    CommandType2["PhoneNotify"] = "PhoneNotify";
     CommandType2["StartTimer"] = "StartTimer";
     CommandType2["StopTimer"] = "StopTimer";
+    CommandType2["SetTimeOfDay"] = "SetTimeOfDay";
+    CommandType2["ShowMiniGame"] = "ShowMiniGame";
     return CommandType2;
   })(CommandType || {});
   const REACTIVE_VISUAL_TYPES = /* @__PURE__ */ new Set([
@@ -670,10 +689,38 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (!anyChanged) return project;
     return { ...project, uiScreens: newScreens };
   }
+  function migrateMapLocationActions(project) {
+    const maps = project.maps;
+    if (!maps) return project;
+    let anyChanged = false;
+    const nextMaps = {};
+    for (const [mapId, map] of Object.entries(maps)) {
+      const locations = map == null ? void 0 : map.locations;
+      if (!Array.isArray(locations)) {
+        nextMaps[mapId] = map;
+        continue;
+      }
+      let mapChanged = false;
+      const nextLocations = locations.map((loc) => {
+        if (!loc || !loc.targetSceneId) return loc;
+        const actions = Array.isArray(loc.actions) ? [...loc.actions] : [];
+        const alreadyJumps = actions.some((a) => a && a.type === UIActionType.JumpToScene && a.targetSceneId === loc.targetSceneId);
+        if (!alreadyJumps) actions.push({ type: UIActionType.JumpToScene, targetSceneId: loc.targetSceneId });
+        mapChanged = true;
+        const { targetSceneId, ...rest } = loc;
+        return { ...rest, actions };
+      });
+      if (mapChanged) {
+        anyChanged = true;
+        nextMaps[mapId] = { ...map, locations: nextLocations };
+      } else nextMaps[mapId] = map;
+    }
+    return anyChanged ? { ...project, maps: nextMaps } : project;
+  }
   const projectReducer = (state, action) => {
     switch (action.type) {
       case "SET_PROJECT":
-        return repairOrphanBranchMarkers(migrateStatVariables(migrateItemCountVariableBounds(migrateInventorySlotButton(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload))))));
+        return migrateMapLocationActions(repairOrphanBranchMarkers(migrateStatVariables(migrateItemCountVariableBounds(migrateInventorySlotButton(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload)))))));
       case "UPDATE_PROJECT": {
         return {
           ...state,
@@ -764,7 +811,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   };
   const generateId$7 = () => Math.random().toString(36).substring(2, 9);
   const characterReducer = (state, action) => {
-    var _a;
+    var _a, _b;
     switch (action.type) {
       case "ADD_CHARACTER": {
         const { name, color } = action.payload;
@@ -883,6 +930,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         }
         return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers, expressions: newExpressions } } };
+      }
+      case "UPDATE_LAYER_ASSET": {
+        const { characterId, layerId, assetId, updates } = action.payload;
+        const character = state.characters[characterId];
+        const asset = (_b = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _b.assets[assetId];
+        if (!asset) return state;
+        const newAssets = { ...character.layers[layerId].assets, [assetId]: { ...asset, ...updates } };
+        const newLayers = { ...character.layers, [layerId]: { ...character.layers[layerId], assets: newAssets } };
+        return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers } } };
       }
       case "ADD_EXPRESSION": {
         const { characterId, name } = action.payload;
@@ -3321,7 +3377,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const toast = useToast();
     const [history, setHistory] = React2.useState(() => ({
       past: [],
-      present: repairOrphanBranchMarkers(migrateStatVariables(migrateItemCountVariableBounds(migrateInventorySlotButton(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject)))))),
+      present: migrateMapLocationActions(repairOrphanBranchMarkers(migrateStatVariables(migrateItemCountVariableBounds(migrateInventorySlotButton(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject))))))),
       future: []
     }));
     const [lastAutoSave, setLastAutoSave] = React2.useState(null);
@@ -3763,8 +3819,28 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const command = { type, callerId: firstCharId || "player", mode: "modal", ringDurationMs: 12e3, onTimeout: "missed", acceptActions: [], declineActions: [], timeoutActions: [], showBadge: true };
         return command;
       }
+      case CommandType.StartPhoneCall: {
+        const command = { type, contactId: firstCharId || "", dialingMs: 1200, blocking: true, conversation: { lines: [] } };
+        return command;
+      }
+      case CommandType.ShowMap: {
+        const command = { type, mapId: Object.keys(project.maps || {})[0] || "", allowCancel: false };
+        return command;
+      }
+      case CommandType.ShowMiniGame: {
+        const command = { type, gameId: Object.keys(project.miniGames || {})[0] || "" };
+        return command;
+      }
+      case CommandType.PhoneNotify: {
+        const command = { type, title: "", text: "", icon: "chat", showBadge: true, presentation: "notify", tapActions: [] };
+        return command;
+      }
       case CommandType.Flashlight: {
         const command = { type, enabled: true, radius: 22, softness: 0.6, darkness: 0.85, color: "#000000", toggleKey: "f", sfxId: null };
+        return command;
+      }
+      case CommandType.Spotlight: {
+        const command = { type, enabled: true, spotlightId: "main", sourceX: 50, sourceY: 0, aimAngle: 0, intensity: 0.85, beamWidth: 45, sourceWidth: 8, height: 100, falloff: 0.5, color: "#fff3d6", followMouse: true, swivelMax: 30, toggleKey: "f", sfxId: null };
         return command;
       }
       case CommandType.SetScreenOverlayEffect: {
@@ -3773,6 +3849,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case CommandType.ShowScreen: {
         const command = { type, screenId: firstScreenId || "" };
+        return command;
+      }
+      case CommandType.HideScreen: {
+        const command = { type, screenId: "", all: false };
         return command;
       }
       case CommandType.ShowText: {
@@ -4070,6 +4150,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case CommandType.StopTimer: {
         return { type, timerId: "" };
       }
+      case CommandType.SetTimeOfDay: {
+        return { type, mode: "set", hour: 18, hours: 1, transitionDuration: 2 };
+      }
       default:
         return null;
     }
@@ -4096,7 +4179,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       id: el.id,
       name: el.name,
       shape: el.shape,
-      trigger: el.trigger,
+      trigger: el.trigger || "click",
       x: el.x,
       y: el.y,
       width: el.width,
@@ -4281,6 +4364,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   const fontSettingsToStyle = (settings) => {
     var _a, _b, _c;
     const px = (n) => `calc(var(--font-scale, 1) * ${n}px)`;
+    if (!settings) {
+      return { fontSize: px(16), color: "#ffffff", textAlign: "left" };
+    }
     const style = {
       fontFamily: settings.family,
       fontSize: px(settings.size),
@@ -4301,7 +4387,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   };
   const extractTextGradientStyle = (settings) => {
     var _a, _b;
-    if (!((_a = settings.textGradient) == null ? void 0 : _a.enabled) || settings.textGradient.colors.length < 2) return null;
+    if (!settings || !((_a = settings.textGradient) == null ? void 0 : _a.enabled) || settings.textGradient.colors.length < 2) return null;
     const grad = settings.textGradient;
     const style = {
       background: grad.type === "radial" ? `radial-gradient(circle, ${grad.colors.join(", ")})` : `linear-gradient(${grad.angle}deg, ${grad.colors.join(", ")})`,
@@ -4446,7 +4532,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const byType = /* @__PURE__ */ new Map();
     for (const effect of effects) {
       const intensity = clamp01(effect.intensity ?? 0);
-      if (intensity <= 0) continue;
+      if (intensity <= 0 && !effect.intensityVariableId) continue;
       byType.set(effect.type, {
         ...effect,
         intensity,
@@ -4459,7 +4545,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const normalized = normalizeOverlayEffects(effects);
     const intensity = clamp01(next.intensity ?? 0);
     const without = normalized.filter((e) => e.type !== next.type);
-    if (intensity <= 0) return without;
+    if (intensity <= 0 && !next.intensityVariableId) return without;
     return normalizeOverlayEffects([
       ...without,
       {
@@ -4485,6 +4571,2838 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     close: "✕",
     phone: "📱"
   };
+  const basePhone = (context) => ({
+    open: false,
+    messages: [],
+    ...context.playerState.uiState.phone || {}
+  });
+  const phoneThreadKey = (m) => {
+    const k = m.contactId ?? (m.senderId !== "player" ? m.senderId : "");
+    return k === "__misc__" ? "" : k;
+  };
+  const countPhoneThread = (messages, key) => messages.filter((m) => phoneThreadKey(m) === key).length;
+  const collectToCameraRoll = (roll, msg) => {
+    if (!msg.image) return roll;
+    const cur = roll || [];
+    if (cur.some((e) => e.id === msg.id)) return roll;
+    return [...cur, { id: msg.id, image: msg.image, senderId: msg.senderId, contactId: msg.contactId, caption: msg.text || void 0, order: cur.length }];
+  };
+  const handleShowPhone = (_command, context) => {
+    return {
+      advance: true,
+      updates: { uiState: { phone: { ...basePhone(context), open: true, view: "home", notification: null } } }
+    };
+  };
+  const handleHidePhone = (_command, context) => {
+    return {
+      advance: true,
+      updates: { uiState: { phone: { ...basePhone(context), open: false, waiting: false, pendingChoices: void 0, notification: null } } }
+    };
+  };
+  const handleShowPhoneText = (command, context) => {
+    const prev = basePhone(context);
+    const messages = prev.messages;
+    const msg = {
+      id: `${command.id}-${messages.length}`,
+      senderId: command.senderId,
+      text: command.text,
+      ...command.portrait ? { portrait: command.portrait } : {},
+      ...command.image ? { image: command.image } : {},
+      // Tag the conversation thread so the Messages inbox can group: character messages thread
+      // by sender; player messages stick to the thread that's open (else the legacy bucket).
+      ...command.senderId !== "player" ? { contactId: command.senderId } : prev.activeContactId && prev.activeContactId !== "__misc__" ? { contactId: prev.activeContactId } : {}
+    };
+    const hasChoices = !!(command.choices && command.choices.length > 0);
+    const nextMessages = [...messages, msg];
+    const threadKey = phoneThreadKey(msg);
+    return {
+      // When the message offers replies, pause the scene — the in-phone reply buttons resume it.
+      advance: !hasChoices,
+      updates: {
+        uiState: {
+          phone: {
+            ...prev,
+            open: true,
+            view: "chat",
+            // Focus this character's thread (so the chat shows just their conversation).
+            activeContactId: command.senderId !== "player" ? command.senderId : prev.activeContactId,
+            messages: nextMessages,
+            cameraRoll: collectToCameraRoll(prev.cameraRoll, msg),
+            threadLastRead: { ...prev.threadLastRead || {}, [threadKey]: countPhoneThread(nextMessages, threadKey) },
+            waiting: hasChoices,
+            pendingChoices: hasChoices ? command.choices : void 0,
+            typing: null
+          }
+        }
+      }
+    };
+  };
+  const handleHidePhoneText = (_command, context) => {
+    return {
+      advance: true,
+      updates: { uiState: { phone: { ...basePhone(context), messages: [], waiting: false, pendingChoices: void 0, typing: null } } }
+    };
+  };
+  const PhoneGlyph = ({ name }) => /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "1.4em", lineHeight: 1 }, children: name && PHONE_GLYPHS[name] || "●" });
+  function resolvePhonePortrait(source, character, assetResolver) {
+    var _a, _b;
+    const baseUrl = (character == null ? void 0 : character.id) ? assetResolver(character.id, "image") : null;
+    const mode = (source == null ? void 0 : source.mode) || "base";
+    if (mode === "custom") {
+      const ci = source == null ? void 0 : source.customImage;
+      const url = ci ? assetResolver(ci.id, ci.type === "video" ? "video" : "image") : null;
+      return url ? [url] : baseUrl ? [baseUrl] : [];
+    }
+    if (mode === "expression" && character) {
+      const stack = [];
+      if (!(source == null ? void 0 : source.hideBase) && baseUrl) stack.push(baseUrl);
+      const expr = (source == null ? void 0 : source.expressionId) ? (_a = character.expressions) == null ? void 0 : _a[source.expressionId] : void 0;
+      if (expr) {
+        for (const layer of Object.values(character.layers || {})) {
+          const assetId = (_b = expr.layerConfiguration) == null ? void 0 : _b[layer.id];
+          if (!assetId) continue;
+          const url = assetResolver(assetId, "image");
+          if (url) stack.push(url);
+        }
+      }
+      return stack;
+    }
+    return baseUrl ? [baseUrl] : [];
+  }
+  const PhonePortrait = ({ urls, size, fit, objectPosition }) => {
+    if (urls.length === 0) return null;
+    return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: size, height: size, borderRadius: "9999px", overflow: "hidden", flexShrink: 0, position: "relative", background: "rgba(0,0,0,0.2)" }, children: urls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: fit || "cover", objectPosition: objectPosition || "center" } }, i)) });
+  };
+  const PhoneMedia = ({ media, assetResolver, style, caption }) => {
+    const [zoomed, setZoomed] = React2.useState(false);
+    const url = assetResolver(media.id, media.type === "video" ? "video" : "image");
+    if (!url) return null;
+    const thumb = media.type === "video" ? /* @__PURE__ */ jsxRuntime2.jsx("video", { src: url, muted: true, loop: true, playsInline: true, autoPlay: true, style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } });
+    return /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntime2.jsx("div", { onClick: (e) => {
+        e.stopPropagation();
+        setZoomed(true);
+      }, style: { cursor: "zoom-in", overflow: "hidden", ...style }, children: thumb }),
+      zoomed && reactDom.createPortal(
+        /* @__PURE__ */ jsxRuntime2.jsxs("div", { onClick: () => setZoomed(false), style: { position: "fixed", inset: 0, zIndex: 1e4, background: "rgba(0,0,0,0.92)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "zoom-out", animation: "fade-in 0.15s ease-out" }, children: [
+          media.type === "video" ? /* @__PURE__ */ jsxRuntime2.jsx("video", { src: url, controls: true, autoPlay: true, playsInline: true, style: { maxWidth: "92%", maxHeight: "86%" } }) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", style: { maxWidth: "92%", maxHeight: "86%", objectFit: "contain" } }),
+          caption && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { color: "#fff", marginTop: 10, fontSize: 14, opacity: 0.85, maxWidth: "80%", textAlign: "center" }, children: caption })
+        ] }),
+        document.body
+      )
+    ] });
+  };
+  const renderContactsRoster = (ctx) => {
+    const { ui, project, phone, variables, assetResolver, evaluateConditions: evaluateConditions2, onContactCall, onContactMessage, playTap } = ctx;
+    const contacts = (ui.phoneContacts || []).filter((c) => {
+      var _a;
+      return !((_a = c.conditions) == null ? void 0 : _a.length) || evaluateConditions2(c.conditions, variables);
+    });
+    const sortedContacts = [...contacts].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+    const contactAvatarSize = `${ui.phoneContactAvatarSize ?? 2.4}em`;
+    const lastMessageFor = (cid) => {
+      for (let i = phone.messages.length - 1; i >= 0; i--) {
+        const m = phone.messages[i];
+        if (m.senderId === cid || m.contactId === cid) return m.text;
+      }
+      return "";
+    };
+    return sortedContacts.length === 0 ? /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.5, textAlign: "center", marginTop: 12, fontSize: "0.8em" }, children: "No contacts" }) : sortedContacts.map((c) => {
+      const char = project.characters[c.characterId];
+      const curls = resolvePhonePortrait(c.avatar, char, assetResolver);
+      const name = c.displayName || (char == null ? void 0 : char.name) || "Unknown";
+      const status = c.statusText ? interpolateVariables(c.statusText, variables, project) : "";
+      const preview = lastMessageFor(c.characterId);
+      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 12, background: ui.phoneContactRowColor || ui.phoneHistoryRowColor || "rgba(255,255,255,0.05)", color: ui.phoneContactTextColor || ui.phoneHistoryTextColor || "#fff" }, children: [
+        ui.phoneShowAvatars !== false && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: curls, size: contactAvatarSize, fit: ui.phoneContactAvatarFit }),
+        /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 600, ...ui.phoneContactNameFont ? fontSettingsToStyle(ui.phoneContactNameFont) : {} }, children: name }),
+          status && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.75, ...ui.phoneContactStatusFont ? fontSettingsToStyle(ui.phoneContactStatusFont) : {} }, children: status }),
+          preview && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: interpolateVariables(preview, variables, project) })
+        ] }),
+        /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 4, flexShrink: 0 }, children: [
+          !c.hideCall && /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
+            playTap();
+            onContactCall(c.characterId);
+          }, title: ui.phoneContactCallLabel || "Call", style: { display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", borderRadius: 9999, border: "none", cursor: "pointer", background: ui.phoneCallAcceptColor || "#22c55e", color: "#fff", fontSize: "0.7em" }, children: "📞" }),
+          !c.hideMessage && /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
+            playTap();
+            onContactMessage(c.characterId);
+          }, title: ui.phoneContactMessageLabel || "Message", style: { display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", borderRadius: 9999, border: "none", cursor: "pointer", background: ui.phoneOutgoingBubbleColor || "#2f6bff", color: "#fff", fontSize: "0.7em" }, children: "💬" })
+        ] })
+      ] }, c.id);
+    });
+  };
+  const fireAppButton = (ctx, b) => {
+    ctx.playTap();
+    if (b.appId) ctx.openApp(b.appId);
+    else if (b.action) ctx.onAction(b.action);
+  };
+  const HomeWidgets = ({ ctx }) => {
+    const { ui, project, variables, assetResolver, evaluateConditions: evaluateConditions2 } = ctx;
+    const widgets = (ui.phoneHomeWidgets || []).filter((w) => {
+      var _a;
+      return !((_a = w.conditions) == null ? void 0 : _a.length) || evaluateConditions2(w.conditions, variables);
+    });
+    if (!widgets.length) return null;
+    return /* @__PURE__ */ jsxRuntime2.jsx(jsxRuntime2.Fragment, { children: widgets.map((w) => {
+      const font = w.font ? fontSettingsToStyle(w.font) : {};
+      const style = { position: "absolute", left: `${w.x}%`, top: `${w.y}%`, width: `${w.width}%`, ...w.height ? { height: `${w.height}%` } : {}, pointerEvents: "none", color: w.color || "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.6)", ...font };
+      if (w.type === "image" && w.image) {
+        const url = assetResolver(w.image.id, w.image.type === "video" ? "video" : "image");
+        if (!url) return null;
+        return /* @__PURE__ */ jsxRuntime2.jsx("div", { style, children: w.image.type === "video" ? /* @__PURE__ */ jsxRuntime2.jsx("video", { src: url, autoPlay: true, loop: true, muted: true, playsInline: true, style: { width: "100%", height: "100%", objectFit: "contain" } }) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", style: { width: "100%", height: "100%", objectFit: "contain" } }) }, w.id);
+      }
+      const text = w.type === "clock" ? ui.phoneClockText || "" : w.text || "";
+      return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...style, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }, children: interpolateVariables(text, variables, project) }, w.id);
+    }) });
+  };
+  const HomeApp = {
+    id: "home",
+    glyph: "home",
+    defaultLabel: "Home",
+    render: (ctx) => {
+      const { ui, assetResolver, buttons } = ctx;
+      if (ui.phoneButtonLayout !== "grid") return /* @__PURE__ */ jsxRuntime2.jsx(HomeWidgets, { ctx });
+      const cols = Math.max(1, ui.phoneHomeGridColumns ?? 3);
+      const iconPct = Math.max(6, Math.min(40, ui.phoneHomeIconSize ?? 18));
+      const labelFont = ui.phoneHomeLabelFont ? fontSettingsToStyle(ui.phoneHomeLabelFont) : {};
+      return /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntime2.jsx(HomeWidgets, { ctx }),
+        /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: "4%", padding: "4% 2%", alignContent: "start" }, children: buttons.map((b) => {
+          const customIcon = b.iconImage ? assetResolver(b.iconImage.id, "image") : null;
+          return /* @__PURE__ */ jsxRuntime2.jsxs(
+            "button",
+            {
+              onClick: () => fireAppButton(ctx, b),
+              title: b.label || "",
+              style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "transparent", border: "none", cursor: "pointer", color: ui.phoneButtonIconColor || "#cbd5e1", padding: 0 },
+              children: [
+                /* @__PURE__ */ jsxRuntime2.jsx("span", { style: {
+                  width: `${iconPct / (100 / cols) * 100}%`,
+                  maxWidth: "86%",
+                  aspectRatio: "1",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: ui.phoneHomeIconBgColor || "transparent",
+                  borderRadius: ui.phoneHomeIconRadius ?? 14,
+                  containerType: "size"
+                }, children: customIcon ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: customIcon, alt: "", style: { width: "86cqmin", height: "86cqmin", objectFit: "contain" } }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "64cqmin", lineHeight: 1 }, children: b.builtinIcon && PHONE_GLYPHS[b.builtinIcon] || "●" }) }),
+                ui.phoneHomeShowLabels !== false && b.label && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "0.65em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%", textShadow: "0 1px 3px rgba(0,0,0,0.7)", ...labelFont }, children: b.label })
+              ]
+            },
+            b.id
+          );
+        }) })
+      ] });
+    }
+  };
+  const ChatApp = {
+    id: "chat",
+    glyph: "chat",
+    defaultLabel: "Messages",
+    usesChatBackground: true,
+    render: (ctx) => {
+      var _a;
+      const { ui, project, phone, variables, assetResolver, evaluateConditions: evaluateConditions2, onAction, onReply, playTap, onOpenThread } = ctx;
+      const bodyFont = ui.phoneFont ? fontSettingsToStyle(ui.phoneFont) : {};
+      const chatAvatarSize = `${ui.phoneChatAvatarSize ?? 2.2}em`;
+      const activeContactId = phone.activeContactId;
+      if (!activeContactId) {
+        const groups = /* @__PURE__ */ new Map();
+        phone.messages.forEach((m, idx) => {
+          const key = phoneThreadKey(m);
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push({ m, idx });
+        });
+        const rows = Array.from(groups.entries()).map(([key, entries]) => {
+          const contact = key ? (ui.phoneContacts || []).find((c) => c.characterId === key) : void 0;
+          const char = key ? project.characters[key] : null;
+          const name = (contact == null ? void 0 : contact.displayName) || (char == null ? void 0 : char.name) || (key ? "?" : ui.phoneMessagesHeader || "Messages");
+          const urls = char ? resolvePhonePortrait(contact == null ? void 0 : contact.avatar, char, assetResolver) : [];
+          const last = entries[entries.length - 1];
+          const preview = last.m.text ? interpolateVariables(last.m.text, variables, project) : last.m.image ? "📷 Photo" : "";
+          const unread = Math.max(0, entries.length - ((phone.threadLastRead || {})[key] ?? 0));
+          return { key, name, urls, preview, unread, recency: last.idx };
+        });
+        const played = phone.playedConversations || [];
+        (ui.phoneContacts || []).forEach((c) => {
+          var _a2;
+          if (groups.has(c.characterId) || c.hideMessage) return;
+          if (((_a2 = c.conditions) == null ? void 0 : _a2.length) && !evaluateConditions2(c.conditions, variables)) return;
+          const available = (c.textConversations || []).some((e) => {
+            var _a3, _b, _c;
+            return !!((_b = (_a3 = e.conversation) == null ? void 0 : _a3.lines) == null ? void 0 : _b.length) && (!e.once || !played.includes(e.id)) && (!((_c = e.conditions) == null ? void 0 : _c.length) || evaluateConditions2(e.conditions, variables));
+          });
+          if (!available) return;
+          const char = project.characters[c.characterId];
+          rows.push({ key: c.characterId, name: c.displayName || (char == null ? void 0 : char.name) || "?", urls: char ? resolvePhonePortrait(c.avatar, char, assetResolver) : [], preview: ui.phoneMessagesNewHint || "New conversation", unread: 1, recency: Number.MAX_SAFE_INTEGER });
+        });
+        rows.sort((a, b) => b.recency - a.recency);
+        return /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontWeight: 700, fontSize: "0.9em", marginBottom: 4, ...ui.phoneTitleFont ? fontSettingsToStyle(ui.phoneTitleFont) : {} }, children: ui.phoneMessagesHeader || "Messages" }),
+          rows.length === 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.5, textAlign: "center", marginTop: 12, fontSize: "0.8em" }, children: ui.phoneMessagesEmptyText || "No messages yet" }),
+          rows.map((r) => /* @__PURE__ */ jsxRuntime2.jsxs(
+            "div",
+            {
+              onClick: () => {
+                if (onOpenThread) {
+                  playTap();
+                  onOpenThread(r.key);
+                }
+              },
+              style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 12, cursor: "pointer", background: ui.phoneContactRowColor || ui.phoneHistoryRowColor || "rgba(255,255,255,0.05)", color: ui.phoneContactTextColor || ui.phoneHistoryTextColor || "#fff" },
+              children: [
+                ui.phoneShowAvatars !== false && r.urls.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: r.urls, size: `${ui.phoneContactAvatarSize ?? 2.4}em`, fit: ui.phoneContactAvatarFit }),
+                /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
+                  /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 600, ...ui.phoneContactNameFont ? fontSettingsToStyle(ui.phoneContactNameFont) : {} }, children: r.name }),
+                  r.preview && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: r.preview })
+                ] }),
+                r.unread > 0 && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { flexShrink: 0, minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9999, background: ui.phoneBadgeColor || "#ef4444", color: ui.phoneBadgeTextColor || "#fff", fontSize: "0.65em", display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }, children: r.unread > 9 ? "9+" : r.unread })
+              ]
+            },
+            r.key || "·"
+          ))
+        ] });
+      }
+      const effectiveReplies = phone.pendingReplies && phone.pendingReplies.length ? phone.pendingReplies : (phone.pendingChoices || []).map((o) => ({ id: o.id, text: o.text, conditions: o.conditions, actions: o.actions }));
+      const threadKey = activeContactId === "__misc__" ? "" : activeContactId;
+      const threadMessages = phone.messages.filter((m) => phoneThreadKey(m) === threadKey);
+      const activeContact = (ui.phoneContacts || []).find((c) => c.characterId === activeContactId);
+      const activeContactName = (activeContact == null ? void 0 : activeContact.displayName) || ((_a = project.characters[activeContactId]) == null ? void 0 : _a.name) || (activeContactId === "__misc__" ? ui.phoneMessagesHeader || "Messages" : "");
+      return /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+        activeContactId && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }, children: [
+          /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => onOpenThread ? onOpenThread(null) : onAction({ type: UIActionType.ShowPhoneContacts }), title: "Back", style: { background: "transparent", border: "none", cursor: "pointer", color: "inherit", fontSize: "1.1em", lineHeight: 1, padding: "0 4px" }, children: "‹" }),
+          /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontWeight: 600, fontSize: "0.85em" }, children: activeContactName })
+        ] }),
+        threadMessages.map((m) => {
+          const mine = m.senderId === "player";
+          const char = mine ? null : project.characters[m.senderId];
+          const portraitUrls = mine ? [] : resolvePhonePortrait(m.portrait, char, assetResolver);
+          return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", flexDirection: mine ? "row-reverse" : "row", gap: 6, alignItems: "flex-end" }, children: [
+            ui.phoneShowAvatars !== false && !mine && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: portraitUrls, size: chatAvatarSize, fit: ui.phoneChatAvatarFit }),
+            /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { maxWidth: "76%" }, children: [
+              !mine && (char == null ? void 0 : char.name) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.75, marginBottom: 1, color: char.color }, children: char.name }),
+              m.image && /* @__PURE__ */ jsxRuntime2.jsx(PhoneMedia, { media: m.image, assetResolver, caption: m.text ? interpolateVariables(m.text, variables, project) : void 0, style: { borderRadius: 14, marginBottom: m.text ? 3 : 0, aspectRatio: "4 / 3" } }),
+              m.text && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { padding: "6px 10px", borderRadius: 14, wordBreak: "break-word", background: mine ? ui.phoneOutgoingBubbleColor || "#2f6bff" : ui.phoneIncomingBubbleColor || "#2a2f3a", color: ui.phoneBubbleTextColor || "#fff" }, children: interpolateVariables(m.text, variables, project) })
+            ] })
+          ] }, m.id);
+        }),
+        phone.typing && (() => {
+          const tchar = phone.typing.senderId === "player" ? null : project.characters[phone.typing.senderId];
+          const turls = tchar ? resolvePhonePortrait(void 0, tchar, assetResolver) : [];
+          return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 6, alignItems: "flex-end" }, children: [
+            ui.phoneShowAvatars !== false && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: turls, size: chatAvatarSize, fit: ui.phoneChatAvatarFit }),
+            /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { padding: "8px 12px", borderRadius: 14, background: ui.phoneIncomingBubbleColor || "#2a2f3a", display: "inline-flex", gap: 4, alignItems: "center" }, children: [0, 1, 2].map((i) => /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { width: 6, height: 6, borderRadius: "9999px", background: ui.phoneTypingColor || ui.phoneBubbleTextColor || "#fff", animation: `vn-phone-typing 1s ${i * 0.2}s infinite` } }, i)) })
+          ] });
+        })(),
+        effectiveReplies.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }, children: effectiveReplies.filter((o) => {
+          var _a2;
+          return !((_a2 = o.conditions) == null ? void 0 : _a2.length) || evaluateConditions2(o.conditions, variables);
+        }).map((o) => /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
+          playTap();
+          onReply(o);
+        }, style: { alignSelf: "flex-end", maxWidth: "82%", padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", ...bodyFont, background: ui.phoneOutgoingBubbleColor || "#2f6bff", color: ui.phoneBubbleTextColor || "#fff" }, children: interpolateVariables(o.text, variables, project) }, o.id)) })
+      ] });
+    }
+  };
+  const HistoryApp = {
+    id: "history",
+    glyph: "call",
+    defaultLabel: "Recents",
+    render: (ctx) => {
+      const { ui, project, phone, assetResolver, variables, playTap, onAction } = ctx;
+      const notifs = [...phone.notifications || []].reverse();
+      return /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+        notifs.length > 0 && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 4 }, children: [
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", fontWeight: 700, opacity: 0.65, textTransform: "uppercase", letterSpacing: 0.5 }, children: "Notifications" }),
+          notifs.map((e) => {
+            const echar = !e.senderId || e.senderId === "player" ? null : project.characters[e.senderId];
+            const eurls = resolvePhonePortrait(e.portrait, echar, assetResolver);
+            const eIconImg = e.iconImage ? assetResolver(e.iconImage.id, "image") : null;
+            const taps = e.tapActions || [];
+            return /* @__PURE__ */ jsxRuntime2.jsxs(
+              "div",
+              {
+                onClick: taps.length ? () => {
+                  playTap();
+                  taps.forEach((a) => onAction(a));
+                } : void 0,
+                style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 10, cursor: taps.length ? "pointer" : "default", background: ui.phoneHistoryRowColor || "rgba(255,255,255,0.05)", color: ui.phoneHistoryTextColor || "#fff", opacity: e.read ? 0.65 : 1 },
+                children: [
+                  eurls.length > 0 ? /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: eurls, size: "2em" }) : eIconImg ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: eIconImg, alt: "", style: { width: "2em", height: "2em", objectFit: "contain", flexShrink: 0 } }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "1.3em", flexShrink: 0 }, children: e.icon && PHONE_GLYPHS[e.icon] || "🔔" }),
+                  /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
+                    (e.title || (echar == null ? void 0 : echar.name)) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: e.read ? 400 : 700 }, children: e.title || (echar == null ? void 0 : echar.name) }),
+                    /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: interpolateVariables(e.text, variables, project) })
+                  ] }),
+                  !e.read && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { width: 8, height: 8, borderRadius: 9999, background: ui.phoneBadgeColor || "#ef4444", flexShrink: 0 } })
+                ]
+              },
+              e.id
+            );
+          }),
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", fontWeight: 700, opacity: 0.65, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 }, children: "Calls" })
+        ] }),
+        phone.callLog && phone.callLog.length > 0 ? [...phone.callLog].reverse().map((entry) => {
+          const caller = entry.callerId === "player" ? null : project.characters[entry.callerId];
+          const purls = resolvePhonePortrait(entry.portrait, caller, assetResolver);
+          const icon = entry.status === "missed" ? "↙" : entry.status === "accepted" ? "↗" : "⊘";
+          const tint = entry.status === "missed" ? "#ef4444" : entry.status === "accepted" ? "#22c55e" : "#9ca3af";
+          return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 10, background: ui.phoneHistoryRowColor || "rgba(255,255,255,0.05)", color: ui.phoneHistoryTextColor || "#fff" }, children: [
+            /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: purls, size: "2em" }),
+            /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: (caller == null ? void 0 : caller.name) || "Unknown" }),
+              /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { fontSize: "0.7em", opacity: 0.8, color: tint }, children: [
+                entry.direction === "outgoing" ? "↗" : icon,
+                " ",
+                entry.status,
+                entry.durationMs ? ` · ${fmtCallTime(entry.durationMs)}` : ""
+              ] })
+            ] })
+          ] }, entry.id);
+        }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.5, textAlign: "center", marginTop: 12, fontSize: "0.8em" }, children: "No recent calls" })
+      ] });
+    }
+  };
+  const ContactsApp = {
+    id: "contacts",
+    glyph: "contacts",
+    defaultLabel: "Contacts",
+    render: (ctx) => ctx.ui.phoneContactsRegion ? null : renderContactsRoster(ctx)
+  };
+  const fmtCallTime = (ms) => `${Math.floor(ms / 6e4)}:${String(Math.floor(ms / 1e3) % 60).padStart(2, "0")}`;
+  const CallApp = {
+    id: "call",
+    glyph: "phone",
+    defaultLabel: "Call",
+    render: (ctx) => {
+      const { ui, project, phone, variables, assetResolver, evaluateConditions: evaluateConditions2, playTap, onCallReply, onEndCall } = ctx;
+      const ac = phone.activeCall;
+      if (!ac) return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.5, textAlign: "center", marginTop: 12, fontSize: "0.8em" }, children: "No active call" });
+      const char = ac.contactId === "player" ? null : project.characters[ac.contactId];
+      const contact = ac.contactId === "player" ? void 0 : (ui.phoneContacts || []).find((c) => c.characterId === ac.contactId);
+      const name = (contact == null ? void 0 : contact.displayName) || (char == null ? void 0 : char.name) || "Unknown";
+      const purls = resolvePhonePortrait(ac.portrait || (contact == null ? void 0 : contact.avatar), char, assetResolver);
+      const bodyFont = ui.phoneFont ? fontSettingsToStyle(ui.phoneFont) : {};
+      const endBtn = (label) => /* @__PURE__ */ jsxRuntime2.jsxs(
+        "button",
+        {
+          onClick: () => {
+            playTap();
+            onEndCall == null ? void 0 : onEndCall();
+          },
+          style: { alignSelf: "center", display: "flex", alignItems: "center", gap: 6, padding: "8px 18px", borderRadius: 9999, border: "none", cursor: "pointer", background: ui.phoneCallEndColor || "#ef4444", color: "#fff", fontWeight: 600, ...bodyFont },
+          children: [
+            ui.phoneCallEndImage ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: assetResolver(ui.phoneCallEndImage.id, "image") || void 0, alt: "", style: { width: "1.2em", height: "1.2em", objectFit: "contain" } }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { children: ui.phoneCallEndIcon && PHONE_GLYPHS[ui.phoneCallEndIcon] || "📵" }),
+            /* @__PURE__ */ jsxRuntime2.jsx("span", { children: ui.phoneCallEndLabel || "End Call" })
+          ]
+        }
+      );
+      const header = /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4, paddingTop: 6, flexShrink: 0 }, children: [
+        /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: purls, size: "3.4em", fit: ui.phoneCallPortraitFit }),
+        /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontWeight: 700, ...ui.phoneCallNameFont ? fontSettingsToStyle(ui.phoneCallNameFont) : {} }, children: name }),
+        ac.phase === "dialing" && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.75em", opacity: 0.75 }, children: ui.phoneCallDialingText || "Calling…" }),
+        ac.phase === "active" && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.75em", color: ui.phoneCallTimerColor || "rgba(255,255,255,0.7)" }, children: fmtCallTime(ac.elapsedMs) }),
+        ac.phase === "ended" && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { fontSize: "0.75em", opacity: 0.75 }, children: [
+          "Call ended · ",
+          fmtCallTime(ac.elapsedMs)
+        ] })
+      ] });
+      if (ac.phase === "dialing") {
+        return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: 14, height: "100%", justifyContent: "center" }, children: [
+          header,
+          endBtn()
+        ] });
+      }
+      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: 8, minHeight: "100%" }, children: [
+        header,
+        /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "flex", flexDirection: "column", gap: 6, flex: 1 }, children: ac.transcript.map((m) => {
+          const mine = m.senderId === "player";
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "flex", flexDirection: mine ? "row-reverse" : "row" }, children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { maxWidth: "80%" }, children: [
+            m.image && /* @__PURE__ */ jsxRuntime2.jsx(PhoneMedia, { media: m.image, assetResolver, style: { borderRadius: 12, marginBottom: m.text ? 3 : 0, aspectRatio: "4 / 3" } }),
+            m.text && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { padding: "5px 10px", borderRadius: 12, fontStyle: "italic", wordBreak: "break-word", background: mine ? ui.phoneCallLineOutgoingColor || ui.phoneOutgoingBubbleColor || "#2f6bff" : ui.phoneCallLineIncomingColor || ui.phoneIncomingBubbleColor || "#2a2f3a", color: ui.phoneBubbleTextColor || "#fff", opacity: 0.94 }, children: interpolateVariables(m.text, variables, project) })
+          ] }) }, m.id);
+        }) }),
+        ac.phase === "active" && (ac.pendingReplies || []).filter((o) => {
+          var _a;
+          return !((_a = o.conditions) == null ? void 0 : _a.length) || evaluateConditions2(o.conditions, variables);
+        }).length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: (ac.pendingReplies || []).filter((o) => {
+          var _a;
+          return !((_a = o.conditions) == null ? void 0 : _a.length) || evaluateConditions2(o.conditions, variables);
+        }).map((o) => /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
+          playTap();
+          onCallReply == null ? void 0 : onCallReply(o);
+        }, style: { alignSelf: "flex-end", maxWidth: "82%", padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", ...bodyFont, background: ui.phoneCallLineOutgoingColor || ui.phoneOutgoingBubbleColor || "#2f6bff", color: ui.phoneBubbleTextColor || "#fff" }, children: interpolateVariables(o.text, variables, project) }, o.id)) }),
+        ac.phase === "active" && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { paddingBottom: 6, display: "flex", justifyContent: "center" }, children: endBtn() })
+      ] });
+    }
+  };
+  const GalleryAppBody = ({ ctx }) => {
+    const { ui, project, phone, variables, assetResolver } = ctx;
+    const cg = project.cgGallery;
+    const cgEntries = cg ? Object.values(cg.entries || {}).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)) : [];
+    const showCG = (ui.phoneGalleryShowCG ?? true) && cgEntries.length > 0;
+    const [tab, setTab] = React2.useState("photos");
+    const roll = [...phone.cameraRoll || []].reverse();
+    const cols = Math.max(1, ui.phoneGalleryColumns ?? (cg == null ? void 0 : cg.columns) ?? 3);
+    const isUnlocked = (entry) => {
+      if (!entry.unlockable) return true;
+      if (!entry.unlockVariableId) return true;
+      const val = variables[entry.unlockVariableId];
+      return val === true || val === "true" || val === 1;
+    };
+    const lockedUrl = (cg == null ? void 0 : cg.lockedPlaceholderAssetId) ? assetResolver(cg.lockedPlaceholderAssetId, "image") : null;
+    const tabBtn = (id, label) => /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
+      ctx.playTap();
+      setTab(id);
+    }, style: { flex: 1, padding: "4px 0", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600, fontSize: "0.75em", background: tab === id ? ui.phoneButtonActiveColor || ui.phoneOutgoingBubbleColor || "#2f6bff" : "rgba(255,255,255,0.08)", color: "#fff" }, children: label });
+    const grid = (children) => /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 6 }, children });
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
+      showCG && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 6 }, children: [
+        tabBtn("photos", ui.phoneGalleryPhotosLabel || "Photos"),
+        tabBtn("cg", ui.phoneGalleryCGLabel || "Collection")
+      ] }),
+      tab === "photos" || !showCG ? roll.length === 0 ? /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.5, textAlign: "center", marginTop: 12, fontSize: "0.8em" }, children: ui.phoneGalleryEmptyText || "No photos yet" }) : grid(roll.map((e) => /* @__PURE__ */ jsxRuntime2.jsx(
+        PhoneMedia,
+        {
+          media: e.image,
+          assetResolver,
+          caption: e.caption ? interpolateVariables(e.caption, variables, project) : void 0,
+          style: { borderRadius: 8, aspectRatio: "1" }
+        },
+        e.id
+      ))) : grid(cgEntries.map((entry) => {
+        const unlocked = isUnlocked(entry);
+        if (!unlocked) {
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { borderRadius: 8, aspectRatio: "1", overflow: "hidden", background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }, children: lockedUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: lockedUrl, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { opacity: 0.5 }, children: "🔒" }) }, entry.id);
+        }
+        return /* @__PURE__ */ jsxRuntime2.jsx(PhoneMedia, { media: { type: "image", id: entry.assetId }, assetResolver, caption: entry.name, style: { borderRadius: 8, aspectRatio: "1" } }, entry.id);
+      }))
+    ] });
+  };
+  const GalleryApp = {
+    id: "gallery",
+    glyph: "gallery",
+    defaultLabel: "Gallery",
+    render: (ctx) => /* @__PURE__ */ jsxRuntime2.jsx(GalleryAppBody, { ctx })
+  };
+  const MapSurface = ({ map, project, variables, assetResolver, evaluateConditions: evaluateConditions2, onLocationTap, travelAllowed = true, lockedText }) => {
+    const [confirmId, setConfirmId] = React2.useState(null);
+    const [gateMsg, setGateMsg] = React2.useState(false);
+    const zoomEnabled = map.allowZoom !== false;
+    const maxZoom = Math.max(1.2, Math.min(8, map.maxZoom ?? 3));
+    const containerRef = React2.useRef(null);
+    const [view, setView] = React2.useState({ s: 1, tx: 0, ty: 0 });
+    const pointers = React2.useRef(/* @__PURE__ */ new Map());
+    const dragRef = React2.useRef(null);
+    const movedRef = React2.useRef(false);
+    const rect = () => {
+      var _a;
+      return (_a = containerRef.current) == null ? void 0 : _a.getBoundingClientRect();
+    };
+    const clampView = React2.useCallback((v) => {
+      const r = rect();
+      const W = (r == null ? void 0 : r.width) ?? 0, H = (r == null ? void 0 : r.height) ?? 0;
+      const s = Math.max(1, Math.min(maxZoom, v.s));
+      if (s <= 1.0001) return { s: 1, tx: 0, ty: 0 };
+      return { s, tx: Math.min(0, Math.max(W * (1 - s), v.tx)), ty: Math.min(0, Math.max(H * (1 - s), v.ty)) };
+    }, [maxZoom]);
+    const zoomTo = React2.useCallback((nextS, fx, fy) => {
+      setView((prev) => {
+        const s2 = Math.max(1, Math.min(maxZoom, nextS));
+        const cx = (fx - prev.tx) / prev.s, cy = (fy - prev.ty) / prev.s;
+        return clampView({ s: s2, tx: fx - cx * s2, ty: fy - cy * s2 });
+      });
+    }, [maxZoom, clampView]);
+    const bump = (factor) => {
+      const r = rect();
+      if (r) zoomTo(view.s * factor, r.width / 2, r.height / 2);
+    };
+    const resetView = () => setView({ s: 1, tx: 0, ty: 0 });
+    const onWheel = (e) => {
+      if (!zoomEnabled) return;
+      const r = rect();
+      if (!r) return;
+      zoomTo(view.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX - r.left, e.clientY - r.top);
+    };
+    const onPointerDown = (e) => {
+      var _a, _b;
+      if (!zoomEnabled) return;
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      (_b = (_a = e.currentTarget).setPointerCapture) == null ? void 0 : _b.call(_a, e.pointerId);
+      movedRef.current = false;
+      if (pointers.current.size === 2) {
+        const [a, b] = [...pointers.current.values()];
+        dragRef.current = { lastX: 0, lastY: 0, pinchDist: Math.hypot(a.x - b.x, a.y - b.y) };
+      } else {
+        dragRef.current = { lastX: e.clientX, lastY: e.clientY, pinchDist: 0 };
+      }
+    };
+    const onPointerMove = (e) => {
+      if (!zoomEnabled || !pointers.current.has(e.pointerId) || !dragRef.current) return;
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const r = rect();
+      if (!r) return;
+      if (pointers.current.size >= 2) {
+        const [a, b] = [...pointers.current.values()];
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        if (dragRef.current.pinchDist > 0) zoomTo(view.s * (dist / dragRef.current.pinchDist), (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+        dragRef.current.pinchDist = dist;
+        movedRef.current = true;
+      } else if (view.s > 1) {
+        const dx = e.clientX - dragRef.current.lastX, dy = e.clientY - dragRef.current.lastY;
+        if (Math.abs(dx) + Math.abs(dy) > 3) movedRef.current = true;
+        dragRef.current.lastX = e.clientX;
+        dragRef.current.lastY = e.clientY;
+        setView((prev) => clampView({ s: prev.s, tx: prev.tx + dx, ty: prev.ty + dy }));
+      }
+    };
+    const onPointerUp = (e) => {
+      pointers.current.delete(e.pointerId);
+      const rest = [...pointers.current.values()];
+      dragRef.current = rest.length === 1 ? { lastX: rest[0].x, lastY: rest[0].y, pinchDist: 0 } : null;
+      if (rest.length === 0) window.setTimeout(() => {
+        movedRef.current = false;
+      }, 0);
+    };
+    const zoomBtnStyle = {
+      width: 32,
+      height: 32,
+      borderRadius: "50%",
+      border: "none",
+      cursor: "pointer",
+      background: "rgba(12,14,20,0.72)",
+      color: "#fff",
+      fontSize: 20,
+      fontWeight: 700,
+      lineHeight: 1,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      boxShadow: "0 2px 8px rgba(0,0,0,0.45)",
+      backdropFilter: "blur(2px)"
+    };
+    const bg = map.backgroundImage ? assetResolver(map.backgroundImage.id, map.backgroundImage.type === "video" ? "video" : "image") : null;
+    const markerSize = Math.max(2, map.markerSize ?? 6);
+    const tap = (loc) => {
+      if (!travelAllowed) {
+        setGateMsg(true);
+        window.setTimeout(() => setGateMsg(false), 2200);
+        return;
+      }
+      if (map.confirmTravel && confirmId !== loc.id) {
+        setConfirmId(loc.id);
+        return;
+      }
+      setConfirmId(null);
+      onLocationTap(loc);
+    };
+    return /* @__PURE__ */ jsxRuntime2.jsxs(
+      "div",
+      {
+        ref: containerRef,
+        onWheel: zoomEnabled ? onWheel : void 0,
+        onPointerDown: zoomEnabled ? onPointerDown : void 0,
+        onPointerMove: zoomEnabled ? onPointerMove : void 0,
+        onPointerUp: zoomEnabled ? onPointerUp : void 0,
+        onPointerCancel: zoomEnabled ? onPointerUp : void 0,
+        onDoubleClick: zoomEnabled ? () => view.s > 1 ? resetView() : bump(1.8) : void 0,
+        style: { position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#0b0d12", touchAction: zoomEnabled ? "none" : void 0, cursor: zoomEnabled && view.s > 1 ? "grab" : void 0 },
+        children: [
+          /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", inset: 0, transformOrigin: "0 0", transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})`, willChange: view.s > 1 ? "transform" : void 0 }, children: [
+            bg && (map.backgroundImage.type === "video" ? /* @__PURE__ */ jsxRuntime2.jsx("video", { src: bg, autoPlay: true, loop: true, muted: true, playsInline: true, style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: bg, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" } })),
+            map.locations.map((loc) => {
+              var _a;
+              const unlocked = !((_a = loc.conditions) == null ? void 0 : _a.length) || evaluateConditions2(loc.conditions, variables);
+              const lockedLook = loc.lockedAppearance || "hidden";
+              if (!unlocked && lockedLook === "hidden") return null;
+              const style = loc.markerStyle || "icon";
+              const markerUrl = style === "image" && loc.markerImage ? assetResolver(loc.markerImage.id, "image") : null;
+              const displayLabel = unlocked ? interpolateVariables(loc.label || loc.name, variables, project) : loc.lockedLabel || "???";
+              const clickable = unlocked;
+              const dim = !unlocked;
+              const isRegion = style === "region";
+              const w = isRegion ? loc.width ?? 12 : markerSize;
+              const h = isRegion ? loc.height ?? 12 : void 0;
+              const locFont = loc.labelFont || map.labelFont;
+              const labelStyle = locFont ? fontSettingsToStyle(locFont) : {};
+              const labelImg = unlocked && loc.labelImage ? assetResolver(loc.labelImage.id, "image") : null;
+              const showLabel = loc.showLabel !== false;
+              return /* @__PURE__ */ jsxRuntime2.jsxs(
+                "div",
+                {
+                  onClick: clickable ? (e) => {
+                    e.stopPropagation();
+                    if (movedRef.current) return;
+                    tap(loc);
+                  } : void 0,
+                  title: displayLabel,
+                  style: {
+                    position: "absolute",
+                    left: `${loc.x}%`,
+                    top: `${loc.y}%`,
+                    width: `${w}%`,
+                    ...isRegion ? { height: `${h}%` } : { aspectRatio: "1" },
+                    transform: isRegion ? void 0 : "translate(-50%, -50%)",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: clickable ? "pointer" : "default",
+                    opacity: dim ? 0.45 : 1,
+                    containerType: "size"
+                  },
+                  children: [
+                    !isRegion && (!unlocked && lockedLook === "lockedIcon" ? /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "62cqmin", lineHeight: 1, filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.7))" }, children: "🔒" }) : markerUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: markerUrl, alt: "", style: { width: "92cqmin", height: "92cqmin", objectFit: "contain", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.6))" } }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "70cqmin", lineHeight: 1, color: map.markerColor || "#ef4444", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.7))" }, children: loc.builtinIcon && PHONE_GLYPHS[loc.builtinIcon] || "📍" })),
+                    showLabel && (labelImg ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: labelImg, alt: "", style: { position: "absolute", top: "100%", marginTop: 2, height: 24, maxWidth: 140, objectFit: "contain", pointerEvents: "none", filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.9))" } }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { position: "absolute", top: "100%", marginTop: 2, whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,0.9)", ...labelStyle }, children: displayLabel })),
+                    confirmId === loc.id && /* @__PURE__ */ jsxRuntime2.jsxs("div", { onClick: (e) => e.stopPropagation(), style: { position: "absolute", bottom: "110%", left: "50%", transform: "translateX(-50%)", background: "rgba(10,12,18,0.95)", borderRadius: 10, padding: "6px 10px", display: "flex", gap: 6, alignItems: "center", whiteSpace: "nowrap", zIndex: 5, boxShadow: "0 6px 20px rgba(0,0,0,0.5)" }, children: [
+                      /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { color: "#fff", fontSize: 12 }, children: (map.confirmText || "Travel to {name}?").replace("{name}", displayLabel) }),
+                      /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
+                        setConfirmId(null);
+                        onLocationTap(loc);
+                      }, style: { border: "none", borderRadius: 8, padding: "3px 10px", cursor: "pointer", background: "#22c55e", color: "#fff", fontWeight: 700 }, children: "✓" }),
+                      /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => setConfirmId(null), style: { border: "none", borderRadius: 8, padding: "3px 10px", cursor: "pointer", background: "rgba(255,255,255,0.15)", color: "#fff" }, children: "✕" })
+                    ] })
+                  ]
+                },
+                loc.id
+              );
+            })
+          ] }),
+          zoomEnabled && /* @__PURE__ */ jsxRuntime2.jsxs(
+            "div",
+            {
+              style: { position: "absolute", right: 8, bottom: 8, display: "flex", flexDirection: "column", gap: 6, zIndex: 6 },
+              onPointerDown: (e) => e.stopPropagation(),
+              onDoubleClick: (e) => e.stopPropagation(),
+              children: [
+                /* @__PURE__ */ jsxRuntime2.jsx("button", { type: "button", "aria-label": "Zoom in", title: "Zoom in", onClick: () => bump(1.4), style: zoomBtnStyle, children: "+" }),
+                /* @__PURE__ */ jsxRuntime2.jsx("button", { type: "button", "aria-label": "Zoom out", title: "Zoom out", onClick: () => bump(1 / 1.4), style: zoomBtnStyle, children: "−" }),
+                view.s > 1.0001 && /* @__PURE__ */ jsxRuntime2.jsx("button", { type: "button", "aria-label": "Reset zoom", title: "Reset zoom", onClick: resetView, style: { ...zoomBtnStyle, fontSize: 15 }, children: "⤢" })
+              ]
+            }
+          ),
+          gateMsg && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(10,12,18,0.92)", color: "#fff", borderRadius: 10, padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap", animation: "fade-in 0.2s ease-out" }, children: lockedText || "You can't leave right now." })
+        ]
+      }
+    );
+  };
+  const MapApp = {
+    id: "map",
+    glyph: "map",
+    defaultLabel: "Map",
+    isEnabled: (ui, project) => !!ui.phoneMapId && !!(project.maps || {})[ui.phoneMapId],
+    render: (ctx) => {
+      var _a;
+      const { ui, project, variables, assetResolver, evaluateConditions: evaluateConditions2, onAction, playTap } = ctx;
+      const map = ui.phoneMapId ? (project.maps || {})[ui.phoneMapId] : null;
+      if (!map) return null;
+      const travelAllowed = !((_a = ui.phoneMapTravelConditions) == null ? void 0 : _a.length) || evaluateConditions2(ui.phoneMapTravelConditions, variables);
+      return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { margin: "-8px -10px", height: "calc(100% + 16px)" }, children: /* @__PURE__ */ jsxRuntime2.jsx(
+        MapSurface,
+        {
+          map,
+          project,
+          variables,
+          assetResolver,
+          evaluateConditions: evaluateConditions2,
+          travelAllowed,
+          lockedText: ui.phoneMapTravelLockedText,
+          onLocationTap: (loc) => {
+            playTap();
+            onAction({ type: UIActionType.HidePhone });
+            (loc.actions || []).forEach((a) => onAction(a));
+            if (loc.targetSceneId) onAction({ type: UIActionType.JumpToScene, targetSceneId: loc.targetSceneId });
+          }
+        }
+      ) });
+    }
+  };
+  const SettingsApp = {
+    id: "settings",
+    glyph: "settings",
+    defaultLabel: "Settings",
+    isEnabled: (ui) => !!(ui.phoneWallpapers && ui.phoneWallpapers.length > 0),
+    render: (ctx) => {
+      const { ui, phone, variables, assetResolver, evaluateConditions: evaluateConditions2, playTap, onSetWallpaper } = ctx;
+      const options = (ui.phoneWallpapers || []).filter((w) => {
+        var _a;
+        return !((_a = w.conditions) == null ? void 0 : _a.length) || evaluateConditions2(w.conditions, variables);
+      });
+      const current = phone.wallpaperId || null;
+      const tile = (key, selected, onClick, inner, label) => /* @__PURE__ */ jsxRuntime2.jsxs(
+        "button",
+        {
+          onClick: () => {
+            playTap();
+            onClick();
+          },
+          style: { position: "relative", aspectRatio: "9 / 16", borderRadius: 10, overflow: "hidden", border: "none", padding: 0, cursor: "pointer", background: "rgba(255,255,255,0.06)", boxShadow: selected ? `0 0 0 3px ${ui.phoneButtonActiveColor || "#2f6bff"}` : "inset 0 0 0 1px rgba(255,255,255,0.12)" },
+          children: [
+            inner,
+            label && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { position: "absolute", bottom: 4, left: 0, right: 0, textAlign: "center", fontSize: 10, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,0.9)" }, children: label }),
+            selected && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { position: "absolute", top: 4, right: 4, width: 18, height: 18, borderRadius: 9999, background: ui.phoneButtonActiveColor || "#2f6bff", color: "#fff", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }, children: "✓" })
+          ]
+        },
+        key
+      );
+      const defaultBg = ui.phoneWallpaperImage ? assetResolver(ui.phoneWallpaperImage.id, ui.phoneWallpaperImage.type === "video" ? "video" : "image") : null;
+      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
+        /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.75em", fontWeight: 700, opacity: 0.8 }, children: ui.phoneSettingsWallpaperLabel || "Wallpaper" }),
+        /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }, children: [
+          tile(
+            "__default__",
+            !current,
+            () => onSetWallpaper == null ? void 0 : onSetWallpaper(null),
+            defaultBg ? ui.phoneWallpaperImage.type === "video" ? /* @__PURE__ */ jsxRuntime2.jsx("video", { src: defaultBg, muted: true, loop: true, playsInline: true, autoPlay: true, style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: defaultBg, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.5)", fontSize: 18 }, children: "—" }),
+            "Default"
+          ),
+          options.map((w) => {
+            const url = assetResolver((w.thumbnail || w.image).id, w.thumbnail ? "image" : w.image.type === "video" ? "video" : "image");
+            const isVid = !w.thumbnail && w.image.type === "video";
+            return tile(
+              w.id,
+              current === w.id,
+              () => onSetWallpaper == null ? void 0 : onSetWallpaper(w.id),
+              url ? isVid ? /* @__PURE__ */ jsxRuntime2.jsx("video", { src: url, muted: true, loop: true, playsInline: true, autoPlay: true, style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : null,
+              w.name
+            );
+          })
+        ] })
+      ] });
+    }
+  };
+  const PHONE_APPS = {
+    home: HomeApp,
+    chat: ChatApp,
+    history: HistoryApp,
+    contacts: ContactsApp,
+    gallery: GalleryApp,
+    map: MapApp,
+    settings: SettingsApp,
+    call: CallApp
+  };
+  function resolvePhoneApp(view, ui, project) {
+    const app = PHONE_APPS[view];
+    if (app && (!app.isEnabled || app.isEnabled(ui, project))) return app;
+    return PHONE_APPS.home;
+  }
+  ["chat", "contacts", "history", "gallery", "map", "settings"].map((id) => ({ id, glyph: PHONE_APPS[id].glyph, label: PHONE_APPS[id].defaultLabel }));
+  function resolveVarNumber(variables, variableId, fallback, opts) {
+    let value = fallback;
+    if (variableId && variables) {
+      const raw = variables[variableId];
+      const n = typeof raw === "number" ? raw : parseFloat(String(raw));
+      if (Number.isFinite(n)) value = n * ((opts == null ? void 0 : opts.scale) ?? 1);
+    }
+    if ((opts == null ? void 0 : opts.min) !== void 0) value = Math.max(opts.min, value);
+    if ((opts == null ? void 0 : opts.max) !== void 0) value = Math.min(opts.max, value);
+    return value;
+  }
+  const SAMPLE_MAX = 128;
+  const SAMPLE_MIN_MS = 300;
+  const GRID_COLS = 24;
+  const GRID_ROWS = 14;
+  function buildStamp(style, sizePx, customImg) {
+    const d = Math.max(4, Math.ceil(sizePx));
+    const c = document.createElement("canvas");
+    c.width = d;
+    c.height = d;
+    const ctx = c.getContext("2d");
+    if (!ctx) return c;
+    const r = d / 2;
+    if (style === "custom" && customImg) {
+      ctx.drawImage(customImg, 0, 0, d, d);
+    } else if (style === "hardRound") {
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(r, r, r, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (style === "sponge") {
+      for (let i = 0; i < 46; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const rr = Math.sqrt(Math.random()) * r * 0.9;
+        const cr = r * (0.08 + Math.random() * 0.16);
+        const g = ctx.createRadialGradient(r + Math.cos(a) * rr, r + Math.sin(a) * rr, 0, r + Math.cos(a) * rr, r + Math.sin(a) * rr, cr);
+        g.addColorStop(0, "rgba(255,255,255,0.85)");
+        g.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(r + Math.cos(a) * rr, r + Math.sin(a) * rr, cr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      const g = ctx.createRadialGradient(r, r, 0, r, r, r);
+      g.addColorStop(0, "rgba(255,255,255,1)");
+      g.addColorStop(0.65, "rgba(255,255,255,0.9)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, d, d);
+    }
+    return c;
+  }
+  const WipeGameSurface = ({ ctx }) => {
+    const stage = ctx.stage;
+    const { assetResolver } = ctx;
+    const hostRef = React2.useRef(null);
+    const canvasRef = React2.useRef(null);
+    const [box, setBox] = React2.useState({ w: 0, h: 0 });
+    const [won, setWon] = React2.useState(false);
+    const [clearing, setClearing] = React2.useState(false);
+    const drawRef = React2.useRef({ ctx2d: null, dpr: 1, stamp: null, brushPx: 0, last: null, initialOpaque: 0, lastSampleAt: 0, tainted: false, visited: /* @__PURE__ */ new Set(), stamped: false, wonReported: false });
+    const coverType = stage.coverType || "color";
+    const coverUrl = coverType === "image" && stage.coverImageId ? assetResolver(stage.coverImageId, "image") : null;
+    const coverMaskUrl = stage.coverMaskImageId ? assetResolver(stage.coverMaskImageId, "image") : null;
+    const revealUrl = stage.revealImageId ? assetResolver(stage.revealImageId, "image") : null;
+    const customBrushUrl = stage.brushStyle === "custom" && stage.customBrushImageId ? assetResolver(stage.customBrushImageId, "image") : null;
+    const winFrac = Math.min(100, Math.max(1, stage.winRevealPercent ?? 70)) / 100;
+    React2.useEffect(() => {
+      const el = hostRef.current;
+      if (!el) return;
+      const obs = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }));
+      obs.observe(el);
+      setBox({ w: el.clientWidth, h: el.clientHeight });
+      return () => obs.disconnect();
+    }, []);
+    React2.useEffect(() => {
+      const canvas = canvasRef.current;
+      const d = drawRef.current;
+      if (!canvas || box.w <= 0 || box.h <= 0) return;
+      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      canvas.width = Math.floor(box.w * dpr);
+      canvas.height = Math.floor(box.h * dpr);
+      const c2d = canvas.getContext("2d");
+      if (!c2d) return;
+      c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+      d.ctx2d = c2d;
+      d.dpr = dpr;
+      d.last = null;
+      d.initialOpaque = 0;
+      d.lastSampleAt = 0;
+      d.tainted = false;
+      d.visited = /* @__PURE__ */ new Set();
+      d.stamped = false;
+      d.wonReported = false;
+      setWon(false);
+      setClearing(false);
+      const brushPct = Math.min(25, Math.max(4, stage.brushSize ?? 10));
+      d.brushPx = Math.max(8, Math.min(box.w, box.h) * brushPct / 100);
+      const finishSetup = (customImg) => {
+        d.stamp = buildStamp(stage.brushStyle || "softRound", d.brushPx * dpr, customImg);
+      };
+      if (customBrushUrl) {
+        const img = new Image();
+        img.onload = () => finishSetup(img);
+        img.onerror = () => finishSetup(null);
+        img.src = customBrushUrl;
+      } else finishSetup(null);
+      const measureBaseline = () => {
+        const s = sampleOpaque(canvas);
+        if (s == null) {
+          d.tainted = true;
+          d.initialOpaque = 0;
+        } else d.initialOpaque = s;
+      };
+      const applyMaskThenMeasure = () => {
+        if (!coverMaskUrl) {
+          measureBaseline();
+          return;
+        }
+        const m = new Image();
+        m.onload = () => {
+          c2d.save();
+          c2d.globalCompositeOperation = "destination-in";
+          c2d.drawImage(m, 0, 0, box.w, box.h);
+          c2d.restore();
+          measureBaseline();
+        };
+        m.onerror = () => measureBaseline();
+        m.src = coverMaskUrl;
+      };
+      c2d.globalCompositeOperation = "source-over";
+      c2d.clearRect(0, 0, box.w, box.h);
+      if (coverType === "image" && coverUrl) {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.max(box.w / img.naturalWidth, box.h / img.naturalHeight);
+          const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
+          c2d.drawImage(img, (box.w - w) / 2, (box.h - h) / 2, w, h);
+          applyMaskThenMeasure();
+        };
+        img.onerror = () => {
+          c2d.fillStyle = stage.coverColor || "#9ca3af";
+          c2d.fillRect(0, 0, box.w, box.h);
+          applyMaskThenMeasure();
+        };
+        img.src = coverUrl;
+      } else if (coverType === "frost") {
+        c2d.fillStyle = "rgba(226, 236, 244, 0.94)";
+        c2d.fillRect(0, 0, box.w, box.h);
+        c2d.fillStyle = "rgba(255,255,255,0.5)";
+        for (let i = 0; i < 900; i++) {
+          c2d.globalAlpha = 0.15 + Math.random() * 0.5;
+          c2d.fillRect(Math.random() * box.w, Math.random() * box.h, 1 + Math.random() * 2, 1 + Math.random() * 2);
+        }
+        c2d.globalAlpha = 1;
+        applyMaskThenMeasure();
+      } else {
+        c2d.fillStyle = stage.coverColor || "#9ca3af";
+        c2d.fillRect(0, 0, box.w, box.h);
+        applyMaskThenMeasure();
+      }
+    }, [box.w, box.h, coverType, coverUrl, coverMaskUrl, stage.coverColor, stage.brushStyle, stage.brushSize, customBrushUrl, stage.id]);
+    const sampleOpaque = (canvas) => {
+      try {
+        const scale = SAMPLE_MAX / Math.max(canvas.width, canvas.height);
+        const sw = Math.max(1, Math.floor(canvas.width * scale));
+        const sh = Math.max(1, Math.floor(canvas.height * scale));
+        const sc = document.createElement("canvas");
+        sc.width = sw;
+        sc.height = sh;
+        const sctx = sc.getContext("2d", { willReadFrequently: true });
+        if (!sctx) return null;
+        sctx.drawImage(canvas, 0, 0, sw, sh);
+        const data = sctx.getImageData(0, 0, sw, sh).data;
+        let opaque = 0;
+        for (let i = 3; i < data.length; i += 4) if (data[i] > 128) opaque++;
+        return opaque;
+      } catch {
+        return null;
+      }
+    };
+    const checkProgress = (force) => {
+      var _a;
+      const d = drawRef.current;
+      const canvas = canvasRef.current;
+      if (!canvas || d.wonReported || !d.stamped) return;
+      const now = performance.now();
+      if (!force && now - d.lastSampleAt < SAMPLE_MIN_MS) return;
+      d.lastSampleAt = now;
+      let frac = 0;
+      if (!d.tainted && d.initialOpaque > 0) {
+        const s = sampleOpaque(canvas);
+        if (s == null) d.tainted = true;
+        else frac = 1 - s / d.initialOpaque;
+      }
+      if (d.tainted || d.initialOpaque === 0) {
+        frac = d.visited.size / (GRID_COLS * GRID_ROWS);
+      }
+      (_a = ctx.reportProgress) == null ? void 0 : _a.call(ctx, Math.min(1, frac));
+      if (frac >= winFrac) {
+        d.wonReported = true;
+        setWon(true);
+        if (stage.autoClearOnWin !== false) {
+          setClearing(true);
+          window.setTimeout(() => ctx.reportWin(), 450);
+        } else {
+          ctx.reportWin();
+        }
+      }
+    };
+    const stampAt = (x, y, angle) => {
+      const d = drawRef.current;
+      const c2d = d.ctx2d;
+      if (!c2d) return;
+      c2d.save();
+      c2d.globalCompositeOperation = "destination-out";
+      if (ctx.stage.brushStyle === "scratch") {
+        c2d.translate(x, y);
+        c2d.rotate(angle);
+        c2d.fillStyle = "#fff";
+        for (let i = 0; i < 3; i++) {
+          const off = (i - 1) * d.brushPx * 0.18 + (Math.random() - 0.5) * d.brushPx * 0.1;
+          c2d.fillRect(-d.brushPx / 2, off - d.brushPx * 0.045, d.brushPx, d.brushPx * 0.09);
+        }
+      } else if (d.stamp) {
+        const s = d.brushPx;
+        c2d.drawImage(d.stamp, x - s / 2, y - s / 2, s, s);
+      }
+      c2d.restore();
+      d.stamped = true;
+      const gx = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(x / Math.max(1, box.w) * GRID_COLS)));
+      const gy = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor(y / Math.max(1, box.h) * GRID_ROWS)));
+      d.visited.add(gy * GRID_COLS + gx);
+    };
+    const pointFrom = (e) => {
+      const rect = canvasRef.current.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+    const onPointerDown = (e) => {
+      var _a, _b;
+      if (won) return;
+      (_b = (_a = e.currentTarget).setPointerCapture) == null ? void 0 : _b.call(_a, e.pointerId);
+      const p = pointFrom(e);
+      drawRef.current.last = p;
+      stampAt(p.x, p.y, 0);
+      ctx.playInteractSound();
+    };
+    const onPointerMove = (e) => {
+      const d = drawRef.current;
+      if (won || !d.last) return;
+      const p = pointFrom(e);
+      const dx = p.x - d.last.x, dy = p.y - d.last.y;
+      const dist = Math.hypot(dx, dy);
+      const step = Math.max(2, d.brushPx / 3);
+      const angle = Math.atan2(dy, dx);
+      for (let t = step; t <= dist; t += step) {
+        stampAt(d.last.x + dx * t / dist, d.last.y + dy * t / dist, angle);
+      }
+      if (dist >= step) d.last = p;
+      checkProgress(false);
+    };
+    const endStroke = () => {
+      drawRef.current.last = null;
+      checkProgress(true);
+    };
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: hostRef, style: { position: "relative", width: "100%", height: "100%", overflow: "hidden" }, children: [
+      revealUrl && /* @__PURE__ */ jsxRuntime2.jsx(
+        "img",
+        {
+          src: revealUrl,
+          alt: "",
+          draggable: false,
+          style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" }
+        }
+      ),
+      /* @__PURE__ */ jsxRuntime2.jsx(
+        "canvas",
+        {
+          ref: canvasRef,
+          onPointerDown,
+          onPointerMove,
+          onPointerUp: endStroke,
+          onPointerCancel: endStroke,
+          onPointerLeave: endStroke,
+          style: {
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            touchAction: "none",
+            opacity: clearing ? 0 : 1,
+            transition: clearing ? "opacity 0.4s ease-out" : void 0
+          }
+        }
+      )
+    ] });
+  };
+  const CARD_ASPECT = 4 / 3;
+  const MemoryGameSurface = ({ ctx }) => {
+    const stage = ctx.stage;
+    const faces = stage.faces || [];
+    const hostRef = React2.useRef(null);
+    const [host, setHost] = React2.useState({ w: 0, h: 0 });
+    const [flipped, setFlipped] = React2.useState([]);
+    const [matched, setMatched] = React2.useState(/* @__PURE__ */ new Set());
+    const lockRef = React2.useRef(false);
+    const timerRef = React2.useRef(null);
+    const wonRef = React2.useRef(false);
+    const deck = React2.useMemo(() => {
+      const cards = faces.flatMap((f, fi) => [{ faceId: f.id, faceIndex: fi }, { faceId: f.id, faceIndex: fi }]);
+      for (let i = cards.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [cards[i], cards[j]] = [cards[j], cards[i]];
+      }
+      return cards;
+    }, [stage.id]);
+    React2.useEffect(() => {
+      const el = hostRef.current;
+      if (!el) return;
+      const obs = new ResizeObserver(() => setHost({ w: el.clientWidth, h: el.clientHeight }));
+      obs.observe(el);
+      setHost({ w: el.clientWidth, h: el.clientHeight });
+      return () => obs.disconnect();
+    }, []);
+    React2.useEffect(() => () => {
+      if (timerRef.current != null) clearTimeout(timerRef.current);
+    }, []);
+    const backUrl = stage.cardBackImageId ? ctx.assetResolver(stage.cardBackImageId, "image") : null;
+    if (!faces.length) {
+      return /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: () => ctx.reportWin(), style: { position: "absolute", inset: 0, width: "100%", height: "100%", background: "transparent", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "rgba(255,255,255,0.85)", fontSize: 15 }, children: [
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 32 }, children: "🃏" }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { children: "No card faces yet — add them in the Mini Games tab." }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 12, opacity: 0.7 }, children: "Tap to continue" })
+      ] });
+    }
+    const count = deck.length;
+    const cols = Math.min(count, Math.max(2, stage.cols || Math.ceil(Math.sqrt(count))));
+    const rows = Math.ceil(count / cols);
+    const gap = 8;
+    const cardW = host.w && host.h ? Math.max(24, Math.min((host.w - (cols - 1) * gap) / cols, (host.h - (rows - 1) * gap) / rows / CARD_ASPECT)) : 0;
+    const cardH = cardW * CARD_ASPECT;
+    const tap = (idx) => {
+      var _a;
+      if (lockRef.current || wonRef.current || matched.has(idx) || flipped.includes(idx)) return;
+      ctx.playInteractSound();
+      const next = [...flipped, idx];
+      setFlipped(next);
+      if (next.length < 2) return;
+      const [a, b] = next;
+      if (deck[a].faceId === deck[b].faceId) {
+        ctx.playSound(stage.matchSfxId ?? null);
+        ctx.reportHit();
+        const m = new Set(matched);
+        m.add(a);
+        m.add(b);
+        setMatched(m);
+        setFlipped([]);
+        (_a = ctx.reportProgress) == null ? void 0 : _a.call(ctx, m.size / count);
+        if (m.size === count && !wonRef.current) {
+          wonRef.current = true;
+          timerRef.current = window.setTimeout(() => ctx.reportWin(), 450);
+        }
+      } else {
+        ctx.reportMistake();
+        lockRef.current = true;
+        timerRef.current = window.setTimeout(() => {
+          setFlipped([]);
+          lockRef.current = false;
+        }, Math.max(200, stage.flipBackDelayMs ?? 900));
+      }
+    };
+    return /* @__PURE__ */ jsxRuntime2.jsx("div", { ref: hostRef, style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }, children: /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "grid", gridTemplateColumns: `repeat(${cols}, ${cardW}px)`, gridAutoRows: `${cardH}px`, gap }, children: deck.map((card, idx) => {
+      const up = matched.has(idx) || flipped.includes(idx);
+      const face = faces[card.faceIndex];
+      const faceUrl = (face == null ? void 0 : face.imageId) ? ctx.assetResolver(face.imageId, "image") : null;
+      return /* @__PURE__ */ jsxRuntime2.jsx(
+        "button",
+        {
+          onClick: () => tap(idx),
+          style: { position: "relative", width: cardW, height: cardH, padding: 0, border: "none", background: "transparent", cursor: up ? "default" : "pointer", perspective: "600px", touchAction: "manipulation" },
+          children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", inset: 0, transformStyle: "preserve-3d", transition: "transform 0.35s ease", transform: up ? "rotateY(180deg)" : "rotateY(0deg)" }, children: [
+            /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", borderRadius: Math.max(4, cardW * 0.08), overflow: "hidden", border: "1px solid rgba(255,255,255,0.25)", background: backUrl ? void 0 : "linear-gradient(135deg,#334155,#1e293b)", display: "flex", alignItems: "center", justifyContent: "center" }, children: backUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: backUrl, alt: "", draggable: false, style: { width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" } }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: cardW * 0.4, opacity: 0.5 }, children: "✦" }) }),
+            /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", transform: "rotateY(180deg)", borderRadius: Math.max(4, cardW * 0.08), overflow: "hidden", border: matched.has(idx) ? "2px solid rgba(52,211,153,0.9)" : "1px solid rgba(255,255,255,0.35)", background: "#0f172a", display: "flex", alignItems: "center", justifyContent: "center" }, children: faceUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: faceUrl, alt: "", draggable: false, style: { width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" } }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: cardW * 0.35, color: "#94a3b8" }, children: card.faceIndex + 1 }) })
+          ] })
+        },
+        idx
+      );
+    }) }) });
+  };
+  function useImageBox(hostRef, url) {
+    const [hostSize, setHostSize] = React2.useState({ w: 0, h: 0 });
+    const [natural, setNatural] = React2.useState(null);
+    React2.useEffect(() => {
+      const el = hostRef.current;
+      if (!el) return;
+      const obs = new ResizeObserver(() => setHostSize({ w: el.clientWidth, h: el.clientHeight }));
+      obs.observe(el);
+      setHostSize({ w: el.clientWidth, h: el.clientHeight });
+      return () => obs.disconnect();
+    }, [hostRef.current]);
+    React2.useEffect(() => {
+      setNatural(null);
+      if (!url) return;
+      let live = true;
+      const img = new Image();
+      img.onload = () => {
+        if (live) setNatural({ w: img.naturalWidth || 16, h: img.naturalHeight || 9 });
+      };
+      img.src = url;
+      return () => {
+        live = false;
+      };
+    }, [url]);
+    return React2.useMemo(() => {
+      if (!hostSize.w || !hostSize.h) return { left: 0, top: 0, width: 0, height: 0 };
+      if (!natural) return { left: 0, top: 0, width: hostSize.w, height: hostSize.h };
+      const scale = Math.min(hostSize.w / natural.w, hostSize.h / natural.h);
+      const w = natural.w * scale, h = natural.h * scale;
+      return { left: (hostSize.w - w) / 2, top: (hostSize.h - h) / 2, width: w, height: h };
+    }, [hostSize, natural]);
+  }
+  const HiddenObjectGameSurface = ({ ctx }) => {
+    const stage = ctx.stage;
+    const hotspots = stage.hotspots || [];
+    const url = stage.sceneImageId ? ctx.assetResolver(stage.sceneImageId, "image") : null;
+    const hostRef = React2.useRef(null);
+    const box = useImageBox(hostRef, url);
+    const [found, setFound] = React2.useState(/* @__PURE__ */ new Set());
+    const [miss, setMiss] = React2.useState(null);
+    const [hintId, setHintId] = React2.useState(null);
+    const [hintReadyAt, setHintReadyAt] = React2.useState(0);
+    const [nowTick, setNowTick] = React2.useState(0);
+    const timersRef = React2.useRef([]);
+    const wonRef = React2.useRef(false);
+    React2.useEffect(() => () => {
+      timersRef.current.forEach((id) => clearTimeout(id));
+    }, []);
+    const pushTimer = (fn, ms) => {
+      const id = window.setTimeout(fn, ms);
+      timersRef.current.push(id);
+    };
+    if (!url || !hotspots.length) {
+      return /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: () => ctx.reportWin(), style: { position: "absolute", inset: 0, width: "100%", height: "100%", background: "transparent", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "rgba(255,255,255,0.85)", fontSize: 15 }, children: [
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 32 }, children: "🔍" }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { children: !url ? "No scene image yet — pick one in the Mini Games tab." : "No objects placed yet — place them in the Mini Games tab." }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 12, opacity: 0.7 }, children: "Tap to continue" })
+      ] });
+    }
+    const hit = (h, px, py) => {
+      if ((h.shape || "circle") === "rect") {
+        return px >= h.x && px <= h.x + h.w && py >= h.y && py <= h.y + h.h;
+      }
+      const cx = h.x + h.w / 2, cy = h.y + h.h / 2;
+      const dx = (px - cx) / (h.w / 2), dy = (py - cy) / (h.h / 2);
+      return dx * dx + dy * dy <= 1;
+    };
+    const tap = (e) => {
+      var _a;
+      if (wonRef.current || !box.width || !box.height) return;
+      const rect = hostRef.current.getBoundingClientRect();
+      const ix = e.clientX - rect.left - box.left;
+      const iy = e.clientY - rect.top - box.top;
+      if (ix < 0 || iy < 0 || ix > box.width || iy > box.height) return;
+      const px = ix / box.width * 100, py = iy / box.height * 100;
+      const target = hotspots.find((h) => !found.has(h.id) && hit(h, px, py));
+      if (target) {
+        ctx.playInteractSound();
+        ctx.reportHit();
+        const next = new Set(found);
+        next.add(target.id);
+        setFound(next);
+        setHintId((cur) => cur === target.id ? null : cur);
+        (_a = ctx.reportProgress) == null ? void 0 : _a.call(ctx, next.size / hotspots.length);
+        if (next.size === hotspots.length && !wonRef.current) {
+          wonRef.current = true;
+          pushTimer(() => ctx.reportWin(), 450);
+        }
+      } else {
+        ctx.reportMistake();
+        setMiss({ x: px, y: py, key: Date.now() });
+        pushTimer(() => setMiss((m) => m && Date.now() - m.key >= 550 ? null : m), 600);
+      }
+    };
+    const hintCooldownMs = Math.max(1, stage.hintCooldownSec ?? 10) * 1e3;
+    const hintRemaining = Math.max(0, hintReadyAt - nowTick);
+    const useHint = () => {
+      const unfound = hotspots.filter((h) => !found.has(h.id));
+      if (!unfound.length || hintRemaining > 0) return;
+      ctx.playInteractSound();
+      const pick = unfound[Math.floor(Math.random() * unfound.length)];
+      setHintId(pick.id);
+      setHintReadyAt(Date.now() + hintCooldownMs);
+      pushTimer(() => setHintId((cur) => cur === pick.id ? null : cur), 1800);
+    };
+    React2.useEffect(() => {
+      if (!stage.hintButton || hintReadyAt <= Date.now()) return;
+      const id = window.setInterval(() => setNowTick(Date.now()), 500);
+      setNowTick(Date.now());
+      return () => clearInterval(id);
+    }, [hintReadyAt, stage.hintButton]);
+    const pctRect = (h) => ({
+      position: "absolute",
+      left: `${h.x}%`,
+      top: `${h.y}%`,
+      width: `${h.w}%`,
+      height: `${h.h}%`
+    });
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: hostRef, style: { position: "absolute", inset: 0, touchAction: "manipulation" }, onPointerDown: tap, children: [
+      /* @__PURE__ */ jsxRuntime2.jsx("style", { children: "@keyframes mgMissRipple{0%{transform:scale(0.4);opacity:0.9}100%{transform:scale(1.6);opacity:0}}@keyframes mgHintPulse{0%,100%{transform:scale(1);opacity:0.9}50%{transform:scale(1.25);opacity:0.4}}@keyframes mgFoundPop{0%{transform:scale(0.5);opacity:0}70%{transform:scale(1.15);opacity:1}100%{transform:scale(1)}}" }),
+      /* @__PURE__ */ jsxRuntime2.jsx(
+        "img",
+        {
+          src: url,
+          alt: "",
+          draggable: false,
+          style: { position: "absolute", left: box.left, top: box.top, width: box.width, height: box.height, pointerEvents: "none" }
+        }
+      ),
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", left: box.left, top: box.top, width: box.width, height: box.height, pointerEvents: "none" }, children: [
+        stage.showFoundMarkers !== false && hotspots.filter((h) => found.has(h.id)).map((h) => {
+          const foundUrl = h.foundImageId ? ctx.assetResolver(h.foundImageId, "image") : null;
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...pctRect(h), animation: "mgFoundPop 0.3s ease-out" }, children: foundUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: foundUrl, alt: "", draggable: false, style: { width: "100%", height: "100%", objectFit: "contain" } }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: "100%", height: "100%", border: "3px solid rgba(52,211,153,0.95)", borderRadius: (h.shape || "circle") === "circle" ? "50%" : 8, display: "flex", alignItems: "center", justifyContent: "center", color: "#34d399", fontWeight: 700, textShadow: "0 1px 4px rgba(0,0,0,0.8)", fontSize: "min(4vmin, 22px)" }, children: "✓" }) }, h.id);
+        }),
+        hintId && (() => {
+          const h = hotspots.find((x) => x.id === hintId);
+          if (!h) return null;
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...pctRect(h), border: "3px solid rgba(250,204,21,0.95)", borderRadius: (h.shape || "circle") === "circle" ? "50%" : 8, animation: "mgHintPulse 0.6s ease-in-out infinite" } });
+        })(),
+        miss && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", left: `${miss.x}%`, top: `${miss.y}%`, width: "6%", aspectRatio: "1", transform: "translate(-50%, -50%)", border: "3px solid rgba(248,113,113,0.9)", borderRadius: "50%", animation: "mgMissRipple 0.55s ease-out forwards" } }, miss.key)
+      ] }),
+      stage.showCounter !== false && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", top: 8, right: 10, padding: "3px 12px", borderRadius: 999, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 14, fontWeight: 600, pointerEvents: "none" }, children: [
+        found.size,
+        " / ",
+        hotspots.length
+      ] }),
+      !!stage.hintButton && found.size < hotspots.length && /* @__PURE__ */ jsxRuntime2.jsx(
+        "button",
+        {
+          onClick: (e) => {
+            e.stopPropagation();
+            useHint();
+          },
+          onPointerDown: (e) => e.stopPropagation(),
+          disabled: hintRemaining > 0,
+          style: { position: "absolute", left: 10, bottom: 10, padding: "7px 16px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.4)", background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 13, cursor: hintRemaining > 0 ? "default" : "pointer", opacity: hintRemaining > 0 ? 0.55 : 1 },
+          children: hintRemaining > 0 ? `${stage.hintLabel || "💡 Hint"} (${Math.ceil(hintRemaining / 1e3)})` : stage.hintLabel || "💡 Hint"
+        }
+      )
+    ] });
+  };
+  function sliceCellStyle(url, cols, rows, col, row) {
+    return {
+      backgroundImage: `url("${url}")`,
+      backgroundSize: `${cols * 100}% ${rows * 100}%`,
+      backgroundPosition: `${cols <= 1 ? 0 : col / (cols - 1) * 100}% ${rows <= 1 ? 0 : row / (rows - 1) * 100}%`,
+      backgroundRepeat: "no-repeat"
+    };
+  }
+  const SlidingGameSurface = ({ ctx }) => {
+    const stage = ctx.stage;
+    const url = stage.imageId ? ctx.assetResolver(stage.imageId, "image") : null;
+    const n = Math.max(3, Math.min(5, stage.gridSize || 3));
+    const cellCount = n * n;
+    const blankTile = cellCount - 1;
+    const hostRef = React2.useRef(null);
+    const box = useImageBox(hostRef, url);
+    const [won, setWon] = React2.useState(false);
+    const wonRef = React2.useRef(false);
+    const timerRef = React2.useRef(null);
+    const initialPos = React2.useMemo(() => {
+      const pos2 = Array.from({ length: cellCount }, (_, i) => i);
+      const cellOf = (tile) => pos2[tile];
+      const tileAt = (cell) => pos2.indexOf(cell);
+      let prevBlankCell = -1;
+      const moves = Math.max(10, stage.shuffleMoves ?? 80);
+      for (let m = 0; m < moves; m++) {
+        const b = cellOf(blankTile);
+        const r = Math.floor(b / n), c = b % n;
+        const neighbors = [
+          r > 0 ? b - n : -1,
+          r < n - 1 ? b + n : -1,
+          c > 0 ? b - 1 : -1,
+          c < n - 1 ? b + 1 : -1
+        ].filter((x) => x >= 0 && x !== prevBlankCell);
+        const pick = neighbors[Math.floor(Math.random() * neighbors.length)];
+        const t = tileAt(pick);
+        pos2[t] = b;
+        pos2[blankTile] = pick;
+        prevBlankCell = b;
+      }
+      if (pos2.every((cell, tile) => cell === tile)) {
+        const b = pos2[blankTile];
+        const swap = b % n > 0 ? b - 1 : b + 1;
+        const t = pos2.indexOf(swap);
+        pos2[t] = b;
+        pos2[blankTile] = swap;
+      }
+      return pos2;
+    }, [stage.id, n]);
+    const [pos, setPos] = React2.useState(initialPos);
+    React2.useEffect(() => () => {
+      if (timerRef.current != null) clearTimeout(timerRef.current);
+    }, []);
+    if (!url) {
+      return /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: () => ctx.reportWin(), style: { position: "absolute", inset: 0, width: "100%", height: "100%", background: "transparent", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "rgba(255,255,255,0.85)", fontSize: 15 }, children: [
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 32 }, children: "🔢" }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { children: "No puzzle image yet — pick one in the Mini Games tab." }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 12, opacity: 0.7 }, children: "Tap to continue" })
+      ] });
+    }
+    const tap = (tile) => {
+      var _a;
+      if (wonRef.current || won) return;
+      const cell = pos[tile], blank = pos[blankTile];
+      const sameRow = Math.floor(cell / n) === Math.floor(blank / n) && Math.abs(cell - blank) === 1;
+      const sameCol = cell % n === blank % n && Math.abs(cell - blank) === n;
+      if (!sameRow && !sameCol) return;
+      ctx.playInteractSound();
+      const next = [...pos];
+      next[tile] = blank;
+      next[blankTile] = cell;
+      setPos(next);
+      const correct = next.reduce((acc, c, t) => acc + (c === t ? 1 : 0), 0);
+      (_a = ctx.reportProgress) == null ? void 0 : _a.call(ctx, correct / cellCount);
+      if (next.every((c, t) => c === t)) {
+        wonRef.current = true;
+        setWon(true);
+        timerRef.current = window.setTimeout(() => ctx.reportWin(), 650);
+      }
+    };
+    const cellPct = 100 / n;
+    const gapPx = 2;
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: hostRef, style: { position: "absolute", inset: 0 }, children: [
+      /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", left: box.left, top: box.top, width: box.width, height: box.height, background: "rgba(0,0,0,0.45)", borderRadius: 6, overflow: "hidden" }, children: Array.from({ length: cellCount }, (_, tile) => {
+        if (tile === blankTile && !won) return null;
+        const cell = pos[tile];
+        const col = tile % n, row = Math.floor(tile / n);
+        return /* @__PURE__ */ jsxRuntime2.jsx(
+          "button",
+          {
+            onClick: () => tap(tile),
+            style: {
+              position: "absolute",
+              left: `${cell % n * cellPct}%`,
+              top: `${Math.floor(cell / n) * cellPct}%`,
+              width: `${cellPct}%`,
+              height: `${cellPct}%`,
+              padding: 0,
+              border: "none",
+              cursor: won ? "default" : "pointer",
+              transition: "left 0.16s ease, top 0.16s ease, opacity 0.4s ease",
+              boxSizing: "border-box",
+              boxShadow: won ? "none" : `inset 0 0 0 ${gapPx}px rgba(0,0,0,0.55)`,
+              touchAction: "manipulation",
+              ...tile === blankTile ? { opacity: won ? 1 : 0, animation: "fade-in 0.5s ease-out" } : {},
+              ...sliceCellStyle(url, n, n, col, row)
+            },
+            children: stage.showNumbers && !won && tile !== blankTile && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { position: "absolute", left: 4, top: 2, fontSize: "max(11px, 1.6vmin)", fontWeight: 700, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,0.9)" }, children: tile + 1 })
+          },
+          tile
+        );
+      }) }),
+      stage.showReference !== false && !won && /* @__PURE__ */ jsxRuntime2.jsx(
+        "img",
+        {
+          src: url,
+          alt: "",
+          draggable: false,
+          style: { position: "absolute", top: 6, left: 6, width: "16%", maxHeight: "22%", objectFit: "contain", borderRadius: 4, border: "1px solid rgba(255,255,255,0.5)", boxShadow: "0 2px 8px rgba(0,0,0,0.6)", pointerEvents: "none", opacity: 0.9 }
+        }
+      )
+    ] });
+  };
+  const DEFAULT_COLORS = ["#ef4444", "#f97316", "#facc15", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#8d5524", "#ffffff", "#1e293b"];
+  function resolvePalettes(inline, paletteIds, project) {
+    const out = [];
+    (inline || []).forEach((p) => {
+      var _a;
+      if ((_a = p.colors) == null ? void 0 : _a.length) out.push(p);
+    });
+    const shared = project.artPalettes;
+    (paletteIds || []).forEach((id) => {
+      var _a;
+      const p = (shared || []).find((x) => x.id === id);
+      if (p && ((_a = p.colors) == null ? void 0 : _a.length) && !out.some((x) => x.id === p.id)) out.push(p);
+    });
+    if (!out.length) out.push({ id: "default", name: "Colors", colors: DEFAULT_COLORS });
+    return out;
+  }
+  const SwatchBar = ({ palettes, activeColor, onPick, trailing }) => {
+    const [paletteIdx, setPaletteIdx] = React2.useState(0);
+    const palette = palettes[Math.min(paletteIdx, palettes.length - 1)] || palettes[0];
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flexShrink: 0, display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", margin: 4, borderRadius: 10, background: "rgba(0,0,0,0.55)" }, children: [
+      palettes.length > 1 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: palettes.map((p, i) => /* @__PURE__ */ jsxRuntime2.jsx(
+        "button",
+        {
+          onClick: () => setPaletteIdx(i),
+          style: {
+            padding: "2px 10px",
+            borderRadius: 999,
+            fontSize: 11,
+            cursor: "pointer",
+            border: `1px solid ${i === paletteIdx ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.25)"}`,
+            background: i === paletteIdx ? "rgba(255,255,255,0.18)" : "transparent",
+            color: i === paletteIdx ? "#fff" : "rgba(255,255,255,0.65)"
+          },
+          children: p.name || `Palette ${i + 1}`
+        },
+        p.id
+      )) }),
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 7, overflowX: "auto", paddingBottom: 2 }, children: [
+        ((palette == null ? void 0 : palette.colors) || DEFAULT_COLORS).map((c, i) => {
+          const active = c.toLowerCase() === activeColor.toLowerCase();
+          return /* @__PURE__ */ jsxRuntime2.jsx(
+            "button",
+            {
+              onClick: () => onPick(c),
+              "aria-label": c,
+              style: {
+                flexShrink: 0,
+                width: 30,
+                height: 30,
+                borderRadius: "50%",
+                cursor: "pointer",
+                background: c,
+                border: active ? "3px solid #fff" : "2px solid rgba(255,255,255,0.35)",
+                boxShadow: active ? "0 0 0 2px rgba(0,0,0,0.5), 0 0 10px rgba(255,255,255,0.4)" : "0 1px 3px rgba(0,0,0,0.5)",
+                transform: active ? "scale(1.12)" : void 0,
+                transition: "transform 0.12s, border 0.12s"
+              }
+            },
+            `${c}-${i}`
+          );
+        }),
+        trailing
+      ] })
+    ] });
+  };
+  const maskStyles = (clip) => {
+    if (clip.maskUrl) {
+      const size = clip.maskFit === "contain" ? "contain" : "100% 100%";
+      return {
+        WebkitMaskImage: `url("${clip.maskUrl}")`,
+        maskImage: `url("${clip.maskUrl}")`,
+        WebkitMaskSize: size,
+        maskSize: size,
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center"
+      };
+    }
+    if (clip.shapeClip) return { clipPath: clip.shapeClip, WebkitClipPath: clip.shapeClip };
+    return {};
+  };
+  const ColorableRegion = ({ clip, fillColor, tintMode, pulse, strokeApiRef }) => {
+    const canvasRef = React2.useRef(null);
+    const hostRef = React2.useRef(null);
+    const blend = (tintMode || "multiply") === "multiply" ? "multiply" : "normal";
+    const clipCss = React2.useMemo(() => maskStyles(clip), [clip.maskUrl, clip.maskFit, clip.shapeClip]);
+    React2.useEffect(() => {
+      if (!strokeApiRef) return;
+      const host = hostRef.current, canvas = canvasRef.current;
+      if (!host || !canvas) return;
+      const rect = host.getBoundingClientRect();
+      const w = Math.max(2, Math.min(768, Math.round(rect.width || 512)));
+      const h = Math.max(2, Math.round(w * ((rect.height || 288) / Math.max(1, rect.width || 512))));
+      canvas.width = w;
+      canvas.height = h;
+      const g = canvas.getContext("2d");
+      const api2 = {
+        stamp: (xPct, yPct, color, sizePct) => {
+          if (!g) return;
+          const r = Math.max(2, sizePct / 100 * w) / 2;
+          const x = xPct / 100 * w, y = yPct / 100 * h;
+          const grad = g.createRadialGradient(x, y, r * 0.25, x, y, r);
+          grad.addColorStop(0, color);
+          grad.addColorStop(1, `${color}00`);
+          g.fillStyle = grad;
+          g.beginPath();
+          g.arc(x, y, r, 0, Math.PI * 2);
+          g.fill();
+        },
+        clear: () => {
+          g == null ? void 0 : g.clearRect(0, 0, canvas.width, canvas.height);
+        }
+      };
+      strokeApiRef(api2);
+      return () => strokeApiRef(null);
+    }, [!!strokeApiRef]);
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: hostRef, style: { position: "absolute", inset: 0, pointerEvents: "none" }, children: [
+      fillColor && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", inset: 0, background: fillColor, mixBlendMode: blend, ...clipCss, transition: "background 0.2s" } }),
+      strokeApiRef && /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: canvasRef, style: { position: "absolute", inset: 0, width: "100%", height: "100%", mixBlendMode: blend, ...clipCss } }),
+      pulse && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", inset: 0, background: "#ffffff", ...clipCss, animation: "mgRegionPulse 1.6s ease-in-out infinite", pointerEvents: "none" } })
+    ] });
+  };
+  const RegionPulseStyle = () => /* @__PURE__ */ jsxRuntime2.jsx("style", { children: "@keyframes mgRegionPulse{0%,100%{opacity:0.04}50%{opacity:0.16}}" });
+  function useMaskHitTesters(urls) {
+    const testersRef = React2.useRef({});
+    React2.useEffect(() => {
+      let alive = true;
+      urls.forEach((url) => {
+        if (!url || testersRef.current[url]) return;
+        const img = new Image();
+        img.onload = () => {
+          if (!alive) return;
+          try {
+            const w = Math.max(8, Math.min(160, img.naturalWidth || 160));
+            const h = Math.max(8, Math.round(w * ((img.naturalHeight || 90) / Math.max(1, img.naturalWidth || 160))));
+            const c = document.createElement("canvas");
+            c.width = w;
+            c.height = h;
+            const g = c.getContext("2d", { willReadFrequently: true });
+            if (!g) throw new Error("no ctx");
+            g.drawImage(img, 0, 0, w, h);
+            const data = g.getImageData(0, 0, w, h).data;
+            testersRef.current[url] = (xPct, yPct) => {
+              const x = Math.max(0, Math.min(w - 1, Math.round(xPct / 100 * w)));
+              const y = Math.max(0, Math.min(h - 1, Math.round(yPct / 100 * h)));
+              return data[(y * w + x) * 4 + 3] > 25;
+            };
+          } catch {
+            testersRef.current[url] = () => true;
+          }
+        };
+        img.onerror = () => {
+          if (alive) testersRef.current[url] = () => true;
+        };
+        img.src = url;
+      });
+      return () => {
+        alive = false;
+      };
+    }, [urls.filter(Boolean).join("|")]);
+    return testersRef;
+  }
+  const TAP_SLOP_PX$1 = 7;
+  const AssembleGameSurface = ({ ctx }) => {
+    var _a;
+    const stage = ctx.stage;
+    const mode = stage.sourceMode || (stage.sliceImageId ? "slice" : "pieces");
+    const sliceUrl = stage.sliceImageId ? ctx.assetResolver(stage.sliceImageId, "image") : null;
+    const baseUrl = stage.baseImageId ? ctx.assetResolver(stage.baseImageId, "image") : null;
+    const trayRight = stage.trayPosition === "right";
+    const tolerance = Math.max(2, stage.snapTolerancePct ?? 8);
+    const boardRef = React2.useRef(null);
+    const surfaceRef = React2.useRef(null);
+    const box = useImageBox(boardRef, mode === "slice" ? sliceUrl : baseUrl);
+    const pieces = React2.useMemo(() => {
+      if (mode === "slice" && sliceUrl) {
+        const cols = Math.max(2, Math.min(8, stage.sliceCols ?? 3));
+        const rows = Math.max(2, Math.min(8, stage.sliceRows ?? 3));
+        const list = [];
+        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+          list.push({
+            key: `cell-${c}-${r}`,
+            target: { x: c * 100 / cols, y: r * 100 / rows, w: 100 / cols, h: 100 / rows },
+            sliceStyle: sliceCellStyle(sliceUrl, cols, rows, c, r),
+            showGhost: false
+            // slice mode's guide is the faint full image
+          });
+        }
+        return list;
+      }
+      return (stage.pieces || []).map((p) => ({
+        key: p.id,
+        target: p.target,
+        imgUrl: p.imageId ? ctx.assetResolver(p.imageId, "image") : null,
+        showGhost: p.showGhost !== false,
+        colorSlot: p.colorSlot
+      }));
+    }, [stage.id, sliceUrl, mode]);
+    const trayOrder = React2.useMemo(() => {
+      const order = pieces.map((p) => p.key);
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+      return order;
+    }, [pieces]);
+    const [placed, setPlaced] = React2.useState(/* @__PURE__ */ new Set());
+    const [drag, setDrag] = React2.useState(null);
+    const wonRef = React2.useRef(false);
+    const timerRef = React2.useRef(null);
+    React2.useEffect(() => () => {
+      if (timerRef.current != null) clearTimeout(timerRef.current);
+    }, []);
+    const coloring = stage.coloring;
+    const coloringOn = !!(coloring == null ? void 0 : coloring.enabled);
+    const needAllColored = coloringOn && coloring.requireAllColored !== false;
+    const allowBrush = coloringOn && !!coloring.allowBrush;
+    const brushSizePct = Math.max(2, Math.min(20, (coloring == null ? void 0 : coloring.brushSizePct) ?? 7));
+    const colorPalettes = React2.useMemo(
+      () => coloringOn ? resolvePalettes(coloring.palettes, coloring.paletteIds, ctx.project) : [],
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [stage.id, coloringOn, ctx.project]
+    );
+    const [activeColor, setActiveColor] = React2.useState(((_a = colorPalettes[0]) == null ? void 0 : _a.colors[0]) || "#ef4444");
+    const [fills, setFills] = React2.useState({});
+    const coloredRef = React2.useRef(/* @__PURE__ */ new Set());
+    const strokeApisRef = React2.useRef({});
+    const colorDragRef = React2.useRef(null);
+    const allPlaced = placed.size >= pieces.length && pieces.length > 0;
+    const canColorNow = coloringOn && (coloring.freeOrder ? true : allPlaced);
+    const reportCombinedProgress = (placedCount, coloredCount) => {
+      var _a2;
+      (_a2 = ctx.reportProgress) == null ? void 0 : _a2.call(ctx, coloringOn && needAllColored ? (placedCount + coloredCount) / (pieces.length * 2) : placedCount / pieces.length);
+    };
+    const maybeWin = (placedCount, coloredCount) => {
+      if (wonRef.current || placedCount < pieces.length) return;
+      if (needAllColored && coloredCount < pieces.length) return;
+      if (coloringOn && !needAllColored) return;
+      wonRef.current = true;
+      timerRef.current = window.setTimeout(() => ctx.reportWin(), 500);
+    };
+    const markColored = (key, color) => {
+      var _a2;
+      coloredRef.current.add(key);
+      const piece = pieces.find((p) => p.key === key);
+      if (piece == null ? void 0 : piece.colorSlot) (_a2 = ctx.reportColors) == null ? void 0 : _a2.call(ctx, { [piece.colorSlot]: color });
+      reportCombinedProgress(placed.size, coloredRef.current.size);
+      maybeWin(placed.size, coloredRef.current.size);
+    };
+    const empty = mode === "slice" ? !sliceUrl : !(stage.pieces || []).length;
+    if (empty) {
+      return /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: () => ctx.reportWin(), style: { position: "absolute", inset: 0, width: "100%", height: "100%", background: "transparent", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "rgba(255,255,255,0.85)", fontSize: 15 }, children: [
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 32 }, children: "🧩" }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { children: mode === "slice" ? "No puzzle image yet — pick one in the Mini Games tab." : "No pieces yet — add them in the Mini Games tab." }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 12, opacity: 0.7 }, children: "Tap to continue" })
+      ] });
+    }
+    const surfacePoint = (e) => {
+      const rect = surfaceRef.current.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+    const startDrag = (key) => (e) => {
+      var _a2, _b;
+      if (wonRef.current || placed.has(key)) return;
+      (_b = (_a2 = surfaceRef.current) == null ? void 0 : _a2.setPointerCapture) == null ? void 0 : _b.call(_a2, e.pointerId);
+      setDrag({ key, ...surfacePoint(e) });
+    };
+    const moveDrag = (e) => {
+      if (!drag) return;
+      const p = surfacePoint(e);
+      setDrag((d) => d ? { ...d, x: p.x, y: p.y } : d);
+    };
+    const endDrag = (e) => {
+      if (!drag) return;
+      const piece = pieces.find((p) => p.key === drag.key);
+      setDrag(null);
+      if (!piece || !box.width || !box.height) return;
+      const boardRect = boardRef.current.getBoundingClientRect();
+      const surfRect = surfaceRef.current.getBoundingClientRect();
+      const bx = (drag.x + surfRect.left - boardRect.left - box.left) / box.width * 100;
+      const by = (drag.y + surfRect.top - boardRect.top - box.top) / box.height * 100;
+      const distTo = (p) => {
+        const cx = p.target.x + p.target.w / 2, cy = p.target.y + p.target.h / 2;
+        return Math.hypot(bx - cx, by - cy);
+      };
+      if (distTo(piece) <= tolerance) {
+        ctx.playInteractSound();
+        ctx.reportHit();
+        const next = new Set(placed);
+        next.add(piece.key);
+        setPlaced(next);
+        reportCombinedProgress(next.size, coloredRef.current.size);
+        maybeWin(next.size, coloredRef.current.size);
+        return;
+      }
+      const wrong = pieces.find((p) => p.key !== piece.key && !placed.has(p.key) && distTo(p) <= tolerance);
+      if (wrong) ctx.reportMistake();
+    };
+    const boardPct = (e) => {
+      const host = boardRef.current;
+      if (!host || !box.width || !box.height) return null;
+      const rect = host.getBoundingClientRect();
+      return { x: (e.clientX - rect.left - box.left) / box.width * 100, y: (e.clientY - rect.top - box.top) / box.height * 100 };
+    };
+    const hitPlacedPiece = (bx, by) => {
+      for (let i = pieces.length - 1; i >= 0; i--) {
+        const p = pieces[i];
+        if (!placed.has(p.key)) continue;
+        const t = p.target;
+        if (bx >= t.x && bx <= t.x + t.w && by >= t.y && by <= t.y + t.h) return p.key;
+      }
+      return null;
+    };
+    const fillPiece = (key) => {
+      var _a2;
+      setFills((f) => ({ ...f, [key]: activeColor }));
+      (_a2 = strokeApisRef.current[key]) == null ? void 0 : _a2.clear();
+      ctx.playInteractSound();
+      markColored(key, activeColor);
+    };
+    const colorPointerDown = (e) => {
+      var _a2, _b;
+      if (!canColorNow || wonRef.current || drag) return;
+      const p = boardPct(e);
+      if (!p) return;
+      const key = hitPlacedPiece(p.x, p.y);
+      if (!key) return;
+      (_b = (_a2 = surfaceRef.current) == null ? void 0 : _a2.setPointerCapture) == null ? void 0 : _b.call(_a2, e.pointerId);
+      colorDragRef.current = { key, startX: e.clientX, startY: e.clientY, moved: false };
+    };
+    const colorPointerMove = (e) => {
+      var _a2, _b;
+      const d = colorDragRef.current;
+      if (!d || !allowBrush) return;
+      if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < TAP_SLOP_PX$1) return;
+      d.moved = true;
+      const p = boardPct(e);
+      if (!p) return;
+      const t = (_a2 = pieces.find((x) => x.key === d.key)) == null ? void 0 : _a2.target;
+      if (!t) return;
+      (_b = strokeApisRef.current[d.key]) == null ? void 0 : _b.stamp((p.x - t.x) / t.w * 100, (p.y - t.y) / t.h * 100, activeColor, brushSizePct * (100 / Math.max(1, t.w)));
+    };
+    const colorPointerUp = () => {
+      const d = colorDragRef.current;
+      colorDragRef.current = null;
+      if (!d || wonRef.current) return;
+      if (d.moved) {
+        ctx.playInteractSound();
+        markColored(d.key, activeColor);
+      } else fillPiece(d.key);
+    };
+    const pieceArt = (p, style) => p.sliceStyle ? /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...style, ...p.sliceStyle } }) : p.imgUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: p.imgUrl, alt: "", draggable: false, style: { ...style, objectFit: "contain" } }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...style, background: "#334155", borderRadius: 6 } });
+    const trayPieces = trayOrder.filter((k) => !placed.has(k) && (drag == null ? void 0 : drag.key) !== k);
+    const dragPiece = drag ? pieces.find((p) => p.key === drag.key) : null;
+    const dragW = dragPiece && box.width ? dragPiece.target.w / 100 * box.width : 60;
+    const dragH = dragPiece && box.height ? dragPiece.target.h / 100 * box.height : 60;
+    const showSwatches = coloringOn && canColorNow;
+    return /* @__PURE__ */ jsxRuntime2.jsxs(
+      "div",
+      {
+        ref: surfaceRef,
+        onPointerMove: (e) => {
+          moveDrag(e);
+          colorPointerMove(e);
+        },
+        onPointerUp: (e) => {
+          endDrag();
+          colorPointerUp();
+        },
+        onPointerCancel: (e) => {
+          endDrag();
+          colorPointerUp();
+        },
+        style: { position: "absolute", inset: 0, display: "flex", flexDirection: "column", touchAction: "none" },
+        children: [
+          /* @__PURE__ */ jsxRuntime2.jsx(RegionPulseStyle, {}),
+          /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: trayRight ? "row" : "column" }, children: [
+            /* @__PURE__ */ jsxRuntime2.jsxs(
+              "div",
+              {
+                ref: boardRef,
+                onPointerDown: colorPointerDown,
+                style: { position: "relative", flex: 1, minWidth: 0, minHeight: 0, cursor: showSwatches ? "crosshair" : void 0 },
+                children: [
+                  baseUrl && mode !== "slice" && /* @__PURE__ */ jsxRuntime2.jsx("img", { src: baseUrl, alt: "", draggable: false, style: { position: "absolute", left: box.left, top: box.top, width: box.width, height: box.height, pointerEvents: "none" } }),
+                  /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", left: box.left, top: box.top, width: box.width, height: box.height }, children: [
+                    mode === "slice" && sliceUrl && /* @__PURE__ */ jsxRuntime2.jsx("img", { src: sliceUrl, alt: "", draggable: false, style: { position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.15, pointerEvents: "none" } }),
+                    pieces.map((p) => {
+                      const rect = { position: "absolute", left: `${p.target.x}%`, top: `${p.target.y}%`, width: `${p.target.w}%`, height: `${p.target.h}%` };
+                      if (placed.has(p.key)) {
+                        return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { ...rect, animation: "fade-in 0.2s ease-out" }, children: [
+                          pieceArt(p, { width: "100%", height: "100%" }),
+                          coloringOn && /* @__PURE__ */ jsxRuntime2.jsx(
+                            ColorableRegion,
+                            {
+                              clip: p.imgUrl ? { maskUrl: p.imgUrl, maskFit: "contain" } : {},
+                              fillColor: fills[p.key] || null,
+                              tintMode: (coloring == null ? void 0 : coloring.tintMode) || "multiply",
+                              pulse: canColorNow && !coloredRef.current.has(p.key),
+                              strokeApiRef: allowBrush ? ((api2) => {
+                                strokeApisRef.current[p.key] = api2;
+                              }) : void 0
+                            }
+                          )
+                        ] }, p.key);
+                      }
+                      if (p.showGhost && p.imgUrl) {
+                        return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...rect, opacity: 0.28, filter: "grayscale(1)", pointerEvents: "none" }, children: /* @__PURE__ */ jsxRuntime2.jsx("img", { src: p.imgUrl, alt: "", draggable: false, style: { width: "100%", height: "100%", objectFit: "contain" } }) }, p.key);
+                      }
+                      if (mode === "slice") {
+                        return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...rect, border: "1px dashed rgba(255,255,255,0.25)", boxSizing: "border-box", pointerEvents: "none" } }, p.key);
+                      }
+                      return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...rect, border: "2px dashed rgba(255,255,255,0.35)", borderRadius: 8, boxSizing: "border-box", pointerEvents: "none" } }, p.key);
+                    })
+                  ] })
+                ]
+              }
+            ),
+            /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: {
+              flexShrink: 0,
+              display: "flex",
+              gap: 8,
+              padding: 8,
+              alignItems: "center",
+              background: "rgba(0,0,0,0.5)",
+              borderRadius: 10,
+              margin: 4,
+              ...trayRight ? { flexDirection: "column", width: "18%", minWidth: 84, overflowY: "auto" } : { flexDirection: "row", height: "20%", minHeight: 72, overflowX: "auto" }
+            }, children: [
+              trayPieces.map((k) => {
+                const p = pieces.find((x) => x.key === k);
+                return /* @__PURE__ */ jsxRuntime2.jsx(
+                  "div",
+                  {
+                    onPointerDown: startDrag(k),
+                    style: { flexShrink: 0, cursor: "grab", touchAction: "none", ...trayRight ? { width: "84%" } : { height: "84%" }, aspectRatio: `${Math.max(0.2, p.target.w / Math.max(0.1, p.target.h))}` },
+                    children: pieceArt(p, { width: "100%", height: "100%", pointerEvents: "none" })
+                  },
+                  k
+                );
+              }),
+              trayPieces.length === 0 && !drag && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { color: "rgba(255,255,255,0.4)", fontSize: 12, margin: "auto" }, children: "—" })
+            ] })
+          ] }),
+          showSwatches && /* @__PURE__ */ jsxRuntime2.jsx(
+            SwatchBar,
+            {
+              palettes: colorPalettes,
+              activeColor,
+              onPick: (c) => {
+                setActiveColor(c);
+                ctx.playInteractSound();
+              },
+              trailing: !needAllColored && allPlaced ? /* @__PURE__ */ jsxRuntime2.jsx(
+                "button",
+                {
+                  onClick: () => {
+                    if (!wonRef.current) {
+                      wonRef.current = true;
+                      ctx.reportWin();
+                    }
+                  },
+                  style: { flexShrink: 0, marginLeft: 6, padding: "6px 16px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.4)", background: "rgba(16,185,129,0.85)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+                  children: "✓ Done"
+                }
+              ) : void 0
+            }
+          ),
+          drag && dragPiece && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", left: drag.x, top: drag.y, width: dragW, height: dragH, transform: "translate(-50%, -50%)", pointerEvents: "none", zIndex: 20, filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.6))" }, children: pieceArt(dragPiece, { width: "100%", height: "100%" }) })
+        ]
+      }
+    );
+  };
+  const TAP_SLOP_PX = 7;
+  const PaintGameSurface = ({ ctx }) => {
+    var _a;
+    const stage = ctx.stage;
+    const regions = stage.regions || [];
+    const baseUrl = stage.baseImageId ? ctx.assetResolver(stage.baseImageId, "image") : null;
+    const tintMode = stage.tintMode || "multiply";
+    const allowBrush = !!stage.allowBrush;
+    const requireAll = stage.requireAllRegions !== false;
+    const palettes = React2.useMemo(() => resolvePalettes(stage.palettes, stage.paletteIds, ctx.project), [stage.id, ctx.project]);
+    const [activeColor, setActiveColor] = React2.useState(((_a = palettes[0]) == null ? void 0 : _a.colors[0]) || "#ef4444");
+    const boardRef = React2.useRef(null);
+    const box = useImageBox(boardRef, baseUrl);
+    const maskUrl = (r) => r.maskImageId ? ctx.assetResolver(r.maskImageId, "image") : null;
+    const maskUrls = React2.useMemo(() => regions.map(maskUrl), [stage.id, ctx.project]);
+    const testers = useMaskHitTesters(maskUrls);
+    const [fills, setFills] = React2.useState({});
+    const paintedRef = React2.useRef(/* @__PURE__ */ new Set());
+    const strokeApisRef = React2.useRef({});
+    const wonRef = React2.useRef(false);
+    const dragRef = React2.useRef(null);
+    if (!regions.length) {
+      return /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: () => ctx.reportWin(), style: { position: "absolute", inset: 0, width: "100%", height: "100%", background: "transparent", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "rgba(255,255,255,0.85)", fontSize: 15 }, children: [
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 32 }, children: "🎨" }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { children: "No paint regions yet — add them in the Mini Games tab." }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 12, opacity: 0.7 }, children: "Tap to continue" })
+      ] });
+    }
+    const clipFor = (r, i) => {
+      const u = maskUrls[i];
+      if (u) return { maskUrl: u, maskFit: "stretch" };
+      const x = r.x ?? 30, y = r.y ?? 30, w = r.w ?? 40, h = r.h ?? 40;
+      if ((r.shape || "rect") === "ellipse") {
+        return { shapeClip: `ellipse(${w / 2}% ${h / 2}% at ${x + w / 2}% ${y + h / 2}%)` };
+      }
+      return { shapeClip: `inset(${y}% ${Math.max(0, 100 - x - w)}% ${Math.max(0, 100 - y - h)}% ${x}%)` };
+    };
+    const hitRegion = (xPct, yPct) => {
+      for (let i = regions.length - 1; i >= 0; i--) {
+        const r = regions[i];
+        const u = maskUrls[i];
+        if (u) {
+          const test = testers.current[u];
+          if (test ? test(xPct, yPct) : false) return r.id;
+        } else {
+          const x = r.x ?? 30, y = r.y ?? 30, w = r.w ?? 40, h = r.h ?? 40;
+          if ((r.shape || "rect") === "ellipse") {
+            const dx = (xPct - (x + w / 2)) / (w / 2), dy = (yPct - (y + h / 2)) / (h / 2);
+            if (dx * dx + dy * dy <= 1) return r.id;
+          } else if (xPct >= x && xPct <= x + w && yPct >= y && yPct <= y + h) return r.id;
+        }
+      }
+      return null;
+    };
+    const boardPct = (e) => {
+      const host = boardRef.current;
+      if (!host || !box.width || !box.height) return null;
+      const rect = host.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left - box.left) / box.width * 100,
+        y: (e.clientY - rect.top - box.top) / box.height * 100
+      };
+    };
+    const markPainted = (key, color) => {
+      var _a2, _b;
+      paintedRef.current.add(key);
+      const r = regions.find((x) => x.id === key);
+      if (r == null ? void 0 : r.colorSlot) (_a2 = ctx.reportColors) == null ? void 0 : _a2.call(ctx, { [r.colorSlot]: color });
+      (_b = ctx.reportProgress) == null ? void 0 : _b.call(ctx, paintedRef.current.size / regions.length);
+      if (requireAll && paintedRef.current.size >= regions.length && !wonRef.current) {
+        wonRef.current = true;
+        window.setTimeout(() => ctx.reportWin(), 450);
+      }
+    };
+    const fillRegion = (key) => {
+      var _a2;
+      setFills((f) => ({ ...f, [key]: activeColor }));
+      (_a2 = strokeApisRef.current[key]) == null ? void 0 : _a2.clear();
+      ctx.playInteractSound();
+      markPainted(key, activeColor);
+    };
+    const brushSizePct = Math.max(2, Math.min(20, stage.brushSizePct ?? 7));
+    const onPointerDown = (e) => {
+      var _a2, _b;
+      if (wonRef.current) return;
+      const p = boardPct(e);
+      if (!p) return;
+      (_b = (_a2 = e.currentTarget).setPointerCapture) == null ? void 0 : _b.call(_a2, e.pointerId);
+      const key = hitRegion(p.x, p.y);
+      dragRef.current = { regionKey: key, startX: e.clientX, startY: e.clientY, moved: false };
+    };
+    const onPointerMove = (e) => {
+      var _a2;
+      const d = dragRef.current;
+      if (!d || !allowBrush || !d.regionKey) return;
+      if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < TAP_SLOP_PX) return;
+      d.moved = true;
+      const p = boardPct(e);
+      if (!p) return;
+      (_a2 = strokeApisRef.current[d.regionKey]) == null ? void 0 : _a2.stamp(p.x, p.y, activeColor, brushSizePct);
+    };
+    const onPointerUp = () => {
+      const d = dragRef.current;
+      dragRef.current = null;
+      if (!d || wonRef.current || !d.regionKey) return;
+      if (d.moved) {
+        ctx.playInteractSound();
+        markPainted(d.regionKey, activeColor);
+      } else {
+        fillRegion(d.regionKey);
+      }
+    };
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", inset: 0, display: "flex", flexDirection: "column" }, children: [
+      /* @__PURE__ */ jsxRuntime2.jsx(RegionPulseStyle, {}),
+      /* @__PURE__ */ jsxRuntime2.jsx(
+        "div",
+        {
+          ref: boardRef,
+          onPointerDown,
+          onPointerMove,
+          onPointerUp,
+          onPointerCancel: onPointerUp,
+          style: { position: "relative", flex: 1, minHeight: 0, touchAction: "none", cursor: "crosshair" },
+          children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", left: box.left, top: box.top, width: box.width, height: box.height, pointerEvents: "none" }, children: [
+            baseUrl && /* @__PURE__ */ jsxRuntime2.jsx("img", { src: baseUrl, alt: "", draggable: false, style: { position: "absolute", inset: 0, width: "100%", height: "100%" } }),
+            regions.map((r, i) => /* @__PURE__ */ jsxRuntime2.jsx(
+              ColorableRegion,
+              {
+                clip: clipFor(r, i),
+                fillColor: fills[r.id] || null,
+                tintMode,
+                pulse: !paintedRef.current.has(r.id),
+                strokeApiRef: allowBrush ? ((api2) => {
+                  strokeApisRef.current[r.id] = api2;
+                }) : void 0
+              },
+              r.id
+            ))
+          ] })
+        }
+      ),
+      /* @__PURE__ */ jsxRuntime2.jsx(
+        SwatchBar,
+        {
+          palettes,
+          activeColor,
+          onPick: (c) => {
+            setActiveColor(c);
+            ctx.playInteractSound();
+          },
+          trailing: !requireAll ? /* @__PURE__ */ jsxRuntime2.jsx(
+            "button",
+            {
+              onClick: () => {
+                if (!wonRef.current) {
+                  wonRef.current = true;
+                  ctx.reportWin();
+                }
+              },
+              style: { flexShrink: 0, marginLeft: 6, padding: "6px 16px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.4)", background: "rgba(16,185,129,0.85)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+              children: "✓ Done"
+            }
+          ) : void 0
+        }
+      )
+    ] });
+  };
+  const normKey = (raw) => {
+    const l = (raw || "").toLowerCase().trim();
+    if (l === " " || l === "space" || l === "spacebar") return " ";
+    if (l === "up" || l === "arrowup") return "arrowup";
+    if (l === "down" || l === "arrowdown") return "arrowdown";
+    if (l === "left" || l === "arrowleft") return "arrowleft";
+    if (l === "right" || l === "arrowright") return "arrowright";
+    if (l === "esc" || l === "escape") return "escape";
+    if (l === "return" || l === "enter") return "enter";
+    return l;
+  };
+  const keyCapLabel = (raw) => {
+    switch (normKey(raw || " ")) {
+      case " ":
+        return "SPACE";
+      case "arrowup":
+        return "↑";
+      case "arrowdown":
+        return "↓";
+      case "arrowleft":
+        return "←";
+      case "arrowright":
+        return "→";
+      case "enter":
+        return "⏎";
+      case "escape":
+        return "ESC";
+      default:
+        return (raw || "?").toUpperCase();
+    }
+  };
+  const QteGameSurface = ({ ctx }) => {
+    const stage = ctx.stage;
+    const prompts = stage.prompts || [];
+    const gapMs = Math.max(0, stage.gapMs ?? 400);
+    const onMiss = stage.onMiss || "retry";
+    const showPips = stage.showProgressPips !== false;
+    const [idx, setIdx] = React2.useState(0);
+    const [phase, setPhase] = React2.useState("gap");
+    const doneRef = React2.useRef(false);
+    const idxRef = React2.useRef(0);
+    const phaseRef = React2.useRef("gap");
+    phaseRef.current = phase;
+    idxRef.current = idx;
+    const ringRef = React2.useRef(null);
+    const rafRef = React2.useRef(null);
+    const timerRef = React2.useRef(null);
+    const deadlineRef = React2.useRef(0);
+    const windowMsRef = React2.useRef(1500);
+    const prompt = prompts[idx];
+    const clearTimers = () => {
+      if (timerRef.current != null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+    const schedule = (fn, ms) => {
+      if (timerRef.current != null) clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(fn, ms);
+    };
+    const startPrompt = (i) => {
+      if (doneRef.current) return;
+      const p = prompts[i];
+      if (!p) return;
+      const windowMs = Math.max(300, p.windowMs ?? 1500);
+      windowMsRef.current = windowMs;
+      deadlineRef.current = performance.now() + windowMs;
+      if (p.bgImageId !== void 0) ctx.setBackground(p.bgImageId ?? null);
+      setIdx(i);
+      setPhase("active");
+      const tick = () => {
+        if (doneRef.current || phaseRef.current !== "active" || idxRef.current !== i) return;
+        const left = deadlineRef.current - performance.now();
+        const ring = ringRef.current;
+        if (ring) {
+          const frac = Math.max(0, left / windowMsRef.current);
+          ring.style.transform = `translate(-50%, -50%) scale(${1 + frac * 0.9})`;
+          ring.style.opacity = String(0.35 + (1 - frac) * 0.65);
+          ring.style.borderColor = frac < 0.25 ? "#ef4444" : "#facc15";
+        }
+        if (left <= 0) {
+          miss(i);
+          return;
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+      schedule(() => {
+        if (!doneRef.current && phaseRef.current === "active" && idxRef.current === i) miss(i);
+      }, windowMs + 40);
+    };
+    const hit = (i) => {
+      var _a, _b, _c, _d;
+      if (doneRef.current || phaseRef.current !== "active" || idxRef.current !== i) return;
+      clearTimers();
+      ctx.playInteractSound();
+      ctx.reportHit(((_a = prompts[i]) == null ? void 0 : _a.hitExpressionId) ?? null, ((_b = prompts[i]) == null ? void 0 : _b.hitFeedback) ?? null, { x: ((_c = prompts[i]) == null ? void 0 : _c.xPct) ?? 50, y: ((_d = prompts[i]) == null ? void 0 : _d.yPct) ?? 50 });
+      setPhase("hitFlash");
+      const isLast = i >= prompts.length - 1;
+      schedule(() => {
+        if (doneRef.current) return;
+        if (isLast) {
+          doneRef.current = true;
+          ctx.reportWin();
+          return;
+        }
+        setPhase("gap");
+        schedule(() => startPrompt(i + 1), gapMs);
+      }, 160);
+    };
+    const miss = (i) => {
+      var _a, _b, _c, _d;
+      if (doneRef.current || phaseRef.current !== "active" || idxRef.current !== i) return;
+      clearTimers();
+      ctx.reportMistake(((_a = prompts[i]) == null ? void 0 : _a.missExpressionId) ?? null, ((_b = prompts[i]) == null ? void 0 : _b.missFeedback) ?? null, { x: ((_c = prompts[i]) == null ? void 0 : _c.xPct) ?? 50, y: ((_d = prompts[i]) == null ? void 0 : _d.yPct) ?? 50 });
+      setPhase("missFlash");
+      if (onMiss === "fail") {
+        doneRef.current = true;
+        schedule(() => ctx.reportFail(), 350);
+        return;
+      }
+      const restartIdx = onMiss === "retryPrompt" ? i : 0;
+      schedule(() => {
+        if (!doneRef.current) {
+          setPhase("gap");
+          schedule(() => startPrompt(restartIdx), Math.max(350, gapMs));
+        }
+      }, 420);
+    };
+    React2.useEffect(() => {
+      if (!prompts.length) return;
+      doneRef.current = false;
+      schedule(() => startPrompt(0), 350);
+      return () => {
+        doneRef.current = true;
+        clearTimers();
+      };
+    }, [stage.id]);
+    React2.useEffect(() => {
+      const handler = (e) => {
+        if (doneRef.current || phaseRef.current !== "active") return;
+        const p = prompts[idxRef.current];
+        if (!p || p.kind !== "key") return;
+        const want = normKey(p.key || " ");
+        const got = normKey(e.key);
+        if (got === want) {
+          e.preventDefault();
+          e.stopPropagation();
+          hit(idxRef.current);
+        }
+      };
+      window.addEventListener("keydown", handler, true);
+      return () => window.removeEventListener("keydown", handler, true);
+    }, [stage.id]);
+    if (!prompts.length) {
+      return /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: () => ctx.reportWin(), style: { position: "absolute", inset: 0, width: "100%", height: "100%", background: "transparent", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "rgba(255,255,255,0.85)", fontSize: 15 }, children: [
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 32 }, children: "⚡" }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { children: "No prompts yet — add them in the Mini Games tab." }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 12, opacity: 0.7 }, children: "Tap to continue" })
+      ] });
+    }
+    const px = (prompt == null ? void 0 : prompt.xPct) ?? 50, py = (prompt == null ? void 0 : prompt.yPct) ?? 50;
+    const imgUrl = (prompt == null ? void 0 : prompt.imageId) ? ctx.assetResolver(prompt.imageId, "image") : null;
+    const isKey = (prompt == null ? void 0 : prompt.kind) === "key";
+    const keyLabel = isKey ? keyCapLabel(prompt.key) : "";
+    const showTarget = phase === "active" || phase === "hitFlash" || phase === "missFlash";
+    const effMissFb = (prompt == null ? void 0 : prompt.missFeedback) ?? stage.missFeedback;
+    const customMissShown = !!effMissFb && effMissFb.enabled !== false && !!(effMissFb.text || effMissFb.imageId);
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", inset: 0, touchAction: "none", userSelect: "none" }, children: [
+      /* @__PURE__ */ jsxRuntime2.jsx("style", { children: "@keyframes mgQtePop{0%{transform:translate(-50%,-50%) scale(0.5);opacity:0}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}" }),
+      showTarget && prompt && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", left: `${px}%`, top: `${py}%`, width: 0, height: 0 }, children: [
+        phase === "active" && /* @__PURE__ */ jsxRuntime2.jsx("div", { ref: ringRef, style: {
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 108,
+          height: 108,
+          borderRadius: "50%",
+          border: "4px solid #facc15",
+          transform: "translate(-50%, -50%) scale(1.9)",
+          opacity: 0.35,
+          pointerEvents: "none",
+          boxShadow: "0 0 14px rgba(250,204,21,0.35)"
+        } }),
+        /* @__PURE__ */ jsxRuntime2.jsx(
+          "button",
+          {
+            onPointerDown: (e) => {
+              e.preventDefault();
+              if (!isKey) hit(idxRef.current);
+            },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              transform: "translate(-50%, -50%)",
+              width: 88,
+              height: 88,
+              borderRadius: "50%",
+              cursor: isKey ? "default" : "pointer",
+              border: `4px solid ${phase === "hitFlash" ? "#34d399" : phase === "missFlash" ? "#ef4444" : "rgba(255,255,255,0.9)"}`,
+              background: imgUrl ? "rgba(0,0,0,0.35)" : "rgba(15,23,42,0.85)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+              color: "#fff",
+              animation: "mgQtePop 0.18s ease-out",
+              boxShadow: phase === "hitFlash" ? "0 0 22px rgba(52,211,153,0.8)" : phase === "missFlash" ? "0 0 22px rgba(239,68,68,0.8)" : "0 2px 12px rgba(0,0,0,0.6)",
+              touchAction: "none"
+            },
+            children: imgUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: imgUrl, alt: "", draggable: false, style: { width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" } }) : isKey ? /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: keyLabel.length > 2 ? 15 : 26, fontWeight: 800, letterSpacing: 1 }, children: keyLabel }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: prompt.label && prompt.label.length > 3 ? 14 : 22, fontWeight: 800, padding: "0 6px", textAlign: "center", lineHeight: 1.15 }, children: prompt.label || "👆" })
+          }
+        ),
+        isKey && phase === "active" && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", left: 0, top: 56, transform: "translateX(-50%)", whiteSpace: "nowrap", color: "rgba(255,255,255,0.75)", fontSize: 12, textShadow: "0 1px 3px rgba(0,0,0,0.8)", pointerEvents: "none" }, children: prompt.label || "Press the key!" }),
+        phase === "missFlash" && onMiss !== "fail" && !customMissShown && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", left: 0, top: -68, transform: "translateX(-50%)", whiteSpace: "nowrap", color: "#fca5a5", fontSize: 15, fontWeight: 700, textShadow: "0 1px 4px rgba(0,0,0,0.8)", pointerEvents: "none" }, children: [
+          "↺ ",
+          onMiss === "retryPrompt" ? "Try again!" : "From the top!"
+        ] })
+      ] }),
+      showPips && prompts.length > 1 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", left: "50%", bottom: 8, transform: "translateX(-50%)", display: "flex", gap: 7, pointerEvents: "none" }, children: prompts.map((p, i) => {
+        const done = i < idx || i === idx && (phase === "hitFlash" && i === prompts.length - 1);
+        const current = i === idx && phase !== "gap";
+        return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: {
+          width: 10,
+          height: 10,
+          borderRadius: "50%",
+          background: done ? "#34d399" : current ? "#facc15" : "rgba(255,255,255,0.25)",
+          boxShadow: current ? "0 0 8px rgba(250,204,21,0.7)" : void 0,
+          transition: "background 0.2s"
+        } }, p.id);
+      }) })
+    ] });
+  };
+  const StubSurface = ({ ctx }) => /* @__PURE__ */ jsxRuntime2.jsxs(
+    "button",
+    {
+      onClick: () => ctx.reportWin(),
+      style: {
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        color: "rgba(255,255,255,0.85)",
+        fontSize: 15
+      },
+      children: [
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 32 }, children: "🚧" }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { children: "This mini game isn't available in this version." }),
+        /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 12, opacity: 0.7 }, children: "Tap to continue" })
+      ]
+    }
+  );
+  const stub = (label) => ({ label, Surface: StubSurface });
+  const MINI_GAMES = {
+    wipe: { label: "Wipe away", Surface: WipeGameSurface },
+    assemble: { label: "Assemble the pieces", Surface: AssembleGameSurface },
+    paint: { label: "Painting", Surface: PaintGameSurface },
+    memory: { label: "Memory match", Surface: MemoryGameSurface },
+    hidden: { label: "Hidden objects", Surface: HiddenObjectGameSurface },
+    sliding: { label: "Sliding puzzle", Surface: SlidingGameSurface },
+    qte: { label: "Quick taps", Surface: QteGameSurface }
+  };
+  function resolveMiniGameDef(stageType) {
+    return MINI_GAMES[stageType] || stub("Mini game");
+  }
+  function characterExpressionUrls(project, characterId, expressionId) {
+    var _a, _b, _c, _d, _e;
+    const ch = (_a = project.characters) == null ? void 0 : _a[characterId];
+    if (!ch) return [];
+    const urls = [];
+    if (ch.baseImageUrl) urls.push(resolveFieldUrl(project.id, ch.baseImageUrl) || ch.baseImageUrl);
+    const expr = expressionId ? (_b = ch.expressions) == null ? void 0 : _b[expressionId] : Object.values(ch.expressions || {})[0];
+    const cfg = expr == null ? void 0 : expr.layerConfiguration;
+    if (cfg) {
+      for (const layerId of Object.keys(cfg)) {
+        const assetId = cfg[layerId];
+        if (!assetId) continue;
+        const asset = (_e = (_d = (_c = ch.layers) == null ? void 0 : _c[layerId]) == null ? void 0 : _d.assets) == null ? void 0 : _e[assetId];
+        if (asset == null ? void 0 : asset.imageUrl) urls.push(resolveFieldUrl(project.id, asset.imageUrl) || asset.imageUrl);
+      }
+    }
+    return urls;
+  }
+  const MessageBody = ({ cfg, variables, project, assetResolver, scale = 1 }) => {
+    const imgUrl = cfg.imageId ? assetResolver(cfg.imageId, "image") : null;
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 10 * scale,
+      maxWidth: "80%",
+      padding: cfg.panelColor ? `${18 * scale}px ${32 * scale}px` : 0,
+      borderRadius: 16 * scale,
+      background: cfg.panelColor || "transparent"
+    }, children: [
+      imgUrl && /* @__PURE__ */ jsxRuntime2.jsx("img", { src: imgUrl, alt: "", draggable: false, style: { maxWidth: `${40 * scale}vmin`, maxHeight: `${30 * scale}vmin`, objectFit: "contain", pointerEvents: "none" } }),
+      cfg.text && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
+        fontSize: (cfg.fontSize ?? 48) * scale,
+        fontFamily: cfg.fontFamily || void 0,
+        color: cfg.color || "#ffffff",
+        fontWeight: cfg.bold === false ? "normal" : "bold",
+        fontStyle: cfg.italic ? "italic" : "normal",
+        textAlign: "center",
+        whiteSpace: "pre-wrap",
+        textShadow: "0 2px 10px rgba(0,0,0,0.7)"
+      }, children: interpolateVariables(cfg.text, variables, project) })
+    ] });
+  };
+  const MiniGameFrame = ({ game, project, variables, assetResolver, playSound, onResolve, isEditorPreview }) => {
+    const stages = game.stages || [];
+    const [stageIndex, setStageIndex] = React2.useState(0);
+    const [attempt, setAttempt] = React2.useState(0);
+    const [phase, setPhase] = React2.useState(game.introText ? "intro" : "play");
+    const [progress, setProgress] = React2.useState(0);
+    const [remainingMs, setRemainingMs] = React2.useState(null);
+    const [mistakes, setMistakes] = React2.useState(0);
+    const mistakesRef = React2.useRef(0);
+    const failCauseRef = React2.useRef("time");
+    const resolvedRef = React2.useRef(false);
+    const timersRef = React2.useRef([]);
+    const deadlineRef = React2.useRef(null);
+    const rafRef = React2.useRef(null);
+    const [reaction, setReaction] = React2.useState("idle");
+    const reactionOverrideRef = React2.useRef(null);
+    const reactionTimerRef = React2.useRef(null);
+    const hitsRef = React2.useRef(0);
+    const missesRef = React2.useRef(0);
+    const [bgOverride, setBgOverride] = React2.useState(null);
+    const cutsceneNextRef = React2.useRef("nextStage");
+    const [feedbackFlash, setFeedbackFlash] = React2.useState(null);
+    const feedbackTimerRef = React2.useRef(null);
+    const feedbackNonceRef = React2.useRef(0);
+    const stage = stages[stageIndex];
+    const timeLimitMs = (game.timeLimitSec ?? 0) > 0 ? game.timeLimitSec * 1e3 : 0;
+    const pushTimer = (fn, ms) => {
+      const id = window.setTimeout(fn, ms);
+      timersRef.current.push(id);
+    };
+    const phaseRef = React2.useRef(phase);
+    phaseRef.current = phase;
+    const slotColorsRef = React2.useRef({});
+    const computeScore = () => {
+      const hits = hitsRef.current, misses = missesRef.current, total = hits + misses;
+      return { hits, misses, accuracy: total > 0 ? Math.round(hits / total * 100) : 100 };
+    };
+    const resolve = (kind) => {
+      if (resolvedRef.current) return;
+      resolvedRef.current = true;
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      onResolve(kind, kind === "win" ? { ...slotColorsRef.current } : void 0, computeScore());
+    };
+    const flashReaction = (kind, override) => {
+      if (!game.character || phaseRef.current === "won" || phaseRef.current === "failed") return;
+      reactionOverrideRef.current = override ?? null;
+      setReaction(kind);
+      if (reactionTimerRef.current != null) clearTimeout(reactionTimerRef.current);
+      reactionTimerRef.current = window.setTimeout(() => {
+        setReaction("idle");
+        reactionOverrideRef.current = null;
+      }, Math.max(120, game.character.reactMs ?? 500));
+      timersRef.current.push(reactionTimerRef.current);
+    };
+    const retryAttempt = () => {
+      resolvedRef.current = false;
+      mistakesRef.current = 0;
+      setMistakes(0);
+      hitsRef.current = 0;
+      missesRef.current = 0;
+      setProgress(0);
+      setBgOverride(null);
+      setReaction("idle");
+      setFeedbackFlash(null);
+      if (game.retryScope !== "stage") setStageIndex(0);
+      setAttempt((a) => a + 1);
+      setPhase("play");
+    };
+    const triggerFail = (cause) => {
+      if (resolvedRef.current || phaseRef.current === "won" || phaseRef.current === "failed") return;
+      failCauseRef.current = cause;
+      setPhase("failed");
+      setReaction("fail");
+      playSound(game.failSfxId ?? null);
+      const retry = game.failMode === "retry";
+      const fm = game.failMessage;
+      const banner = fm && fm.enabled !== false && (fm.text || fm.imageId);
+      const holdMs = (fm == null ? void 0 : fm.enabled) === false ? 150 : banner ? Math.max(150, fm.durationMs ?? 1200) : retry ? 650 : 750;
+      pushTimer(() => {
+        if (retry) retryAttempt();
+        else resolve("fail");
+      }, holdMs);
+    };
+    const showFeedback = (kind, override, pos) => {
+      const cfg = override ?? (kind === "hit" ? stage == null ? void 0 : stage.hitFeedback : stage == null ? void 0 : stage.missFeedback);
+      if (!cfg || cfg.enabled === false || !(cfg.text || cfg.imageId)) return;
+      if (feedbackTimerRef.current != null) clearTimeout(feedbackTimerRef.current);
+      feedbackNonceRef.current = feedbackNonceRef.current + 1 | 0;
+      setFeedbackFlash({ cfg, pos, nonce: feedbackNonceRef.current });
+      feedbackTimerRef.current = window.setTimeout(() => setFeedbackFlash(null), Math.max(250, cfg.durationMs ?? 900));
+      timersRef.current.push(feedbackTimerRef.current);
+    };
+    const handleMistake = (override, feedbackOverride, pos) => {
+      if (resolvedRef.current || phaseRef.current !== "play") return;
+      missesRef.current += 1;
+      flashReaction("miss", override);
+      showFeedback("miss", feedbackOverride, pos);
+      const limit = game.mistakeLimit ?? 0;
+      if (limit <= 0) return;
+      mistakesRef.current += 1;
+      setMistakes(mistakesRef.current);
+      if (mistakesRef.current >= limit) triggerFail("mistakes");
+    };
+    const handleHit = (override, feedbackOverride, pos) => {
+      if (resolvedRef.current || phaseRef.current !== "play") return;
+      hitsRef.current += 1;
+      flashReaction("hit", override);
+      showFeedback("hit", feedbackOverride, pos);
+    };
+    React2.useEffect(() => {
+      if (!timeLimitMs || phase === "intro") return;
+      deadlineRef.current = performance.now() + timeLimitMs;
+      setRemainingMs(timeLimitMs);
+      const tick = () => {
+        if (resolvedRef.current) return;
+        const left = deadlineRef.current - performance.now();
+        setRemainingMs(Math.max(0, left));
+        if (left <= 0) {
+          triggerFail("time");
+          return;
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+      return () => {
+        if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      };
+    }, [timeLimitMs, phase === "intro", attempt]);
+    React2.useEffect(() => () => {
+      timersRef.current.forEach((id) => clearTimeout(id));
+    }, []);
+    const enterWin = () => {
+      setPhase("won");
+      setReaction("win");
+      playSound(game.winSfxId ?? null);
+      const wm = game.winMessage;
+      const banner = wm && wm.enabled !== false && (wm.text || wm.imageId);
+      const holdMs = (wm == null ? void 0 : wm.enabled) === false ? 150 : banner ? Math.max(150, wm.durationMs ?? 1200) : 750;
+      pushTimer(() => resolve("win"), holdMs);
+    };
+    const advanceToNextStage = () => {
+      if (game.mistakesPerStage) {
+        mistakesRef.current = 0;
+        setMistakes(0);
+      }
+      setStageIndex((i) => i + 1);
+      setProgress(0);
+      setBgOverride(null);
+      setReaction("idle");
+      setFeedbackFlash(null);
+      setPhase("play");
+    };
+    const dismissCutscene = () => {
+      if (phaseRef.current !== "cutscene") return;
+      if (cutsceneNextRef.current === "win") enterWin();
+      else advanceToNextStage();
+    };
+    const handleStageWin = () => {
+      if (resolvedRef.current || phaseRef.current === "stageWon" || phaseRef.current === "cutscene" || phaseRef.current === "won" || phaseRef.current === "failed") return;
+      const isLast = stageIndex >= stages.length - 1;
+      const cut = stage == null ? void 0 : stage.cutscene;
+      const hasCut = !!cut && !!(cut.text || cut.imageId || cut.characterId);
+      playSound((stage == null ? void 0 : stage.stageWinSfxId) ?? game.interactSfxId ?? null);
+      if (hasCut) {
+        cutsceneNextRef.current = isLast ? "win" : "nextStage";
+        setPhase("cutscene");
+        if (cut.durationMs && cut.durationMs > 0) pushTimer(dismissCutscene, cut.durationMs);
+        return;
+      }
+      if (isLast) enterWin();
+      else {
+        setPhase("stageWon");
+        pushTimer(advanceToNextStage, 750);
+      }
+    };
+    const cursorUrl = (stage == null ? void 0 : stage.cursorImageId) ? assetResolver(stage.cursorImageId, "image") : null;
+    const cursorRef = React2.useRef(null);
+    const surfaceRef = React2.useRef(null);
+    const moveCursor = (e) => {
+      const el = cursorRef.current, host = surfaceRef.current;
+      if (!el || !host) return;
+      const rect = host.getBoundingClientRect();
+      el.style.transform = `translate3d(${e.clientX - rect.left}px, ${e.clientY - rect.top}px, 0) translate(-50%, -50%)`;
+      el.style.opacity = "1";
+    };
+    const hideCursor = () => {
+      if (cursorRef.current) cursorRef.current.style.opacity = "0";
+    };
+    const cursorSizePct = Math.min(30, Math.max(2, (stage == null ? void 0 : stage.cursorSizePct) ?? 6));
+    if (!stage) return null;
+    const def = resolveMiniGameDef(stage.stageType);
+    const Surface = def.Surface;
+    const activeBgId = bgOverride ?? game.backgroundImage ?? null;
+    const bgUrl = activeBgId ? assetResolver(activeBgId, "image") : null;
+    const char = game.character;
+    const reactionExprId = char ? reaction === "hit" ? reactionOverrideRef.current || char.hitExpressionId || char.idleExpressionId || null : reaction === "miss" ? reactionOverrideRef.current || char.missExpressionId || char.idleExpressionId || null : reaction === "win" ? char.winExpressionId || char.idleExpressionId || null : reaction === "fail" ? char.failExpressionId || char.idleExpressionId || null : char.idleExpressionId || null : null;
+    const charUrls = char ? characterExpressionUrls(project, char.characterId, reactionExprId) : [];
+    const ctx = {
+      stage,
+      game,
+      project,
+      variables,
+      assetResolver,
+      playInteractSound: () => playSound(game.interactSfxId ?? null),
+      playSound,
+      reportWin: handleStageWin,
+      reportMistake: handleMistake,
+      reportHit: handleHit,
+      setBackground: (id) => setBgOverride(id),
+      reportFail: () => triggerFail("mistakes"),
+      reportProgress: setProgress,
+      reportColors: (slots) => {
+        Object.assign(slotColorsRef.current, slots);
+      },
+      isEditorPreview
+    };
+    const timerFrac = timeLimitMs && remainingMs != null ? remainingMs / timeLimitMs : 1;
+    const blocking = phase !== "play";
+    return (
+      // game.fontFamily cascades to ALL mini-game text (title/instructions/labels/keycaps/cutscene/
+      // Skip/pips…); per-message fonts still override via MessageBody. Absent = inherit app default.
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", inset: 0, background: game.backgroundColor || "rgba(0,0,0,0.75)", display: "flex", flexDirection: "column", userSelect: "none", fontFamily: game.fontFamily || void 0 }, children: [
+        bgUrl && /* @__PURE__ */ jsxRuntime2.jsx("img", { src: bgUrl, alt: "", draggable: false, style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" } }),
+        /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "relative", zIndex: 2, padding: "14px 18px 8px", textAlign: "center", color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.8)", pointerEvents: "none" }, children: [
+          (game.title || game.name) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: 22, fontWeight: 700 }, children: game.title || game.name }),
+          game.instructions && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: 14, opacity: 0.9, marginTop: 2 }, children: game.instructions }),
+          stage.instructions && phase !== "intro" && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: 14, opacity: 0.95, marginTop: 4, fontStyle: "italic" }, children: stage.instructions }),
+          stages.length > 1 && phase !== "intro" && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: 12, opacity: 0.75, marginTop: 4 }, children: `Step ${Math.min(stageIndex + 1, stages.length)} of ${stages.length}` }),
+          timeLimitMs > 0 && game.showTimer !== false && phase !== "intro" && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { margin: "8px auto 0", width: "min(420px, 70%)", height: 6, borderRadius: 3, background: "rgba(255,255,255,0.25)", overflow: "hidden" }, children: /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: `${Math.max(0, Math.min(1, timerFrac)) * 100}%`, height: "100%", borderRadius: 3, background: timerFrac < 0.25 ? "#ef4444" : "#facc15", transition: "width 0.1s linear" } }) }),
+          (game.mistakeLimit ?? 0) > 0 && game.showMistakes !== false && phase !== "intro" && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { marginTop: 5, fontSize: 17, letterSpacing: 3, lineHeight: 1 }, children: Array.from({ length: game.mistakeLimit }).map((_, i) => /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { color: "#f87171", opacity: i < game.mistakeLimit - mistakes ? 1 : 0.22, transition: "opacity 0.25s" }, children: "♥" }, i)) })
+        ] }),
+        /* @__PURE__ */ jsxRuntime2.jsxs(
+          "div",
+          {
+            ref: surfaceRef,
+            style: { position: "relative", zIndex: 1, flex: 1, minHeight: 0, margin: "4px 4% 12px", cursor: cursorUrl ? "none" : void 0 },
+            onPointerMove: cursorUrl ? moveCursor : void 0,
+            onPointerDown: cursorUrl ? moveCursor : void 0,
+            onPointerLeave: cursorUrl ? hideCursor : void 0,
+            onPointerUp: cursorUrl ? ((e) => {
+              if (e.pointerType !== "mouse") hideCursor();
+            }) : void 0,
+            children: [
+              /* @__PURE__ */ jsxRuntime2.jsx(Surface, { ctx }, `${stage.id}-${attempt}`),
+              char && charUrls.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
+                position: "absolute",
+                left: `${char.x ?? 22}%`,
+                top: `${char.y ?? 8}%`,
+                height: `${char.size ?? 62}%`,
+                aspectRatio: "3 / 4",
+                transform: char.flipX ? "scaleX(-1)" : void 0,
+                pointerEvents: "none",
+                zIndex: 15,
+                transition: "transform 0.12s ease-out"
+              }, children: charUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx(
+                "img",
+                {
+                  src: u,
+                  alt: "",
+                  draggable: false,
+                  style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }
+                },
+                i
+              )) }),
+              cursorUrl && /* @__PURE__ */ jsxRuntime2.jsx(
+                "img",
+                {
+                  ref: cursorRef,
+                  src: cursorUrl,
+                  alt: "",
+                  draggable: false,
+                  style: { position: "absolute", left: 0, top: 0, width: `${cursorSizePct}%`, opacity: 0, pointerEvents: "none", zIndex: 30, willChange: "transform" }
+                }
+              ),
+              phase === "play" && progress > 0 && progress < 1 && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", right: 10, bottom: 10, zIndex: 20, padding: "2px 10px", borderRadius: 999, background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 12, pointerEvents: "none" }, children: [
+                Math.round(progress * 100),
+                "%"
+              ] }),
+              feedbackFlash && phase === "play" && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: {
+                position: "absolute",
+                left: feedbackFlash.pos ? `${feedbackFlash.pos.x}%` : "50%",
+                top: feedbackFlash.pos ? `${feedbackFlash.pos.y}%` : "40%",
+                transform: "translate(-50%, -50%)",
+                zIndex: 22,
+                pointerEvents: "none"
+              }, children: [
+                /* @__PURE__ */ jsxRuntime2.jsx("style", { children: "@keyframes mgPopIn{0%{transform:scale(0.6);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}" }),
+                /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
+                  animation: (feedbackFlash.cfg.animation ?? "pop") === "pop" ? "mgPopIn 0.3s ease-out" : (feedbackFlash.cfg.animation ?? "pop") === "fade" ? "fade-in 0.25s ease-out" : void 0
+                }, children: /* @__PURE__ */ jsxRuntime2.jsx(MessageBody, { cfg: feedbackFlash.cfg, variables, project, assetResolver, scale: 0.6 }) }, feedbackFlash.nonce)
+              ] }),
+              blocking && phase !== "intro" && (() => {
+                const isWin = phase === "won";
+                const isFail = phase === "failed";
+                const cfg = isWin ? game.winMessage : isFail ? game.failMessage : void 0;
+                const msgHidden = (isWin || isFail) && (cfg == null ? void 0 : cfg.enabled) === false;
+                const custom = (isWin || isFail) && !msgHidden && cfg && (cfg.text || cfg.imageId) ? cfg : null;
+                const dim = msgHidden ? false : custom ? custom.dimBackground !== false : true;
+                const anim = custom ? custom.animation ?? "pop" : "fade";
+                return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", inset: 0, zIndex: 25, display: "flex", alignItems: "center", justifyContent: "center", background: dim ? "rgba(0,0,0,0.35)" : "transparent", animation: "fade-in 0.15s ease-out" }, children: [
+                  /* @__PURE__ */ jsxRuntime2.jsx("style", { children: "@keyframes mgPopIn{0%{transform:scale(0.6);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}" }),
+                  msgHidden ? null : custom ? /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { animation: anim === "pop" ? "mgPopIn 0.35s ease-out" : anim === "fade" ? "fade-in 0.3s ease-out" : void 0 }, children: /* @__PURE__ */ jsxRuntime2.jsx(MessageBody, { cfg: custom, variables, project, assetResolver }) }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: 72, textShadow: "0 2px 12px rgba(0,0,0,0.7)" }, children: isFail ? game.failMode === "retry" ? "↻" : failCauseRef.current === "mistakes" ? "✖" : "⏰" : "✓" })
+                ] });
+              })()
+            ]
+          }
+        ),
+        !!game.skippable && phase !== "won" && phase !== "failed" && /* @__PURE__ */ jsxRuntime2.jsx(
+          "button",
+          {
+            onClick: () => {
+              playSound(game.interactSfxId ?? null);
+              resolve("skip");
+            },
+            style: { position: "absolute", right: 14, bottom: 12, zIndex: 3, padding: "7px 16px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.4)", background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 13, cursor: "pointer" },
+            children: game.skipLabel || "Skip"
+          }
+        ),
+        phase === "cutscene" && stage.cutscene && (() => {
+          const cut = stage.cutscene;
+          const cutImg = cut.imageId ? assetResolver(cut.imageId, "image") : null;
+          const cutCharUrls = cut.characterId ? characterExpressionUrls(project, cut.characterId, cut.expressionId ?? null) : [];
+          return /* @__PURE__ */ jsxRuntime2.jsxs(
+            "button",
+            {
+              onClick: () => {
+                playSound(game.interactSfxId ?? null);
+                dismissCutscene();
+              },
+              style: { position: "absolute", inset: 0, zIndex: 26, background: cut.backgroundColor || "rgba(0,0,0,0.82)", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, color: "#fff", animation: "fade-in 0.25s ease-out" },
+              children: [
+                cutCharUrls.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "relative", height: "46%", aspectRatio: "3 / 4" }, children: cutCharUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", draggable: false, style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" } }, i)) }),
+                cutImg && /* @__PURE__ */ jsxRuntime2.jsx("img", { src: cutImg, alt: "", draggable: false, style: { maxWidth: "50vmin", maxHeight: "34vmin", objectFit: "contain" } }),
+                cut.text && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 19, maxWidth: "74%", whiteSpace: "pre-wrap", textAlign: "center", textShadow: "0 1px 4px rgba(0,0,0,0.85)" }, children: interpolateVariables(cut.text, variables, project) }),
+                !cut.durationMs && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 13, opacity: 0.8 }, children: "▶ Tap to continue" })
+              ]
+            }
+          );
+        })(),
+        phase === "intro" && /* @__PURE__ */ jsxRuntime2.jsxs(
+          "button",
+          {
+            onClick: () => {
+              playSound(game.interactSfxId ?? null);
+              setPhase("play");
+            },
+            style: { position: "absolute", inset: 0, zIndex: 4, background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, color: "#fff" },
+            children: [
+              /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 18, maxWidth: "70%", whiteSpace: "pre-wrap", textShadow: "0 1px 4px rgba(0,0,0,0.8)" }, children: game.introText }),
+              /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: 13, opacity: 0.8 }, children: "▶ Tap to start" })
+            ]
+          }
+        )
+      ] })
+    );
+  };
+  function resolvePlayerCharacterId(project, variables) {
+    var _a;
+    const varId = (_a = project.ui) == null ? void 0 : _a.playerCharacterVarId;
+    if (!varId) return null;
+    const raw = variables == null ? void 0 : variables[varId];
+    const id = raw == null ? "" : String(raw);
+    return id && project.characters[id] ? id : null;
+  }
+  function resolvePlayerCharacterName(project, variables) {
+    var _a;
+    const varId = (_a = project.ui) == null ? void 0 : _a.playerCharacterNameVarId;
+    if (!varId) return null;
+    const raw = variables == null ? void 0 : variables[varId];
+    const name = raw == null ? "" : String(raw);
+    return name.trim() ? name : null;
+  }
+  function resolveCommandCharacterId(command, project, variables) {
+    if (command.characterSource === "player") {
+      return resolvePlayerCharacterId(project, variables);
+    }
+    return command.characterId ?? null;
+  }
   function getEffect(effects, type) {
     return effects.find((e) => e.type === type);
   }
@@ -5682,6 +8600,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return best;
   }
+  function revealHighlightStyle(hl) {
+    switch (hl.style) {
+      case "glow":
+        return { textShadow: `0 0 8px ${hl.color}, 0 0 14px ${hl.color}` };
+      case "underline":
+        return { textDecoration: "underline", textDecorationColor: hl.color, textUnderlineOffset: "3px", textDecorationThickness: "2px" };
+      case "color":
+      default:
+        return { color: hl.color, WebkitTextFillColor: hl.color };
+    }
+  }
   const TEXT_EFFECT_KEYFRAMES = `
 @keyframes vnTextShake {
     0%, 100% { transform: translate(0, 0); }
@@ -5813,12 +8742,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     displayText,
     textEffect,
     textStyle,
-    gradientStyle
+    gradientStyle,
+    revealHighlight
   }) => {
     React2.useMemo(() => {
       injectTextEffectStyles();
     }, []);
     if (!textEffect || textEffect.type === "none") {
+      if (revealHighlight && revealHighlight.start < displayText.length) {
+        const hlEnd = Math.min(revealHighlight.end ?? displayText.length, displayText.length);
+        const before = displayText.slice(0, revealHighlight.start);
+        const word = displayText.slice(revealHighlight.start, hlEnd);
+        const after = displayText.slice(hlEnd);
+        return /* @__PURE__ */ jsxRuntime2.jsxs("span", { style: gradientStyle || void 0, children: [
+          before,
+          /* @__PURE__ */ jsxRuntime2.jsx("span", { style: revealHighlightStyle(revealHighlight), children: word }),
+          after
+        ] });
+      }
       return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: gradientStyle || void 0, children: displayText });
     }
     const tokens = displayText.split(/(\s+)/);
@@ -5834,6 +8775,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       charIndex += token.length;
       return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { display: "inline-block", whiteSpace: "nowrap" }, children: token.split("").map((char, ci) => {
         const charStyle = getCharacterStyle(textEffect, wordStart + ci);
+        const gi = wordStart + ci;
+        const hlStyle = revealHighlight && gi >= revealHighlight.start && gi < (revealHighlight.end ?? displayText.length) ? revealHighlightStyle(revealHighlight) : void 0;
         return /* @__PURE__ */ jsxRuntime2.jsx(
           "span",
           {
@@ -5844,7 +8787,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 WebkitBackgroundClip: void 0,
                 backgroundClip: void 0,
                 WebkitTextFillColor: void 0
-              } : {}
+              } : {},
+              ...hlStyle || {}
             },
             children: char
           },
@@ -5853,6 +8797,159 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }) }, ti);
     }) });
   };
+  const MAX_ANALYZE_BYTES = 6 * 1024 * 1024;
+  let sharedCtx = null;
+  const getCtx = () => {
+    try {
+      if (!sharedCtx) sharedCtx = new (window.AudioContext || window.webkitAudioContext)();
+      return sharedCtx;
+    } catch {
+      return null;
+    }
+  };
+  const HOP_MS = 10;
+  const BRIDGE_MS = 140;
+  const MIN_SEG_MS = 60;
+  function findSpeechSegments(env) {
+    let peak = 0;
+    for (const v of env) peak = Math.max(peak, v);
+    if (peak <= 0) return [];
+    const thr = Math.max(peak * 0.12, 8e-3);
+    const segs = [];
+    let segStart = -1;
+    for (let i = 0; i <= env.length; i++) {
+      const loud = i < env.length && env[i] >= thr;
+      if (loud && segStart < 0) segStart = i * HOP_MS;
+      if (!loud && segStart >= 0) {
+        segs.push({ start: segStart, end: i * HOP_MS });
+        segStart = -1;
+      }
+    }
+    const merged = [];
+    for (const s of segs) {
+      const last = merged[merged.length - 1];
+      if (last && s.start - last.end <= BRIDGE_MS) last.end = s.end;
+      else merged.push({ ...s });
+    }
+    return merged.filter((s) => s.end - s.start >= MIN_SEG_MS);
+  }
+  function wavEnvelope(buf) {
+    try {
+      const dv = new DataView(buf);
+      if (buf.byteLength < 44) return null;
+      if (dv.getUint32(0, false) !== 1380533830 || dv.getUint32(8, false) !== 1463899717) return null;
+      let pos = 12;
+      let fmt = null;
+      let dataStart = -1, dataLen = 0;
+      while (pos + 8 <= buf.byteLength) {
+        const id = dv.getUint32(pos, false);
+        const size = dv.getUint32(pos + 4, true);
+        if (id === 1718449184 && size >= 16) {
+          fmt = {
+            codec: dv.getUint16(pos + 8, true),
+            channels: Math.max(1, dv.getUint16(pos + 10, true)),
+            rate: dv.getUint32(pos + 12, true),
+            bits: dv.getUint16(pos + 22, true)
+          };
+          if (fmt.codec === 65534 && size >= 40) fmt.codec = dv.getUint16(pos + 32, true);
+        } else if (id === 1684108385) {
+          dataStart = pos + 8;
+          dataLen = Math.min(size, buf.byteLength - dataStart);
+        }
+        pos += 8 + size + (size & 1);
+      }
+      if (!fmt || dataStart < 0 || dataLen <= 0 || fmt.rate < 4e3 || fmt.rate > 384e3) return null;
+      const pcm16 = fmt.codec === 1 && fmt.bits === 16;
+      const pcm8 = fmt.codec === 1 && fmt.bits === 8;
+      const f32 = fmt.codec === 3 && fmt.bits === 32;
+      if (!pcm16 && !pcm8 && !f32) return null;
+      const bytesPer = fmt.bits / 8;
+      const frameBytes = bytesPer * fmt.channels;
+      const frames = Math.floor(dataLen / frameBytes);
+      const hopFrames = Math.max(1, Math.round(fmt.rate * HOP_MS / 1e3));
+      const env = new Float32Array(Math.ceil(frames / hopFrames));
+      for (let e = 0; e < env.length; e++) {
+        let sum = 0;
+        const from = e * hopFrames, to = Math.min(frames, from + hopFrames);
+        for (let f = from; f < to; f++) {
+          const off = dataStart + f * frameBytes;
+          const v = pcm16 ? dv.getInt16(off, true) / 32768 : pcm8 ? (dv.getUint8(off) - 128) / 128 : dv.getFloat32(off, true);
+          sum += v * v;
+        }
+        env[e] = Math.sqrt(sum / Math.max(1, to - from));
+      }
+      return env;
+    } catch {
+      return null;
+    }
+  }
+  let decodeChain = Promise.resolve();
+  const clipCache = /* @__PURE__ */ new Map();
+  function getClipSpeech(url) {
+    const hit = clipCache.get(url);
+    if (hit) return hit;
+    const job = decodeChain.then(async () => {
+      try {
+        const res = await fetch(url);
+        const buf = await res.arrayBuffer();
+        if (buf.byteLength > MAX_ANALYZE_BYTES) return null;
+        let env = wavEnvelope(buf);
+        const isRiff = buf.byteLength >= 4 && new DataView(buf).getUint32(0, false) === 1380533830;
+        if (!env && isRiff) return null;
+        if (!env) {
+          const ctx = getCtx();
+          if (!ctx) return null;
+          const audio = await ctx.decodeAudioData(buf);
+          const ch = audio.getChannelData(0);
+          const hop = Math.max(1, Math.round(audio.sampleRate * HOP_MS / 1e3));
+          env = new Float32Array(Math.ceil(ch.length / hop));
+          for (let i = 0; i < env.length; i++) {
+            let sum = 0;
+            const from = i * hop, to = Math.min(ch.length, from + hop);
+            for (let j = from; j < to; j++) sum += ch[j] * ch[j];
+            env[i] = Math.sqrt(sum / Math.max(1, to - from));
+          }
+        }
+        const segs = findSpeechSegments(env);
+        if (!segs.length) return null;
+        return { segs, totalSpeech: segs.reduce((a, s) => a + (s.end - s.start), 0) };
+      } catch {
+        return null;
+      }
+    });
+    decodeChain = job.catch(() => null);
+    clipCache.set(url, job);
+    return job;
+  }
+  function analyzeVoiceWordStarts(url, weights) {
+    if (!url || !weights.length) return Promise.resolve(null);
+    return getClipSpeech(url).then((clip) => {
+      if (!clip) return null;
+      const { segs, totalSpeech } = clip;
+      const totalWeight = weights.reduce((a, w) => a + w, 0) || 1;
+      const starts = [];
+      let segIdx = 0;
+      let posInSeg = 0;
+      for (const w of weights) {
+        const seg = segs[Math.min(segIdx, segs.length - 1)];
+        starts.push(seg.start + posInSeg);
+        let need = w / totalWeight * totalSpeech;
+        while (need > 0 && segIdx < segs.length) {
+          const s = segs[segIdx];
+          const room = s.end - s.start - posInSeg;
+          if (need < room) {
+            posInSeg += need;
+            need = 0;
+          } else {
+            need -= room;
+            segIdx++;
+            posInSeg = 0;
+          }
+        }
+      }
+      return starts;
+    });
+  }
   const normalizeSetVariableOperator = (variableType, variableName, operator) => {
     if ((operator === "add" || operator === "subtract") && variableType !== "number") {
       console.warn(
@@ -5892,13 +8989,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           return value;
         }
         const normalized = changeValStr.trim().toLowerCase();
-        if (normalized === "") {
-          return !currentValue;
-        }
-        if (normalized === "true" || normalized === "1") {
+        if (normalized === "" || normalized === "undefined" || normalized === "null") {
           return true;
         }
-        if (normalized === "false" || normalized === "0") {
+        if (normalized === "true" || normalized === "1" || normalized === "yes") {
+          return true;
+        }
+        if (normalized === "false" || normalized === "0" || normalized === "no") {
           return false;
         }
         return !!value;
@@ -5943,7 +9040,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             return randomVal;
           }
         }
-        return finish(coerceValueToType(changeValue, variableType, currentValue));
+        return finish(coerceValueToType(changeValue, variableType));
     }
   };
   const PRESET_X = {
@@ -5987,7 +9084,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   }
   const handleDialogue = (command, context) => {
     const { project } = context;
-    const char = command.characterId ? project.characters[command.characterId] : null;
+    const resolvedCharacterId = resolveCommandCharacterId(command, project, context.playerState.variables) || command.characterId;
+    const char = resolvedCharacterId ? project.characters[resolvedCharacterId] : null;
+    const playerName = command.characterSource === "player" ? resolvePlayerCharacterName(project, context.playerState.variables) : null;
     const voiceAudioId = command.voiceAudioId || (char == null ? void 0 : char.defaultVoiceId) || null;
     const textEffect = command.textEffect || (char == null ? void 0 : char.textEffect) || void 0;
     if (voiceAudioId) {
@@ -6003,13 +9102,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           isWaitingForInput: true,
           dialogue: {
             text: command.text,
-            characterName: (char == null ? void 0 : char.name) || "Narrator",
+            characterName: playerName || (char == null ? void 0 : char.name) || "Narrator",
             characterColor: (char == null ? void 0 : char.color) || "#FFFFFF",
-            characterId: command.characterId || null,
+            characterId: resolvedCharacterId || null,
             voiceAudioId,
             textEffect,
             textboxThemeId: command.textboxThemeId ?? null,
-            textSpeed: command.textSpeed
+            textSpeed: command.textSpeed,
+            // Per-line auto-advance timer (counts from typewriter completion).
+            timeLimit: command.timeLimit,
+            timeLimitLocked: command.timeLimitLocked,
+            showTimer: command.showTimer
           }
         }
       }
@@ -6208,15 +9311,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return from + (to - from) * t;
   }
   function lerpColor(from, to, t) {
-    const fromRgb = hexToRgb(from);
-    const toRgb = hexToRgb(to);
+    const fromRgb = hexToRgb$1(from);
+    const toRgb = hexToRgb$1(to);
     if (!fromRgb || !toRgb) return to;
     const r = Math.round(lerp(fromRgb.r, toRgb.r, t));
     const g = Math.round(lerp(fromRgb.g, toRgb.g, t));
     const b = Math.round(lerp(fromRgb.b, toRgb.b, t));
     return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
   }
-  function hexToRgb(hex) {
+  function hexToRgb$1(hex) {
     const match = hex.replace("#", "").match(/^([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
     if (!match) return null;
     return { r: parseInt(match[1], 16), g: parseInt(match[2], 16), b: parseInt(match[3], 16) };
@@ -6430,15 +9533,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   }
   function handleShowCharacter(command, context) {
     const { project, playerState, activeEffectTimeoutsRef, advance, setPlayerState } = context;
-    const charData = project.characters[command.characterId];
-    const exprData = charData == null ? void 0 : charData.expressions[command.expressionId];
-    if (!charData || !exprData) {
+    const characterId = resolveCommandCharacterId(command, project, playerState.variables) || command.characterId;
+    const charData = characterId ? project.characters[characterId] : void 0;
+    const exprData = charData ? charData.expressions[command.expressionId] || Object.values(charData.expressions)[0] : void 0;
+    if (!characterId || !charData || !exprData) {
       return { advance: true };
     }
-    TweenManager.cancelForTarget(command.characterId, "character");
+    TweenManager.cancelForTarget(characterId, "character");
     const wrap = (u) => resolveFieldUrl(project.id, u) || u;
     const finalBindings = {};
-    const existingChar = playerState == null ? void 0 : playerState.stageState.characters[command.characterId];
+    const existingChar = playerState == null ? void 0 : playerState.stageState.characters[characterId];
     Object.values(charData.layers).forEach((layer) => {
       let boundVarId = null;
       const existingVarId = existingChar == null ? void 0 : existingChar.layerVariableBindings[layer.id];
@@ -6485,8 +9589,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const assetId = String(varValue);
           layerSelections[layer.id] = assetId && layer.assets[assetId] ? assetId : null;
         }
-      } else {
+      } else if (Object.prototype.hasOwnProperty.call(exprData.layerConfiguration, layer.id)) {
         layerSelections[layer.id] = exprData.layerConfiguration[layer.id] ?? null;
+      } else if ((existingChar == null ? void 0 : existingChar.layerSelections) && Object.prototype.hasOwnProperty.call(existingChar.layerSelections, layer.id)) {
+        layerSelections[layer.id] = existingChar.layerSelections[layer.id];
+      } else {
+        layerSelections[layer.id] = null;
       }
     });
     const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, layerSelections, wrap);
@@ -6495,12 +9603,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const requestedTransition = command.transition;
     const currentCharacters = playerState.stageState.characters;
     const hasShowTransitionFlag = requestedTransition && requestedTransition !== "instant";
-    const existingSameChar = currentCharacters[command.characterId];
+    const existingSameChar = currentCharacters[characterId];
     const isPoseChange = !!existingSameChar && !!hasShowTransitionFlag && (existingSameChar.imageUrls.join(",") !== imageUrls.join(",") || existingSameChar.expressionId !== command.expressionId);
     if (command.keepPosition && existingSameChar) {
       finalPosition = existingSameChar.position;
     }
-    const ghostKey = isPoseChange ? `__ghost_${command.characterId}_${Date.now()}` : null;
+    const ghostKey = isPoseChange ? `__ghost_${characterId}_${Date.now()}` : null;
     const ghostEntry = isPoseChange ? {
       charId: ghostKey,
       position: existingSameChar.position,
@@ -6530,7 +9638,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       playerState.variables
     );
     const characterState = {
-      charId: command.characterId,
+      charId: characterId,
       layer: command.layer,
       parallaxDepth: command.parallaxDepth,
       position: finalPosition,
@@ -6574,7 +9682,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             ...prev.characters,
             // Old pose ghost (fades out) when changing pose of the same character
             ...ghostEntry && ghostKey ? { [ghostKey]: ghostEntry } : {},
-            [command.characterId]: characterState
+            [characterId]: characterState
           }
         }),
         delay: duration,
@@ -6593,18 +9701,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return {
       advance: true,
       stagePatch: (prev) => ({
-        characters: { ...prev.characters, [command.characterId]: characterState }
+        characters: { ...prev.characters, [characterId]: characterState }
       })
     };
   }
   function handleHideCharacter(command, context) {
-    const { playerState, setPlayerState, advance } = context;
+    const { project, playerState, setPlayerState, advance } = context;
     const hideTransitionType = command.transition;
-    const existingChar = playerState.stageState.characters[command.characterId];
-    if (!existingChar) {
+    const characterId = resolveCommandCharacterId(command, project, playerState.variables) || command.characterId;
+    const existingChar = characterId ? playerState.stageState.characters[characterId] : void 0;
+    if (!characterId || !existingChar) {
       return { advance: true };
     }
-    TweenManager.cancelForTarget(command.characterId, "character");
+    TweenManager.cancelForTarget(characterId, "character");
     if (hideTransitionType && hideTransitionType !== "instant") {
       const finalPosition = existingChar.position;
       const startPosition = void 0;
@@ -6624,13 +9733,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         advance: false,
         // Functional patch (composes with other stacked/parallel character commands).
         stagePatch: (prev) => ({
-          characters: { ...prev.characters, [command.characterId]: characterWithTransition }
+          characters: { ...prev.characters, [characterId]: characterWithTransition }
         }),
         delay: duration,
         callback: () => {
           setPlayerState((p) => {
             if (!p) return null;
-            const { [command.characterId]: _, ...remaining } = p.stageState.characters;
+            const { [characterId]: _, ...remaining } = p.stageState.characters;
             return {
               ...p,
               stageState: { ...p.stageState, characters: remaining }
@@ -6643,7 +9752,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       return {
         advance: true,
         stagePatch: (prev) => {
-          const { [command.characterId]: _, ...remaining } = prev.characters;
+          const { [characterId]: _, ...remaining } = prev.characters;
           return { characters: remaining };
         }
       };
@@ -8110,6 +11219,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         if (!context.onRunCommand) return;
         await context.onRunCommand("Flashlight", { enabled: false });
       },
+      spotlight: async (opts = {}) => {
+        if (!context.onRunCommand) return;
+        await context.onRunCommand("Spotlight", { enabled: true, ...opts });
+      },
+      spotlightOff: async () => {
+        if (!context.onRunCommand) return;
+        await context.onRunCommand("Spotlight", { enabled: false });
+      },
       screenOverlay: async (effectType, opts = {}) => {
         if (!context.onRunCommand) return;
         await context.onRunCommand("SetScreenOverlayEffect", { effectType, ...opts });
@@ -8553,11 +11670,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     var _a, _b;
     const { playerState, activeEffectTimeoutsRef, advance, setPlayerState } = context;
     const tag = command.particleTag || `particles_${command.id}`;
+    const hasBindings = !!(command.emitRateVariableId || command.windVariableId || command.gravityVariableId || command.opacityVariableId);
     const particleEntry = {
       tag,
       config: command.config,
       startTime: Date.now(),
-      duration: command.duration || 0
+      duration: command.duration || 0,
+      // LIVE variable bindings ride the entry; the stage render resolves them into the
+      // config each frame-render so the emitter reacts while running.
+      ...hasBindings ? {
+        varBindings: {
+          emitRate: command.emitRateVariableId ?? null,
+          wind: command.windVariableId ?? null,
+          gravity: command.gravityVariableId ?? null,
+          opacity: command.opacityVariableId ?? null
+        }
+      } : {}
     };
     console.log("[ParticleHandler] SpawnParticles:", { tag, preset: (_a = command.config) == null ? void 0 : _a.preset, emitRate: (_b = command.config) == null ? void 0 : _b.emitRate, duration: command.duration, configKeys: Object.keys(command.config || {}) });
     if (command.duration > 0) {
@@ -8797,9 +11925,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   }
   function handleMoveCharacter(command, context) {
     const { advance } = context;
-    const char = context.playerState.stageState.characters[command.characterId];
-    if (!char) return { advance: true };
-    const resting = TweenManager.getRestingValues(command.characterId, "character");
+    const characterId = resolveCommandCharacterId(command, context.project, context.playerState.variables) || command.characterId;
+    const char = characterId ? context.playerState.stageState.characters[characterId] : void 0;
+    if (!characterId || !char) return { advance: true };
+    const resting = TweenManager.getRestingValues(characterId, "character");
     const curPos = typeof char.position === "object" ? char.position : PRESET_COORDS[char.position] ?? { x: 50, y: 10 };
     const fromPos = command.fromPosition ? posToCoords(command.fromPosition) : { x: (resting == null ? void 0 : resting.x) ?? curPos.x, y: (resting == null ? void 0 : resting.y) ?? curPos.y };
     const toPos = posToCoords(command.toPosition);
@@ -8819,7 +11948,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     const waitForCompletion = command.waitForCompletion !== false;
     TweenManager.start({
-      targetId: command.characterId,
+      targetId: characterId,
       targetType: "character",
       from,
       to,
@@ -8827,63 +11956,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       duration: command.duration,
       onComplete: waitForCompletion ? () => advance() : void 0
     });
-    return { advance: !waitForCompletion };
+    const stagePatch = (prev) => {
+      const existing = prev.characters[characterId];
+      if (!existing) return {};
+      const updated = { ...existing, position: command.toPosition };
+      if (command.scale !== void 0) updated.scale = command.scale;
+      if (command.rotation !== void 0) updated.rotation = command.rotation;
+      return { characters: { ...prev.characters, [characterId]: updated } };
+    };
+    return { advance: !waitForCompletion, stagePatch };
   }
-  const basePhone = (context) => ({
-    open: false,
-    messages: [],
-    ...context.playerState.uiState.phone || {}
-  });
-  const handleShowPhone = (_command, context) => {
-    return {
-      advance: true,
-      updates: { uiState: { phone: { ...basePhone(context), open: true, view: "home", notification: null } } }
-    };
-  };
-  const handleHidePhone = (_command, context) => {
-    return {
-      advance: true,
-      updates: { uiState: { phone: { ...basePhone(context), open: false, waiting: false, pendingChoices: void 0, notification: null } } }
-    };
-  };
-  const handleShowPhoneText = (command, context) => {
-    const prev = basePhone(context);
-    const messages = prev.messages;
-    const msg = {
-      id: `${command.id}-${messages.length}`,
-      senderId: command.senderId,
-      text: command.text,
-      ...command.portrait ? { portrait: command.portrait } : {},
-      // Tag the conversation thread (the character) so the Contacts app can group by contact.
-      ...command.senderId !== "player" ? { contactId: command.senderId } : {}
-    };
-    const hasChoices = !!(command.choices && command.choices.length > 0);
-    return {
-      // When the message offers replies, pause the scene — the in-phone reply buttons resume it.
-      advance: !hasChoices,
-      updates: {
-        uiState: {
-          phone: {
-            ...prev,
-            open: true,
-            view: "chat",
-            // Focus this character's thread (so the chat shows just their conversation).
-            activeContactId: command.senderId !== "player" ? command.senderId : prev.activeContactId,
-            messages: [...messages, msg],
-            waiting: hasChoices,
-            pendingChoices: hasChoices ? command.choices : void 0,
-            typing: null
-          }
-        }
-      }
-    };
-  };
-  const handleHidePhoneText = (_command, context) => {
-    return {
-      advance: true,
-      updates: { uiState: { phone: { ...basePhone(context), messages: [], waiting: false, pendingChoices: void 0, typing: null } } }
-    };
-  };
   const computeCollectionRestock = (collection, variables) => {
     var _a;
     const out = {};
@@ -9149,6 +12231,70 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return "transition-dissolve";
     }
   };
+  const r3 = (n) => Math.round(n * 1e3) / 1e3;
+  function hexToRgb(hex) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec((hex || "#ffffff").trim());
+    return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 255, g: 255, b: 255 };
+  }
+  function hexToRgba$1(hex, alpha) {
+    const { r, g, b } = hexToRgb(hex);
+    return `rgba(${r}, ${g}, ${b}, ${r3(Math.max(0, Math.min(1, alpha)))})`;
+  }
+  function effOpacity(l) {
+    return l.enabled ? l.tintOpacity ?? 0 : 0;
+  }
+  function effBrightness(l) {
+    return l.enabled ? l.brightness ?? 1 : 1;
+  }
+  function effSaturation(l) {
+    return l.enabled ? l.saturation ?? 1 : 1;
+  }
+  function lerpLayer(a, b, t) {
+    return {
+      enabled: a.enabled || b.enabled,
+      tint: lerpColor(a.tint || "#ffffff", b.tint || "#ffffff", t),
+      tintOpacity: r3(lerp(effOpacity(a), effOpacity(b), t)),
+      brightness: r3(lerp(effBrightness(a), effBrightness(b), t)),
+      saturation: r3(lerp(effSaturation(a), effSaturation(b), t))
+    };
+  }
+  function computeGrade(hour, phases) {
+    if (!phases || phases.length === 0) return null;
+    const h = (hour % 24 + 24) % 24;
+    const sorted = [...phases].sort((p, q) => p.atHour - q.atHour);
+    if (sorted.length === 1) return { background: lerpLayer(sorted[0].background, sorted[0].background, 0), sprites: lerpLayer(sorted[0].sprites, sorted[0].sprites, 0) };
+    let lo = sorted[sorted.length - 1], hi = sorted[0];
+    for (let i = 0; i < sorted.length; i++) {
+      if (sorted[i].atHour <= h && (i === sorted.length - 1 || sorted[i + 1].atHour > h)) {
+        lo = sorted[i];
+        hi = sorted[(i + 1) % sorted.length];
+        break;
+      }
+    }
+    let span = hi.atHour - lo.atHour;
+    if (span <= 0) span += 24;
+    let pos = h - lo.atHour;
+    if (pos < 0) pos += 24;
+    const t = span > 0 ? Math.min(1, Math.max(0, pos / span)) : 0;
+    return { background: lerpLayer(lo.background, hi.background, t), sprites: lerpLayer(lo.sprites, hi.sprites, t) };
+  }
+  function gradeToBackgroundStyle(g) {
+    return {
+      overlayColor: g.tintOpacity > 1e-3 ? hexToRgba$1(g.tint, g.tintOpacity) : "transparent",
+      filter: `brightness(${g.brightness}) saturate(${g.saturation})`
+    };
+  }
+  function gradeToCharacterFilter(g) {
+    if (!g.enabled) return "";
+    const parts = [];
+    if (g.brightness !== 1) parts.push(`brightness(${g.brightness})`);
+    if (g.saturation !== 1) parts.push(`saturate(${g.saturation})`);
+    return parts.join(" ");
+  }
+  function gradeToSpriteTint(g) {
+    if (!g.enabled || g.tintOpacity <= 1e-3) return null;
+    return { color: g.tint, opacity: Math.min(1, g.tintOpacity) };
+  }
   function useTween(targetId, targetType) {
     const [values, setValues] = React2.useState(
       () => TweenManager.getCurrentValues(targetId, targetType)
@@ -9868,14 +13014,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         rectPct: { x: overlay.x, y: overlay.y, width: overlay.width, height: overlay.height },
         acceptTag: overlay.acceptedTag || void 0,
         onDrop: () => {
-          overlay.actions.forEach((a) => onAction(a));
+          (overlay.actions || []).forEach((a) => onAction(a));
         }
       });
     }, [active, overlay, onAction]);
     if (!active) return null;
     const fire = (e) => {
       e.stopPropagation();
-      overlay.actions.forEach((a) => onAction(a));
+      (overlay.actions || []).forEach((a) => onAction(a));
       if (overlay.advanceOnTrigger && onAdvance) onAdvance();
     };
     const style = {
@@ -9891,7 +13037,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       // drag-drop spots are pure drop zones (coordinate hit-test) — don't capture clicks,
       // so empty/drag clicks still reach the stage. click/hover spots capture.
       pointerEvents: overlay.trigger === "drag-drop" ? "none" : "auto",
-      cursor: overlay.trigger === "click" ? "pointer" : "default",
+      cursor: (overlay.trigger || "click") === "click" ? "pointer" : "default",
       // Honor "Draw the spot during play" (overlay.visible) ONLY — an invisible spot is fully
       // invisible even in test-play. (Authors still see/position it on the scene editor canvas,
       // which always draws hot spots with a label.)
@@ -9902,12 +13048,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       "div",
       {
         style,
-        onClick: overlay.trigger === "click" ? fire : void 0,
-        onMouseEnter: overlay.trigger === "hover" ? () => overlay.actions.forEach((a) => onAction(a)) : void 0
+        onClick: (overlay.trigger || "click") === "click" ? fire : void 0,
+        onMouseEnter: overlay.trigger === "hover" ? () => (overlay.actions || []).forEach((a) => onAction(a)) : void 0
       }
     );
   };
-  const useTypewriter = (text, speed) => {
+  const useTypewriter = (text, speed, msPerCharOverride) => {
     const [displayText, setDisplayText] = React2.useState("");
     const hasFinished = displayText.length === text.length;
     React2.useEffect(() => {
@@ -9922,9 +13068,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             return prev;
           }
         });
-      }, 1e3 / speed);
+      }, msPerCharOverride ?? 1e3 / speed);
       return () => clearInterval(interval);
-    }, [text, speed]);
+    }, [text, speed, msPerCharOverride]);
     const skip = () => setDisplayText(text);
     return { displayText, skip, hasFinished };
   };
@@ -10091,12 +13237,52 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return null;
   };
-  const DialogueBox = ({ dialogue, settings, projectUI, onFinished, variables, project, reactiveState }) => {
+  const DialogueBox = ({ dialogue, settings, projectUI, onFinished, variables, project, reactiveState, timerPaused, uiPalette, voiceRef }) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
     if (!dialogue) return null;
     const interpolatedText = interpolateVariables(dialogue.text, variables, project);
     const effectiveTextSpeed = dialogue.textSpeed != null && dialogue.textSpeed > 0 ? dialogue.textSpeed : settings.textSpeed;
-    const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, effectiveTextSpeed);
+    const wantVoicePacing = !!projectUI.voicePacedText && !!dialogue.voiceAudioId && !(dialogue.textSpeed != null && dialogue.textSpeed > 0);
+    const [voiceDurationMs, setVoiceDurationMs] = React2.useState(null);
+    React2.useEffect(() => {
+      setVoiceDurationMs(null);
+      if (!wantVoicePacing || !voiceRef) return;
+      let tries = 0;
+      const id = window.setInterval(() => {
+        var _a2;
+        const d = (_a2 = voiceRef.current) == null ? void 0 : _a2.duration;
+        if (d && isFinite(d) && d > 0) {
+          setVoiceDurationMs(d * 1e3);
+          clearInterval(id);
+        } else if (++tries > 25) clearInterval(id);
+      }, 100);
+      return () => clearInterval(id);
+    }, [dialogue.text, dialogue.voiceAudioId, wantVoicePacing]);
+    const pacedMsPerChar = wantVoicePacing && voiceDurationMs && interpolatedText.length > 0 ? Math.max(8, Math.min(200, voiceDurationMs * 0.92 / interpolatedText.length)) : null;
+    const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, effectiveTextSpeed, pacedMsPerChar);
+    const timeLimit = dialogue.timeLimit && dialogue.timeLimit > 0 ? dialogue.timeLimit : 0;
+    const timerLocked = !!(timeLimit && dialogue.timeLimitLocked);
+    const [timerRemaining, setTimerRemaining] = React2.useState(0);
+    React2.useEffect(() => {
+      if (!timeLimit || !hasFinished || timerPaused) return;
+      let raf = 0;
+      let fired = false;
+      const start = performance.now();
+      const tick = () => {
+        const left = timeLimit - (performance.now() - start) / 1e3;
+        setTimerRemaining(Math.max(0, left));
+        if (left <= 0) {
+          if (!fired) {
+            fired = true;
+            onFinished();
+          }
+          return;
+        }
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(raf);
+    }, [timeLimit, hasFinished, timerPaused, dialogue.text]);
     const character = dialogue.characterId ? project.characters[dialogue.characterId] : null;
     let charTb = resolveEffectiveTextbox(project, character, dialogue.textboxThemeId);
     if (reactiveState) {
@@ -10112,6 +13298,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     );
     const reactiveTransition = reactiveMs > 0 ? `background-color ${reactiveMs}ms ease, background ${reactiveMs}ms ease, opacity ${reactiveMs}ms ease, border-radius ${reactiveMs}ms ease` : void 0;
     const handleClick = () => {
+      if (timerLocked) {
+        if (!hasFinished && settings.enableSkip) skip();
+        return;
+      }
       if (hasFinished) {
         onFinished();
       } else if (settings.enableSkip) {
@@ -10134,12 +13324,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const dialogueBoxPadding = projectUI.dialogueBoxPadding ?? 20;
     const dialogueSizeMode = (charTb == null ? void 0 : charTb.dialogueBoxSizeMode) ?? projectUI.dialogueBoxSizeMode ?? "stretch";
     const dialogueSlice = (charTb == null ? void 0 : charTb.dialogueBoxSlice) ?? projectUI.dialogueBoxSlice ?? 30;
-    const dialogueColor = (charTb == null ? void 0 : charTb.dialogueBoxColor) ?? projectUI.dialogueBoxColor ?? "#0f172a";
+    const dialogueColor = (uiPalette == null ? void 0 : uiPalette.dialogueBg) ?? (charTb == null ? void 0 : charTb.dialogueBoxColor) ?? projectUI.dialogueBoxColor ?? "#0f172a";
     const dialogueOpacity = (charTb == null ? void 0 : charTb.dialogueBoxOpacity) ?? projectUI.dialogueBoxOpacity ?? 90;
     const dialogueBorderRadius = (charTb == null ? void 0 : charTb.dialogueBoxBorderRadius) ?? projectUI.dialogueBoxBorderRadius ?? 8;
     const nameboxImage = (charTb == null ? void 0 : charTb.nameboxImage) ?? projectUI.nameboxImage;
     const nameboxImageUrl = nameboxImage ? resolveFieldUrl(project.id, ((_h = project.images[nameboxImage.id]) == null ? void 0 : _h.imageUrl) || ((_i = project.backgrounds[nameboxImage.id]) == null ? void 0 : _i.imageUrl)) : null;
-    const nameboxColor = (charTb == null ? void 0 : charTb.nameboxColor) ?? projectUI.nameboxColor ?? "#0f172a";
+    const nameboxColor = (uiPalette == null ? void 0 : uiPalette.dialogueName) ?? (charTb == null ? void 0 : charTb.nameboxColor) ?? projectUI.nameboxColor ?? "#0f172a";
     const nameboxOpacity = (charTb == null ? void 0 : charTb.nameboxOpacity) ?? projectUI.nameboxOpacity ?? 92;
     const nameboxPadding = (charTb == null ? void 0 : charTb.nameboxPadding) ?? projectUI.nameboxPadding ?? 8;
     const nameboxHPadding = (charTb == null ? void 0 : charTb.nameboxHorizontalPadding) ?? projectUI.nameboxHorizontalPadding ?? 14;
@@ -10156,8 +13346,75 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ...characterFont ? { fontFamily: characterFont } : {},
       ...characterFontSize ? { fontSize: `calc(var(--font-scale, 1) * ${characterFontSize}px)` } : {},
       ...characterFontWeight ? { fontWeight: characterFontWeight } : {},
-      ...characterFontItalic ? { fontStyle: "italic" } : {}
+      ...characterFontItalic ? { fontStyle: "italic" } : {},
+      // Speaker-tinted lines: this character's dialogue renders in their name color (or a
+      // custom one). Wins over theme/global text color; a palette→UI restyle still wins.
+      ...(character == null ? void 0 : character.dialogueTextColorMode) === "character" && dialogue.characterColor ? { color: dialogue.characterColor } : (character == null ? void 0 : character.dialogueTextColorMode) === "custom" && character.dialogueTextColor ? { color: character.dialogueTextColor } : {},
+      ...(uiPalette == null ? void 0 : uiPalette.dialogueText) ? { color: uiPalette.dialogueText } : {}
     };
+    const rhCfg = projectUI.dialogueRevealHighlight;
+    const wordRanges = React2.useMemo(() => {
+      const out = [];
+      const re = /\S+/g;
+      let m;
+      while (m = re.exec(interpolatedText)) out.push({ start: m.index, end: m.index + m[0].length });
+      return out;
+    }, [interpolatedText]);
+    const wantVoiceSync = !!((rhCfg == null ? void 0 : rhCfg.enabled) && rhCfg.syncToVoice && dialogue.voiceAudioId && voiceRef);
+    const [voiceWordStarts, setVoiceWordStarts] = React2.useState(null);
+    const [syncWordIdx, setSyncWordIdx] = React2.useState(-1);
+    React2.useEffect(() => {
+      var _a2;
+      setVoiceWordStarts(null);
+      setSyncWordIdx(-1);
+      if (!wantVoiceSync || !wordRanges.length) return;
+      let alive = true;
+      const asset = (_a2 = project.audio) == null ? void 0 : _a2[dialogue.voiceAudioId];
+      const url = asset ? resolveFieldUrl(project.id, asset.audioUrl) : null;
+      if (!url) return;
+      analyzeVoiceWordStarts(url, wordRanges.map((w) => w.end - w.start + 1)).then((starts) => {
+        if (alive && starts) setVoiceWordStarts(starts);
+      }).catch(() => {
+      });
+      return () => {
+        alive = false;
+      };
+    }, [dialogue.text, dialogue.voiceAudioId, wantVoiceSync]);
+    React2.useEffect(() => {
+      if (!voiceWordStarts || !voiceRef) return;
+      let raf = 0;
+      const tick = () => {
+        const a = voiceRef.current;
+        if (!a || a.ended || a.paused && a.currentTime === 0) {
+          setSyncWordIdx(-1);
+          raf = requestAnimationFrame(tick);
+          return;
+        }
+        const t = a.currentTime * 1e3;
+        let idx = -1;
+        for (let i = 0; i < voiceWordStarts.length; i++) {
+          if (t >= voiceWordStarts[i]) idx = i;
+          else break;
+        }
+        if (a.ended) idx = -1;
+        setSyncWordIdx((prev) => prev === idx ? prev : idx);
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(raf);
+    }, [voiceWordStarts, voiceRef]);
+    let revealHighlight = null;
+    if ((rhCfg == null ? void 0 : rhCfg.enabled) && displayText.length > 0) {
+      const hlColor = rhCfg.useSpeakerColor && dialogue.characterColor && dialogue.characterColor !== "#FFFFFF" ? dialogue.characterColor : rhCfg.color || "#facc15";
+      const style = rhCfg.style || "color";
+      const syncRange = wantVoiceSync && voiceWordStarts && syncWordIdx >= 0 && syncWordIdx < wordRanges.length ? wordRanges[syncWordIdx] : null;
+      if (syncRange && syncRange.start < displayText.length) {
+        revealHighlight = { start: syncRange.start, end: Math.min(syncRange.end, displayText.length), color: hlColor, style };
+      } else if (!syncRange && !hasFinished) {
+        const m = displayText.match(/(\S+)$/);
+        if (m && m.index != null) revealHighlight = { start: m.index, color: hlColor, style };
+      }
+    }
     const hasCustomImage = dialogueBoxUrl || dialogueBorderUrl;
     const showNamebox = dialogue.characterName !== "Narrator" && !(reactiveState == null ? void 0 : reactiveState.hideNamebox);
     const nameFont = (charTb == null ? void 0 : charTb.dialogueNameFont) ?? projectUI.dialogueNameFont;
@@ -10241,7 +13498,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   transition: reactiveTransition,
                   ...hasCustomImage ? {} : {
                     backgroundColor: dialogueBgColor,
-                    border: "1px solid rgba(148,163,184,0.25)",
+                    // dialogueBorder palette slot restyles the default box edge (image-
+                    // skinned boxes keep their border art — that's authored pixels).
+                    border: (uiPalette == null ? void 0 : uiPalette.dialogueBorder) ? `2px solid ${uiPalette.dialogueBorder}` : "1px solid rgba(148,163,184,0.25)",
                     boxShadow: "0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)",
                     backdropFilter: "blur(8px)",
                     WebkitBackdropFilter: "blur(8px)"
@@ -10281,7 +13540,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         {
                           displayText,
                           textEffect: dialogue.textEffect,
-                          gradientStyle: extractTextGradientStyle(projectUI.dialogueTextFont) || void 0
+                          gradientStyle: extractTextGradientStyle(projectUI.dialogueTextFont) || void 0,
+                          revealHighlight
                         }
                       ),
                       !hasFinished && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: {
@@ -10295,7 +13555,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         opacity: 0.85
                       } })
                     ] }),
-                    hasFinished && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
+                    hasFinished && !timerLocked && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
                       position: "absolute",
                       bottom: "8px",
                       right: "12px",
@@ -10304,7 +13564,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       fontSize: "calc(var(--font-scale, 1) * 12px)",
                       color: "#94a3b8"
                     }, children: "▼" })
-                  ] })
+                  ] }),
+                  timeLimit > 0 && dialogue.showTimer && hasFinished && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    height: "3px",
+                    zIndex: 2,
+                    width: `${Math.max(0, Math.min(100, timerRemaining / timeLimit * 100))}%`,
+                    background: projectUI.choiceHoverColor || "#6B4C9A",
+                    transition: "width 0.12s linear"
+                  } })
                 ]
               }
             ),
@@ -10327,7 +13597,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       )
     ] });
   };
-  const ChoiceMenu = ({ choices, projectUI, onSelect, variables, project, layout, timeLimit, showTimer, onTimeout }) => {
+  const ChoiceMenu = ({ choices, projectUI, onSelect, variables, project, layout, timeLimit, showTimer, onTimeout, uiPalette }) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
     const [hoveredIndex, setHoveredIndex] = React2.useState(null);
     const [remaining, setRemaining] = React2.useState(timeLimit ?? 0);
@@ -10367,7 +13637,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const choicePadding = projectUI.choiceButtonPadding ?? 16;
     const choiceSizeMode = projectUI.choiceButtonSizeMode ?? "stretch";
     const choiceSlice = projectUI.choiceButtonSlice ?? 15;
-    const choiceColor = projectUI.choiceButtonColor ?? "#1e293b";
+    const choiceColor = (uiPalette == null ? void 0 : uiPalette.choiceBg) ?? projectUI.choiceButtonColor ?? "#1e293b";
     const choiceOpacity = projectUI.choiceButtonOpacity ?? 90;
     const choiceBorderRadius = projectUI.choiceButtonBorderRadius ?? 8;
     const choiceHoverColor = projectUI.choiceHoverColor ?? "#334155";
@@ -10417,7 +13687,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               backgroundColor: isHovered ? optHoverBg : optBg
             } : !hasImg ? {
               backgroundColor: isHovered ? optHoverBg : optBg,
-              border: "1px solid rgba(148,163,184,0.3)",
+              border: (uiPalette == null ? void 0 : uiPalette.choiceBorder) ? `2px solid ${uiPalette.choiceBorder}` : "1px solid rgba(148,163,184,0.3)",
               boxShadow: "0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)",
               backdropFilter: "blur(6px)",
               WebkitBackdropFilter: "blur(6px)"
@@ -10425,6 +13695,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             padding: `${scalePx(choicePadding)} ${scalePx(choicePadding * 2)}`,
             ...!fill && choiceHeight ? { height: scalePx(choiceHeight) } : {},
             ...fontSettingsToStyle(projectUI.choiceTextFont),
+            ...(uiPalette == null ? void 0 : uiPalette.choiceText) ? { color: uiPalette.choiceText } : {},
             ...choice.fontSize ? { fontSize: scalePx(choice.fontSize) } : {},
             ...choice.textColor ? { color: choice.textColor } : {},
             textAlign: ((_b2 = projectUI.choiceTextFont) == null ? void 0 : _b2.align) || "center",
@@ -10434,7 +13705,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           },
           children: [
             baseIsVideo && baseImg && /* @__PURE__ */ jsxRuntime2.jsx(TrimmedVideo, { src: baseImg, autoPlay: true, loop: true, muted: true, trimStart: baseTrim.start, trimEnd: baseTrim.end, className: "absolute inset-0 w-full h-full -z-10", style: { pointerEvents: "none", objectFit: "fill", borderRadius: scalePx(optRadius) } }),
-            /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "relative z-10", style: { ...extractTextGradientStyle(projectUI.choiceTextFont) || {}, ...choice.textColor ? { color: choice.textColor } : {} }, children: interpolatedText })
+            /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "relative z-10", style: { ...extractTextGradientStyle(projectUI.choiceTextFont) || {}, ...(uiPalette == null ? void 0 : uiPalette.choiceText) && !choice.textColor ? { color: uiPalette.choiceText, background: "none", WebkitTextFillColor: uiPalette.choiceText } : {}, ...choice.textColor ? { color: choice.textColor } : {} }, children: interpolatedText })
           ]
         }
       );
@@ -10784,6 +14055,83 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ] })
     ] });
   };
+  const makeSpotlightState = (c) => ({
+    sourceX: c.sourceX ?? 50,
+    sourceY: c.sourceY ?? 0,
+    aimAngle: c.aimAngle ?? 0,
+    intensity: c.intensity ?? 0.85,
+    beamWidth: c.beamWidth ?? 45,
+    sourceWidth: c.sourceWidth ?? 8,
+    height: c.height ?? 100,
+    falloff: c.falloff ?? 0.5,
+    color: c.color || "#fff3d6",
+    followMouse: c.followMouse !== false,
+    swivelMax: c.swivelMax ?? 30,
+    toggleKey: c.toggleKey,
+    affectsDialogue: c.affectsDialogue !== false,
+    on: true
+  });
+  const TIMER_VAR_MUTATION_TYPES = /* @__PURE__ */ new Set([
+    UIActionType.SetVariable,
+    UIActionType.ResetVariable,
+    UIActionType.GiveItem,
+    UIActionType.UseItem,
+    UIActionType.DestroyItem,
+    UIActionType.UseSelectedItem,
+    UIActionType.RestockCollection,
+    UIActionType.BuyItem,
+    UIActionType.SellItem,
+    UIActionType.BuySelectedItem,
+    UIActionType.SellSelectedItem
+  ]);
+  const TimerElement = ({ element, style, onAction, onCommitVariables }) => {
+    const [remaining, setRemaining] = React2.useState(Math.max(0, element.durationSeconds || 0));
+    const onActionRef = React2.useRef(onAction);
+    onActionRef.current = onAction;
+    const onCommitRef = React2.useRef(onCommitVariables);
+    onCommitRef.current = onCommitVariables;
+    const actionsRef = React2.useRef(element.actions);
+    actionsRef.current = element.actions;
+    React2.useEffect(() => {
+      let cancelled = false;
+      const total = Math.max(0, element.durationSeconds || 0);
+      const fire = () => {
+        if (cancelled) return;
+        const acts = actionsRef.current || [];
+        const vars = acts.filter((a) => TIMER_VAR_MUTATION_TYPES.has(a.type));
+        const others = acts.filter((a) => !TIMER_VAR_MUTATION_TYPES.has(a.type));
+        vars.forEach((a) => onActionRef.current(a));
+        if (vars.length && onCommitRef.current) onCommitRef.current();
+        others.forEach((a) => onActionRef.current(a));
+      };
+      setRemaining(total);
+      let elapsedMs = 0;
+      const TICK = 250;
+      const iv = window.setInterval(() => {
+        if (cancelled) return;
+        elapsedMs += TICK;
+        setRemaining(Math.max(0, total - elapsedMs / 1e3));
+        if (elapsedMs >= total * 1e3) {
+          fire();
+          if (element.loop) {
+            elapsedMs = 0;
+            setRemaining(total);
+          } else {
+            window.clearInterval(iv);
+          }
+        }
+      }, TICK);
+      return () => {
+        cancelled = true;
+        window.clearInterval(iv);
+      };
+    }, [element.id, element.durationSeconds, element.loop]);
+    if (!element.showCountdown) return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...style, pointerEvents: "none" } });
+    return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...style, pointerEvents: "none" }, className: "flex items-center justify-center text-white text-sm font-semibold", children: /* @__PURE__ */ jsxRuntime2.jsxs("span", { style: { textShadow: "0 1px 3px rgba(0,0,0,0.85)" }, children: [
+      "⏱ ",
+      Math.ceil(remaining)
+    ] }) });
+  };
   const ButtonElement = ({ element, style, playSound, onAction, getElementAssetUrl, variables = {}, project, onCommitVariables }) => {
     var _a;
     const [isHovered, setIsHovered] = React2.useState(false);
@@ -10816,6 +14164,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     };
     const buttonBg = element.backgroundColor || "#4D3273";
     const hoverBg = element.hoverBackgroundColor || (element.backgroundColor ? void 0 : "#6B4C9A");
+    const btnRadius = element.borderRadius != null ? `calc(var(--font-scale, 1) * ${element.borderRadius}px)` : void 0;
     const { transform, overflow, ...wrapperStyle } = style;
     const fit = !!element.fitToContent && !!displayUrl;
     const interactive = wrapperStyle.pointerEvents !== "none";
@@ -10835,7 +14184,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           onMouseLeave: () => setIsHovered(false),
           onClick: handleClick,
           children: [
-            /* @__PURE__ */ jsxRuntime2.jsx("img", { src: displayUrl, alt: element.text, draggable: false, style: { display: "block", maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto", objectFit: "contain" } }),
+            /* @__PURE__ */ jsxRuntime2.jsx("img", { src: displayUrl, alt: element.text, draggable: false, style: { display: "block", maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto", objectFit: "contain", borderRadius: btnRadius } }),
             interpolatedText && /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "absolute inset-0 flex items-center justify-center z-10", style: { ...textStyle, ...extractTextGradientStyle(element.font) || {}, pointerEvents: "none" }, children: interpolatedText })
           ]
         }
@@ -10860,11 +14209,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           onMouseLeave: hasCb ? void 0 : () => setIsHovered(false),
           onClick: hasCb ? void 0 : handleClick,
           children: [
-            displayUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: displayUrl, alt: element.text, className: "absolute inset-0 w-full h-full object-fill" }) : /* @__PURE__ */ jsxRuntime2.jsx(
+            displayUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: displayUrl, alt: element.text, className: "absolute inset-0 w-full h-full object-fill", style: { borderRadius: btnRadius } }) : /* @__PURE__ */ jsxRuntime2.jsx(
               "div",
               {
                 className: "absolute inset-0 w-full h-full rounded",
-                style: { backgroundColor: isHovered && hoverBg ? hoverBg : buttonBg }
+                style: { backgroundColor: isHovered && hoverBg ? hoverBg : buttonBg, borderRadius: btnRadius }
               }
             ),
             /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "relative z-10", style: { ...textStyle, ...extractTextGradientStyle(element.font) || {}, display: "inline-block", pointerEvents: "none" }, children: interpolatedText })
@@ -11272,7 +14621,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     );
   };
-  const InventoryGridElement = ({ element, items, variables, project, assetResolver, onAction, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, groupByCategory, categoryOrder, autoSort }) => {
+  const InventoryGridElement = ({ element, items, variables, project, assetResolver, onAction, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, groupByCategory, categoryOrder, autoSort, style }) => {
     var _a;
     const count = (it) => Number(variables[it.countVariableId] ?? 0);
     const filteredAll = element.categoryFilter ? items.filter((it) => it.category === element.categoryFilter) : items;
@@ -11352,22 +14701,29 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       suppressClickRef.current = true;
       setDragSlot(null);
     };
+    const isVarMutation = (a) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable || a.type === UIActionType.GiveItem || a.type === UIActionType.UseItem || a.type === UIActionType.DestroyItem || a.type === UIActionType.UseSelectedItem || a.type === UIActionType.RestockCollection || a.type === UIActionType.BuyItem || a.type === UIActionType.SellItem || a.type === UIActionType.BuySelectedItem || a.type === UIActionType.SellSelectedItem;
+    const runActionList = (acts) => {
+      const setVarActions = acts.filter(isVarMutation);
+      const otherActions = acts.filter((a) => !isVarMutation(a));
+      setVarActions.forEach((a) => onAction(a));
+      if (setVarActions.length > 0 && onCommitVariables) onCommitVariables();
+      otherActions.forEach((a) => onAction(a));
+    };
+    const slotButtonActionsFor = (it) => {
+      var _a2;
+      return ((_a2 = it.slotButtonActions) == null ? void 0 : _a2.length) ? it.slotButtonActions : element.slotButtonActions || [];
+    };
     const useItem = (it) => {
       if (!it.usable) return;
       if (it.carryToUse) {
         onAction({ type: UIActionType.CarryItem, itemId: it.id });
         return;
       }
-      const actions = [
+      runActionList([
         ...it.consumeOnUse === false ? [] : [{ type: UIActionType.SetVariable, variableId: it.countVariableId, operator: "subtract", value: 1 }],
-        ...it.useEffect || []
-      ];
-      const isVarMutation = (a) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable || a.type === UIActionType.GiveItem || a.type === UIActionType.UseItem || a.type === UIActionType.DestroyItem || a.type === UIActionType.UseSelectedItem || a.type === UIActionType.RestockCollection || a.type === UIActionType.BuyItem || a.type === UIActionType.SellItem || a.type === UIActionType.BuySelectedItem || a.type === UIActionType.SellSelectedItem;
-      const setVarActions = actions.filter(isVarMutation);
-      const otherActions = actions.filter((a) => !isVarMutation(a));
-      setVarActions.forEach((a) => onAction(a));
-      if (setVarActions.length > 0 && onCommitVariables) onCommitVariables();
-      otherActions.forEach((a) => onAction(a));
+        ...it.useEffect || [],
+        ...slotButtonActionsFor(it)
+      ]);
     };
     const slotButtonMode = element.slotButton ?? "none";
     const tradeCollectionId = slotButtonMode === "buy" ? element.collectionId : slotButtonMode === "sell" ? element.sellToCollectionId : void 0;
@@ -11376,14 +14732,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (!tradeCollectionId) return;
       onAction({ type: slotButtonMode === "buy" ? UIActionType.BuyItem : UIActionType.SellItem, itemId: it.id, collectionId: tradeCollectionId });
       if (onCommitVariables) onCommitVariables();
+      const acts = slotButtonActionsFor(it);
+      if (acts.length) runActionList(acts);
     };
     const tradeBlocked = (it) => {
       if (!tradeCollection) return true;
       const res = slotButtonMode === "buy" ? computeBuy(it.id, tradeCollection, project, variables) : computeSell(it.id, tradeCollection, project, variables);
       return "blocked" in res;
     };
-    const slotStyle = { aspectRatio: "1 / 1", borderRadius: `${element.slotBorderRadius ?? 8}px`, border: `2px solid ${element.slotBorderColor || "#4D3273"}`, background: element.slotColor || "transparent" };
+    const hideBox = element.hideSlotBox === true;
+    const slotStyle = { ...element.squareSlots === false ? { width: "100%", height: "100%" } : { aspectRatio: "1 / 1" }, borderRadius: `${element.slotBorderRadius ?? 8}px`, border: hideBox ? "none" : `2px solid ${element.slotBorderColor || "#4D3273"}`, background: hideBox ? "transparent" : element.slotColor || "transparent" };
     const selectedRing = element.selectedBorderColor || "#38bdf8";
+    const qtyCorner = { "top-left": "top-1 left-1", "top-right": "top-1 right-1", "bottom-left": "bottom-1 left-1", "bottom-right": "bottom-1 right-1" }[element.quantityPosition || "top-right"];
+    const qtyStyle = { backgroundColor: element.quantityBgColor || "rgba(0,0,0,0.7)", color: element.quantityColor || "#ffffff", ...element.quantityFont ? fontSettingsToStyle(element.quantityFont) : {} };
     const gridStyle = { gridTemplateColumns: `repeat(${cols}, 1fr)`, columnGap: `${colGap}px`, rowGap: `${rowGap}px` };
     const renderSlot = (slotId, i) => {
       var _a2;
@@ -11421,7 +14782,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }) : void 0,
           children: [
             url ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: it.name, className: "w-full flex-1 min-h-0 object-contain", draggable: false }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full flex-1 min-h-0" }),
-            element.showQuantity !== false && qty > 1 && /* @__PURE__ */ jsxRuntime2.jsxs("span", { className: "absolute top-1 right-1 bg-black/70 text-white text-[10px] rounded px-1 leading-tight", children: [
+            element.showQuantity !== false && qty > 1 && /* @__PURE__ */ jsxRuntime2.jsxs("span", { className: `absolute ${qtyCorner} text-[10px] rounded px-1 leading-tight`, style: qtyStyle, children: [
               "×",
               qty
             ] }),
@@ -11500,12 +14861,27 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         ] }, cat || "__uncat__");
       });
     })();
+    if (element.slotLayout === "free" && element.slotRects && element.slotRects.length > 0) {
+      const rects = element.slotRects;
+      return /* @__PURE__ */ jsxRuntime2.jsx(
+        "div",
+        {
+          style: { position: "absolute", left: 0, top: 0, width: "100%", height: "100%", zIndex: style == null ? void 0 : style.zIndex, opacity: style == null ? void 0 : style.opacity, pointerEvents: "none" },
+          onPointerUp: reorderEnabled ? (() => setDragSlot(null)) : void 0,
+          children: slots.map((slotId, i) => {
+            const rect = rects[i];
+            if (!rect) return null;
+            return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%`, pointerEvents: "auto" }, children: renderSlot(slotId, i) }, `free-${i}`);
+          })
+        }
+      );
+    }
     return /* @__PURE__ */ jsxRuntime2.jsxs(
       "div",
       {
         ref: gridContainerRef,
         className: "w-full h-full overflow-y-auto p-2 rounded",
-        style: { backgroundColor: element.backgroundColor || "rgba(15, 23, 42, 0.9)" },
+        style: { backgroundColor: element.hideBackgroundPanel ? "transparent" : element.backgroundColor || "rgba(15, 23, 42, 0.9)" },
         onPointerUp: reorderEnabled ? (() => setDragSlot(null)) : void 0,
         children: [
           totalSlots === 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full flex items-center justify-center text-center text-xs text-white/50 px-2", children: element.emptyText || "" }),
@@ -11850,8 +15226,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       };
     }, [dragState, dragOffset, containerSize, interactiveElements, hotSpots, handleLocalAction, project]);
     const handleSpotClick = React2.useCallback((spot) => {
-      if (spot.trigger === "click") {
-        spot.actions.forEach((a) => handleLocalAction(a));
+      if ((spot.trigger || "click") === "click") {
+        (spot.actions || []).forEach((a) => handleLocalAction(a));
       }
     }, [handleLocalAction]);
     const handleSpotHover = React2.useCallback((spot) => {
@@ -11879,7 +15255,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 backgroundColor: spot.visible ? spot.highlightColor || "rgba(59, 130, 246, 0.2)" : "transparent",
                 border: spot.visible ? `2px dashed ${spot.highlightColor || "rgba(59, 130, 246, 0.5)"}` : "none",
                 pointerEvents: spot.trigger === "drag-drop" ? "none" : "auto",
-                cursor: spot.trigger === "click" ? "pointer" : void 0
+                cursor: (spot.trigger || "click") === "click" ? "pointer" : void 0
               },
               onClick: () => handleSpotClick(spot),
               onMouseEnter: () => handleSpotHover(spot)
@@ -12105,7 +15481,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     ] });
     const meterPrevRef = React2.useRef({});
     const renderElement = (element, variables2, project2, onCommitVariables2) => {
-      var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
+      var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B;
       runtimeDebugLog("🎯 renderElement called:", element.type, element.name, element.id);
       if (element.conditions && element.conditions.length > 0) {
         const conditionsMet = evaluateConditions2(element.conditions, variables2);
@@ -12177,6 +15553,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         case UIElementType.Button: {
           const el = element;
           return /* @__PURE__ */ jsxRuntime2.jsx(ButtonElement, { element: el, style, playSound, onAction, getElementAssetUrl, variables: variables2, project: project2, onCommitVariables: onCommitVariables2 }, el.id);
+        }
+        case UIElementType.Timer: {
+          const el = element;
+          return /* @__PURE__ */ jsxRuntime2.jsx(TimerElement, { element: el, style, onAction, onCommitVariables: onCommitVariables2 }, el.id);
         }
         case UIElementType.Text: {
           const el = element;
@@ -12396,7 +15776,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         case UIElementType.CharacterPreview: {
           const el = element;
-          const character = project2.characters[el.characterId];
+          const previewCharacterId = el.characterSource === "player" ? resolvePlayerCharacterId(project2, variables2) || el.characterId : el.characterId;
+          const character = previewCharacterId ? project2.characters[previewCharacterId] : null;
           if (!character) return null;
           runtimeDebugLog(`[CharacterPreview] layerVariableMap:`, el.layerVariableMap);
           runtimeDebugLog(`[CharacterPreview] Available variables:`, Object.keys(variables2));
@@ -12415,7 +15796,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
           const defaultExpression = el.expressionId ? character.expressions[el.expressionId] : null;
           Object.entries(character.layers).forEach(([layerId, layer]) => {
-            const variableId = el.layerVariableMap[layerId];
+            let variableId = el.layerVariableMap[layerId];
+            if (!variableId && el.characterSource === "player" && variables2) {
+              const matches = Object.entries(project2.variables).filter(([vid, v]) => v.type === "string" && String(variables2[vid] || "") in layer.assets);
+              if (matches.length) variableId = matches[matches.length - 1][0];
+            }
             let asset = null;
             runtimeDebugLog(`[CharacterPreview] Processing layer ${layer.name} (${layerId}), mapped variableId:`, variableId);
             if (variableId && variables2) {
@@ -12656,24 +16041,79 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const labelStyle = { ...fontSettingsToStyle(el.font), lineHeight: 1.2 };
           const assetUrlOf = (a) => a.imageUrl ? resolveFieldUrl(project2.id, a.imageUrl) || a.imageUrl : a.videoUrl ? resolveFieldUrl(project2.id, a.videoUrl) || a.videoUrl : null;
           const previewNode = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "relative w-full h-full", children: hasVideo && videoUrls.length > 0 ? videoUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("video", { src: u, autoPlay: true, muted: true, loop: videoLoop, playsInline: true, className: "absolute inset-0 w-full h-full object-contain", style: { zIndex: i } }, i)) : imageUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", className: "absolute inset-0 w-full h-full object-contain", style: { zIndex: i } }, i)) });
+          const catIdxOfVar = /* @__PURE__ */ new Map();
+          (el.categories || []).forEach((c, i) => catIdxOfVar.set(c.variableId, i));
+          const catRefs = (el.categories || []).map((c) => {
+            const refs = /* @__PURE__ */ new Set();
+            const layer = character.layers[c.layerId];
+            if (layer) Object.values(layer.assets).forEach((a) => {
+              var _a3, _b3;
+              (((_b3 = (_a3 = el.optionMeta) == null ? void 0 : _a3[a.id]) == null ? void 0 : _b3.conditions) || []).forEach((cond) => {
+                const j = catIdxOfVar.get(cond.variableId);
+                if (j !== void 0) refs.add(j);
+              });
+            });
+            return refs;
+          });
+          const droppedVarsPerCat = (el.categories || []).map((_, i) => {
+            var _a3;
+            const dropped = /* @__PURE__ */ new Set();
+            (_a3 = catRefs[i]) == null ? void 0 : _a3.forEach((j) => {
+              var _a4;
+              if (j > i && ((_a4 = catRefs[j]) == null ? void 0 : _a4.has(i))) dropped.add((el.categories || [])[j].variableId);
+            });
+            return dropped;
+          });
+          const conditionsFor = (catIdx, assetId) => {
+            var _a3, _b3;
+            const conds = (_b3 = (_a3 = el.optionMeta) == null ? void 0 : _a3[assetId]) == null ? void 0 : _b3.conditions;
+            if (!(conds == null ? void 0 : conds.length)) return conds;
+            const dropped = droppedVarsPerCat[catIdx];
+            if (!dropped || dropped.size === 0) return conds;
+            return conds.filter((c) => !dropped.has(c.variableId));
+          };
           const processOptions = (cat) => {
             const layer = character.layers[cat.layerId];
+            const catIdx = catIdxOfVar.get(cat.variableId) ?? -1;
             if (!layer) return [];
             return Object.values(layer.assets).map((a) => {
-              var _a3, _b3;
+              var _a3;
               const meta = (_a3 = el.optionMeta) == null ? void 0 : _a3[a.id];
-              const ok = !((_b3 = meta == null ? void 0 : meta.conditions) == null ? void 0 : _b3.length) || evaluateConditions2(meta.conditions, variables2);
+              const conds = conditionsFor(catIdx, a.id);
+              const ok = !(conds == null ? void 0 : conds.length) || evaluateConditions2(conds, variables2);
               const locked = !ok && (meta == null ? void 0 : meta.whenUnmet) === "lock";
               const hidden = !ok && ((meta == null ? void 0 : meta.whenUnmet) ?? "hide") === "hide";
               const swatchUrl = (meta == null ? void 0 : meta.swatchImage) ? getElementAssetUrl(meta.swatchImage) : assetUrlOf(a);
               return { a, locked, hidden, swatchUrl };
             }).filter((x) => !x.hidden);
           };
+          const pickAndHeal = (srcCat, id) => {
+            onVariableChange == null ? void 0 : onVariableChange(srcCat.variableId, id);
+            const next = { ...variables2, [srcCat.variableId]: id };
+            (el.categories || []).forEach((c, cIdx) => {
+              if (c.variableId === srcCat.variableId) return;
+              const layer = character.layers[c.layerId];
+              if (!layer) return;
+              const isHidden = (assetId) => {
+                var _a3;
+                const m = (_a3 = el.optionMeta) == null ? void 0 : _a3[assetId];
+                const conds = conditionsFor(cIdx, assetId);
+                return !!(conds == null ? void 0 : conds.length) && !evaluateConditions2(conds, next) && ((m == null ? void 0 : m.whenUnmet) ?? "hide") === "hide";
+              };
+              const cur = String(next[c.variableId] ?? "");
+              if (!cur || !layer.assets[cur] || !isHidden(cur)) return;
+              const firstVisible = Object.values(layer.assets).find((a) => !isHidden(a.id));
+              if (firstVisible) {
+                next[c.variableId] = firstVisible.id;
+                onVariableChange == null ? void 0 : onVariableChange(c.variableId, firstVisible.id);
+              }
+            });
+          };
           const renderPicker = (cat, current) => {
             const opts = processOptions(cat);
             const selectable = opts.filter((x) => !x.locked);
             const pstyle = cat.pickerStyle || "swatches";
-            const pick = (id) => onVariableChange == null ? void 0 : onVariableChange(cat.variableId, id);
+            const pick = (id) => pickAndHeal(cat, id);
             if (pstyle === "arrows") {
               const idx = selectable.findIndex((x) => x.a.id === current);
               const cycle = (dir) => {
@@ -12756,13 +16196,50 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 renderPicker(cat, current)
               ] }, cat.layerId);
             }),
-            (el.categories || []).length === 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...labelStyle, opacity: 0.6 }, children: "No categories yet — set them up in the Customizer's properties." }),
             (el.showRandomize || el.showReset) && (el.categories || []).length > 0 && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }, children: [
               el.showRandomize && /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: randomizeLook, style: { ...labelStyle, cursor: "pointer", padding: "4px 12px", borderRadius: 6, background: buttonColor, color: buttonTextColor, border: "none" }, children: el.randomizeLabel || "Randomize" }),
               el.showReset && /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: resetLook, style: { ...labelStyle, cursor: "pointer", padding: "4px 12px", borderRadius: 6, background: buttonColor, color: buttonTextColor, border: "none" }, children: el.resetLabel || "Reset" })
             ] })
           ] });
-          const layout = el.layout || "preview-left";
+          if (el.layout === "free" && el.previewRect) {
+            const pr = el.previewRect;
+            const kr = el.pickersRect;
+            const previewFrameUrl = el.previewBackgroundImage ? getElementAssetUrl(el.previewBackgroundImage) : null;
+            const previewBoxStyle = {
+              position: "absolute",
+              left: `${pr.x}%`,
+              top: `${pr.y}%`,
+              width: `${pr.width}%`,
+              height: `${pr.height}%`,
+              pointerEvents: "none",
+              overflow: "hidden",
+              ...el.previewBackgroundColor ? { background: el.previewBackgroundColor } : {},
+              ...previewFrameUrl ? { backgroundImage: `url(${previewFrameUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {},
+              ...el.previewBorderColor ? { border: `1px solid ${el.previewBorderColor}` } : {},
+              ...el.previewBorderRadius !== void 0 ? { borderRadius: el.previewBorderRadius } : {}
+            };
+            const pickersFrameUrl = el.backgroundImage ? getElementAssetUrl(el.backgroundImage) : null;
+            const pickersBoxStyle = {
+              position: "absolute",
+              left: `${(kr == null ? void 0 : kr.x) ?? 0}%`,
+              top: `${(kr == null ? void 0 : kr.y) ?? 0}%`,
+              width: `${(kr == null ? void 0 : kr.width) ?? 0}%`,
+              height: `${(kr == null ? void 0 : kr.height) ?? 0}%`,
+              pointerEvents: "auto",
+              overflow: "hidden",
+              ...el.hidePickersPanel ? {} : {
+                background: el.backgroundColor || void 0,
+                ...pickersFrameUrl ? { backgroundImage: `url(${pickersFrameUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {},
+                ...el.borderColor ? { border: `1px solid ${el.borderColor}` } : {},
+                borderRadius: el.borderRadius ?? 8
+              }
+            };
+            return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", left: 0, top: 0, width: "100%", height: "100%", zIndex: style.zIndex, opacity: style.opacity, pointerEvents: "none" }, children: [
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: previewBoxStyle, children: /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "relative w-full h-full", children: hasVideo && videoUrls.length > 0 ? videoUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("video", { src: u, autoPlay: true, muted: true, loop: videoLoop, playsInline: true, className: "absolute inset-0 w-full h-full object-contain", style: { zIndex: i, objectPosition: "bottom" } }, i)) : imageUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", className: "absolute inset-0 w-full h-full object-contain", style: { zIndex: i, objectPosition: "bottom" } }, i)) }) }),
+              kr && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: pickersBoxStyle, children: pickersNode })
+            ] }, el.id);
+          }
+          const layout = el.layout === "free" ? "preview-left" : el.layout || "preview-left";
           const pv = `${el.previewPercent ?? 45}%`;
           const frameUrl = el.backgroundImage ? getElementAssetUrl(el.backgroundImage) : null;
           const containerStyle = {
@@ -12854,7 +16331,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           } : el;
           const gridEl = isShopList ? { ...effEl, hideUnowned: false } : effEl;
           const groupByCategory = isPlayerInv && !!invUI.inventoryGroupByCategory;
-          return /* @__PURE__ */ jsxRuntime2.jsx("div", { style, children: /* @__PURE__ */ jsxRuntime2.jsx(
+          const invGrid = /* @__PURE__ */ jsxRuntime2.jsx(
             InventoryGridElement,
             {
               element: gridEl,
@@ -12871,9 +16348,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               onSelectItem,
               groupByCategory,
               categoryOrder: catOrder,
-              autoSort: isPlayerInv && sortMode !== "manual"
+              autoSort: isPlayerInv && sortMode !== "manual",
+              style
             }
-          ) }, el.id);
+          );
+          return gridEl.slotLayout === "free" && ((_B = gridEl.slotRects) == null ? void 0 : _B.length) ? /* @__PURE__ */ jsxRuntime2.jsx(React2.Fragment, { children: invGrid }, el.id) : /* @__PURE__ */ jsxRuntime2.jsx("div", { style, children: invGrid }, el.id);
         }
         case UIElementType.Meter: {
           const el = element;
@@ -13270,33 +16749,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     );
   };
-  const PhoneGlyph = ({ name }) => /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "1.4em", lineHeight: 1 }, children: name && PHONE_GLYPHS[name] || "●" });
-  function resolvePhonePortrait(source, character, assetResolver) {
-    var _a, _b;
-    const baseUrl = (character == null ? void 0 : character.id) ? assetResolver(character.id, "image") : null;
-    const mode = (source == null ? void 0 : source.mode) || "base";
-    if (mode === "custom") {
-      const ci = source == null ? void 0 : source.customImage;
-      const url = ci ? assetResolver(ci.id, ci.type === "video" ? "video" : "image") : null;
-      return url ? [url] : baseUrl ? [baseUrl] : [];
-    }
-    if (mode === "expression" && character) {
-      const stack = [];
-      if (!(source == null ? void 0 : source.hideBase) && baseUrl) stack.push(baseUrl);
-      const expr = (source == null ? void 0 : source.expressionId) ? (_a = character.expressions) == null ? void 0 : _a[source.expressionId] : void 0;
-      if (expr) {
-        for (const layer of Object.values(character.layers || {})) {
-          const assetId = (_b = expr.layerConfiguration) == null ? void 0 : _b[layer.id];
-          if (!assetId) continue;
-          const url = assetResolver(assetId, "image");
-          if (url) stack.push(url);
-        }
-      }
-      return stack;
-    }
-    return baseUrl ? [baseUrl] : [];
-  }
-  function renderPhoneBadge(ui) {
+  function renderPhoneBadge(ui, count = 1) {
     const size = ui.phoneBadgeSize ?? 16;
     const shape = ui.phoneBadgeShape || "dot";
     const color = ui.phoneBadgeColor || "#ef4444";
@@ -13305,7 +16758,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     let shapeEl;
     if (shape === "ring") shapeEl = /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...base, width: size, borderRadius: "9999px", border: `${Math.max(2, size * 0.18)}px solid ${color}`, background: "transparent", boxShadow: "none" } });
     else if (shape === "square") shapeEl = /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...base, width: size, borderRadius: Math.max(3, size * 0.25), background: color } });
-    else if (shape === "count") shapeEl = /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...base, padding: "0 5px", borderRadius: "9999px", background: color }, children: "1" });
+    else if (shape === "count") shapeEl = /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...base, padding: "0 5px", borderRadius: "9999px", background: color }, children: Math.max(1, count) });
     else if (shape === "icon") shapeEl = /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...base, width: size, borderRadius: "9999px", background: color, fontSize: size * 0.62 }, children: ui.phoneBadgeIcon && PHONE_GLYPHS[ui.phoneBadgeIcon] || "💬" });
     else if (shape === "pulse") shapeEl = /* @__PURE__ */ jsxRuntime2.jsxs("span", { style: { position: "relative", display: "inline-flex" }, children: [
       /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `@keyframes vn-badge-pulse{0%{transform:scale(1);opacity:.6}70%{transform:scale(2.2);opacity:0}100%{opacity:0}}` }),
@@ -13319,12 +16772,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: Math.max(9, size * 0.62), fontWeight: 600, color: ui.phoneBadgeLabelColor || textColor, whiteSpace: "nowrap", textShadow: "0 1px 3px rgba(0,0,0,0.6)" }, children: ui.phoneBadgeLabel })
     ] });
   }
-  const PhonePortrait = ({ urls, size, fit, objectPosition }) => {
-    if (urls.length === 0) return null;
-    return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: size, height: size, borderRadius: "9999px", overflow: "hidden", flexShrink: 0, position: "relative", background: "rgba(0,0,0,0.2)" }, children: urls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: fit || "cover", objectPosition: objectPosition || "center" } }, i)) });
-  };
-  const PhonePanel = ({ ui, project, phone, variables, assetResolver, evaluateConditions: evaluateConditions2, onAction, onReply, onContactMessage, onContactCall, playTap }) => {
-    var _a;
+  const PhonePanel = ({ ui, project, phone, variables, assetResolver, evaluateConditions: evaluateConditions2, onAction, onReply, onContactMessage, onContactCall, playTap, onOpenApp, onCallReply, onEndCall, onSetWallpaper, onOpenThread }) => {
     const scrollRef = React2.useRef(null);
     React2.useEffect(() => {
       if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -13339,8 +16787,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const bodyFont = ui.phoneFont ? fontSettingsToStyle(ui.phoneFont) : {};
     const titleFont = ui.phoneTitleFont ? fontSettingsToStyle(ui.phoneTitleFont) : {};
     const buttons = (ui.phoneButtons || []).filter((b) => {
-      var _a2;
-      return b.show !== false && (!((_a2 = b.conditions) == null ? void 0 : _a2.length) || evaluateConditions2(b.conditions, variables));
+      var _a;
+      return b.show !== false && (!((_a = b.conditions) == null ? void 0 : _a.length) || evaluateConditions2(b.conditions, variables));
     });
     const batteryPct = ui.phoneBatteryVariableId != null ? Math.max(0, Math.min(100, Number(variables[ui.phoneBatteryVariableId] ?? 100))) : 100;
     const signalBars = Math.max(1, Math.min(8, ui.phoneSignalBars ?? 4));
@@ -13351,64 +16799,44 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const casingRadius = ui.phoneBorderRadius ?? 28;
     const screenRadius = Math.max(casingRadius - bezel, 6);
     const showHome = ui.phoneShowHomeButton !== false;
-    const effectiveReplies = phone.pendingReplies && phone.pendingReplies.length ? phone.pendingReplies : (phone.pendingChoices || []).map((o) => ({ id: o.id, text: o.text, conditions: o.conditions, actions: o.actions }));
     const view = phone.view || "chat";
-    const showHistory = view === "history";
-    const isHome = view === "home";
-    const isContacts = view === "contacts";
-    const contacts = (ui.phoneContacts || []).filter((c) => {
-      var _a2;
-      return !((_a2 = c.conditions) == null ? void 0 : _a2.length) || evaluateConditions2(c.conditions, variables);
-    });
-    const sortedContacts = [...contacts].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+    const app = resolvePhoneApp(view, ui, project);
+    const isHome = app.id === "home";
+    const isContacts = app.id === "contacts";
+    const ctx = {
+      ui,
+      project,
+      phone,
+      variables,
+      assetResolver,
+      evaluateConditions: evaluateConditions2,
+      onAction,
+      onReply,
+      onContactMessage,
+      onContactCall,
+      playTap,
+      openApp: onOpenApp,
+      buttons,
+      onCallReply,
+      onEndCall,
+      onSetWallpaper,
+      onOpenThread
+    };
     const activeContactId = phone.activeContactId;
-    const threadMessages = activeContactId ? phone.messages.filter((m) => m.senderId === activeContactId || m.contactId === activeContactId) : phone.messages;
-    const contactAvatarSize = `${ui.phoneContactAvatarSize ?? 2.4}em`;
-    const chatAvatarSize = `${ui.phoneChatAvatarSize ?? 2.2}em`;
     const activeContact = activeContactId ? (ui.phoneContacts || []).find((c) => c.characterId === activeContactId) : void 0;
     const resolvePhoneBg = (ref) => {
       if (!ref) return null;
       const url = assetResolver(ref.id, ref.type === "video" ? "video" : "image");
       return url ? { url, isVideo: ref.type === "video", trimStart: ref.trimStart, trimEnd: ref.trimEnd } : null;
     };
-    const wallpaper = resolvePhoneBg(ui.phoneWallpaperImage);
+    const pickedWallpaper = phone.wallpaperId ? (ui.phoneWallpapers || []).find((w2) => {
+      var _a;
+      return w2.id === phone.wallpaperId && (!((_a = w2.conditions) == null ? void 0 : _a.length) || evaluateConditions2(w2.conditions, variables));
+    }) : void 0;
+    const wallpaper = resolvePhoneBg((pickedWallpaper == null ? void 0 : pickedWallpaper.image) || ui.phoneWallpaperImage);
     const chatBg = resolvePhoneBg((activeContact == null ? void 0 : activeContact.chatBackground) || ui.phoneChatBackgroundImage);
-    const isChatView = !isHome && !isContacts && !showHistory;
-    const screenBg = (isChatView ? chatBg : null) || wallpaper;
+    const screenBg = (app.usesChatBackground ? chatBg : null) || wallpaper;
     const contactsRegion = ui.phoneContactsRegion;
-    const activeContactName = (activeContact == null ? void 0 : activeContact.displayName) || (activeContactId ? (_a = project.characters[activeContactId]) == null ? void 0 : _a.name : "") || "";
-    const lastMessageFor = (cid) => {
-      for (let i = phone.messages.length - 1; i >= 0; i--) {
-        const m = phone.messages[i];
-        if (m.senderId === cid || m.contactId === cid) return m.text;
-      }
-      return "";
-    };
-    const contactsRoster = sortedContacts.length === 0 ? /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.5, textAlign: "center", marginTop: 12, fontSize: "0.8em" }, children: "No contacts" }) : sortedContacts.map((c) => {
-      const char = project.characters[c.characterId];
-      const curls = resolvePhonePortrait(c.avatar, char, assetResolver);
-      const name = c.displayName || (char == null ? void 0 : char.name) || "Unknown";
-      const status = c.statusText ? interpolateVariables(c.statusText, variables, project) : "";
-      const preview = lastMessageFor(c.characterId);
-      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 12, background: ui.phoneContactRowColor || ui.phoneHistoryRowColor || "rgba(255,255,255,0.05)", color: ui.phoneContactTextColor || ui.phoneHistoryTextColor || "#fff" }, children: [
-        ui.phoneShowAvatars !== false && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: curls, size: contactAvatarSize, fit: ui.phoneContactAvatarFit }),
-        /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
-          /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 600, ...ui.phoneContactNameFont ? fontSettingsToStyle(ui.phoneContactNameFont) : {} }, children: name }),
-          status && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.75, ...ui.phoneContactStatusFont ? fontSettingsToStyle(ui.phoneContactStatusFont) : {} }, children: status }),
-          preview && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: interpolateVariables(preview, variables, project) })
-        ] }),
-        /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 4, flexShrink: 0 }, children: [
-          !c.hideCall && /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
-            playTap();
-            onContactCall(c.characterId);
-          }, title: ui.phoneContactCallLabel || "Call", style: { display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", borderRadius: 9999, border: "none", cursor: "pointer", background: ui.phoneCallAcceptColor || "#22c55e", color: "#fff", fontSize: "0.7em" }, children: "📞" }),
-          !c.hideMessage && /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
-            playTap();
-            onContactMessage(c.characterId);
-          }, title: ui.phoneContactMessageLabel || "Message", style: { display: "flex", alignItems: "center", gap: 3, padding: "4px 8px", borderRadius: 9999, border: "none", cursor: "pointer", background: ui.phoneOutgoingBubbleColor || "#2f6bff", color: "#fff", fontSize: "0.7em" }, children: "💬" })
-        ] })
-      ] }, c.id);
-    });
     return (
       // Casing (phone body): the screen is inset by the bezel so it reads as a separate panel.
       /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: {
@@ -13470,65 +16898,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ] }),
           ui.phoneHeaderText && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { padding: "2px 16px 6px", ...titleFont }, children: ui.phoneHeaderText }),
           /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `@keyframes vn-phone-typing{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-3px);opacity:1}}` }),
-          /* @__PURE__ */ jsxRuntime2.jsx("div", { ref: scrollRef, style: { flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 10px", display: "flex", flexDirection: "column", gap: 8 }, children: isHome ? null : isContacts ? contactsRegion ? null : contactsRoster : showHistory ? /* @__PURE__ */ jsxRuntime2.jsx(jsxRuntime2.Fragment, { children: phone.callLog && phone.callLog.length > 0 ? [...phone.callLog].reverse().map((entry) => {
-            const caller = entry.callerId === "player" ? null : project.characters[entry.callerId];
-            const purls = resolvePhonePortrait(entry.portrait, caller, assetResolver);
-            const icon = entry.status === "missed" ? "↙" : entry.status === "accepted" ? "↗" : "⊘";
-            const tint = entry.status === "missed" ? "#ef4444" : entry.status === "accepted" ? "#22c55e" : "#9ca3af";
-            return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 10, background: ui.phoneHistoryRowColor || "rgba(255,255,255,0.05)", color: ui.phoneHistoryTextColor || "#fff" }, children: [
-              /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: purls, size: "2em" }),
-              /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
-                /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: (caller == null ? void 0 : caller.name) || "Unknown" }),
-                /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { fontSize: "0.7em", opacity: 0.8, color: tint }, children: [
-                  icon,
-                  " ",
-                  entry.status
-                ] })
-              ] })
-            ] }, entry.id);
-          }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.5, textAlign: "center", marginTop: 12, fontSize: "0.8em" }, children: "No recent calls" }) }) : /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
-            activeContactId && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }, children: [
-              /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => onAction({ type: UIActionType.ShowPhoneContacts }), title: "Back to contacts", style: { background: "transparent", border: "none", cursor: "pointer", color: "inherit", fontSize: "1.1em", lineHeight: 1, padding: "0 4px" }, children: "‹" }),
-              /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontWeight: 600, fontSize: "0.85em" }, children: activeContactName })
-            ] }),
-            threadMessages.map((m) => {
-              const mine = m.senderId === "player";
-              const char = mine ? null : project.characters[m.senderId];
-              const portraitUrls = mine ? [] : resolvePhonePortrait(m.portrait, char, assetResolver);
-              return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", flexDirection: mine ? "row-reverse" : "row", gap: 6, alignItems: "flex-end" }, children: [
-                ui.phoneShowAvatars !== false && !mine && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: portraitUrls, size: chatAvatarSize, fit: ui.phoneChatAvatarFit }),
-                /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { maxWidth: "76%" }, children: [
-                  !mine && (char == null ? void 0 : char.name) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.75, marginBottom: 1, color: char.color }, children: char.name }),
-                  /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { padding: "6px 10px", borderRadius: 14, wordBreak: "break-word", background: mine ? ui.phoneOutgoingBubbleColor || "#2f6bff" : ui.phoneIncomingBubbleColor || "#2a2f3a", color: ui.phoneBubbleTextColor || "#fff" }, children: interpolateVariables(m.text, variables, project) })
-                ] })
-              ] }, m.id);
-            }),
-            phone.typing && (() => {
-              const tchar = phone.typing.senderId === "player" ? null : project.characters[phone.typing.senderId];
-              const turls = tchar ? resolvePhonePortrait(void 0, tchar, assetResolver) : [];
-              return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 6, alignItems: "flex-end" }, children: [
-                ui.phoneShowAvatars !== false && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: turls, size: chatAvatarSize, fit: ui.phoneChatAvatarFit }),
-                /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { padding: "8px 12px", borderRadius: 14, background: ui.phoneIncomingBubbleColor || "#2a2f3a", display: "inline-flex", gap: 4, alignItems: "center" }, children: [0, 1, 2].map((i) => /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { width: 6, height: 6, borderRadius: "9999px", background: ui.phoneTypingColor || ui.phoneBubbleTextColor || "#fff", animation: `vn-phone-typing 1s ${i * 0.2}s infinite` } }, i)) })
-              ] });
-            })(),
-            effectiveReplies.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }, children: effectiveReplies.filter((o) => {
-              var _a2;
-              return !((_a2 = o.conditions) == null ? void 0 : _a2.length) || evaluateConditions2(o.conditions, variables);
-            }).map((o) => /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
-              playTap();
-              onReply(o);
-            }, style: { alignSelf: "flex-end", maxWidth: "82%", padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", ...bodyFont, background: ui.phoneOutgoingBubbleColor || "#2f6bff", color: ui.phoneBubbleTextColor || "#fff" }, children: interpolateVariables(o.text, variables, project) }, o.id)) })
-          ] }) }),
-          isContacts && contactsRegion && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", left: `${contactsRegion.x}%`, top: `${contactsRegion.y}%`, width: `${contactsRegion.width}%`, height: `${contactsRegion.height}%`, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, padding: "4px 6px", zIndex: 2 }, children: contactsRoster }),
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { ref: scrollRef, style: { flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 10px", display: "flex", flexDirection: "column", gap: 8 }, children: app.render(ctx) }),
+          isContacts && contactsRegion && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", left: `${contactsRegion.x}%`, top: `${contactsRegion.y}%`, width: `${contactsRegion.width}%`, height: `${contactsRegion.height}%`, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, padding: "4px 6px", zIndex: 2 }, children: renderContactsRoster(ctx) }),
           isHome && ui.phoneButtonLayout === "free" && buttons.map((b) => {
             const customIcon = b.iconImage ? assetResolver(b.iconImage.id, "image") : null;
             return /* @__PURE__ */ jsxRuntime2.jsxs(
               "button",
               {
-                onClick: () => {
-                  playTap();
-                  b.action && onAction(b.action);
-                },
+                onClick: () => fireAppButton(ctx, b),
                 title: b.label || "",
                 style: { position: "absolute", left: `${b.x ?? 8}%`, top: `${b.y ?? 12}%`, width: `${b.width ?? 14}%`, height: `${b.height ?? 14}%`, containerType: "size", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1cqmin", background: "transparent", border: "none", cursor: "pointer", color: ui.phoneButtonIconColor || "#cbd5e1", zIndex: 5 },
                 children: [
@@ -13539,26 +16916,23 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               b.id
             );
           }),
-          isHome && ui.phoneButtonLayout !== "free" && buttons.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-around", gap: 4, padding: "6px 4px", backgroundColor: ui.phoneButtonBarColor || "rgba(0,0,0,0.35)", flexShrink: 0 }, children: buttons.map((b) => {
+          isHome && ui.phoneButtonLayout !== "free" && ui.phoneButtonLayout !== "grid" && buttons.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-around", gap: 4, padding: "6px 4px", backgroundColor: ui.phoneButtonBarColor || "rgba(0,0,0,0.35)", flexShrink: 0 }, children: buttons.map((b) => {
             const customIcon = b.iconImage ? assetResolver(b.iconImage.id, "image") : null;
-            return /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: () => {
-              playTap();
-              b.action && onAction(b.action);
-            }, title: b.label || "", style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 2px", background: "transparent", border: "none", cursor: "pointer", color: ui.phoneButtonIconColor || "#cbd5e1", fontSize: "0.7em" }, children: [
+            return /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: () => fireAppButton(ctx, b), title: b.label || "", style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 2px", background: "transparent", border: "none", cursor: "pointer", color: ui.phoneButtonIconColor || "#cbd5e1", fontSize: "0.7em" }, children: [
               customIcon ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: customIcon, alt: "", style: { width: "1.6em", height: "1.6em", objectFit: "contain" } }) : /* @__PURE__ */ jsxRuntime2.jsx(PhoneGlyph, { name: b.builtinIcon }),
               b.label && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { whiteSpace: "nowrap" }, children: b.label })
             ] }, b.id);
           }) })
         ] }),
-        showHome && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", paddingTop: bezel * 0.6 }, children: /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
+        showHome && !phone.activeCall && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", paddingTop: bezel * 0.6 }, children: /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => {
           playTap();
           onAction({ type: isHome ? UIActionType.HidePhone : UIActionType.ShowPhone });
         }, "aria-label": "Home", title: "Home", style: { width: "1.5em", height: "1.5em", borderRadius: "9999px", border: `2px solid ${ui.phoneHomeButtonColor || "rgba(255,255,255,0.28)"}`, background: "transparent", cursor: "pointer", flexShrink: 0 } }) })
       ] })
     );
   };
-  const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false }) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q;
+  const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false, startAt = null }) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s;
     const { project } = useProject();
     const toast = useToast();
     const notify = React2.useCallback((message, type = "info") => {
@@ -13579,7 +16953,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       return Object.keys(project.uiScreens)[0] || null;
     }, [project.ui.titleScreenId, project.uiScreens]);
     const titleScreenId = getValidTitleScreenId();
-    const [screenStack, setScreenStack] = React2.useState(titleScreenId ? [titleScreenId] : []);
+    const [screenStack, setScreenStack] = React2.useState(startAt ? [] : titleScreenId ? [titleScreenId] : []);
     const [hudStack, setHudStack] = React2.useState([]);
     const [elementVisibility, setElementVisibility] = React2.useState({});
     const prevOpenScreensRef = React2.useRef(/* @__PURE__ */ new Set());
@@ -13811,6 +17185,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const timersRef = React2.useRef(/* @__PURE__ */ new Map());
     const blockingTimerRef = React2.useRef(null);
     const fastForwardTargetRef = React2.useRef(null);
+    const backwardReplayRef = React2.useRef(null);
+    const dnTransitionRef = React2.useRef(0.4);
     const startTimer = (cfg) => {
       const key = (cfg.timerId || "").trim() || "default";
       const mode = cfg.mode === "stopwatch" ? "stopwatch" : "countdown";
@@ -13833,6 +17209,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         } catch {
         }
       }
+    };
+    const applyTimeOfDay = (mode, amount, transitionDuration) => {
+      var _a2;
+      const tv = (_a2 = project.dayNightCycle) == null ? void 0 : _a2.timeVariableId;
+      if (!tv) return;
+      dnTransitionRef.current = Math.max(0, transitionDuration ?? 0);
+      updatePlayerState((p) => {
+        if (!p) return p;
+        const cur = Number(p.variables[tv] ?? 0);
+        let next = mode === "set" ? amount ?? 0 : cur + (amount ?? 0);
+        next = Math.round((next % 24 + 24) % 24 * 1e3) / 1e3;
+        return { ...p, variables: { ...p.variables, [tv]: next } };
+      });
     };
     const activeCallCmdRef = React2.useRef(null);
     const callRingAudioRef = React2.useRef(null);
@@ -13867,17 +17256,67 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     React2.useEffect(() => {
       if (!(flashlight == null ? void 0 : flashlight.on)) return;
       const onMove = (e) => {
+        var _a2;
         const el = flashlightOverlayRef.current;
         if (!el) return;
         const rect = el.getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
-        const radiusPx = flashlight.radius / 100 * Math.min(rect.width, rect.height);
-        el.style.background = flashlightBg(mx, my, radiusPx, flashlight.softness, hexToRgba(flashlight.color, flashlight.darkness * 100));
+        const fVars = (_a2 = playerStateRef.current) == null ? void 0 : _a2.variables;
+        const fRadius = resolveVarNumber(fVars, flashlight.radiusVariableId, flashlight.radius, { min: 1, max: 100 });
+        const fDarkness = resolveVarNumber(fVars, flashlight.darknessVariableId, flashlight.darkness, { min: 0, max: 1 });
+        const radiusPx = fRadius / 100 * Math.min(rect.width, rect.height);
+        el.style.background = flashlightBg(mx, my, radiusPx, flashlight.softness, hexToRgba(flashlight.color, fDarkness * 100));
       };
       window.addEventListener("mousemove", onMove);
       return () => window.removeEventListener("mousemove", onMove);
     }, [flashlight == null ? void 0 : flashlight.on, flashlight == null ? void 0 : flashlight.radius, flashlight == null ? void 0 : flashlight.softness, flashlight == null ? void 0 : flashlight.darkness, flashlight == null ? void 0 : flashlight.color]);
+    const [spotlights, setSpotlights] = React2.useState({});
+    const spotlightRefs = React2.useRef(/* @__PURE__ */ new Map());
+    const spotToggleKeys = Object.values(spotlights).map((s) => s.toggleKey || "").join(",");
+    React2.useEffect(() => {
+      if (!Object.values(spotlights).some((s) => s.toggleKey)) return;
+      const onKey = (e) => {
+        const tgt = e.target;
+        if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA" || tgt.isContentEditable)) return;
+        const k = e.key.toLowerCase();
+        setSpotlights((prev) => {
+          let changed = false;
+          const next = {};
+          for (const id in prev) {
+            const s = prev[id];
+            if (s.toggleKey && s.toggleKey.toLowerCase() === k) {
+              next[id] = { ...s, on: !s.on };
+              changed = true;
+            } else next[id] = s;
+          }
+          if (changed) e.preventDefault();
+          return changed ? next : prev;
+        });
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [spotToggleKeys]);
+    const spotFollowSig = Object.entries(spotlights).map(([id, s]) => `${id}:${s.on && s.followMouse ? 1 : 0}:${s.sourceX},${s.sourceY},${s.aimAngle},${s.swivelMax}`).join("|");
+    React2.useEffect(() => {
+      if (!Object.values(spotlights).some((s) => s.on && s.followMouse)) return;
+      const onMove = (e) => {
+        for (const id in spotlights) {
+          const s = spotlights[id];
+          if (!s.on || !s.followMouse) continue;
+          const el = spotlightRefs.current.get(id);
+          if (!el) continue;
+          const rect = el.getBoundingClientRect();
+          const spx = s.sourceX / 100 * rect.width, spy = s.sourceY / 100 * rect.height;
+          const vx = e.clientX - rect.left - spx, vy = e.clientY - rect.top - spy;
+          let A = Math.atan2(vx, vy) * 180 / Math.PI;
+          A = Math.max(s.aimAngle - s.swivelMax, Math.min(s.aimAngle + s.swivelMax, A));
+          el.style.transform = `rotate(${-A}deg)`;
+        }
+      };
+      window.addEventListener("mousemove", onMove);
+      return () => window.removeEventListener("mousemove", onMove);
+    }, [spotFollowSig]);
     const [activeCreditRoll, setActiveCreditRoll] = React2.useState(null);
     const assetResolver = React2.useCallback((assetId, type) => {
       if (!assetId) return null;
@@ -14165,6 +17604,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             selectedItemId: playerState.selectedItemId,
             selectedElementId: playerState.selectedElementId,
             pickedUpItems: playerState.pickedUpItems,
+            uiPaletteOverride: playerState.uiPaletteOverride ?? void 0,
             phone: playerState.uiState.phone ?? void 0
           }
         };
@@ -14217,12 +17657,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       menuMusicUrlRef.current = null;
       const doLoad = async () => {
-        var _a2, _b2;
+        var _a2, _b2, _c2, _d2, _e2, _f2;
         const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
         const saveData = saves[slotNumber];
         if (!saveData) return;
         restockPrevConditionRef.current = {};
         restockPrevWatchRef.current = {};
+        const savedPhone = saveData.playerStateData.phone;
+        const seededThreadLastRead = savedPhone && savedPhone.threadLastRead === void 0 ? (savedPhone.messages || []).reduce((acc, m) => {
+          const k = phoneThreadKey(m);
+          acc[k] = (acc[k] || 0) + 1;
+          return acc;
+        }, {}) : savedPhone == null ? void 0 : savedPhone.threadLastRead;
         updatePlayerState({
           mode: "playing",
           currentSceneId: saveData.playerStateData.currentSceneId,
@@ -14235,9 +17681,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           selectedItemId: saveData.playerStateData.selectedItemId,
           selectedElementId: saveData.playerStateData.selectedElementId,
           pickedUpItems: saveData.playerStateData.pickedUpItems,
+          uiPaletteOverride: saveData.playerStateData.uiPaletteOverride ?? null,
+          // palette→UI restyle survives save/load
           history: [],
           savedInputs: {},
-          uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: saveData.playerStateData.phone ? { ...saveData.playerStateData.phone, outgoingCall: null } : null },
+          uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: savedPhone ? { ...savedPhone, threadLastRead: seededThreadLastRead, typing: null, outgoingCall: null, activeCall: ((_b2 = savedPhone.activeCall) == null ? void 0 : _b2.phase) === "active" ? savedPhone.activeCall : null } : null },
           musicState: saveData.playerStateData.musicState
         });
         setScreenStack([]);
@@ -14246,9 +17694,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         timersRef.current.clear();
         blockingTimerRef.current = null;
         fastForwardTargetRef.current = null;
+        backwardReplayRef.current = null;
         setIsJustLoaded(true);
-        const savedCall = (_b2 = saveData.playerStateData.phone) == null ? void 0 : _b2.incomingCall;
+        const savedCall = (_c2 = saveData.playerStateData.phone) == null ? void 0 : _c2.incomingCall;
         if ((savedCall == null ? void 0 : savedCall.phase) === "ringing" && savedCall.cmd) rearmIncomingCall(savedCall.cmd);
+        const savedActive = (_d2 = saveData.playerStateData.phone) == null ? void 0 : _d2.activeCall;
+        if ((savedActive == null ? void 0 : savedActive.phase) === "active" && !((_e2 = savedActive.pendingReplies) == null ? void 0 : _e2.length)) {
+          pushPhoneTimer(playNextCallLine, 900);
+        }
+        if ((savedPhone == null ? void 0 : savedPhone.activeTextConvo) && !((_f2 = savedPhone.pendingReplies) == null ? void 0 : _f2.length)) {
+          pushPhoneTimer(playNextTextLine, 900);
+        }
         try {
           pluginManager.invokeHook("onLoadAfterSave", saveData);
         } catch {
@@ -14256,8 +17712,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       };
       void doLoad();
     };
-    const startNewGame = React2.useCallback(() => {
-      var _a2;
+    const startNewGame = React2.useCallback((startOverride) => {
+      var _a2, _b2;
       stopAndResetMusic();
       clearPhoneTimers();
       stopRingtone();
@@ -14282,9 +17738,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         resetGameplayVar(c.currencyVariableId);
         (c.entries || []).forEach((e) => resetGameplayVar(e.countVariableId));
       });
-      let startSceneId = project.startSceneId;
+      const hasOverride = !!(startOverride && project.scenes[startOverride.sceneId]);
+      let startSceneId = hasOverride ? startOverride.sceneId : project.startSceneId;
       const startScene = project.scenes[startSceneId];
-      if (startScene && startScene.conditions && startScene.conditions.length > 0) {
+      if (!hasOverride && startScene && startScene.conditions && startScene.conditions.length > 0) {
         const conditionsMet = combineConditions(startScene.conditions, (condition) => {
           const varValue = initialVariables[condition.variableId];
           if (varValue === void 0) return false;
@@ -14341,6 +17798,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       timersRef.current.clear();
       blockingTimerRef.current = null;
       fastForwardTargetRef.current = null;
+      backwardReplayRef.current = null;
+      if (hasOverride) {
+        const cmds = ((_b2 = project.scenes[startSceneId]) == null ? void 0 : _b2.commands) || [];
+        const idx = Math.max(0, Math.min(startOverride.index, Math.max(0, cmds.length - 1)));
+        fastForwardTargetRef.current = idx > 0 ? idx : null;
+      }
     }, [project, stopAndResetMusic, menuVariables]);
     const startNewGameWithFade = React2.useCallback(() => {
       setGameStartFade("toBlack");
@@ -14350,6 +17813,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         window.setTimeout(() => setGameStartFade("none"), 450);
       }, 400);
     }, [startNewGame]);
+    const startAtConsumedRef = React2.useRef(false);
+    React2.useEffect(() => {
+      if (!startAt || startAtConsumedRef.current) return;
+      startAtConsumedRef.current = true;
+      startNewGame(startAt);
+      setGameStartFade("fromBlack");
+      window.setTimeout(() => setGameStartFade("none"), 450);
+    }, [startAt]);
     React2.useEffect(() => {
       const onHotReload = (e) => {
         const detail = e.detail || {};
@@ -14786,13 +18257,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       musicAudioRef.current.volume = Math.max(0, Math.min(1, screenVol * safeVol));
     }, [settings.musicVolume, screenStack, project.uiScreens]);
     React2.useEffect(() => {
-      const isInActiveGameplay = (playerState == null ? void 0 : playerState.mode) === "playing" && screenStack.length === 0;
-      if (isInActiveGameplay) {
-        return;
-      }
       const audio = ambientNoiseAudioRef.current;
-      const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
-      if (!activeScreen) {
+      const activeScreenId = screenStack.length > 0 ? screenStack[screenStack.length - 1] : hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+      const activeScreen = activeScreenId ? project.uiScreens[activeScreenId] : null;
+      if (!activeScreen || !activeScreen.ambientNoise) {
         if (audio && !audio.paused) {
           fadeAudio(audio, 0, 0.5, () => audio.pause());
         }
@@ -14846,7 +18314,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       } else {
         menuAmbientUrlRef.current = newAudioUrl;
       }
-    }, [screenStack, playerState == null ? void 0 : playerState.mode, project.uiScreens, assetResolver, settings.ambientVolume, fadeAudio]);
+    }, [screenStack, hudStack, playerState == null ? void 0 : playerState.mode, project.uiScreens, assetResolver, settings.ambientVolume, fadeAudio]);
     React2.useEffect(() => {
       var _a2;
       if (!ambientNoiseAudioRef.current) return;
@@ -15352,6 +18820,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             if (!parallelWarnedRef.current.has(key)) {
               parallelWarnedRef.current.add(key);
               console.warn(`[Parallel CE "${ce.name}"] command "${cmd.type}" skipped (not background-safe).`);
+              notify(`"${cmd.type}" won't run in the Parallel event "${ce.name}". Parallel events only run background commands (variables, audio, scripts). Use a "Called" or "Auto" event for on-screen commands.`, "warning");
             }
             continue;
           }
@@ -15751,7 +19220,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         isStandalone
       };
       commandContext.runCommand = async (type, params) => {
-        var _a3, _b2, _c2, _d2;
+        var _a3, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2;
         try {
           const base = createCommand(type, project, {});
           if (!base) {
@@ -15850,10 +19319,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               result = handleSellItemCommand(cmd, hctx);
               break;
             case "PlaceLights":
-              result = { advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters }) };
+              result = { advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null }) };
               break;
             case "ClearLights":
-              result = { advance: true, stagePatch: () => ({ lights: [] }) };
+              result = { advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null }) };
               break;
             case "CreditRoll": {
               setActiveCreditRoll(cmd);
@@ -15863,7 +19332,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             // Screen effects are INLINE in the main loop (component refs/state), so we replicate
             // the exact same effect here (identical refs/render path) rather than touch the loop.
             case "ShakeScreen": {
-              activeShakeRef.current = { intensity: cmd.intensity, duration: cmd.duration };
+              activeShakeRef.current = { intensity: resolveVarNumber((_a3 = playerStateRef.current) == null ? void 0 : _a3.variables, cmd.intensityVariableId, cmd.intensity, { min: 1, max: 10 }), duration: cmd.duration };
               setShakeTrigger((prev) => prev + 1);
               if (cmd.duration > 0) {
                 const tid = window.setTimeout(() => {
@@ -15876,20 +19345,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               return;
             }
             case "FlashScreen": {
-              activeFlashRef.current = { color: cmd.color, duration: cmd.duration, key: Date.now() };
+              activeFlashRef.current = { color: cmd.color, duration: resolveVarNumber((_b2 = playerStateRef.current) == null ? void 0 : _b2.variables, cmd.durationVariableId, cmd.duration, { min: 0.05, max: 30 }), key: Date.now() };
               setFlashTrigger((prev) => prev + 1);
               return;
             }
             case "TintScreen": {
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, transitionDuration: cmd.duration } } } : p);
+              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, tintOpacity: cmd.opacity ?? 100, tintOpacityVariableId: cmd.opacityVariableId ?? null, transitionDuration: cmd.duration } } } : p);
               return;
             }
             case "PanZoomScreen": {
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: cmd.zoom, panX: cmd.panX, panY: cmd.panY, transitionDuration: cmd.duration } } } : p);
+              const pzVars = (_c2 = playerStateRef.current) == null ? void 0 : _c2.variables;
+              const pzZoom = resolveVarNumber(pzVars, cmd.zoomVariableId, cmd.zoom, { min: 0.1, max: 5 });
+              const pzX = resolveVarNumber(pzVars, cmd.panXVariableId, cmd.panX, { min: -100, max: 100 });
+              const pzY = resolveVarNumber(pzVars, cmd.panYVariableId, cmd.panY, { min: -100, max: 100 });
+              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: pzZoom, panX: pzX, panY: pzY, transitionDuration: cmd.duration } } } : p);
               return;
             }
             case "ResetScreenEffects": {
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] } } } : p);
+              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: "transparent", tintOpacity: 100, tintOpacityVariableId: null, zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] } } } : p);
               return;
             }
             // More inline-effect commands (refs/component state) — replicate the main loop's exact
@@ -15900,6 +19373,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   radius: cmd.radius ?? 22,
                   softness: cmd.softness ?? 0.6,
                   darkness: cmd.darkness ?? 0.85,
+                  radiusVariableId: cmd.radiusVariableId ?? null,
+                  darknessVariableId: cmd.darknessVariableId ?? null,
                   color: cmd.color || "#000000",
                   toggleKey: cmd.toggleKey,
                   affectsDialogue: cmd.affectsDialogue !== false,
@@ -15912,10 +19387,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }
               return;
             }
+            case "Spotlight": {
+              const sid = cmd.spotlightId || "main";
+              if (cmd.enabled) {
+                setSpotlights((prev) => ({ ...prev, [sid]: makeSpotlightState(cmd) }));
+                if (cmd.sfxId) playSound(cmd.sfxId);
+              } else {
+                setSpotlights((prev) => {
+                  const n = { ...prev };
+                  delete n[sid];
+                  return n;
+                });
+              }
+              return;
+            }
             case "Lightning": {
               activeLightningRef.current = {
                 color: cmd.color || "#EAF2FF",
-                intensity: cmd.intensity ?? 0.9,
+                intensity: resolveVarNumber((_d2 = playerStateRef.current) == null ? void 0 : _d2.variables, cmd.intensityVariableId, cmd.intensity ?? 0.9, { min: 0, max: 1 }),
                 duration: cmd.duration ?? 0.7,
                 flashes: cmd.flashes ?? 2,
                 affectsDialogue: cmd.affectsDialogue !== false,
@@ -15931,10 +19420,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             case "Fireworks": {
               activeFireworksRef.current = {
                 colors: cmd.colors && cmd.colors.length ? cmd.colors : [],
-                intensity: cmd.intensity ?? 1,
-                bursts: Math.max(1, cmd.bursts ?? 3),
+                intensity: resolveVarNumber((_e2 = playerStateRef.current) == null ? void 0 : _e2.variables, cmd.intensityVariableId, cmd.intensity ?? 1, { min: 0, max: 1 }),
+                bursts: Math.round(resolveVarNumber((_f2 = playerStateRef.current) == null ? void 0 : _f2.variables, cmd.burstsVariableId, Math.max(1, cmd.bursts ?? 3), { min: 1, max: 20 })),
                 duration: cmd.duration ?? 2.5,
-                burstHeight: cmd.burstHeight ?? 0.7,
+                burstHeight: resolveVarNumber((_g2 = playerStateRef.current) == null ? void 0 : _g2.variables, cmd.burstHeightVariableId, cmd.burstHeight ?? 0.7, { min: 0, max: 1 }),
                 affectsDialogue: cmd.affectsDialogue !== false,
                 sfxId: cmd.sfxId ?? null,
                 sfxVolume: cmd.sfxVolume,
@@ -15949,7 +19438,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               return;
             }
             case "SetScreenOverlayEffect": {
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: cmd.effectType, intensity: cmd.intensity, variant: cmd.variant, color: cmd.color, params: cmd.params }) } } } : p);
+              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: cmd.effectType, intensity: cmd.intensity, intensityVariableId: cmd.intensityVariableId ?? null, variant: cmd.variant, color: cmd.color, params: cmd.params }) } } } : p);
               const overlayDur = cmd.duration ?? 0;
               if (overlayDur > 0) {
                 const effType = cmd.effectType;
@@ -15994,21 +19483,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             // no script is awaiting, that ref is null, so normal playback is untouched.
             case "Dialogue": {
               const r = handleDialogue(cmd, hctx);
-              if ((_a3 = r.updates) == null ? void 0 : _a3.uiState) updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, ...r.updates.uiState } } : p);
+              if ((_h2 = r.updates) == null ? void 0 : _h2.uiState) updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, ...r.updates.uiState } } : p);
               return new Promise((resolve) => {
                 scriptInputResolverRef.current = { kind: "dialogue", resolve: () => resolve() };
               });
             }
             case "Choice": {
               const r = handleChoice(cmd, hctx);
-              if ((_b2 = r.updates) == null ? void 0 : _b2.uiState) updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, ...r.updates.uiState } } : p);
+              if ((_i2 = r.updates) == null ? void 0 : _i2.uiState) updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, ...r.updates.uiState } } : p);
               return new Promise((resolve) => {
                 scriptInputResolverRef.current = { kind: "choice", resolve: (idx) => resolve(typeof idx === "number" ? idx : 0) };
               });
             }
             case "TextInput": {
               const r = handleTextInput(cmd, hctx);
-              if ((_c2 = r.updates) == null ? void 0 : _c2.uiState) updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, ...r.updates.uiState } } : p);
+              if ((_j2 = r.updates) == null ? void 0 : _j2.uiState) updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, ...r.updates.uiState } } : p);
               return new Promise((resolve) => {
                 scriptInputResolverRef.current = { kind: "textInput", resolve: (val) => resolve(typeof val === "string" ? val : String(val ?? "")) };
               });
@@ -16043,7 +19532,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               return;
           }
           if (!result) return;
-          if (((_d2 = result.updates) == null ? void 0 : _d2.variables) && variableStoreRef.current) {
+          if (((_k2 = result.updates) == null ? void 0 : _k2.variables) && variableStoreRef.current) {
             variableStoreRef.current.applyWrites(Object.entries(result.updates.variables).map(([variableId, value]) => ({ variableId, value, scope: "global", sourceCommandId: cmd.id })));
           }
           if (result.updates || result.stagePatch) {
@@ -16082,10 +19571,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       };
       let instantAdvance = true;
       (async () => {
-        var _a3;
+        var _a3, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2;
         try {
           const applyResult = (result) => {
-            var _a4, _b2, _c2, _d2;
+            var _a4, _b3, _c3, _d3;
             const variableStore2 = variableStoreRef.current;
             const previousSceneId = playerState == null ? void 0 : playerState.currentSceneId;
             if (((_a4 = result.updates) == null ? void 0 : _a4.variables) && variableStore2) {
@@ -16097,7 +19586,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }));
               variableStore2.applyWrites(writes);
             }
-            if ((_b2 = result.updates) == null ? void 0 : _b2.variables) {
+            if ((_b3 = result.updates) == null ? void 0 : _b3.variables) {
               const prevVars = (playerState == null ? void 0 : playerState.variables) || {};
               for (const [vid, val] of Object.entries(result.updates.variables)) {
                 if (prevVars[vid] !== val) {
@@ -16109,33 +19598,33 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }
             }
             if (result.updates || result.stagePatch) {
-              const isSceneChange = ((_c2 = result.updates) == null ? void 0 : _c2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId;
+              const isSceneChange = ((_c3 = result.updates) == null ? void 0 : _c3.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId;
               updatePlayerState((p) => {
-                var _a5, _b3, _c3, _d3, _e2, _f2, _g2, _h2, _i2, _j2;
+                var _a5, _b4, _c4, _d4, _e3, _f3, _g3, _h3, _i3, _j3;
                 if (!p) return null;
-                let mergedVariables = ((_a5 = result.updates) == null ? void 0 : _a5.variables) && variableStore2 ? variableStore2.snapshot().globals : { ...p.variables, ...((_b3 = result.updates) == null ? void 0 : _b3.variables) ?? {} };
+                let mergedVariables = ((_a5 = result.updates) == null ? void 0 : _a5.variables) && variableStore2 ? variableStore2.snapshot().globals : { ...p.variables, ...((_b4 = result.updates) == null ? void 0 : _b4.variables) ?? {} };
                 if (isSceneChange) {
                   const localDefaults = getLocalVariableDefaults(project.variables);
                   mergedVariables = { ...mergedVariables, ...localDefaults };
                   runtimeDebugLog("[Variable Scope] Reset local variables on scene change:", Object.keys(localDefaults));
                 }
-                let nextStage = ((_c3 = result.updates) == null ? void 0 : _c3.stageState) !== void 0 ? { ...p.stageState, ...result.updates.stageState } : void 0;
+                let nextStage = ((_c4 = result.updates) == null ? void 0 : _c4.stageState) !== void 0 ? { ...p.stageState, ...result.updates.stageState } : void 0;
                 if (result.stagePatch) {
                   nextStage = { ...nextStage ?? p.stageState, ...result.stagePatch(p.stageState) };
                 }
                 return {
                   ...p,
-                  ...((_d3 = result.updates) == null ? void 0 : _d3.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
-                  ...((_e2 = result.updates) == null ? void 0 : _e2.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
-                  ...((_f2 = result.updates) == null ? void 0 : _f2.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
-                  ...((_g2 = result.updates) == null ? void 0 : _g2.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
-                  ...((_h2 = result.updates) == null ? void 0 : _h2.variables) !== void 0 || isSceneChange ? { variables: mergedVariables } : {},
+                  ...((_d4 = result.updates) == null ? void 0 : _d4.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
+                  ...((_e3 = result.updates) == null ? void 0 : _e3.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
+                  ...((_f3 = result.updates) == null ? void 0 : _f3.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
+                  ...((_g3 = result.updates) == null ? void 0 : _g3.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
+                  ...((_h3 = result.updates) == null ? void 0 : _h3.variables) !== void 0 || isSceneChange ? { variables: mergedVariables } : {},
                   ...nextStage !== void 0 ? { stageState: nextStage } : {},
-                  ...((_i2 = result.updates) == null ? void 0 : _i2.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {},
-                  ...((_j2 = result.updates) == null ? void 0 : _j2.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}
+                  ...((_i3 = result.updates) == null ? void 0 : _i3.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {},
+                  ...((_j3 = result.updates) == null ? void 0 : _j3.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}
                 };
               });
-              if (((_d2 = result.updates) == null ? void 0 : _d2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId) {
+              if (((_d3 = result.updates) == null ? void 0 : _d3.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId) {
                 runtimeDebugLog("[Scene Cleanup] Scene changed from", previousSceneId, "to", result.updates.currentSceneId, "- clearing UI stacks");
                 setScreenStack([]);
                 setHudStack([]);
@@ -16146,6 +19635,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 activeLightningRef.current = null;
                 activeFireworksRef.current = null;
                 setFlashlight(null);
+                setSpotlights({});
                 activeShakeRef.current = null;
                 scheduler.reset();
                 variableStoreRef.current = null;
@@ -16170,14 +19660,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               advance: result.advance
             });
           };
+          const hw = backwardReplayRef.current;
+          if (hw && (playerState.currentSceneId !== hw.sceneId || playerState.currentIndex >= hw.index)) {
+            backwardReplayRef.current = null;
+          }
+          const replayingBackward = backwardReplayRef.current != null;
           const savedInputKey = `${playerState.currentSceneId}:${playerState.currentIndex}`;
           const savedInput = playerState.savedInputs[savedInputKey];
-          if (savedInput && command.type === CommandType.Choice && savedInput.type === "choice") {
+          if (replayingBackward && savedInput && command.type === CommandType.Choice && savedInput.type === "choice") {
             runtimeDebugLog("[BACKWARD REPLAY] Auto-replaying saved choice:", savedInput.choice.text);
             handleChoiceSelect(savedInput.choice);
             return;
           }
-          if (savedInput && command.type === CommandType.TextInput && savedInput.type === "textInput") {
+          if (replayingBackward && savedInput && command.type === CommandType.TextInput && savedInput.type === "textInput") {
             runtimeDebugLog("[BACKWARD REPLAY] Auto-replaying saved text input:", savedInput.value);
             const cmd = command;
             updatePlayerState((p) => {
@@ -16428,7 +19923,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               if (cmd.waitForCondition) {
                 const conditionMet = () => {
                   var _a4;
-                  return evaluateConditions2(cmd.waitConditions, ((_a4 = playerStateRef.current) == null ? void 0 : _a4.variables) ?? {});
+                  return evaluateConditions2(cmd.waitConditions, mergeDirtyUiVariables(((_a4 = playerStateRef.current) == null ? void 0 : _a4.variables) ?? {}));
                 };
                 if (conditionMet()) {
                   advance();
@@ -16448,11 +19943,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 const targets2 = Array.isArray(cmd.targetItemIds) ? cmd.targetItemIds.filter(Boolean) : [];
                 const mode = cmd.itemsMode === "any" ? "any" : "all";
                 const isCollected = (itemId) => {
-                  var _a4, _b2, _c2;
+                  var _a4, _b3, _c3;
                   const item = (_a4 = project.items) == null ? void 0 : _a4[itemId];
                   if (!item) return true;
-                  const need = Math.max(1, Number(((_b2 = cmd.targetItemCounts) == null ? void 0 : _b2[itemId]) ?? 1) || 1);
-                  const c = Number((((_c2 = playerStateRef.current) == null ? void 0 : _c2.variables) ?? {})[item.countVariableId] ?? 0);
+                  const need = Math.max(1, Number(((_b3 = cmd.targetItemCounts) == null ? void 0 : _b3[itemId]) ?? 1) || 1);
+                  const c = Number(mergeDirtyUiVariables(((_c3 = playerStateRef.current) == null ? void 0 : _c3.variables) ?? {})[item.countVariableId] ?? 0);
                   return c >= need;
                 };
                 const conditionMet = () => targets2.length === 0 ? true : mode === "any" ? targets2.some(isCollected) : targets2.every(isCollected);
@@ -16486,8 +19981,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   }
                 };
                 const clickHandler = (e) => {
-                  var _a4, _b2;
-                  if ((_b2 = (_a4 = e.target) == null ? void 0 : _a4.closest) == null ? void 0 : _b2.call(_a4, "[data-vn-no-advance]")) return;
+                  var _a4, _b3;
+                  if ((_b3 = (_a4 = e.target) == null ? void 0 : _a4.closest) == null ? void 0 : _b3.call(_a4, "[data-vn-no-advance]")) return;
                   if (stageRef.current && stageRef.current.contains(e.target)) {
                     onUserAdvance();
                   }
@@ -16525,8 +20020,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   }
                 };
                 const clickHandler = (e) => {
-                  var _a4, _b2;
-                  if ((_b2 = (_a4 = e.target) == null ? void 0 : _a4.closest) == null ? void 0 : _b2.call(_a4, "[data-vn-no-advance]")) return;
+                  var _a4, _b3;
+                  if ((_b3 = (_a4 = e.target) == null ? void 0 : _a4.closest) == null ? void 0 : _b3.call(_a4, "[data-vn-no-advance]")) return;
                   if (stageRef.current && stageRef.current.contains(e.target)) {
                     onUserAdvance();
                   }
@@ -16544,7 +20039,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             case CommandType.ShakeScreen: {
               const cmd = command;
-              activeShakeRef.current = { intensity: cmd.intensity, duration: cmd.duration };
+              activeShakeRef.current = { intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity, { min: 1, max: 10 }), duration: cmd.duration };
               setShakeTrigger((prev) => prev + 1);
               if (cmd.duration > 0) {
                 const timeoutId = window.setTimeout(() => {
@@ -16558,22 +20053,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             case CommandType.TintScreen: {
               const cmd = command;
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, transitionDuration: cmd.duration } } } : null);
+              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, tintOpacity: cmd.opacity ?? 100, tintOpacityVariableId: cmd.opacityVariableId ?? null, transitionDuration: cmd.duration } } } : null);
               break;
             }
             case CommandType.PanZoomScreen: {
               const cmd = command;
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: cmd.zoom, panX: cmd.panX, panY: cmd.panY, transitionDuration: cmd.duration } } } : null);
+              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: resolveVarNumber(p.variables, cmd.zoomVariableId, cmd.zoom, { min: 0.1, max: 5 }), panX: resolveVarNumber(p.variables, cmd.panXVariableId, cmd.panX, { min: -100, max: 100 }), panY: resolveVarNumber(p.variables, cmd.panYVariableId, cmd.panY, { min: -100, max: 100 }), transitionDuration: cmd.duration } } } : null);
               break;
             }
             case CommandType.ResetScreenEffects: {
               const cmd = command;
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] } } } : null);
+              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: "transparent", tintOpacity: 100, tintOpacityVariableId: null, zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] } } } : null);
               break;
             }
             case CommandType.FlashScreen: {
               const cmd = command;
-              activeFlashRef.current = { color: cmd.color, duration: cmd.duration, key: Date.now() };
+              activeFlashRef.current = { color: cmd.color, duration: resolveVarNumber(playerState.variables, cmd.durationVariableId, cmd.duration, { min: 0.05, max: 30 }), key: Date.now() };
               setFlashTrigger((prev) => prev + 1);
               break;
             }
@@ -16581,7 +20076,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               const cmd = command;
               activeLightningRef.current = {
                 color: cmd.color || "#EAF2FF",
-                intensity: cmd.intensity ?? 0.9,
+                intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity ?? 0.9, { min: 0, max: 1 }),
                 duration: cmd.duration ?? 0.7,
                 flashes: cmd.flashes ?? 2,
                 affectsDialogue: cmd.affectsDialogue !== false,
@@ -16600,10 +20095,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               const cmd = command;
               activeFireworksRef.current = {
                 colors: cmd.colors && cmd.colors.length ? cmd.colors : [],
-                intensity: cmd.intensity ?? 1,
-                bursts: Math.max(1, cmd.bursts ?? 3),
+                intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity ?? 1, { min: 0, max: 1 }),
+                bursts: Math.round(resolveVarNumber(playerState.variables, cmd.burstsVariableId, Math.max(1, cmd.bursts ?? 3), { min: 1, max: 20 })),
                 duration: cmd.duration ?? 2.5,
-                burstHeight: cmd.burstHeight ?? 0.7,
+                burstHeight: resolveVarNumber(playerState.variables, cmd.burstHeightVariableId, cmd.burstHeight ?? 0.7, { min: 0, max: 1 }),
                 affectsDialogue: cmd.affectsDialogue !== false,
                 sfxId: cmd.sfxId ?? null,
                 sfxVolume: cmd.sfxVolume,
@@ -16621,11 +20116,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             case CommandType.PlaceLights: {
               const cmd = command;
-              applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters }) });
+              applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null }) });
               break;
             }
             case CommandType.ClearLights: {
-              applyResult({ advance: true, stagePatch: () => ({ lights: [] }) });
+              applyResult({ advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null }) });
               break;
             }
             case CommandType.ShowPhone: {
@@ -16657,6 +20152,46 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               startIncomingCall(cmd);
               break;
             }
+            case CommandType.PhoneNotify: {
+              startPhoneNotify(command);
+              break;
+            }
+            case CommandType.ShowMap: {
+              const cmd = command;
+              if (!((_b2 = project.maps) == null ? void 0 : _b2[cmd.mapId])) {
+                runtimeDebugWarn(`[ShowMap] Map ${cmd.mapId} not found — skipping.`);
+                break;
+              }
+              instantAdvance = false;
+              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true, mapOverlay: { mapId: cmd.mapId, allowCancel: cmd.allowCancel, fromCommand: true } } } : null);
+              break;
+            }
+            case CommandType.ShowMiniGame: {
+              const cmd = command;
+              const game = (_c2 = project.miniGames) == null ? void 0 : _c2[cmd.gameId];
+              if (!game || !((_d2 = game.stages) == null ? void 0 : _d2.length)) {
+                runtimeDebugWarn(`[ShowMiniGame] Mini game ${cmd.gameId} ${game ? "has no stages" : "not found"} — skipping.`);
+                break;
+              }
+              instantAdvance = false;
+              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true, miniGameOverlay: { gameId: cmd.gameId, fromCommand: true } } } : null);
+              break;
+            }
+            case CommandType.StartPhoneCall: {
+              const cmd = command;
+              const contact = (project.ui.phoneContacts || []).find((c) => c.characterId === cmd.contactId);
+              const contactPick = !((_f2 = (_e2 = cmd.conversation) == null ? void 0 : _e2.lines) == null ? void 0 : _f2.length) && contact ? pickConversation(contact.callConversations, contact.callConversation, ((_g2 = playerStateRef.current) == null ? void 0 : _g2.variables) || {}, ((_i2 = (_h2 = playerStateRef.current) == null ? void 0 : _h2.uiState.phone) == null ? void 0 : _i2.playedConversations) || []) : null;
+              const conversation = ((_k2 = (_j2 = cmd.conversation) == null ? void 0 : _j2.lines) == null ? void 0 : _k2.length) ? cmd.conversation : contactPick == null ? void 0 : contactPick.conversation;
+              if (!((_l2 = conversation == null ? void 0 : conversation.lines) == null ? void 0 : _l2.length)) {
+                runtimeDebugWarn("[StartPhoneCall] No conversation on the command or the contact — skipping.");
+                break;
+              }
+              if ((_m2 = contactPick == null ? void 0 : contactPick.entry) == null ? void 0 : _m2.once) markConversationPlayed(contactPick.entry.id);
+              const blocking = cmd.blocking !== false;
+              if (blocking) instantAdvance = false;
+              startOutgoingTranscriptCall({ contactId: cmd.contactId, portrait: cmd.portrait ?? (contact == null ? void 0 : contact.avatar), conversation, dialingMs: cmd.dialingMs, blocking });
+              break;
+            }
             case CommandType.Flashlight: {
               const cmd = command;
               if (cmd.enabled) {
@@ -16664,6 +20199,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   radius: cmd.radius ?? 22,
                   softness: cmd.softness ?? 0.6,
                   darkness: cmd.darkness ?? 0.85,
+                  radiusVariableId: cmd.radiusVariableId ?? null,
+                  darknessVariableId: cmd.darknessVariableId ?? null,
                   color: cmd.color || "#000000",
                   toggleKey: cmd.toggleKey,
                   affectsDialogue: cmd.affectsDialogue !== false,
@@ -16673,6 +20210,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 if (cmd.sfxId) playSound(cmd.sfxId);
               } else {
                 setFlashlight(null);
+              }
+              break;
+            }
+            case CommandType.Spotlight: {
+              const cmd = command;
+              const sid = cmd.spotlightId || "main";
+              if (cmd.enabled) {
+                setSpotlights((prev) => ({ ...prev, [sid]: makeSpotlightState(cmd) }));
+                if (cmd.sfxId) playSound(cmd.sfxId);
+              } else {
+                setSpotlights((prev) => {
+                  const n = { ...prev };
+                  delete n[sid];
+                  return n;
+                });
               }
               break;
             }
@@ -16687,6 +20239,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, {
                       type: cmd.effectType,
                       intensity: cmd.intensity,
+                      intensityVariableId: cmd.intensityVariableId ?? null,
                       variant: cmd.variant,
                       color: cmd.color,
                       params: cmd.params
@@ -16734,6 +20287,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 setHudStack((s) => [...s, cmd.screenId]);
               } else {
                 setScreenStack((s) => [...s, cmd.screenId]);
+              }
+              break;
+            }
+            case CommandType.HideScreen: {
+              const cmd = command;
+              if (cmd.all) {
+                setHudStack([]);
+                setScreenStack([]);
+              } else if (cmd.screenId) {
+                setHudStack((s) => s.filter((id) => id !== cmd.screenId));
+                setScreenStack((s) => s.filter((id) => id !== cmd.screenId));
+              } else if (hudStack.length > 0) {
+                setHudStack((s) => s.slice(0, -1));
+              } else if (screenStack.length > 0) {
+                setScreenStack((s) => s.slice(0, -1));
               }
               break;
             }
@@ -16881,6 +20449,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             case CommandType.StopTimer: {
               stopTimer(command.timerId);
+              break;
+            }
+            case CommandType.SetTimeOfDay: {
+              const cmd = command;
+              applyTimeOfDay(cmd.mode, cmd.mode === "set" ? cmd.hour : cmd.hours, cmd.transitionDuration);
               break;
             }
             default: {
@@ -17187,6 +20760,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       });
     };
     const handleSkipBackward = React2.useCallback(() => {
+      const cur = playerStateRef.current;
+      if (cur && cur.history.some((h) => h.type === "dialogue")) {
+        const hw = backwardReplayRef.current;
+        if (!(hw && hw.sceneId === cur.currentSceneId && hw.index > cur.currentIndex)) {
+          backwardReplayRef.current = { sceneId: cur.currentSceneId, index: cur.currentIndex };
+        }
+      }
       updatePlayerState((p) => {
         if (!p || p.history.length === 0) return p;
         let targetIdx = p.history.length - 1;
@@ -17263,7 +20843,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       executeUIAction(action, opts);
     };
     const executeUIAction = (action, opts) => {
-      var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2;
+      var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r2, _s2, _t, _u, _v, _w;
       if (action.type === UIActionType.StartNewGame) {
         startNewGameWithFade();
       } else if (!playerState && action.type === UIActionType.ContinueGame) {
@@ -17286,7 +20866,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const closeBehavior = (closingScreen == null ? void 0 : closingScreen.onCloseBehavior) || "default";
         const advanceOnReturn = closeBehavior === "advance" || closeBehavior === "default" && !wasPaused && !(closingScreen == null ? void 0 : closingScreen.hudNonBlocking);
         const finishReturn = () => {
-          updatePlayerState((p) => p ? { ...p, mode: "playing" } : null);
+          reactDom.flushSync(() => {
+            updatePlayerState((p) => p ? { ...p, mode: "playing", variables: mergeDirtyUiVariables(p.variables) } : null);
+          });
+          uiDirtyVariableIdsRef.current.clear();
           setScreenStack([]);
           setHudStack([]);
           if (wasPaused && musicAudioRef.current && musicAudioRef.current.paused && playerState.musicState.isPlaying) {
@@ -17343,6 +20926,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const isClosing = hudStack.includes(targetId);
           setHudStack((s) => s.includes(targetId) ? s.filter((id) => id !== targetId) : [...s, targetId]);
           if (isClosing) {
+            reactDom.flushSync(() => {
+              updatePlayerState((p) => p ? { ...p, variables: mergeDirtyUiVariables(p.variables) } : null);
+            });
+            uiDirtyVariableIdsRef.current.clear();
             const cs = project.uiScreens[targetId];
             const b = (cs == null ? void 0 : cs.onCloseBehavior) || "default";
             if (b === "advance") updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
@@ -17664,14 +21251,43 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       } else if (action.type === UIActionType.ShowPhoneText) {
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "chat", notification: null, unread: false } } } : null);
       } else if (action.type === UIActionType.ShowPhoneHistory) {
-        updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "history", notification: null, unread: false } } } : null);
+        updatePlayerState((p) => {
+          var _a3;
+          return p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "history", notification: null, unread: false, notifications: (((_a3 = p.uiState.phone) == null ? void 0 : _a3.notifications) || []).map((e) => e.read ? e : { ...e, read: true }) } } } : null;
+        });
       } else if (action.type === UIActionType.ShowPhoneContacts) {
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "contacts", activeContactId: null, notification: null, unread: false } } } : null);
+      } else if (action.type === UIActionType.OpenPhoneApp) {
+        const appId = action.appId || "home";
+        if (project.ui.phoneOpenSoundId && !((_c2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _c2.open)) playSound(project.ui.phoneOpenSoundId, void 0, false);
+        updatePlayerState((p) => {
+          var _a3;
+          return p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: appId, ...appId === "contacts" ? { activeContactId: null } : {}, ...appId === "history" ? { notifications: (((_a3 = p.uiState.phone) == null ? void 0 : _a3.notifications) || []).map((e) => e.read ? e : { ...e, read: true }) } : {}, notification: null, unread: false } } } : null;
+        });
+      } else if (action.type === UIActionType.ShowMap) {
+        const mapId = action.mapId;
+        if ((_d2 = project.maps) == null ? void 0 : _d2[mapId]) {
+          updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, mapOverlay: { mapId, allowCancel: true, fromCommand: false } } } : null);
+        } else {
+          runtimeDebugWarn(`[ShowMap action] Map ${mapId} not found`);
+        }
+      } else if (action.type === UIActionType.ShowMiniGame) {
+        const gameId = action.gameId;
+        if ((_g2 = (_f2 = (_e2 = project.miniGames) == null ? void 0 : _e2[gameId]) == null ? void 0 : _f2.stages) == null ? void 0 : _g2.length) {
+          updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, miniGameOverlay: { gameId, fromCommand: false } } } : null);
+        } else {
+          runtimeDebugWarn(`[ShowMiniGame action] Mini game ${gameId} not found or has no stages`);
+        }
+      } else if (action.type === UIActionType.ClearUiPalette) {
+        updatePlayerState((p) => p ? { ...p, uiPaletteOverride: null } : null);
       } else if (action.type === UIActionType.HidePhone) {
-        if (project.ui.phoneCloseSoundId && ((_c2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _c2.open)) playSound(project.ui.phoneCloseSoundId, void 0, false);
+        if (project.ui.phoneCloseSoundId && ((_h2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _h2.open)) playSound(project.ui.phoneCloseSoundId, void 0, false);
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: false, waiting: false, pendingChoices: void 0, notification: null } } } : null);
         if (project.ui.phoneOnCloseBehavior === "advance" && (playerState == null ? void 0 : playerState.mode) === "playing") {
-          updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+          const d0 = (_i2 = playerStateRef.current) == null ? void 0 : _i2.uiState.dialogue;
+          if (!((d0 == null ? void 0 : d0.timeLimitLocked) && (d0.timeLimit ?? 0) > 0)) {
+            updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+          }
         }
       } else if (action.type === UIActionType.HidePhoneText) {
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, messages: [], waiting: false, pendingChoices: void 0, pendingReplies: void 0, typing: null } } } : null);
@@ -17703,6 +21319,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           activeLightningRef.current = null;
           activeFireworksRef.current = null;
           setFlashlight(null);
+          setSpotlights({});
           activeShakeRef.current = null;
           commandSchedulerRef.current.reset();
           variableStoreRef.current = null;
@@ -17968,6 +21585,36 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           runtimeDebugLog("[PlaySound] action triggered:", soundAction.audioId, "volume:", soundAction.volume, "loop:", soundAction.loop);
           playSound(soundAction.audioId, soundAction.volume, soundAction.loop);
         }
+      } else if (action.type === UIActionType.PlayMusic) {
+        const a = action;
+        if (a.audioId) {
+          const cmd = { type: CommandType.PlayMusic, audioId: a.audioId, loop: a.loop ?? true, fadeDuration: a.fadeDuration ?? 1, volume: a.volume };
+          const r = handlePlayMusic(cmd, { playerState: playerStateRef.current, assetResolver, musicAudioRef, fadeAudio, settings, setPlayerState: updatePlayerState });
+          if ((_j2 = r.updates) == null ? void 0 : _j2.musicState) updatePlayerState((p) => p ? { ...p, musicState: { ...p.musicState, ...r.updates.musicState } } : p);
+        }
+      } else if (action.type === UIActionType.StopMusic) {
+        const a = action;
+        const cmd = { type: CommandType.StopMusic, fadeDuration: a.fadeDuration ?? 1 };
+        const r = handleStopMusic(cmd, { musicAudioRef, fadeAudio, playerState: playerStateRef.current });
+        if ((_k2 = r.updates) == null ? void 0 : _k2.musicState) updatePlayerState((p) => p ? { ...p, musicState: { ...p.musicState, ...r.updates.musicState } } : p);
+      } else if (action.type === UIActionType.ShowSpotlight) {
+        const a = action;
+        const sid = a.spotlightId || "main";
+        setSpotlights((prev) => ({ ...prev, [sid]: makeSpotlightState(a) }));
+        if (a.sfxId) playSound(a.sfxId);
+      } else if (action.type === UIActionType.HideSpotlight) {
+        const sid = action.spotlightId || "main";
+        setSpotlights((prev) => {
+          const n = { ...prev };
+          delete n[sid];
+          return n;
+        });
+      } else if (action.type === UIActionType.ShowFlashlight) {
+        const a = action;
+        setFlashlight({ radius: a.radius ?? 22, softness: a.softness ?? 0.6, darkness: a.darkness ?? 0.85, radiusVariableId: null, darknessVariableId: null, color: a.color || "#000000", toggleKey: a.toggleKey, affectsDialogue: a.affectsDialogue !== false, darkWhenOff: false, on: true });
+        if (a.sfxId) playSound(a.sfxId);
+      } else if (action.type === UIActionType.HideFlashlight) {
+        setFlashlight((f) => f ? { ...f, on: false } : f);
       } else if (action.type === UIActionType.CycleLayerAsset) {
         runtimeDebugLog("CycleLayerAsset handler triggered, playerState exists:", !!playerState);
         const cycleAction = action;
@@ -18032,10 +21679,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         runtimeDebugLog("JumpToLabel handler triggered:", {
           targetLabel,
           currentSceneId: playerState.currentSceneId,
-          currentSceneName: (_d2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _d2.name,
+          currentSceneName: (_l2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _l2.name,
           screenSceneId: playerState.uiState.screenSceneId,
           targetSceneId,
-          targetSceneName: (_e2 = project.scenes[targetSceneId]) == null ? void 0 : _e2.name
+          targetSceneName: (_m2 = project.scenes[targetSceneId]) == null ? void 0 : _m2.name
         });
         const targetScene = project.scenes[targetSceneId];
         if (!targetScene) {
@@ -18111,6 +21758,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         startTimer(action);
       } else if (action.type === UIActionType.StopTimer) {
         stopTimer(action.timerId);
+      } else if (action.type === UIActionType.SetTimeOfDay) {
+        const a = action;
+        applyTimeOfDay(a.mode, a.mode === "set" ? a.hour : a.hours, a.transitionDuration);
       } else if (action.type === UIActionType.OpenURL) {
         const openUrlAction = action;
         if (openUrlAction.url) {
@@ -18141,7 +21791,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const savedVariables = {};
         const clearedVariables = [];
         for (const param of ce.parameters || []) {
-          const raw = (_f2 = ccAction.arguments) == null ? void 0 : _f2[param.id];
+          const raw = (_n2 = ccAction.arguments) == null ? void 0 : _n2[param.id];
           overrides[param.id] = raw !== void 0 ? coerceParam(raw, param.type) : param.defaultValue;
           if (Object.prototype.hasOwnProperty.call(playerState.variables, param.id)) savedVariables[param.id] = playerState.variables[param.id];
           else clearedVariables.push(param.id);
@@ -18163,22 +21813,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         });
       } else if (action.type === UIActionType.GiveItem) {
         const a = action;
-        const item = (_g2 = project.items) == null ? void 0 : _g2[a.itemId];
+        const item = (_o2 = project.items) == null ? void 0 : _o2[a.itemId];
         if (item) executeUIAction(item.unique ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 1 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "add", value: a.quantity ?? 1 });
       } else if (action.type === UIActionType.UseItem) {
         const a = action;
-        const item = (_h2 = project.items) == null ? void 0 : _h2[a.itemId];
+        const item = (_p2 = project.items) == null ? void 0 : _p2[a.itemId];
         if (item) {
           if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
           (item.useEffect || []).forEach((eff) => executeUIAction(eff));
         }
       } else if (action.type === UIActionType.DestroyItem) {
         const a = action;
-        const item = (_i2 = project.items) == null ? void 0 : _i2[a.itemId];
+        const item = (_q2 = project.items) == null ? void 0 : _q2[a.itemId];
         if (item) executeUIAction(a.all ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 0 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: a.quantity ?? 1 });
       } else if (action.type === UIActionType.UseSelectedItem) {
-        const selId = (_j2 = playerStateRef.current) == null ? void 0 : _j2.selectedItemId;
-        const item = selId ? (_k2 = project.items) == null ? void 0 : _k2[selId] : void 0;
+        const selId = (_r2 = playerStateRef.current) == null ? void 0 : _r2.selectedItemId;
+        const item = selId ? (_s2 = project.items) == null ? void 0 : _s2[selId] : void 0;
         if (item && item.usable) {
           if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
           (item.useEffect || []).forEach((eff) => executeUIAction(eff));
@@ -18187,7 +21837,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         startCarry(action.itemId);
       } else if (action.type === UIActionType.RestockCollection) {
         const a = action;
-        const collection = (_l2 = project.itemCollections) == null ? void 0 : _l2[a.collectionId];
+        const collection = (_t = project.itemCollections) == null ? void 0 : _t[a.collectionId];
         if (collection) {
           const restocked = computeCollectionRestock(collection, project.variables);
           Object.entries(restocked).forEach(([varId, val]) => {
@@ -18196,12 +21846,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
       } else if (action.type === UIActionType.BuyItem || action.type === UIActionType.SellItem || action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem) {
         const a = action;
-        const collection = (_m2 = project.itemCollections) == null ? void 0 : _m2[a.collectionId];
+        const collection = (_u = project.itemCollections) == null ? void 0 : _u[a.collectionId];
         const isBuy = action.type === UIActionType.BuyItem || action.type === UIActionType.BuySelectedItem;
         const isSelected = action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem;
-        const itemId = isSelected ? (_n2 = playerStateRef.current) == null ? void 0 : _n2.selectedItemId : a.itemId;
+        const itemId = isSelected ? (_v = playerStateRef.current) == null ? void 0 : _v.selectedItemId : a.itemId;
         if (collection && itemId) {
-          const curVars = ((_o2 = playerStateRef.current) == null ? void 0 : _o2.variables) || {};
+          const curVars = ((_w = playerStateRef.current) == null ? void 0 : _w.variables) || {};
           const res = isBuy ? computeBuy(itemId, collection, project, curVars) : computeSell(itemId, collection, project, curVars);
           if (!("blocked" in res)) {
             Object.entries(res.updates).forEach(([varId, val]) => {
@@ -18307,7 +21957,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       updatePlayerState((p) => {
         if (!p) return null;
         const ph = p.uiState.phone || { open: false, messages: [] };
-        return { ...p, uiState: { ...p.uiState, phone: { ...ph, open, view: "chat", messages: [...ph.messages, m], typing: null } } };
+        const msg = m.senderId === "player" && !m.contactId && ph.activeContactId && ph.activeContactId !== "__misc__" ? { ...m, contactId: ph.activeContactId } : m;
+        const nextMessages = [...ph.messages, msg];
+        const key = phoneThreadKey(msg);
+        const watching = ph.activeContactId === key || ph.activeContactId === "__misc__" && key === "";
+        const threadLastRead = watching ? { ...ph.threadLastRead || {}, [key]: countPhoneThread(nextMessages, key) } : ph.threadLastRead;
+        return { ...p, uiState: { ...p.uiState, phone: { ...ph, open, view: "chat", messages: nextMessages, cameraRoll: collectToCameraRoll(ph.cameraRoll, msg), threadLastRead, typing: null } } };
       });
     };
     const playPhoneFollowUps = (followUps, onDone) => {
@@ -18322,7 +21977,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         pushPhoneTimer(() => updatePlayerState((p) => p && p.uiState.phone ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, open: true, typing: { senderId: f.senderId } } } } : p), delay);
         delay += typeMs;
         pushPhoneTimer(() => {
-          appendPhoneMessage({ id: `fu-${Date.now()}-${idx}`, senderId: f.senderId, text: f.text, ...f.portrait ? { portrait: f.portrait } : {} }, true);
+          appendPhoneMessage({ id: `fu-${Date.now()}-${idx}`, senderId: f.senderId, text: f.text, ...f.portrait ? { portrait: f.portrait } : {}, ...f.image ? { image: f.image } : {} }, true);
           if (f.soundId) playSound(f.soundId, void 0, false);
           if (idx === followUps.length - 1) pushPhoneTimer(onDone, 60);
         }, delay);
@@ -18343,17 +21998,116 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       acts.forEach((a) => handleUIAction(a));
       const navigates = phoneNavigates(acts);
       const resume = () => {
+        var _a3, _b3;
         if (wasWaiting && !navigates) updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null);
+        if (!navigates && ((_b3 = (_a3 = playerStateRef.current) == null ? void 0 : _a3.uiState.phone) == null ? void 0 : _b3.activeTextConvo)) pushPhoneTimer(playNextTextLine, 300);
       };
       const followUps = reply.followUps || [];
       if (followUps.length && !navigates) playPhoneFollowUps(followUps, resume);
       else resume();
     };
-    const handleContactMessage = (contactId) => {
-      updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "chat", activeContactId: contactId, notification: null, unread: false } } } : null);
+    const pickConversation = (entries, legacy, variables, played) => {
+      var _a2, _b2, _c2, _d2;
+      for (const e of entries || []) {
+        if (!((_b2 = (_a2 = e.conversation) == null ? void 0 : _a2.lines) == null ? void 0 : _b2.length)) continue;
+        if (e.once && played.includes(e.id)) continue;
+        if (((_c2 = e.conditions) == null ? void 0 : _c2.length) && !evaluateConditions2(e.conditions, variables)) continue;
+        return { entry: e, conversation: e.conversation };
+      }
+      if ((_d2 = legacy == null ? void 0 : legacy.lines) == null ? void 0 : _d2.length) return { conversation: legacy };
+      return null;
     };
+    const markConversationPlayed = (id) => updatePlayerState((p) => p && p.uiState.phone && !(p.uiState.phone.playedConversations || []).includes(id) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, playedConversations: [...p.uiState.phone.playedConversations || [], id] } } } : p);
+    const playNextTextLine = () => {
+      var _a2, _b2;
+      const p0 = playerStateRef.current;
+      const at = (_a2 = p0 == null ? void 0 : p0.uiState.phone) == null ? void 0 : _a2.activeTextConvo;
+      if (!p0 || !at) return;
+      const lines = at.conversation.lines || [];
+      let idx = at.lineIndex;
+      while (idx < lines.length) {
+        const cand = lines[idx];
+        if (!((_b2 = cand.conditions) == null ? void 0 : _b2.length) || evaluateConditions2(cand.conditions, p0.variables)) break;
+        idx++;
+      }
+      if (idx >= lines.length) {
+        const endActions = at.conversation.endActions || [];
+        updatePlayerState((p) => p && p.uiState.phone ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, activeTextConvo: null, typing: null } } } : p);
+        endActions.forEach((a) => handleUIAction(a));
+        return;
+      }
+      const line = lines[idx];
+      const landAndContinue = () => {
+        var _a3;
+        appendPhoneMessage({ id: `tc-${Date.now()}-${idx}`, senderId: line.speakerId, text: line.text, ...line.portrait ? { portrait: line.portrait } : {}, ...line.image ? { image: line.image } : {}, contactId: at.contactId }, true);
+        if (line.soundId) playSound(line.soundId, void 0, false);
+        const hasReplies = !!((_a3 = line.replies) == null ? void 0 : _a3.length);
+        updatePlayerState((p) => p && p.uiState.phone ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, activeTextConvo: p.uiState.phone.activeTextConvo ? { ...p.uiState.phone.activeTextConvo, lineIndex: idx + 1 } : null, ...hasReplies ? { pendingReplies: line.replies } : {} } } } : p);
+        if (!hasReplies) pushPhoneTimer(playNextTextLine, 250);
+      };
+      const typeMs = Math.max(0, line.delayMs ?? 900);
+      if (line.speakerId !== "player" && typeMs > 0) {
+        updatePlayerState((p) => p && p.uiState.phone ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, typing: { senderId: line.speakerId } } } } : p);
+        pushPhoneTimer(landAndContinue, typeMs);
+      } else if (typeMs > 0) {
+        pushPhoneTimer(landAndContinue, typeMs);
+      } else {
+        landAndContinue();
+      }
+    };
+    const startTextConversation = (contactId, pick) => {
+      var _a2;
+      if ((_a2 = pick.entry) == null ? void 0 : _a2.once) markConversationPlayed(pick.entry.id);
+      updatePlayerState((p) => {
+        var _a3;
+        return p && p.uiState.phone ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, activeTextConvo: { contactId, conversation: pick.conversation, lineIndex: 0, entryId: (_a3 = pick.entry) == null ? void 0 : _a3.id } } } } : p;
+      });
+      pushPhoneTimer(playNextTextLine, 400);
+    };
+    const handleOpenThread = (contactId) => {
+      var _a2, _b2, _c2, _d2;
+      updatePlayerState((p) => {
+        if (!p) return null;
+        const ph = p.uiState.phone || { open: false, messages: [] };
+        if (contactId === null) return { ...p, uiState: { ...p.uiState, phone: { ...ph, view: "chat", activeContactId: null } } };
+        const key = contactId === "__misc__" ? "" : contactId;
+        const active = contactId === "" ? "__misc__" : contactId;
+        return {
+          ...p,
+          uiState: {
+            ...p.uiState,
+            phone: {
+              ...ph,
+              open: true,
+              view: "chat",
+              activeContactId: active,
+              notification: null,
+              unread: false,
+              threadLastRead: { ...ph.threadLastRead || {}, [key]: countPhoneThread(ph.messages, key) }
+            }
+          }
+        };
+      });
+      if (contactId && contactId !== "__misc__") {
+        const ph = (_a2 = playerStateRef.current) == null ? void 0 : _a2.uiState.phone;
+        if (!(ph == null ? void 0 : ph.activeTextConvo) && !((_b2 = ph == null ? void 0 : ph.pendingReplies) == null ? void 0 : _b2.length) && !((_c2 = ph == null ? void 0 : ph.pendingChoices) == null ? void 0 : _c2.length)) {
+          const contact = (project.ui.phoneContacts || []).find((c) => c.characterId === contactId);
+          const pick = contact ? pickConversation(contact.textConversations, void 0, ((_d2 = playerStateRef.current) == null ? void 0 : _d2.variables) || {}, (ph == null ? void 0 : ph.playedConversations) || []) : null;
+          if (pick) startTextConversation(contactId, pick);
+        }
+      }
+    };
+    const handleContactMessage = (contactId) => handleOpenThread(contactId);
     const handleContactCall = (contactId) => {
+      var _a2, _b2, _c2, _d2;
       clearPhoneTimers();
+      const contactWithConvo = (project.ui.phoneContacts || []).find((c) => c.characterId === contactId);
+      const pick = contactWithConvo ? pickConversation(contactWithConvo.callConversations, contactWithConvo.callConversation, ((_a2 = playerStateRef.current) == null ? void 0 : _a2.variables) || {}, ((_c2 = (_b2 = playerStateRef.current) == null ? void 0 : _b2.uiState.phone) == null ? void 0 : _c2.playedConversations) || []) : null;
+      if (pick) {
+        if ((_d2 = pick.entry) == null ? void 0 : _d2.once) markConversationPlayed(pick.entry.id);
+        startOutgoingTranscriptCall({ contactId, portrait: contactWithConvo.avatar, conversation: pick.conversation, blocking: false });
+        return;
+      }
       updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, outgoingCall: { contactId } } } } : null);
       const contact = (project.ui.phoneContacts || []).find((c) => c.characterId === contactId);
       if (contact == null ? void 0 : contact.callAction) {
@@ -18367,17 +22121,174 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       clearPhoneTimers();
       updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: p.uiState.phone ? { ...p.uiState.phone, outgoingCall: null } : p.uiState.phone } } : null);
     };
+    const patchActiveCall = (fn) => {
+      updatePlayerState((p) => {
+        var _a2;
+        const ac = (_a2 = p == null ? void 0 : p.uiState.phone) == null ? void 0 : _a2.activeCall;
+        if (!p || !ac) return p;
+        const patch = fn(ac);
+        return { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, activeCall: patch === null ? null : { ...ac, ...patch } } } };
+      });
+    };
+    const landCallLine = (line, then, pacingMs) => {
+      patchActiveCall((ac) => ({ transcript: [...ac.transcript, { id: `cl-${Date.now()}-${ac.transcript.length}`, senderId: line.speakerId, text: line.text, ...line.portrait ? { portrait: line.portrait } : {}, ...line.image ? { image: line.image } : {} }] }));
+      if (line.soundId) playSound(line.soundId, void 0, false);
+      const speaker = line.speakerId === "player" ? null : project.characters[line.speakerId];
+      const voiceId = line.voiceAudioId ?? (speaker == null ? void 0 : speaker.defaultVoiceId) ?? null;
+      const audio = voiceId ? playVoice ? playVoice(voiceId, settings.voiceVolume ?? 1) : null : null;
+      if (line.waitForVoice && audio) {
+        audio.onended = () => pushPhoneTimer(then, 350);
+        audio.onerror = () => pushPhoneTimer(then, pacingMs);
+      } else {
+        pushPhoneTimer(then, pacingMs);
+      }
+    };
+    const playNextCallLine = () => {
+      var _a2, _b2, _c2, _d2;
+      const p = playerStateRef.current;
+      const ac = (_a2 = p == null ? void 0 : p.uiState.phone) == null ? void 0 : _a2.activeCall;
+      if (!p || !ac || ac.phase !== "active") return;
+      const queue = ac.queue || [];
+      if (queue.length > 0) {
+        const [f, ...rest] = queue;
+        patchActiveCall(() => ({ queue: rest }));
+        landCallLine({ speakerId: f.senderId, text: f.text, portrait: f.portrait, voiceAudioId: f.voiceAudioId, waitForVoice: !!f.voiceAudioId, soundId: f.soundId }, playNextCallLine, Math.max(250, f.delayMs ?? 900));
+        return;
+      }
+      const lines = ((_b2 = ac.conversation) == null ? void 0 : _b2.lines) || [];
+      let idx = ac.lineIndex;
+      while (idx < lines.length) {
+        const candidate = lines[idx];
+        if (!((_c2 = candidate.conditions) == null ? void 0 : _c2.length) || evaluateConditions2(candidate.conditions, p.variables)) break;
+        idx++;
+      }
+      if (idx >= lines.length) {
+        if (((_d2 = ac.conversation) == null ? void 0 : _d2.autoEnd) !== false) endActiveCall();
+        return;
+      }
+      const line = lines[idx];
+      patchActiveCall(() => ({ lineIndex: idx + 1 }));
+      landCallLine(line, () => {
+        var _a3, _b3, _c3;
+        const cur = (_b3 = (_a3 = playerStateRef.current) == null ? void 0 : _a3.uiState.phone) == null ? void 0 : _b3.activeCall;
+        if (!cur || cur.phase !== "active") return;
+        if ((_c3 = line.replies) == null ? void 0 : _c3.length) {
+          patchActiveCall(() => ({ pendingReplies: line.replies }));
+        } else {
+          playNextCallLine();
+        }
+      }, Math.max(250, line.delayMs ?? 900));
+    };
+    const beginActiveCall = (opts) => {
+      updatePlayerState((p) => {
+        if (!p) return null;
+        const ph = p.uiState.phone || { open: false, messages: [] };
+        return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: "call", outgoingCall: null, notification: null, activeCall: { contactId: opts.contactId, direction: opts.direction, portrait: opts.portrait, phase: "active", conversation: opts.conversation, lineIndex: 0, transcript: [], elapsedMs: 0, blocking: opts.blocking } } } };
+      });
+      pushPhoneTimer(playNextCallLine, 500);
+    };
+    const handleCallReply = (reply) => {
+      var _a2, _b2;
+      const ac = (_b2 = (_a2 = playerStateRef.current) == null ? void 0 : _a2.uiState.phone) == null ? void 0 : _b2.activeCall;
+      if (!ac) return;
+      patchActiveCall((cur) => ({
+        transcript: [...cur.transcript, { id: `cr-${Date.now()}`, senderId: "player", text: reply.text }],
+        pendingReplies: void 0,
+        queue: [...cur.queue || [], ...reply.followUps || []]
+      }));
+      (reply.actions || []).forEach((a) => handleUIAction(a));
+      if (reply.endsCall && !(reply.followUps || []).length) {
+        endActiveCall();
+        return;
+      }
+      if (reply.endsCall) {
+        patchActiveCall((cur) => ({ conversation: { ...cur.conversation || { lines: [] }, lines: [], autoEnd: true }, lineIndex: 0 }));
+      }
+      pushPhoneTimer(playNextCallLine, 300);
+    };
+    const endActiveCall = (_reason) => {
+      var _a2, _b2;
+      const ac = (_b2 = (_a2 = playerStateRef.current) == null ? void 0 : _a2.uiState.phone) == null ? void 0 : _b2.activeCall;
+      if (!ac || ac.phase === "ended") return;
+      stopVoice == null ? void 0 : stopVoice();
+      const durationMs = ac.elapsedMs;
+      patchActiveCall(() => ({ phase: "ended", pendingReplies: void 0, queue: [] }));
+      pushPhoneTimer(() => {
+        var _a3, _b3;
+        const cur = (_b3 = (_a3 = playerStateRef.current) == null ? void 0 : _a3.uiState.phone) == null ? void 0 : _b3.activeCall;
+        const conv = cur == null ? void 0 : cur.conversation;
+        const blocking = cur == null ? void 0 : cur.blocking;
+        updatePlayerState((p) => {
+          if (!p) return null;
+          const ph = p.uiState.phone || { open: false, messages: [] };
+          const log2 = ph.callLog || [];
+          const entry = { id: `call-${Date.now()}`, callerId: ac.contactId, status: "accepted", portrait: ac.portrait, order: log2.length, direction: ac.direction, durationMs };
+          return { ...p, uiState: { ...p.uiState, phone: { ...ph, activeCall: null, view: "home", callLog: [...log2, entry] } } };
+        });
+        const acts = (conv == null ? void 0 : conv.endActions) || [];
+        acts.forEach((a) => handleUIAction(a));
+        if (blocking && !phoneNavigates(acts)) {
+          updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null);
+        }
+      }, 1200);
+    };
+    const startOutgoingTranscriptCall = (opts) => {
+      clearPhoneTimers();
+      updatePlayerState((p) => {
+        if (!p) return null;
+        const ph = p.uiState.phone || { open: false, messages: [] };
+        return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: "call", outgoingCall: null, activeCall: { contactId: opts.contactId, direction: "outgoing", portrait: opts.portrait, phase: "dialing", conversation: opts.conversation, lineIndex: 0, transcript: [], elapsedMs: 0, blocking: opts.blocking } } } };
+      });
+      pushPhoneTimer(() => {
+        var _a2, _b2;
+        const cur = (_b2 = (_a2 = playerStateRef.current) == null ? void 0 : _a2.uiState.phone) == null ? void 0 : _b2.activeCall;
+        if (!cur || cur.phase !== "dialing") return;
+        patchActiveCall(() => ({ phase: "active" }));
+        pushPhoneTimer(playNextCallLine, 400);
+      }, Math.max(200, opts.dialingMs ?? 1200));
+    };
+    React2.useEffect(() => {
+      var _a2, _b2;
+      const active = ((_b2 = (_a2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _a2.activeCall) == null ? void 0 : _b2.phase) === "active" && (playerState == null ? void 0 : playerState.mode) === "playing";
+      if (!active) return;
+      const id = window.setInterval(() => patchActiveCall((ac) => ac.phase === "active" ? { elapsedMs: ac.elapsedMs + 1e3 } : {}), 1e3);
+      return () => window.clearInterval(id);
+    }, [(_d = (_c = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _c.activeCall) == null ? void 0 : _d.phase, playerState == null ? void 0 : playerState.mode]);
+    const notifEntry = (ph, e) => {
+      const list = ph.notifications || [];
+      return [...list, { ...e, id: `nt-${Date.now()}-${list.length}`, order: list.length }];
+    };
+    const startPhoneNotify = (cmd) => {
+      const ding = cmd.soundId ?? project.ui.phoneNotifSoundId ?? null;
+      const silent = cmd.presentation === "silent";
+      updatePlayerState((p) => {
+        if (!p) return null;
+        const ph = p.uiState.phone || { open: false, messages: [] };
+        return { ...p, uiState: { ...p.uiState, phone: {
+          ...ph,
+          notifications: notifEntry(ph, { title: cmd.title, text: cmd.text, icon: cmd.icon, iconImage: cmd.iconImage, tapActions: cmd.tapActions }),
+          ...silent ? {} : { notification: { text: cmd.text, title: cmd.title, icon: cmd.icon, iconImage: cmd.iconImage, tapActions: cmd.tapActions, visible: true } },
+          unread: cmd.showBadge !== false ? true : ph.unread
+        } } };
+      });
+      if (ding && !silent) playSound(ding, void 0, false);
+      const autoMs = project.ui.phoneNotifAutoMs ?? 6e3;
+      if (!silent && autoMs > 0) pushPhoneTimer(() => updatePlayerState((p) => {
+        var _a2;
+        return p && ((_a2 = p.uiState.phone) == null ? void 0 : _a2.notification) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, notification: { ...p.uiState.phone.notification, visible: false } } } } : p;
+      }), autoMs);
+    };
     const startIncomingText = (cmd) => {
       const presentation = cmd.presentation || "notify";
       const replies = cmd.replies || [];
       const hasReplies = replies.length > 0;
-      const msg = { id: `it-${Date.now()}`, senderId: cmd.senderId, text: cmd.text, ...cmd.portrait ? { portrait: cmd.portrait } : {}, ...cmd.senderId !== "player" ? { contactId: cmd.senderId } : {} };
+      const msg = { id: `it-${Date.now()}`, senderId: cmd.senderId, text: cmd.text, ...cmd.portrait ? { portrait: cmd.portrait } : {}, ...cmd.image ? { image: cmd.image } : {}, ...cmd.senderId !== "player" ? { contactId: cmd.senderId } : {} };
       const ding = cmd.soundId ?? project.ui.phoneNotifSoundId ?? null;
       if (presentation === "notify") {
         updatePlayerState((p) => {
           if (!p) return null;
           const ph = p.uiState.phone || { open: false, messages: [] };
-          return { ...p, uiState: { ...p.uiState, phone: { ...ph, messages: [...ph.messages, msg], notification: { senderId: cmd.senderId, text: cmd.text, portrait: cmd.portrait, visible: true }, unread: cmd.showBadge !== false ? true : ph.unread, waiting: false, pendingReplies: hasReplies ? replies : ph.pendingReplies } } };
+          return { ...p, uiState: { ...p.uiState, phone: { ...ph, messages: [...ph.messages, msg], cameraRoll: collectToCameraRoll(ph.cameraRoll, msg), notification: { senderId: cmd.senderId, text: cmd.text || (cmd.image ? "📷 Photo" : ""), portrait: cmd.portrait, visible: true }, notifications: notifEntry(ph, { text: cmd.text || (cmd.image ? "📷 Photo" : ""), senderId: cmd.senderId, portrait: cmd.portrait }), unread: cmd.showBadge !== false ? true : ph.unread, waiting: false, pendingReplies: hasReplies ? replies : ph.pendingReplies } } };
         });
         if (ding) playSound(ding, void 0, false);
         const autoMs = project.ui.phoneNotifAutoMs ?? 6e3;
@@ -18386,11 +22297,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           return p && ((_a2 = p.uiState.phone) == null ? void 0 : _a2.notification) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, notification: { ...p.uiState.phone.notification, visible: false } } } } : p;
         }), autoMs);
       } else {
+        const threadFocus = cmd.senderId !== "player" ? cmd.senderId : void 0;
         const landMessage = () => {
           updatePlayerState((p) => {
             if (!p) return null;
             const ph = p.uiState.phone || { open: false, messages: [] };
-            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: "chat", messages: [...ph.messages, msg], waiting: hasReplies, pendingReplies: hasReplies ? replies : void 0, notification: null, typing: null } } };
+            const nextMessages = [...ph.messages, msg];
+            const key = phoneThreadKey(msg);
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: "chat", ...threadFocus ? { activeContactId: threadFocus } : {}, messages: nextMessages, cameraRoll: collectToCameraRoll(ph.cameraRoll, msg), threadLastRead: { ...ph.threadLastRead || {}, [key]: countPhoneThread(nextMessages, key) }, waiting: hasReplies, pendingReplies: hasReplies ? replies : void 0, notification: null, typing: null } } };
           });
           if (ding) playSound(ding, void 0, false);
         };
@@ -18399,7 +22313,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           updatePlayerState((p) => {
             if (!p) return null;
             const ph = p.uiState.phone || { open: false, messages: [] };
-            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: "chat", notification: null, typing: { senderId: cmd.senderId } } } };
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: "chat", ...threadFocus ? { activeContactId: threadFocus } : {}, notification: null, typing: { senderId: cmd.senderId } } } };
           });
           pushPhoneTimer(landMessage, typingMs);
         } else {
@@ -18454,20 +22368,39 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       callRingAudioRef.current = null;
     };
     const resolveIncomingCall = (outcome) => {
+      var _a2, _b2;
       const cmd = activeCallCmdRef.current;
       if (!cmd) return;
       stopRingtone();
       activeCallCmdRef.current = null;
+      const hasConversation = outcome === "accepted" && !!((_b2 = (_a2 = cmd.conversation) == null ? void 0 : _a2.lines) == null ? void 0 : _b2.length);
       updatePlayerState((p) => {
+        var _a3;
         if (!p) return null;
         const ph = p.uiState.phone || { open: false, messages: [] };
         const log2 = ph.callLog || [];
-        const entry = { id: `call-${Date.now()}`, callerId: cmd.callerId, status: outcome, portrait: cmd.portrait, order: log2.length };
-        return { ...p, uiState: { ...p.uiState, phone: { ...ph, incomingCall: null, callLog: [...log2, entry], unread: outcome === "missed" && cmd.showBadge !== false ? true : ph.unread } } };
+        const entry = { id: `call-${Date.now()}`, callerId: cmd.callerId, status: outcome, portrait: cmd.portrait, order: log2.length, direction: "incoming" };
+        const missed = outcome === "missed";
+        const callerName = cmd.callerId === "player" ? "" : ((_a3 = project.characters[cmd.callerId]) == null ? void 0 : _a3.name) || "";
+        return { ...p, uiState: { ...p.uiState, phone: {
+          ...ph,
+          incomingCall: null,
+          ...hasConversation ? {} : { callLog: [...log2, entry] },
+          // A missed call now leaves a trace: a banner + a notification-list row.
+          ...missed ? {
+            notification: { senderId: cmd.callerId, title: "Missed call", text: callerName || "Unknown caller", portrait: cmd.portrait, icon: "call", visible: true },
+            notifications: notifEntry(ph, { title: "Missed call", text: callerName || "Unknown caller", senderId: cmd.callerId, portrait: cmd.portrait, icon: "call" })
+          } : {},
+          unread: missed && cmd.showBadge !== false ? true : ph.unread
+        } } };
       });
       const acts = (outcome === "accepted" ? cmd.acceptActions : outcome === "declined" ? cmd.declineActions : cmd.onTimeout === "runActions" ? cmd.timeoutActions : []) || [];
       acts.forEach((a) => handleUIAction(a));
       const navigates = phoneNavigates(acts);
+      if (hasConversation) {
+        beginActiveCall({ contactId: cmd.callerId, direction: "incoming", portrait: cmd.portrait, conversation: cmd.conversation, blocking: (cmd.mode || "modal") === "modal" && !navigates });
+        return;
+      }
       if ((cmd.mode || "modal") === "modal" && !navigates) updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null);
     };
     React2.useEffect(() => {
@@ -18491,7 +22424,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           callTimeoutRef.current = window.setTimeout(() => resolveIncomingCall("missed"), callRingRemainingRef.current);
         }
       }
-    }, [playerState == null ? void 0 : playerState.mode, (_d = (_c = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _c.incomingCall) == null ? void 0 : _d.phase]);
+    }, [playerState == null ? void 0 : playerState.mode, (_f = (_e = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _e.incomingCall) == null ? void 0 : _f.phase]);
     const handleVariableChange = (variableId, value) => {
       runtimeDebugLog("[handleVariableChange] Called with:", { variableId, value, hasPlayerState: !!playerState });
       if (playerState) {
@@ -18689,12 +22622,40 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     }, [playerState == null ? void 0 : playerState.currentSceneId]);
     React2.useEffect(() => {
+      const dn = project.dayNightCycle;
+      const aa = dn == null ? void 0 : dn.autoAdvance;
+      const timeVarId = dn == null ? void 0 : dn.timeVariableId;
+      if (!(dn == null ? void 0 : dn.enabled) || !(aa == null ? void 0 : aa.enabled) || !timeVarId || !(aa.secondsPerHour > 0)) return;
+      const TICK_MS = 250;
+      const hoursPerTick = TICK_MS / 1e3 / aa.secondsPerHour;
+      const id = window.setInterval(() => {
+        updatePlayerState((p) => {
+          if (!p || p.mode !== "playing") return p;
+          const cur = Number(p.variables[timeVarId] ?? 0);
+          const next = Math.round(((cur + hoursPerTick) % 24 + 24) % 24 * 1e3) / 1e3;
+          return { ...p, variables: { ...p.variables, [timeVarId]: next } };
+        });
+      }, TICK_MS);
+      return () => window.clearInterval(id);
+    }, [project.dayNightCycle, updatePlayerState]);
+    React2.useEffect(() => {
+      var _a2;
+      const sceneId = playerState == null ? void 0 : playerState.currentSceneId;
+      const dn = project.dayNightCycle;
+      const sdn = sceneId ? (_a2 = project.scenes[sceneId]) == null ? void 0 : _a2.dayNight : void 0;
+      if ((dn == null ? void 0 : dn.enabled) && dn.timeVariableId && (sdn == null ? void 0 : sdn.mode) === "fixed" && typeof sdn.fixedHour === "number") {
+        const tv = dn.timeVariableId, fh = sdn.fixedHour;
+        updatePlayerState((p) => p && Number(p.variables[tv] ?? -1) !== fh ? { ...p, variables: { ...p.variables, [tv]: fh } } : p);
+      }
+    }, [playerState == null ? void 0 : playerState.currentSceneId, project.dayNightCycle, project.scenes, updatePlayerState]);
+    React2.useEffect(() => {
       const handleKeyDown = (e) => {
-        var _a2, _b2, _c2;
+        var _a2, _b2, _c2, _d2;
         if (!playerState) return;
         if ((e.key === " " || e.key === "Enter") && playerState.mode === "playing" && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput) {
           e.preventDefault();
-          handleDialogueAdvance();
+          const d = playerState.uiState.dialogue;
+          if (!(d.timeLimitLocked && (d.timeLimit ?? 0) > 0)) handleDialogueAdvance();
           return;
         }
         if ((e.key === "h" || e.key === "H") && playerState.mode === "playing" && !playerState.uiState.textInput) {
@@ -18729,7 +22690,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: opening, ...opening ? { view: "home", notification: null, unread: false } : { waiting: false, pendingChoices: void 0, notification: null } } } };
               });
               if (!opening && project.ui.phoneOnCloseBehavior === "advance" && ((_c2 = playerStateRef.current) == null ? void 0 : _c2.mode) === "playing") {
-                updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+                const d0 = (_d2 = playerStateRef.current) == null ? void 0 : _d2.uiState.dialogue;
+                if (!((d0 == null ? void 0 : d0.timeLimitLocked) && (d0.timeLimit ?? 0) > 0)) {
+                  updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+                }
               }
               return;
             }
@@ -18773,6 +22737,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     React2.useEffect(() => {
       if (!settings.autoAdvance || !playerState || playerState.mode !== "playing" || scenePaused) return;
       if (!playerState.uiState.dialogue || playerState.uiState.choices || playerState.uiState.textInput) return;
+      if ((playerState.uiState.dialogue.timeLimit ?? 0) > 0) return;
       const voice = currentVoiceRef.current;
       if (voice && !voice.ended) {
         let advanced = false;
@@ -18800,12 +22765,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       return () => clearTimeout(timer);
     }, [settings.autoAdvance, settings.autoAdvanceDelay, playerState == null ? void 0 : playerState.uiState.dialogue, playerState == null ? void 0 : playerState.uiState.choices, playerState == null ? void 0 : playerState.uiState.textInput, playerState == null ? void 0 : playerState.mode, scenePaused, handleDialogueAdvance]);
     React2.useEffect(() => {
+      var _a2;
       if (!playerState || playerState.mode !== "playing" || !playerState.uiState.isSkipping || scenePaused) return;
       if (!settings.enableSkip) {
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
         return;
       }
       if (playerState.uiState.choices || playerState.uiState.textInput) {
+        updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
+        return;
+      }
+      if (((_a2 = playerState.uiState.dialogue) == null ? void 0 : _a2.timeLimitLocked) && (playerState.uiState.dialogue.timeLimit ?? 0) > 0) {
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
         return;
       }
@@ -18817,7 +22787,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     }, [playerState == null ? void 0 : playerState.uiState.isSkipping, playerState == null ? void 0 : playerState.uiState.dialogue, playerState == null ? void 0 : playerState.uiState.choices, playerState == null ? void 0 : playerState.uiState.textInput, playerState == null ? void 0 : playerState.mode, scenePaused, settings.enableSkip, handleDialogueAdvance]);
     const renderStage = () => {
-      var _a2, _b2;
+      var _a2, _b2, _c2, _d2;
       if (!playerState) return null;
       const state = playerState.stageState;
       const liveVars = mergeDirtyUiVariables(playerState.variables);
@@ -18861,9 +22831,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const tweenedPanY = (screenTween == null ? void 0 : screenTween.y) ?? state.screen.panY;
       const panZoomStyle = { transform: `scale(${tweenedZoom}) translate(${tweenedPanX}%, ${tweenedPanY}%)`, transition: screenTween ? "none" : `transform ${state.screen.transitionDuration}s ease-in-out`, width: "100%", height: "100%" };
       const shakeIntensityStyle = activeShakeRef.current ? { "--shake-intensity-x": `${intensityPx}px`, "--shake-intensity-y": `${intensityPx * 0.7}px` } : {};
-      const tintStyle = { backgroundColor: state.screen.tint, transition: `background-color ${state.screen.transitionDuration}s ease-in-out` };
+      const tintStyle = { backgroundColor: state.screen.tint, opacity: resolveVarNumber(liveVars, state.screen.tintOpacityVariableId, state.screen.tintOpacity ?? 100, { min: 0, max: 100 }) / 100, transition: `background-color ${state.screen.transitionDuration}s ease-in-out, opacity ${state.screen.transitionDuration}s ease-in-out` };
+      const dnc = project.dayNightCycle;
+      const sceneDN = (_c2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _c2.dayNight;
+      const dnActive = !!((dnc == null ? void 0 : dnc.enabled) && ((_d2 = dnc.phases) == null ? void 0 : _d2.length) && (sceneDN == null ? void 0 : sceneDN.mode) !== "off");
+      const dnHour = (sceneDN == null ? void 0 : sceneDN.mode) === "fixed" ? sceneDN.fixedHour ?? 12 : (dnc == null ? void 0 : dnc.timeVariableId) ? Number((liveVars == null ? void 0 : liveVars[dnc.timeVariableId]) ?? 0) : 0;
+      const dnGrade = dnActive ? computeGrade(dnHour, dnc.phases) : null;
+      const dnBg = dnGrade ? gradeToBackgroundStyle(dnGrade.background) : null;
+      const dnCharFilter = dnGrade ? gradeToCharacterFilter(dnGrade.sprites) : "";
+      const dnSpriteTint = dnGrade ? gradeToSpriteTint(dnGrade.sprites) : null;
+      const dnTrans = dnTransitionRef.current;
+      const dnBgFilterStyle = dnBg ? { filter: dnBg.filter, transition: `filter ${dnTrans}s ease-in-out` } : {};
       const handleStageClick = () => {
-        if (playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput && !playerState.uiState.showHistory) {
+        const d = playerState.uiState.dialogue;
+        if (d && !playerState.uiState.choices && !playerState.uiState.textInput && !playerState.uiState.showHistory) {
+          if (d.timeLimitLocked && (d.timeLimit ?? 0) > 0) return;
           handleDialogueAdvance();
         }
       };
@@ -18904,7 +22886,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   }
                 ) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: effBgUrl, alt: "background", className: "absolute w-full h-full object-cover" });
                 const inner = effBgDepth ? /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { transform: `scale(${bgParallaxScale(effBgDepth)})${parallaxTransform(effBgDepth)}`, transformOrigin: "center" }, children: bgMedia }) : bgMedia;
-                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", style: { zIndex: 0 }, children: inner });
+                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", style: { zIndex: 0, ...dnBgFilterStyle }, children: inner });
               })(),
               playerState == null ? void 0 : playerState.uiState.transitionElement,
               (state.backgroundStack || []).map((plane) => {
@@ -18929,8 +22911,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       return `dissolve-in ${dur}s forwards`;
                   }
                 })();
-                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", style: { zIndex: plane.layer ?? 0, backgroundColor: plane.color, animation: anim }, children: planeInner }, plane.commandId);
+                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", style: { zIndex: plane.layer ?? 0, backgroundColor: plane.color, animation: anim, ...dnBgFilterStyle }, children: planeInner }, plane.commandId);
               }),
+              dnBg && dnBg.overlayColor !== "transparent" && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none", style: { zIndex: 3, backgroundColor: dnBg.overlayColor, transition: `background-color ${dnTrans}s ease-in-out` } }),
               state.movieOverlays && state.movieOverlays.length > 0 && state.movieOverlays.map((movie, idx) => {
                 if (!movie.url) return null;
                 const isCustom = movie.objectFit === "custom";
@@ -18993,7 +22976,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 const emphasisDim = project.ui.speakerEmphasisDim ?? 0.5;
                 const emphasisScale = project.ui.speakerEmphasisScale ?? 1.04;
                 return allChars.map((char) => {
-                  var _a4;
+                  var _a4, _b3;
                   let transitionClass = "";
                   let animationDuration = "1s";
                   let slideStyle = {};
@@ -19002,11 +22985,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   const charTween = TweenManager.getCurrentValues(char.charId, "character");
                   const hasTweenPosition = charTween && (charTween.x !== void 0 || charTween.y !== void 0);
                   if (hasTweenPosition) {
+                    const isCustomBase = typeof char.position === "object";
                     const basePos = typeof char.position === "object" ? char.position : { x: arrangedX ?? (char.position === "left" ? 25 : char.position === "right" ? 75 : char.position === "center" ? 50 : char.position === "off-left" ? -25 : 125), y: 10 };
                     positionStyle = {
                       left: `${charTween.x ?? basePos.x}%`,
                       top: `${charTween.y ?? basePos.y}%`,
-                      transform: "translate(-50%, 0)"
+                      // Match the character's OWN anchor convention so the tween lines up with where
+                      // the sprite rests before and after the move: custom {x,y} coords are LEFT-EDGE
+                      // anchored (same as the static custom render), presets are CENTER anchored.
+                      // Mismatching these (always centering) caused a half-width shift when the move
+                      // started and a half-width jump to the final spot when it ended.
+                      transform: isCustomBase ? "translate(0, 0)" : "translate(-50%, 0)"
                     };
                   }
                   const isCustomPosition = typeof char.position === "object" || hasTweenPosition;
@@ -19148,6 +23137,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         break;
                     }
                   }
+                  if (dnCharFilter && !char.charId.startsWith("__ghost")) combinedFilter += ` ${dnCharFilter}`;
                   const contentEffectStyle = {};
                   if (combinedFilter) contentEffectStyle.filter = combinedFilter.trim();
                   if (combinedFilterAnimation) contentEffectStyle.animation = combinedFilterAnimation;
@@ -19155,34 +23145,58 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     contentEffectStyle.animation = contentEffectStyle.animation ? `${contentEffectStyle.animation}, ${flickerAnimation}` : flickerAnimation;
                   }
                   Object.assign(contentEffectStyle, filterVars);
-                  const hasContentEffect = combinedFilter || combinedFilterAnimation || flickerAnimation;
-                  const spriteContent = /* @__PURE__ */ jsxRuntime2.jsx(jsxRuntime2.Fragment, { children: char.isVideo && char.videoUrls ? char.videoUrls.map((url, index) => {
-                    var _a5, _b3, _c2, _d2;
-                    return /* @__PURE__ */ jsxRuntime2.jsx(
-                      TrimmedVideo,
+                  if (dnSpriteTint && !char.isVideo) contentEffectStyle.isolation = "isolate";
+                  const hasContentEffect = combinedFilter || combinedFilterAnimation || flickerAnimation || !!dnSpriteTint && !char.isVideo;
+                  const spriteContent = /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+                    char.isVideo && char.videoUrls ? char.videoUrls.map((url, index) => {
+                      var _a5, _b4, _c3, _d3;
+                      return /* @__PURE__ */ jsxRuntime2.jsx(
+                        TrimmedVideo,
+                        {
+                          src: url,
+                          autoPlay: true,
+                          muted: true,
+                          loop: char.videoLoop,
+                          trimStart: (_b4 = (_a5 = char.videoTrims) == null ? void 0 : _a5[index]) == null ? void 0 : _b4.start,
+                          trimEnd: (_d3 = (_c3 = char.videoTrims) == null ? void 0 : _c3[index]) == null ? void 0 : _d3.end,
+                          playsInline: true,
+                          className: "absolute top-0 left-0 w-full h-full object-contain",
+                          style: { zIndex: index }
+                        },
+                        index
+                      );
+                    }) : char.imageUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx(
+                      "img",
                       {
                         src: url,
-                        autoPlay: true,
-                        muted: true,
-                        loop: char.videoLoop,
-                        trimStart: (_b3 = (_a5 = char.videoTrims) == null ? void 0 : _a5[index]) == null ? void 0 : _b3.start,
-                        trimEnd: (_d2 = (_c2 = char.videoTrims) == null ? void 0 : _c2[index]) == null ? void 0 : _d2.end,
-                        playsInline: true,
+                        alt: "",
                         className: "absolute top-0 left-0 w-full h-full object-contain",
                         style: { zIndex: index }
                       },
                       index
-                    );
-                  }) : char.imageUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx(
-                    "img",
-                    {
-                      src: url,
-                      alt: "",
-                      className: "absolute top-0 left-0 w-full h-full object-contain",
-                      style: { zIndex: index }
-                    },
-                    index
-                  )) });
+                    )),
+                    dnSpriteTint && !char.isVideo && char.imageUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx("div", { "aria-hidden": true, style: {
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: "100%",
+                      zIndex: index,
+                      backgroundColor: dnSpriteTint.color,
+                      opacity: dnSpriteTint.opacity,
+                      mixBlendMode: "multiply",
+                      pointerEvents: "none",
+                      WebkitMaskImage: `url("${url}")`,
+                      maskImage: `url("${url}")`,
+                      WebkitMaskSize: "contain",
+                      maskSize: "contain",
+                      WebkitMaskRepeat: "no-repeat",
+                      maskRepeat: "no-repeat",
+                      WebkitMaskPosition: "center",
+                      maskPosition: "center",
+                      transition: `opacity ${dnTrans}s ease-in-out, background-color ${dnTrans}s ease-in-out`
+                    } }, `dn-tint-${index}`))
+                  ] });
                   let wrappedContent = hasContentEffect ? /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: contentEffectStyle, children: spriteContent }) : spriteContent;
                   for (let tIdx = transformEffects.length - 1; tIdx >= 0; tIdx--) {
                     wrappedContent = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: transformEffects[tIdx].style, children: wrappedContent });
@@ -19204,16 +23218,23 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   const charInverted = char.inverted ?? false;
                   const charFlipY = char.flipY ?? false;
                   const charRotation = (charTween == null ? void 0 : charTween.rotation) ?? char.rotation ?? 0;
-                  let transformStr = positionStyle.transform || "";
-                  if (charRotation) {
-                    transformStr = `${transformStr} rotate(${charRotation}deg)`.trim();
-                  }
+                  let orientTransform = "";
+                  if (charRotation) orientTransform = `rotate(${charRotation}deg)`;
                   if (charScale !== 1 || charInverted || charFlipY) {
                     const scaleX = (charInverted ? -1 : 1) * charScale;
                     const scaleY = (charFlipY ? -1 : 1) * charScale;
-                    transformStr = `${transformStr} scale(${scaleX}, ${scaleY})`.trim();
+                    orientTransform = `${orientTransform} scale(${scaleX}, ${scaleY})`.trim();
+                  }
+                  orientTransform = orientTransform.trim();
+                  const slideOnInner = ((_b3 = char.transition) == null ? void 0 : _b3.type) === "slide" && !!orientTransform;
+                  let transformStr = positionStyle.transform || "";
+                  if (!slideOnInner && orientTransform) {
+                    transformStr = `${transformStr} ${orientTransform}`.trim();
                   }
                   transformStr = (transformStr + parallaxTransform(char.parallaxDepth)).trim();
+                  if (slideOnInner) {
+                    wrappedContent = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: { transform: orientTransform, transformOrigin: "center bottom" }, children: wrappedContent });
+                  }
                   return /* @__PURE__ */ jsxRuntime2.jsx(
                     "div",
                     {
@@ -19238,11 +23259,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 const pEffects = state.particleEffects;
                 const hasParticles = pEffects && Object.keys(pEffects).length > 0;
                 if (hasParticles) {
-                  console.log("[LivePreview] Rendering ParticleSystem:", Object.keys(pEffects), "stageSize:", stageSize.width, "x", stageSize.height);
+                  const resolvedEffects = Object.fromEntries(Object.entries(pEffects).map(([tag, entry]) => {
+                    const vb = entry.varBindings;
+                    if (!vb) return [tag, entry];
+                    return [tag, { ...entry, config: {
+                      ...entry.config,
+                      emitRate: resolveVarNumber(liveVars, vb.emitRate, entry.config.emitRate, { min: 0, max: 500 }),
+                      wind: resolveVarNumber(liveVars, vb.wind, entry.config.wind, { min: -500, max: 500 }),
+                      gravity: resolveVarNumber(liveVars, vb.gravity, entry.config.gravity, { min: -500, max: 500 }),
+                      opacity: resolveVarNumber(liveVars, vb.opacity, entry.config.opacity ?? 1, { min: 0, max: 1 })
+                    } }];
+                  }));
                   return /* @__PURE__ */ jsxRuntime2.jsx(
                     ParticleSystem,
                     {
-                      effects: pEffects,
+                      effects: resolvedEffects,
                       width: stageSize.width,
                       height: stageSize.height
                     }
@@ -19250,7 +23281,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 }
                 return null;
               })(),
-              state.lights && state.lights.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none", style: { zIndex: state.lightsAbove ? 40 : 4 }, children: /* @__PURE__ */ jsxRuntime2.jsx(LightsLayer, { lights: state.lights, stageW: stageSize.width, stageH: stageSize.height }) }),
+              state.lights && state.lights.length > 0 && (() => {
+                const lb = state.lightsBrightnessVariableId ? resolveVarNumber(liveVars, state.lightsBrightnessVariableId, 1, { min: 0, max: 2 }) : 1;
+                const lights = lb === 1 ? state.lights : state.lights.map((l) => ({ ...l, brightness: (l.brightness ?? 1) * lb }));
+                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none", style: { zIndex: state.lightsAbove ? 40 : 4 }, children: /* @__PURE__ */ jsxRuntime2.jsx(LightsLayer, { lights, stageW: stageSize.width, stageH: stageSize.height }) });
+              })(),
               state.textOverlays.filter((o) => !o.live || !o.conditions || evaluateConditions2(o.conditions, liveVars)).map((overlay) => {
                 const liveText = overlay.live && overlay.rawText !== void 0 ? interpolateVariables(overlay.rawText, liveVars, project) : overlay.text;
                 return /* @__PURE__ */ jsxRuntime2.jsx(
@@ -19961,7 +23996,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }
             );
           })(),
-          /* @__PURE__ */ jsxRuntime2.jsx(DialogueBox, { dialogue: uiState.dialogue, settings, projectUI: project.ui, onFinished: handleDialogueAdvance, variables: playerState.variables, project, reactiveState: pickReactiveTextboxState(project.ui.dialogueReactiveStates, playerState.variables, evaluateConditions2) })
+          /* @__PURE__ */ jsxRuntime2.jsx(
+            DialogueBox,
+            {
+              dialogue: uiState.dialogue,
+              settings,
+              projectUI: project.ui,
+              onFinished: handleDialogueAdvance,
+              variables: playerState.variables,
+              project,
+              reactiveState: pickReactiveTextboxState(project.ui.dialogueReactiveStates, playerState.variables, evaluateConditions2),
+              timerPaused: scenePaused || !!uiState.choices || !!uiState.textInput || !!uiState.showHistory,
+              uiPalette: playerState.uiPaletteOverride,
+              voiceRef: currentVoiceRef
+            }
+          )
         ] }),
         uiState.choices && /* @__PURE__ */ jsxRuntime2.jsx(
           ChoiceMenu,
@@ -19974,6 +24023,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             layout: uiState.choiceLayout,
             timeLimit: uiState.choiceTimeLimit,
             showTimer: uiState.choiceShowTimer,
+            uiPalette: playerState.uiPaletteOverride,
             onTimeout: () => {
               const opts = uiState.choices || [];
               if ((uiState.choiceTimeoutBehavior || "option") === "actions") {
@@ -20031,17 +24081,68 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           },
           activeFireworksRef.current.key
         ) }),
-        flashlight && (flashlight.on || flashlight.darkWhenOff) && /* @__PURE__ */ jsxRuntime2.jsx(
-          "div",
-          {
-            ref: flashlightOverlayRef,
-            className: "absolute inset-0 pointer-events-none",
-            style: {
-              zIndex: flashlight.affectsDialogue ? 45 : 15,
-              background: flashlight.on ? flashlightBg((typeof window !== "undefined" ? window.innerWidth : 1280) / 2, (typeof window !== "undefined" ? window.innerHeight : 720) / 2, flashlight.radius / 100 * (typeof window !== "undefined" ? Math.min(window.innerWidth, window.innerHeight) : 720), flashlight.softness, hexToRgba(flashlight.color, flashlight.darkness * 100)) : hexToRgba(flashlight.color, flashlight.darkness * 100)
-            }
-          }
-        )
+        !(screenStack.length > 0 || hudStack.some((id) => {
+          var _a2;
+          return !((_a2 = project.uiScreens[id]) == null ? void 0 : _a2.hudNonBlocking);
+        })) && /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+          flashlight && (flashlight.on || flashlight.darkWhenOff) && (() => {
+            const fVars = playerState == null ? void 0 : playerState.variables;
+            const fRadius = resolveVarNumber(fVars, flashlight.radiusVariableId, flashlight.radius, { min: 1, max: 100 });
+            const fDarkness = resolveVarNumber(fVars, flashlight.darknessVariableId, flashlight.darkness, { min: 0, max: 1 });
+            return /* @__PURE__ */ jsxRuntime2.jsx(
+              "div",
+              {
+                ref: flashlightOverlayRef,
+                className: "absolute inset-0 pointer-events-none",
+                style: {
+                  zIndex: flashlight.affectsDialogue ? 45 : 15,
+                  background: flashlight.on ? flashlightBg((typeof window !== "undefined" ? window.innerWidth : 1280) / 2, (typeof window !== "undefined" ? window.innerHeight : 720) / 2, fRadius / 100 * (typeof window !== "undefined" ? Math.min(window.innerWidth, window.innerHeight) : 720), flashlight.softness, hexToRgba(flashlight.color, fDarkness * 100)) : hexToRgba(flashlight.color, fDarkness * 100)
+                }
+              }
+            );
+          })(),
+          (() => {
+            const active = Object.entries(spotlights).filter(([, s]) => s.on);
+            if (!active.length) return null;
+            const flashActive = !!(flashlight && (flashlight.on || flashlight.darkWhenOff));
+            const maxIntensity = Math.max(...active.map(([, s]) => Math.max(0, Math.min(1, s.intensity))));
+            const affectsDialogue = active.some(([, s]) => s.affectsDialogue);
+            const vpMin = typeof window !== "undefined" ? Math.min(window.innerWidth, window.innerHeight) : 720;
+            return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 pointer-events-none overflow-hidden", style: { zIndex: affectsDialogue ? 45 : 15 }, children: [
+              !flashActive && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { background: hexToRgba("#000000", maxIntensity * 100) } }),
+              active.map(([id, s]) => {
+                const half = Math.max(2, Math.min(100, s.beamWidth)) / 2;
+                const len = Math.max(5, Math.min(200, s.height));
+                const srcHalf = Math.max(0, Math.min(60, s.sourceWidth)) / 2;
+                const inner = Math.round(Math.max(0, Math.min(1, 1 - s.falloff)) * 100);
+                const blurPx = Math.round((0.015 + Math.max(0, Math.min(1, s.falloff)) * 0.05) * vpMin);
+                const sx = s.sourceX, sy = s.sourceY;
+                return /* @__PURE__ */ jsxRuntime2.jsx(
+                  "div",
+                  {
+                    ref: (el) => {
+                      spotlightRefs.current.set(id, el);
+                    },
+                    className: "absolute inset-0",
+                    style: {
+                      mixBlendMode: "screen",
+                      transformOrigin: `${sx}% ${sy}%`,
+                      transform: `rotate(${-s.aimAngle}deg)`,
+                      transition: s.followMouse ? "none" : "transform 0.15s ease-out",
+                      filter: `blur(${blurPx}px)`,
+                      willChange: "transform"
+                    },
+                    children: /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: {
+                      clipPath: `polygon(${sx - srcHalf}% ${sy}%, ${sx + srcHalf}% ${sy}%, ${sx + half}% ${sy + len}%, ${sx - half}% ${sy + len}%)`,
+                      background: `radial-gradient(120% ${len}% at ${sx}% ${sy}%, ${hexToRgba(s.color, 95)} 0%, ${hexToRgba(s.color, 55)} ${inner}%, ${hexToRgba(s.color, 0)} 100%)`
+                    } })
+                  },
+                  id
+                );
+              })
+            ] });
+          })()
+        ] })
       ] });
     };
     const currentScreenId = !playerState || playerState.mode === "paused" ? screenStack.length > 0 ? screenStack[screenStack.length - 1] : null : null;
@@ -20055,7 +24156,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ...((playerState == null ? void 0 : playerState.mode) === "playing" ? playerState == null ? void 0 : playerState.stageState.screen.overlayEffects : []) ?? [],
       ...(activeHudScreen == null ? void 0 : activeHudScreen.effects) ?? [],
       ...(activeMenuScreen == null ? void 0 : activeMenuScreen.effects) ?? []
-    ]);
+    ]).map((e) => e.intensityVariableId ? { ...e, intensity: resolveVarNumber(mergeDirtyUiVariables((playerState == null ? void 0 : playerState.variables) || {}), e.intensityVariableId, e.intensity, { min: 0, max: 1 }) } : e);
     const FOG_LAYER_TYPES = /* @__PURE__ */ new Set(["fog", "haze", "smoke"]);
     const belowCharEffects = activeOverlayEffects.filter((e) => {
       var _a2;
@@ -20139,13 +24240,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       };
     }, []);
     if (!titleScreenId) {
-      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "fixed inset-0 bg-black z-50 flex flex-col items-center justify-center text-white p-8 text-center", children: [
+      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "fixed inset-0 bg-black z-[9000] flex flex-col items-center justify-center text-white p-8 text-center", children: [
         /* @__PURE__ */ jsxRuntime2.jsx("h2", { className: "text-2xl text-red-500 font-bold mb-4", children: "Playback Error" }),
         /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "max-w-md", children: "Could not start the game because no valid Title Screen is set. Please ensure a Title Screen exists and is configured in the Project Settings." }),
         /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: handleClose, className: "mt-8 bg-[var(--bg-tertiary)] hover:bg-[var(--accent-purple)] px-6 py-2 rounded-lg font-bold", children: "Return to Editor" })
       ] });
     }
-    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "fixed inset-0 bg-black z-50 flex items-center justify-center", children: [
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "fixed inset-0 bg-black z-[9000] flex items-center justify-center", children: [
       /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `
                 @keyframes elementTransitionfade {
                     from { opacity: 0; }
@@ -20413,7 +24514,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     100% { background-position: 0% 0%; }
                 }
             ` }),
-      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, className: "relative overflow-hidden", style: { width: `min(100vw, calc(100vh * ${((_e = project.gameResolution) == null ? void 0 : _e.width) || 1920} / ${((_f = project.gameResolution) == null ? void 0 : _f.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_g = project.gameResolution) == null ? void 0 : _g.height) || 1080} / ${((_h = project.gameResolution) == null ? void 0 : _h.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_i = project.gameResolution) == null ? void 0 : _i.width) || 1920) : 1 }, children: [
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, className: "relative overflow-hidden", style: { width: `min(100vw, calc(100vh * ${((_g = project.gameResolution) == null ? void 0 : _g.width) || 1920} / ${((_h = project.gameResolution) == null ? void 0 : _h.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_i = project.gameResolution) == null ? void 0 : _i.height) || 1080} / ${((_j = project.gameResolution) == null ? void 0 : _j.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_k = project.gameResolution) == null ? void 0 : _k.width) || 1920) : 1 }, children: [
         (playerState == null ? void 0 : playerState.mode) === "playing" ? renderStage() : null,
         (!playerState || playerState.mode === "paused") && (() => {
           const ordered = [];
@@ -20546,7 +24647,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         )
       ] }),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_j = playerState.uiState.phone) == null ? void 0 : _j.open) && /* @__PURE__ */ jsxRuntime2.jsx(
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_l = playerState.uiState.phone) == null ? void 0 : _l.open) && /* @__PURE__ */ jsxRuntime2.jsx(
         PhonePanel,
         {
           ui: project.ui,
@@ -20561,33 +24662,139 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           onContactCall: handleContactCall,
           playTap: () => {
             if (project.ui.phoneTapSoundId) playSound(project.ui.phoneTapSoundId, void 0, false);
-          }
+          },
+          onOpenApp: (id) => handleUIAction({ type: UIActionType.OpenPhoneApp, appId: id }),
+          onCallReply: handleCallReply,
+          onEndCall: () => endActiveCall(),
+          onSetWallpaper: (id) => updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, wallpaperId: id } } } : null),
+          onOpenThread: handleOpenThread
         }
       ),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_l = (_k = playerState.uiState.phone) == null ? void 0 : _k.notification) == null ? void 0 : _l.visible) && !playerState.uiState.phone.open && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && playerState.uiState.mapOverlay && (() => {
+        var _a2;
+        const mo = playerState.uiState.mapOverlay;
+        const map = (_a2 = project.maps) == null ? void 0 : _a2[mo.mapId];
+        if (!map) return null;
+        return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 z-[45]", style: { animation: "fade-in 0.25s ease-out" }, children: [
+          /* @__PURE__ */ jsxRuntime2.jsx(
+            MapSurface,
+            {
+              map,
+              project,
+              variables: screenVariables,
+              assetResolver,
+              evaluateConditions: evaluateConditions2,
+              onLocationTap: (loc) => {
+                const acts = loc.actions || [];
+                updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, mapOverlay: null, isWaitingForInput: false } } : null);
+                acts.forEach((a) => handleUIAction(a));
+                if (loc.targetSceneId) {
+                  handleUIAction({ type: UIActionType.JumpToScene, targetSceneId: loc.targetSceneId });
+                } else if (mo.fromCommand && !phoneNavigates(acts)) {
+                  updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+                }
+              }
+            }
+          ),
+          !!mo.allowCancel && /* @__PURE__ */ jsxRuntime2.jsx(
+            "button",
+            {
+              onClick: () => updatePlayerState((p) => p ? { ...p, ...mo.fromCommand ? { currentIndex: p.currentIndex + 1 } : {}, uiState: { ...p.uiState, mapOverlay: null, isWaitingForInput: false } } : null),
+              "aria-label": "Close map",
+              className: "absolute top-3 right-3 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 text-white text-lg flex items-center justify-center",
+              style: { zIndex: 5 },
+              children: "✕"
+            }
+          )
+        ] });
+      })(),
+      (playerState == null ? void 0 : playerState.mode) === "playing" && playerState.uiState.miniGameOverlay && (() => {
+        var _a2;
+        const mg = playerState.uiState.miniGameOverlay;
+        const game = (_a2 = project.miniGames) == null ? void 0 : _a2[mg.gameId];
+        if (!game) return null;
+        return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 z-[46]", style: { animation: "fade-in 0.25s ease-out" }, children: /* @__PURE__ */ jsxRuntime2.jsx(
+          MiniGameFrame,
+          {
+            game,
+            project,
+            variables: screenVariables,
+            assetResolver,
+            playSound: (id) => {
+              if (id) playSound(id, void 0, false);
+            },
+            onResolve: (kind, slotColors, score) => {
+              var _a3, _b2;
+              const baseActs = (kind === "win" ? game.winActions : kind === "skip" ? game.skipActions : game.failActions) || [];
+              let tierActs = [];
+              if (kind === "win" && score && ((_b2 = (_a3 = game.score) == null ? void 0 : _a3.tiers) == null ? void 0 : _b2.length)) {
+                const match = [...game.score.tiers].filter((t) => score.accuracy >= (t.minAccuracy ?? 0)).sort((a, b) => (b.minAccuracy ?? 0) - (a.minAccuracy ?? 0))[0];
+                if (match) tierActs = match.actions || [];
+              }
+              const acts = [...baseActs, ...tierActs];
+              const slots = kind === "win" ? slotColors || {} : {};
+              const slotNames = Object.keys(slots);
+              const uiPatch = {};
+              (game.paletteToUi || []).forEach((m) => {
+                if (m.slot && slots[m.slot]) uiPatch[m.target] = slots[m.slot];
+              });
+              updatePlayerState((p) => p ? {
+                ...p,
+                ...Object.keys(uiPatch).length ? { uiPaletteOverride: { ...p.uiPaletteOverride || {}, ...uiPatch } } : {},
+                uiState: { ...p.uiState, miniGameOverlay: null, isWaitingForInput: false }
+              } : null);
+              slotNames.forEach((slot) => {
+                const def = Object.values(project.variables).find((v) => {
+                  var _a4;
+                  return ((_a4 = v.name) == null ? void 0 : _a4.toLowerCase()) === slot.toLowerCase();
+                });
+                if (def) handleUIAction({ type: UIActionType.SetVariable, variableId: def.id, operator: "set", value: slots[slot] });
+              });
+              if (score && game.score) {
+                const setNum = (vid, val) => {
+                  if (vid && project.variables[vid]) handleUIAction({ type: UIActionType.SetVariable, variableId: vid, operator: "set", value: val });
+                };
+                setNum(game.score.hitsVariableId, score.hits);
+                setNum(game.score.missesVariableId, score.misses);
+                setNum(game.score.accuracyVariableId, score.accuracy);
+              }
+              acts.forEach((a) => handleUIAction(a));
+              if (mg.fromCommand && !phoneNavigates(acts)) {
+                updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+              }
+            }
+          }
+        ) });
+      })(),
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_n = (_m = playerState.uiState.phone) == null ? void 0 : _m.notification) == null ? void 0 : _n.visible) && !playerState.uiState.phone.open && (() => {
         const n = playerState.uiState.phone.notification;
-        const nchar = n.senderId === "player" ? null : project.characters[n.senderId];
+        const nchar = !n.senderId || n.senderId === "player" ? null : project.characters[n.senderId];
         const nurls = resolvePhonePortrait(n.portrait, nchar, assetResolver);
+        const nIconImg = n.iconImage ? assetResolver(n.iconImage.id, "image") : null;
         const freePos = project.ui.phoneNotifX != null || project.ui.phoneNotifY != null;
         const atTop = (project.ui.phoneNotifPosition || "top") === "top";
         const posStyle = freePos ? { left: `${project.ui.phoneNotifX ?? 50}%`, top: `${project.ui.phoneNotifY ?? 2}%` } : { left: "50%", transform: "translateX(-50%)", ...atTop ? { top: "2%" } : { bottom: "2%" } };
         return /* @__PURE__ */ jsxRuntime2.jsxs(
           "div",
           {
-            onClick: () => updatePlayerState((p) => p && p.uiState.phone ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, open: true, view: "chat", notification: null, unread: false } } } : p),
+            onClick: () => {
+              const taps = n.tapActions || [];
+              updatePlayerState((p) => p && p.uiState.phone ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, ...taps.length ? {} : { open: true, view: "chat" }, notification: null, unread: false } } } : p);
+              taps.forEach((a) => handleUIAction(a));
+            },
             style: { position: "absolute", ...posStyle, zIndex: 65, cursor: "pointer", minWidth: "40%", maxWidth: "72%", display: "flex", gap: 10, alignItems: "center", padding: "10px 14px", borderRadius: 14, background: project.ui.phoneNotifColor || "rgba(18,20,26,0.96)", color: project.ui.phoneNotifTextColor || "#fff", boxShadow: "0 8px 30px rgba(0,0,0,0.5)", animation: "fade-in 0.25s ease-out", ...project.ui.phoneNotifFont ? fontSettingsToStyle(project.ui.phoneNotifFont) : {} },
             children: [
-              /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: nurls, size: "2.4em" }),
+              nurls.length > 0 ? /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: nurls, size: "2.4em" }) : nIconImg ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: nIconImg, alt: "", style: { width: "2.4em", height: "2.4em", objectFit: "contain", flexShrink: 0 } }) : n.icon ? /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "1.6em", flexShrink: 0 }, children: PHONE_GLYPHS[n.icon] || "🔔" }) : null,
               /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
-                (nchar == null ? void 0 : nchar.name) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontWeight: 700, fontSize: "0.85em" }, children: nchar.name }),
+                (n.title || (nchar == null ? void 0 : nchar.name)) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontWeight: 700, fontSize: "0.85em" }, children: n.title || (nchar == null ? void 0 : nchar.name) }),
                 /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.85em", opacity: 0.92, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: interpolateVariables(n.text, screenVariables, project) })
               ] }),
-              /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "1.2em" }, children: "💬" })
+              /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "1.2em" }, children: n.title ? "🔔" : "💬" })
             ]
           }
         );
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_n = (_m = playerState.uiState.phone) == null ? void 0 : _m.incomingCall) == null ? void 0 : _n.phase) === "ringing" && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_p = (_o = playerState.uiState.phone) == null ? void 0 : _o.incomingCall) == null ? void 0 : _p.phase) === "ringing" && (() => {
         const call = playerState.uiState.phone.incomingCall;
         const cchar = call.callerId === "player" ? null : project.characters[call.callerId];
         const curls = resolvePhonePortrait(call.portrait, cchar, assetResolver);
@@ -20633,7 +24840,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ] })
         ] });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_o = playerState.uiState.phone) == null ? void 0 : _o.outgoingCall) && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_q = playerState.uiState.phone) == null ? void 0 : _q.outgoingCall) && (() => {
         const oc = playerState.uiState.phone.outgoingCall;
         const contact = (project.ui.phoneContacts || []).find((c) => c.characterId === oc.contactId);
         const ochar = project.characters[oc.contactId];
@@ -20651,10 +24858,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ] })
         ] });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_p = playerState.uiState.phone) == null ? void 0 : _p.unread) && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_r = playerState.uiState.phone) == null ? void 0 : _r.unread) && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
         const bx = project.ui.phoneBadgeX ?? 95;
         const by = project.ui.phoneBadgeY ?? 4;
-        const badge = renderPhoneBadge(project.ui);
+        const unreadCount = (playerState.uiState.phone.notifications || []).filter((e) => !e.read).length;
+        const badge = renderPhoneBadge(project.ui, unreadCount);
         return /* @__PURE__ */ jsxRuntime2.jsx(
           "div",
           {
@@ -20755,7 +24963,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         /* @__PURE__ */ jsxRuntime2.jsx(
           "img",
           {
-            src: assetResolver(((_q = carriedItem.icon) == null ? void 0 : _q.id) || null, "image") || "",
+            src: assetResolver(((_s = carriedItem.icon) == null ? void 0 : _s.id) || null, "image") || "",
             alt: "",
             draggable: false,
             className: "fixed z-[10052] pointer-events-none select-none",
@@ -20914,7 +25122,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "3.4.0",
+    version: "3.6.5",
     /**
      * Check if the engine is ready
      */

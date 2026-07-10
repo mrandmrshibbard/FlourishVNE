@@ -14,6 +14,7 @@ export type CharacterAction =
     | { type: 'DELETE_CHARACTER_LAYER', payload: { characterId: VNID, layerId: VNID } }
     | { type: 'ADD_LAYER_ASSET', payload: { characterId: VNID, layerId: VNID, name: string } & Partial<VNLayerAsset> }
     | { type: 'DELETE_LAYER_ASSET', payload: { characterId: VNID, layerId: VNID, assetId: VNID } }
+    | { type: 'UPDATE_LAYER_ASSET', payload: { characterId: VNID, layerId: VNID, assetId: VNID, updates: Partial<VNLayerAsset> } }
     | { type: 'ADD_EXPRESSION', payload: { characterId: VNID, name: string } }
     | { type: 'UPDATE_EXPRESSION', payload: { characterId: VNID, expressionId: VNID, updates: Partial<VNCharacterExpression> } }
     | { type: 'DELETE_EXPRESSION', payload: { characterId: VNID, expressionId: VNID } }
@@ -150,6 +151,18 @@ export const characterReducer = (state: VNProject, action: CharacterAction): VNP
             }
         }
         return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers, expressions: newExpressions } } };
+    }
+
+    case 'UPDATE_LAYER_ASSET': {
+        // Rename (or otherwise patch) a layer asset. The asset id is unchanged, so expressions and
+        // customizer/variable references that point at it keep working.
+        const { characterId, layerId, assetId, updates } = action.payload;
+        const character = state.characters[characterId];
+        const asset = character?.layers[layerId]?.assets[assetId];
+        if (!asset) return state;
+        const newAssets = { ...character.layers[layerId].assets, [assetId]: { ...asset, ...updates } };
+        const newLayers = { ...character.layers, [layerId]: { ...character.layers[layerId], assets: newAssets } };
+        return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers } } };
     }
 
     case 'ADD_EXPRESSION': {

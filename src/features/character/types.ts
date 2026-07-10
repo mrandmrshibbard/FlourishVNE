@@ -93,4 +93,9 @@ export interface VNCharacter {
     /** Optional reusable textbox theme this character uses by default (project.textboxThemes).
      *  When both are set, the inline `textbox` layers on top of the theme. */
     textboxThemeId?: VNID;
+    /** Speaker-tinted dialogue: render this character's LINES in a color — 'character' uses
+     *  their name color, 'custom' uses dialogueTextColor. Off/absent = no tint (default).
+     *  Additive-optional; wins over theme/global text color, loses to a palette→UI restyle. */
+    dialogueTextColorMode?: 'off' | 'character' | 'custom';
+    dialogueTextColor?: string;
 }

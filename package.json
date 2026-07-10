@@ -1,14 +1,15 @@
 {
   "name": "flourish-visual-novel-engine",
   "private": true,
-  "version": "3.4.0",
+  "version": "3.6.5",
   "description": "Flourish Visual Novel Engine",
   "author": "Memento_Morii",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build:app": "vite build",
+    "build": "npm run build:engine && npm run build:app",
     "preview": "vite preview",
     "build:standalone": "vite build --config vite.config.standalone.ts",
     "generate:engine-bundle": "node scripts/generate-engine-bundle.js",
@@ -16,7 +17,7 @@
     "build:engine": "npm run build:standalone && npm run generate:engine-bundle",
     "build:player": "node scripts/build-player.js",
     "build:docs": "node scripts/build-docs.mjs",
-    "build:full": "npm run build:engine && npm run build",
+    "build:full": "npm run build",
     "electron:dev": "npm run build:full && electron .",
     "electron:dev:nogpu": "npm run build:full && electron . --disable-gpu --disable-gpu-compositing",
     "electron:build": "npm run stage:build-tools && npm run build:full && electron-builder",
@@ -93,8 +94,10 @@
       "artifactName": "Flourish-VNE-Setup-${version}-${arch}.${ext}"
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
       "perMachine": false,
+      "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Flourish Visual Novel Engine",

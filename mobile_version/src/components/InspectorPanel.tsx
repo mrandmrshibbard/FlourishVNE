@@ -30,6 +30,8 @@ export interface InspectorPanelProps {
     selectedVariableId: VNID | null;
     setSelectedVariableId: (id: VNID | null) => void;
     onOpenInSystems: (sel: { system: 'items' | 'inventory' | 'stats'; id?: VNID }) => void;
+    /** Deep link to the Characters tab (used by the Customizer to jump to its character's layers/art). */
+    onOpenCharacters?: (charId: VNID) => void;
 }
 
 const InspectorPanel: React.FC<InspectorPanelProps> = ({
@@ -45,6 +47,7 @@ const InspectorPanel: React.FC<InspectorPanelProps> = ({
     selectedVariableId,
     setSelectedVariableId,
     onOpenInSystems,
+    onOpenCharacters,
 }) => {
     const { t } = useTranslation('editorTools');
     const { project, dispatch } = useProject();
@@ -116,7 +119,7 @@ const InspectorPanel: React.FC<InspectorPanelProps> = ({
                     );
                 }
             }
-            return <UIElementInspector screenId={activeMenuScreenId} elementId={lastId} setSelectedElementId={(id) => setSelectedUIElementIds(id ? [id] : [])} onOpenSystems={onOpenInSystems} />;
+            return <UIElementInspector screenId={activeMenuScreenId} elementId={lastId} setSelectedElementId={(id) => setSelectedUIElementIds(id ? [id] : [])} onOpenSystems={onOpenInSystems} onOpenCharacters={onOpenCharacters} />;
         }
         return <ScreenInspector screenId={activeMenuScreenId} />;
     }

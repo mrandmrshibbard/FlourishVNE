@@ -1,0 +1,14 @@
+{
+  "characters": [
+    {
+      "id": "yuki",
+      "name": "Yuki",
+      "nameColor": "#ee2299",
+      "defaultSprite": "neutral",
+      "sprites": [
+        { "id": "neutral", "image": "assets/images/yuki_neutral.png" },
+        { "id": "smile", "image": "assets/images/yuki_smile.png" }
+      ]
+    }
+  ]
+}

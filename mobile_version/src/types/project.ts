@@ -2,13 +2,46 @@ import { VNID } from './';
 import { VNBackground, VNImage, VNAudio, VNVideo } from '../features/assets/types';
 import { VNCharacter, VNTextboxTheme } from '../features/character/types';
 import { VNScene } from '../features/scene/types';
-import { VNProjectUI, VNUIScreen } from '../features/ui/types';
+import { VNProjectUI, VNUIScreen, VNFontSettings } from '../features/ui/types';
 import { VNVariable } from '../features/variables/types';
 import { VNScript } from './scripting';
 import { VNCommonEvent } from './commonEvents';
 import { PluginRegistryEntry, VNPlugin } from './plugins';
 import { VNItem, VNItemCollection } from '../features/items/types';
 import { VNStat } from '../features/stats/types';
+import { VNMiniGameConfig, VNArtPalette } from './miniGames';
+
+export * from './miniGames';
+
+/** One color-grade layer of a day/night phase (applied to the background OR the sprites). */
+export interface VNGradeLayer {
+    /** When false, this target is left untouched at this phase (e.g. tint bg but not sprites). */
+    enabled: boolean;
+    tint: string;        // hex
+    tintOpacity: number; // 0–1 (overlay/tint strength)
+    brightness: number;  // multiplier, 1 = normal
+    saturation: number;  // multiplier, 1 = normal
+}
+
+/** A keyed point in the day/night cycle (peaks at `atHour`); the engine interpolates between phases. */
+export interface VNDayNightPhase {
+    id: VNID;
+    name: string;
+    atHour: number;          // 0–24
+    background: VNGradeLayer;
+    sprites: VNGradeLayer;
+}
+
+/** Project-level day/night cycle config. Absent/`enabled:false` = no grading (old projects unaffected). */
+export interface VNDayNightCycle {
+    enabled: boolean;
+    /** Managed internal number variable (0–24) the cycle reads/writes; created when first enabled. */
+    timeVariableId?: VNID;
+    /** Optional real-time auto-advance: `secondsPerHour` real seconds advance the clock by 1 hour. */
+    autoAdvance?: { enabled: boolean; secondsPerHour: number };
+    /** Phases sorted by `atHour`; seeded with warm→cold defaults; fully recolorable. */
+    phases: VNDayNightPhase[];
+}
 
 export interface VNProjectFont {
     id: VNID;
@@ -51,6 +84,60 @@ export interface CGGalleryConfig {
     viewerBackgroundColor?: string;
 }
 
+/** One touchable location on a map (the phone Map app + the Show Map command). */
+export interface VNMapLocation {
+    id: VNID;
+    name: string;
+    /** Marker anchor, % of the map image. */
+    x: number;
+    y: number;
+    /** Region size (%, for markerStyle 'region'). */
+    width?: number;
+    height?: number;
+    /** 'icon' (default, a pin glyph) | 'image' (custom marker art) | 'region' (invisible touch area). */
+    markerStyle?: 'icon' | 'image' | 'region';
+    builtinIcon?: string;
+    markerImage?: { type: 'image'; id: VNID } | null;
+    /** Caption under the marker (default = name); interpolates {variables}. */
+    label?: string;
+    /** Per-location label text style; falls back to the map's labelFont, then the built-in default. */
+    labelFont?: VNFontSettings;
+    /** Show the caption under the marker (default true — unset = shown). Off = tappable marker, no text. */
+    showLabel?: boolean;
+    /** Use an image as the label instead of text (shown only while unlocked). */
+    labelImage?: { type: 'image'; id: VNID } | null;
+    /** Legacy single scene jump. Folded into `actions` as a trailing JumpToScene by migrateMapLocationActions. */
+    targetSceneId?: VNID | null;
+    /** Ordered list of actions run when the location is tapped (JumpToScene is just one entry). */
+    actions?: any[];
+    /** Location is unlocked when these pass (empty = always). */
+    conditions?: any[];
+    /** How a LOCKED location looks: hidden entirely, dimmed, or a lock icon. Default 'hidden'. */
+    lockedAppearance?: 'hidden' | 'dimmed' | 'lockedIcon';
+    /** Label shown while locked (e.g. "???"). */
+    lockedLabel?: string;
+}
+
+/** An author-designed travel map: a backdrop + touchable locations. */
+export interface VNMapConfig {
+    id: VNID;
+    name: string;
+    backgroundImage: { type: 'image' | 'video'; id: VNID } | null;
+    locations: VNMapLocation[];
+    markerColor?: string;
+    /** Marker size, % of the map's width (default 6). */
+    markerSize?: number;
+    /** Map-wide default label text style (per-location labelFont overrides it). */
+    labelFont?: VNFontSettings;
+    /** Ask "Travel to {name}?" before jumping (default false). */
+    confirmTravel?: boolean;
+    confirmText?: string;
+    /** Let players zoom & pan this map at runtime (default true — unset = on). Set false for a fixed map. */
+    allowZoom?: boolean;
+    /** How far players can zoom in, as a multiple of the fit-to-screen size (default 3). */
+    maxZoom?: number;
+}
+
 export interface VNProject {
     id: VNID;
     title: string;
@@ -76,6 +163,12 @@ export interface VNProject {
     };
     /** CG Gallery configuration for unlockable art gallery */
     cgGallery?: CGGalleryConfig;
+    /** Travel maps (Show Map command + the phone's Map app). Additive-optional. */
+    maps?: Record<VNID, VNMapConfig>;
+    /** Mini games (Show Mini Game command/action + the Mini Games tab). Additive-optional. */
+    miniGames?: Record<VNID, VNMiniGameConfig>;
+    /** Named color schemes (Art Studio swatches, shared with coloring mini games). Additive-optional. */
+    artPalettes?: VNArtPalette[];
     /** Inventory/shop item registry. Each item is backed by a count variable. */
     items?: Record<VNID, VNItem>;
     /** Independent item lists (player bag, shop stock, library, chest…). Each holds per-list quantities
@@ -101,4 +194,6 @@ export interface VNProject {
     pluginStorage?: Record<string, Record<string, any>>;
     /** When true, characters sharing the same preset position are automatically spread apart */
     autoArrangeCharacters?: boolean;
+    /** Day/night cycle: a time-of-day value drives a color grade over background + sprites. Additive-optional. */
+    dayNightCycle?: VNDayNightCycle;
 }

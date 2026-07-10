@@ -1,0 +1,26 @@
+{
+  "bundle_format_version": "0.1.0",
+  "generator": { "name": "hand-authored", "version": "0" },
+  "game": {
+    "id": "hello_dialogue",
+    "title": "Hello, Dialogue",
+    "author": "Flourish",
+    "version": "1.0.0",
+    "description": "A minimal dialogue sample: narration, a character with two sprite states, a background, and looping music."
+  },
+  "entry": { "scene": "start" },
+  "resolution": { "width": 1280, "height": 720 },
+  "capabilities": {
+    "scripts": false, "plugins": false,
+    "miniGames": false, "phone": false, "inventory": false, "maps": false,
+    "video": false, "particles": false
+  },
+  "files": {
+    "scenes": "script/scenes.json",
+    "variables": "script/variables.json",
+    "logic": "script/logic.json",
+    "characters": "characters/characters.json",
+    "ui": "ui/layout.json",
+    "save": "save-format.json"
+  }
+}

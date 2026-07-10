@@ -24,6 +24,18 @@
     "setVariable": "Definir variável",
     "resetVariable": "Redefinir variável",
     "playSound": "Tocar som",
+
+    "playMusic": "Play Music",
+
+    "stopMusic": "Stop Music",
+
+    "showSpotlight": "Show Spotlight",
+
+    "hideSpotlight": "Hide Spotlight",
+
+    "showFlashlight": "Show Flashlight",
+
+    "hideFlashlight": "Hide Flashlight",
     "cycleLayerAsset": "Alternar recurso de camada",
     "toggleScreen": "Alternar tela",
     "openURL": "Abrir URL",
@@ -43,7 +55,8 @@
     "sellItem": "Vender item",
     "buySelectedItem": "Comprar item selecionado",
     "sellSelectedItem": "Vender item selecionado",
-    "openPauseMenu": "Abrir menu de pausa"
+    "openPauseMenu": "Abrir menu de pausa",
+    "clearUiPalette": "Redefinir cores da interface (desfazer paleta do minijogo)"
   },
   "actionsList": {
     "actions": "Ações",

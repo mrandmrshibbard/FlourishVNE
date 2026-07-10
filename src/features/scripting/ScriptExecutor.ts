@@ -393,6 +393,8 @@ export async function executeScript(
         fireworks: async (opts: Record<string, any> = {}) => { if (!context.onRunCommand) return; await context.onRunCommand('Fireworks', { ...opts }); },
         flashlight: async (opts: Record<string, any> = {}) => { if (!context.onRunCommand) return; await context.onRunCommand('Flashlight', { enabled: true, ...opts }); },
         flashlightOff: async () => { if (!context.onRunCommand) return; await context.onRunCommand('Flashlight', { enabled: false }); },
+        spotlight: async (opts: Record<string, any> = {}) => { if (!context.onRunCommand) return; await context.onRunCommand('Spotlight', { enabled: true, ...opts }); },
+        spotlightOff: async () => { if (!context.onRunCommand) return; await context.onRunCommand('Spotlight', { enabled: false }); },
         screenOverlay: async (effectType: string, opts: Record<string, any> = {}) => { if (!context.onRunCommand) return; await context.onRunCommand('SetScreenOverlayEffect', { effectType, ...opts }); },
         creditRoll: async (opts: Record<string, any> = {}) => { if (!context.onRunCommand) return; await context.onRunCommand('CreditRoll', { ...opts }); },
         playMovie: async (idOrName: string, opts: Record<string, any> = {}) => {

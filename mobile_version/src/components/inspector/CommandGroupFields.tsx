@@ -30,18 +30,34 @@ import ActionCard from '../menu-editor/ActionCard';
 import ConditionsEditor from '../ui/ConditionsEditor';
 import SearchableSelect from '../ui/SearchableSelect';
 import UIActionsListEditor from '../ui/UIActionsListEditor';
-import { OrientationFields, TransitionFields, PositionInputs, CharacterVisualEffectsEditor } from './fields';
+import { OrientationFields, TransitionFields, PositionInputs, CharacterVisualEffectsEditor, VarFollowSelect } from './fields';
 import { canvasPointPick, useCanvasPointPick } from '../../utils/canvasPointPick';
 import { computeCharacterFitScale } from '../../utils/characterFit';
 import CollapsibleSection from '../ui/CollapsibleSection';
 import { InspectorGroupId, INSPECTOR_GROUPS, getCommandGroups } from './inspectorGroups';
 import { LayerControl, ParallaxDepthControl } from './LayerControl';
+import SpotlightPlacementField from './SpotlightPlacementField';
 import { pluginManager } from '../../features/plugins/PluginManagerService';
 import { ChoiceLayoutSelect, ChoiceOptionAppearance } from './ChoiceAppearanceFields';
 import { SetVariablePreview } from './SetVariablePreview';
 import { resolveBoolLabels } from '../../features/variables/booleanLabels';
+import { PHONE_GLYPHS } from '../../features/ui/phoneIcons';
+import ConversationStudio from '../ConversationStudio';
 
 export type UpdateCommand = (updates: Partial<VNCommand>) => void;
+
+// ── ⟨Player's Character⟩ targeting ─────────────────────────────────────────────
+// A sentinel option shown in the character dropdown for Show/Dialogue/Move/Hide. Picking it sets
+// the command's `characterSource: 'player'` so the engine shows/voices whichever character the
+// player created in a Character Creator (project.ui.playerCharacterVarId), instead of a fixed id.
+export const PLAYER_CHARACTER_OPTION = '__playerCharacter__';
+export const PLAYER_CHARACTER_LABEL = "⟨ Player's Character ⟩";
+/** Prepend the ⟨Player's Character⟩ choice to a list of character options. */
+export const withPlayerCharacterOption = (opts: { value: string; label: string }[]) =>
+    [{ value: PLAYER_CHARACTER_OPTION, label: PLAYER_CHARACTER_LABEL }, ...opts];
+/** The value a character selector should show for a command, honoring `characterSource`. */
+export const characterSelectValue = (cmd: { characterId?: string | null; characterSource?: 'fixed' | 'player' }) =>
+    cmd.characterSource === 'player' ? PLAYER_CHARACTER_OPTION : (cmd.characterId || '');
 
 /** Visual scene commands whose stacking order the author can change (the stage band system).
  *  Movies and hot spots keep their fixed bands for now. */
@@ -144,9 +160,11 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
     if (command.type === CommandType.HideCharacter) {
         const c = command as HideCharacterCommand;
         if (groupId === 'content') {
-            const characterOptions = Object.values(project.characters).map((ch: any) => ({ value: ch.id, label: ch.name }));
+            const characterOptions = withPlayerCharacterOption(Object.values(project.characters).map((ch: any) => ({ value: ch.id, label: ch.name })));
             return <FormField label={t('shared.character')}>
-                <SearchableSelect options={characterOptions} value={c.characterId} onChange={value => updateCommand({ characterId: value } as any)}
+                <SearchableSelect options={characterOptions} value={characterSelectValue(c)} onChange={value => value === PLAYER_CHARACTER_OPTION
+                    ? updateCommand({ characterSource: 'player' } as any)
+                    : updateCommand({ characterSource: 'fixed', characterId: value } as any)}
                     placeholder={Object.keys(project.characters).length === 0 ? t('shared.noCharacters') : t('shared.selectCharacter')} />
             </FormField>;
         }
@@ -176,6 +194,81 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
     if (command.type === CommandType.PhoneIncomingCall) {
         return <PhoneIncomingCallGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} />;
     }
+    if (command.type === CommandType.StartPhoneCall) {
+        return <StartPhoneCallGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} />;
+    }
+    if (command.type === CommandType.PhoneNotify) {
+        if (groupId !== 'content') return null;
+        const c = command as any;
+        return <>
+            <FormField label={t('phoneCmd.notifTitle', 'Title (optional)')}>
+                <TextInput value={c.title || ''} placeholder={t('phoneCmd.notifTitlePh', 'e.g. Quest updated')} onChange={e => updateCommand({ title: e.target.value || undefined } as any)} />
+            </FormField>
+            <FormField label={t('phoneCmd.notifText', 'Text')}>
+                <TextArea value={c.text || ''} onChange={e => updateCommand({ text: e.target.value } as any)} />
+            </FormField>
+            <CollapsibleSection title={t('phoneCmd.notifStyle', 'Icon, sound & presentation')}
+                summary={`${c.presentation === 'silent' ? t('phoneCmd.notifSilentSum', 'silent') : t('phoneCmd.sumBanner', 'banner + ding')}${c.icon || c.iconImage ? ` · ${t('phoneCmd.sumIcon', 'icon')}` : ''}`}>
+                <FormField label={t('phoneCmd.notifIcon', 'Icon')}>
+                    <Select value={c.icon || ''} onChange={e => updateCommand({ icon: e.target.value || undefined } as any)}>
+                        <option value="">🔔 default</option>
+                        {Object.keys(PHONE_GLYPHS).map(k => <option key={k} value={k}>{PHONE_GLYPHS[k]} {k}</option>)}
+                    </Select>
+                </FormField>
+                <AssetSelector label={t('phoneCmd.notifIconImage', 'Custom icon image (optional)')} assetType="images" value={c.iconImage?.id || null} onChange={id => updateCommand({ iconImage: id ? { type: 'image', id } : null } as any)} />
+                <FormField label={t('phoneCmd.notifHow', 'How it shows')}>
+                    <Select value={c.presentation || 'notify'} onChange={e => updateCommand({ presentation: e.target.value } as any)}>
+                        <option value="notify">{t('phoneCmd.notifBanner', 'Banner + ding (keep playing)')}</option>
+                        <option value="silent">{t('phoneCmd.notifSilent', 'Silent (badge + list only)')}</option>
+                    </Select>
+                </FormField>
+                <FormField label={t('phoneCmd.ding', 'Notification sound')}>
+                    <AssetSelector label="" assetType="audio" value={c.soundId || null} onChange={id => updateCommand({ soundId: id } as any)} />
+                </FormField>
+                <label className="flex items-center gap-1 mt-1">
+                    <input type="checkbox" checked={c.showBadge !== false} onChange={e => updateCommand({ showBadge: e.target.checked } as any)} className="w-4 h-4" />
+                    <span className="text-xs text-[var(--text-secondary)]">{t('phoneCmd.showBadge', 'Show a notification badge')}</span>
+                </label>
+            </CollapsibleSection>
+            <div className="mt-1.5">
+                <UIActionsListEditor actions={c.tapActions || []} project={project} onChange={acts => updateCommand({ tapActions: acts } as any)} label={t('phoneCmd.notifTapActions', 'When tapped (default: opens the phone)')} />
+            </div>
+        </>;
+    }
+    if (command.type === CommandType.ShowMap) {
+        if (groupId !== 'content') return null;
+        const c = command as any;
+        const maps = Object.values(project.maps || {}) as any[];
+        return <>
+            <FormField label={t('map.whichMap', 'Map')}>
+                <Select value={c.mapId || ''} onChange={e => updateCommand({ mapId: e.target.value } as any)}>
+                    {maps.length === 0 && <option value="">{t('map.noMaps', 'No maps yet — create one in Systems → Maps')}</option>}
+                    {!c.mapId && maps.length > 0 && <option value="">{t('map.selectMap', 'Select a map…')}</option>}
+                    {maps.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </Select>
+            </FormField>
+            <label className="flex items-center gap-1 mt-1">
+                <input type="checkbox" checked={!!c.allowCancel} onChange={e => updateCommand({ allowCancel: e.target.checked || undefined } as any)} className="w-4 h-4" />
+                <span className="text-xs text-[var(--text-secondary)]">{t('map.allowCancel', 'Player can close without traveling (✕)')}</span>
+            </label>
+            <p className="text-[11px] text-[var(--text-muted)] mt-1">{t('map.cmdHint', 'Shows the map full screen and pauses the story until the player picks an unlocked location (its actions run, then the scene jump). Design maps in Systems → Maps.')}</p>
+        </>;
+    }
+    if (command.type === CommandType.ShowMiniGame) {
+        if (groupId !== 'content') return null;
+        const c = command as any;
+        const games = Object.values(project.miniGames || {}) as any[];
+        return <>
+            <FormField label={t('miniGame.whichGame', 'Mini game')}>
+                <Select value={c.gameId || ''} onChange={e => updateCommand({ gameId: e.target.value } as any)}>
+                    {games.length === 0 && <option value="">{t('miniGame.noGames', 'No mini games yet — create one in the Mini Games tab')}</option>}
+                    {!c.gameId && games.length > 0 && <option value="">{t('miniGame.selectGame', 'Select a mini game…')}</option>}
+                    {games.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </Select>
+            </FormField>
+            <p className="text-[11px] text-[var(--text-muted)] mt-1">{t('miniGame.cmdHint', 'Shows the mini game full screen and pauses the story until the player wins, skips, or fails it (each exit runs its own actions). Mini-game progress isn’t saved — a save taken mid-game re-presents the game on load. Build games in the Mini Games tab.')}</p>
+        </>;
+    }
     if (command.type === CommandType.ShowPhone || command.type === CommandType.HidePhone || command.type === CommandType.HidePhoneText) {
         if (groupId !== 'content') return null;
         const msg = command.type === CommandType.ShowPhone ? t('phoneCmd.showHint', 'Opens the phone overlay.')
@@ -187,7 +280,7 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
         return <CreditRollGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} />;
     }
     if (command.type === CommandType.SpawnParticles) {
-        return <SpawnParticlesGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} t={t} />;
+        return <SpawnParticlesGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} />;
     }
     if (command.type === CommandType.TweenElement) {
         return <TweenElementGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} ctx={ctx} />;
@@ -197,6 +290,9 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
     }
     if (command.type === CommandType.StartTimer || command.type === CommandType.StopTimer) {
         return <TimerGroup groupId={groupId} command={command as any} updateCommand={updateCommand} project={project} t={t} />;
+    }
+    if (command.type === CommandType.SetTimeOfDay) {
+        return <SetTimeOfDayGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} t={t} />;
     }
     if (command.type === CommandType.HideText || command.type === CommandType.HideImage || command.type === CommandType.HideButton
         || command.type === CommandType.HideHotSpot) {
@@ -221,9 +317,9 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
     }
     if (command.type === CommandType.ShakeScreen || command.type === CommandType.TintScreen || command.type === CommandType.PanZoomScreen
         || command.type === CommandType.ResetScreenEffects || command.type === CommandType.FlashScreen || command.type === CommandType.Lightning
-        || command.type === CommandType.Flashlight || command.type === CommandType.Fireworks || command.type === CommandType.SetScreenOverlayEffect
+        || command.type === CommandType.Flashlight || command.type === CommandType.Spotlight || command.type === CommandType.Fireworks || command.type === CommandType.SetScreenOverlayEffect
         || command.type === CommandType.PlaceLights || command.type === CommandType.ClearLights
-        || command.type === CommandType.ShowScreen || command.type === CommandType.Label || command.type === CommandType.JumpToLabel) {
+        || command.type === CommandType.ShowScreen || command.type === CommandType.HideScreen || command.type === CommandType.Label || command.type === CommandType.JumpToLabel) {
         return <ScreenMiscGroup groupId={groupId} command={command} updateCommand={updateCommand} project={project} t={t} />;
     }
     if (command.type === CommandType.Jump) {
@@ -342,6 +438,7 @@ const DialogueGroup: React.FC<{ groupId: InspectorGroupId; cmd: DialogueCommand;
     if (groupId === 'content') {
         const characterOptions = [
             { value: '', label: t('shared.narrator') },
+            { value: PLAYER_CHARACTER_OPTION, label: PLAYER_CHARACTER_LABEL },
             ...Object.values(project.characters).map((c: any) => ({ value: c.id, label: c.name })),
         ];
         const audioOptions = [
@@ -354,8 +451,11 @@ const DialogueGroup: React.FC<{ groupId: InspectorGroupId; cmd: DialogueCommand;
         ];
         return <>
             <FormField label={t('shared.character')}>
-                <SearchableSelect options={characterOptions} value={cmd.characterId || ''} onChange={(v) => updateCommand({ characterId: v || null } as any)} placeholder={t('shared.selectCharacter')} />
+                <SearchableSelect options={characterOptions} value={characterSelectValue(cmd)} onChange={(v) => v === PLAYER_CHARACTER_OPTION
+                    ? updateCommand({ characterSource: 'player' } as any)
+                    : updateCommand({ characterSource: 'fixed', characterId: v || null } as any)} placeholder={t('shared.selectCharacter')} />
             </FormField>
+            {cmd.characterSource === 'player' && <p className="text-[11px] text-[var(--text-muted)] -mt-1">Speaks as the player-created character; the name box shows the player's chosen name.</p>}
             <FormField label={t('dialogue.text')}>
                 <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value } as any)} />
             </FormField>
@@ -376,6 +476,22 @@ const DialogueGroup: React.FC<{ groupId: InspectorGroupId; cmd: DialogueCommand;
                 <TextInput type="number" min="0" max="100" value={cmd.textSpeed ?? ''} placeholder={t('dialogue.textSpeedGlobal', 'Global default')}
                     onChange={e => { const n = parseInt(e.target.value, 10); updateCommand({ textSpeed: Number.isFinite(n) && n > 0 ? Math.min(n, 100) : undefined } as any); }} />
             </FormField>
+            <FormField label={t('dialogue.timeLimit', 'Time limit (seconds)')}>
+                <TextInput type="number" min="0" step="0.5" value={(cmd as any).timeLimit ?? ''} placeholder={t('dialogue.timeLimitNone', 'No limit')}
+                    onChange={e => { const n = parseFloat(e.target.value); updateCommand({ timeLimit: Number.isFinite(n) && n > 0 ? n : undefined } as any); }} />
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('dialogue.timeLimitHint', 'Countdown starts once the text finishes typing; when time runs out the story moves on automatically.')}</p>
+            </FormField>
+            {((cmd as any).timeLimit ?? 0) > 0 && <>
+                <label className="flex items-center gap-1.5 -mt-2 mb-2">
+                    <input type="checkbox" checked={!(cmd as any).timeLimitLocked} onChange={e => updateCommand({ timeLimitLocked: e.target.checked ? undefined : true } as any)} className="w-4 h-4" />
+                    <span className="text-xs text-[var(--text-secondary)]">{t('dialogue.timeLimitClickAhead', 'Players can still click ahead')}</span>
+                </label>
+                {(cmd as any).timeLimitLocked && <p className="text-[10px] text-amber-400/90 -mt-1 mb-2">{t('dialogue.timeLimitLockedHint', 'Locked: clicking only reveals the text — the line moves on ONLY when the timer runs out. A short limit can cut off a long voice clip.')}</p>}
+                <label className="flex items-center gap-1.5 mb-2">
+                    <input type="checkbox" checked={!!(cmd as any).showTimer} onChange={e => updateCommand({ showTimer: e.target.checked || undefined } as any)} className="w-4 h-4" />
+                    <span className="text-xs text-[var(--text-secondary)]">{t('dialogue.timeLimitShowBar', 'Show countdown bar')}</span>
+                </label>
+            </>}
         </>;
     }
     if (groupId === 'effects') {
@@ -775,20 +891,22 @@ const ShowCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowCharact
     const character = project.characters[cmd.characterId];
     switch (groupId) {
         case 'content': {
-            const characterOptions = Object.values(project.characters).map((c: any) => ({ value: c.id, label: c.name }));
+            const isPlayer = cmd.characterSource === 'player';
+            const characterOptions = withPlayerCharacterOption(Object.values(project.characters).map((c: any) => ({ value: c.id, label: c.name })));
             const expressionOptions = character ? Object.values(character.expressions).map((e: any) => ({ value: e.id, label: e.name })) : [];
             return <>
                 <FormField label={t('shared.character')}>
-                    <SearchableSelect options={characterOptions} value={cmd.characterId}
-                        onChange={value => { const nc = project.characters[value]; const fe = nc ? Object.keys(nc.expressions)[0] : ''; updateCommand({ characterId: value, expressionId: fe || '' } as any); }}
+                    <SearchableSelect options={characterOptions} value={characterSelectValue(cmd)}
+                        onChange={value => { if (value === PLAYER_CHARACTER_OPTION) { updateCommand({ characterSource: 'player' } as any); return; } const nc = project.characters[value]; const fe = nc ? Object.keys(nc.expressions)[0] : ''; updateCommand({ characterSource: 'fixed', characterId: value, expressionId: fe || '' } as any); }}
                         placeholder={Object.keys(project.characters).length === 0 ? t('shared.noCharacters') : t('shared.selectCharacter')} />
                 </FormField>
-                <FormField label={t('shared.expression')}>
+                {isPlayer && <p className="text-[11px] text-[var(--text-muted)] -mt-1">Shows the character the player created (set one up in <strong>Systems → Character Creator</strong>). Until a player character exists, a default character is shown here so you can preview. Expression falls back automatically.</p>}
+                {!isPlayer && <FormField label={t('shared.expression')}>
                     <SearchableSelect options={expressionOptions} value={cmd.expressionId}
                         onChange={value => updateCommand({ expressionId: value } as any)}
                         placeholder={(!character || Object.keys(character.expressions).length === 0) ? t('shared.noExpressions') : t('shared.selectExpression')} />
-                </FormField>
-                {character && Object.keys(character.layers).length > 0 && (() => {
+                </FormField>}
+                {!isPlayer && character && Object.keys(character.layers).length > 0 && (() => {
                     const ovValue = (layerId: string) => {
                         const ov = cmd.layerOverrides;
                         if (!ov || !Object.prototype.hasOwnProperty.call(ov, layerId)) return '__preset__';
@@ -1028,7 +1146,12 @@ const SetVariableGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
                 const newVar = project.variables[e.target.value];
                 let op = cmd.operator;
                 if (newVar?.type !== 'number' && (op === 'add' || op === 'subtract' || op === 'random')) op = 'set';
-                updateCommand({ variableId: e.target.value, operator: op } as any);
+                // Keep `value` concrete so a boolean Set never saves an empty value (read as the
+                // uninitialised default at runtime, not a real Yes/No choice).
+                let value = cmd.value;
+                if (newVar?.type === 'boolean' && typeof value !== 'boolean') value = true;
+                else if (newVar?.type !== 'boolean' && typeof value === 'boolean') value = '';
+                updateCommand({ variableId: e.target.value, operator: op, value } as any);
             }}>
                 {Object.keys(project.variables).length === 0 && <option disabled>{t('vars.noVariables')}</option>}
                 {Object.values(project.variables).map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -1050,7 +1173,7 @@ const SetVariableGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
         ) : (
             <FormField label={t('vars.value')}>
                 {variable?.type === 'boolean' ? (
-                    <Select value={String(cmd.value)} onChange={e => updateCommand({ value: e.target.value === 'true' } as any)}>
+                    <Select value={cmd.value === false ? 'false' : 'true'} onChange={e => updateCommand({ value: e.target.value === 'true' } as any)}>
                         <option value="true">{resolveBoolLabels(variable, t('vars.true'), t('vars.false')).yes}</option>
                         <option value="false">{resolveBoolLabels(variable, t('vars.true'), t('vars.false')).no}</option>
                     </Select>
@@ -1077,6 +1200,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
             return <>
                 <FormField label={t('screen.intensity', { value: cmd.intensity })}>
                     <RangeInput min="1" max="10" value={cmd.intensity} onChange={e => updateCommand({ intensity: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                    <VarFollowSelect value={cmd.intensityVariableId} onChange={id => updateCommand({ intensityVariableId: id } as any)} project={project} range="1–10" mode="run" />
                 </FormField>
                 <FormField label={t('screen.duration')}>
                     <label className="flex items-center gap-2 mb-2"><input type="checkbox" checked={persistent} onChange={e => updateCommand({ duration: e.target.checked ? 0 : 0.5 } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('screen.persistentShake')}</span></label>
@@ -1087,22 +1211,49 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
         }
         case CommandType.TintScreen:
             return <>
-                <FormField label={t('screen.tintColor')}><TextInput type="text" value={cmd.color} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
+                {/* Legacy commands may hold non-hex colors ('transparent', rgba) — keep a plain
+                    text input for those; hex values get the swatch picker. */}
+                <FormField label={t('screen.tintColor')}>
+                    {/^#/.test(cmd.color || '') || !cmd.color
+                        ? <ColorInput value={cmd.color || '#000000'} onChange={val => updateCommand({ color: val } as any)} />
+                        : <TextInput type="text" value={cmd.color} onChange={e => updateCommand({ color: e.target.value } as any)} />}
+                </FormField>
+                <FormField label={t('screen.tintOpacity', { value: cmd.opacity ?? 100, defaultValue: `Opacity (${cmd.opacity ?? 100}%)` })}>
+                    <RangeInput min="0" max="100" step="1" value={cmd.opacity ?? 100} onChange={e => updateCommand({ opacity: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                    <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('screen.tintOpacityHint', 'How strongly the tint covers the screen. 100% = the color as-is.')}</p>
+                    <VarFollowSelect value={cmd.opacityVariableId} onChange={id => updateCommand({ opacityVariableId: id } as any)} project={project} range="0–100" mode="live" />
+                </FormField>
                 <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 } as any)} /></FormField>
             </>;
         case CommandType.PanZoomScreen:
             return <>
-                <FormField label={t('screen.zoom', { value: cmd.zoom })}><RangeInput min="0.1" max="5" step="0.1" value={cmd.zoom} onChange={e => updateCommand({ zoom: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                <FormField label={t('screen.panX', { value: cmd.panX })}><RangeInput min="-100" max="100" value={cmd.panX} onChange={e => updateCommand({ panX: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                <FormField label={t('screen.panY', { value: cmd.panY })}><RangeInput min="-100" max="100" value={cmd.panY} onChange={e => updateCommand({ panY: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                <FormField label={t('screen.zoom', { value: cmd.zoom })}>
+                    <RangeInput min="0.1" max="5" step="0.1" value={cmd.zoom} onChange={e => updateCommand({ zoom: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                    <VarFollowSelect value={cmd.zoomVariableId} onChange={id => updateCommand({ zoomVariableId: id } as any)} project={project} range="0.1–5" mode="run" />
+                </FormField>
+                <FormField label={t('screen.panX', { value: cmd.panX })}>
+                    <RangeInput min="-100" max="100" value={cmd.panX} onChange={e => updateCommand({ panX: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                    <VarFollowSelect value={cmd.panXVariableId} onChange={id => updateCommand({ panXVariableId: id } as any)} project={project} range="-100–100" mode="run" />
+                </FormField>
+                <FormField label={t('screen.panY', { value: cmd.panY })}>
+                    <RangeInput min="-100" max="100" value={cmd.panY} onChange={e => updateCommand({ panY: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                    <VarFollowSelect value={cmd.panYVariableId} onChange={id => updateCommand({ panYVariableId: id } as any)} project={project} range="-100–100" mode="run" />
+                </FormField>
                 <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 } as any)} /></FormField>
             </>;
         case CommandType.ResetScreenEffects:
             return <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 } as any)} /></FormField>;
         case CommandType.FlashScreen:
             return <>
-                <FormField label={t('screen.flashColor')}><TextInput type="text" value={cmd.color} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
-                <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 } as any)} /></FormField>
+                <FormField label={t('screen.flashColor')}>
+                    {/^#/.test(cmd.color || '') || !cmd.color
+                        ? <ColorInput value={cmd.color || '#ffffff'} onChange={val => updateCommand({ color: val } as any)} />
+                        : <TextInput type="text" value={cmd.color} onChange={e => updateCommand({ color: e.target.value } as any)} />}
+                </FormField>
+                <FormField label={t('shared.durationSec')}>
+                    <TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 } as any)} />
+                    <VarFollowSelect value={cmd.durationVariableId} onChange={id => updateCommand({ durationVariableId: id } as any)} project={project} range="0.05–30 s" mode="run" />
+                </FormField>
             </>;
         case CommandType.Lightning: {
             const audioOpts = Object.values(project.audio || {}) as any[];
@@ -1110,6 +1261,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                 <FormField label={t('fx.flashColor')}><TextInput type="text" value={cmd.color ?? '#EAF2FF'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
                 <FormField label={t('fx.brightnessPct', { value: Math.round((cmd.intensity ?? 0.9) * 100) })}>
                     <RangeInput min="0.1" max="1" step="0.05" value={cmd.intensity ?? 0.9} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                    <VarFollowSelect value={cmd.intensityVariableId} onChange={id => updateCommand({ intensityVariableId: id } as any)} project={project} range="0–1" mode="run" />
                 </FormField>
                 <FormField label={t('shared.durationSec')}><TextInput type="number" min="0.1" step="0.1" value={cmd.duration ?? 0.7} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0.7 } as any)} /></FormField>
                 <FormField label={t('fx.flashes')}>
@@ -1161,10 +1313,19 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                         {fwColors.length === 0 && <p className="text-[11px] text-[var(--text-secondary)]">{t('fx.festiveMixNote')}</p>}
                     </div>
                 </FormField>
-                <FormField label={t('fx.bursts')}><TextInput type="number" min="1" max="20" value={cmd.bursts ?? 3} onChange={e => updateCommand({ bursts: Math.max(1, parseInt(e.target.value, 10) || 3) } as any)} /></FormField>
-                <FormField label={t('fx.burstHeightPct', { value: Math.round((cmd.burstHeight ?? 0.7) * 100) })}><RangeInput min="0.1" max="1" step="0.05" value={cmd.burstHeight ?? 0.7} onChange={e => updateCommand({ burstHeight: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                <FormField label={t('fx.bursts')}>
+                    <TextInput type="number" min="1" max="20" value={cmd.bursts ?? 3} onChange={e => updateCommand({ bursts: Math.max(1, parseInt(e.target.value, 10) || 3) } as any)} />
+                    <VarFollowSelect value={cmd.burstsVariableId} onChange={id => updateCommand({ burstsVariableId: id } as any)} project={project} range="1–20" mode="run" />
+                </FormField>
+                <FormField label={t('fx.burstHeightPct', { value: Math.round((cmd.burstHeight ?? 0.7) * 100) })}>
+                    <RangeInput min="0.1" max="1" step="0.05" value={cmd.burstHeight ?? 0.7} onChange={e => updateCommand({ burstHeight: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                    <VarFollowSelect value={cmd.burstHeightVariableId} onChange={id => updateCommand({ burstHeightVariableId: id } as any)} project={project} range="0–1" mode="run" />
+                </FormField>
                 <FormField label={t('shared.durationSec')}><TextInput type="number" min="0.5" step="0.1" value={cmd.duration ?? 2.5} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 2.5 } as any)} /></FormField>
-                <FormField label={t('fx.brightnessPct', { value: Math.round((cmd.intensity ?? 1) * 100) })}><RangeInput min="0.2" max="1" step="0.05" value={cmd.intensity ?? 1} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                <FormField label={t('fx.brightnessPct', { value: Math.round((cmd.intensity ?? 1) * 100) })}>
+                    <RangeInput min="0.2" max="1" step="0.05" value={cmd.intensity ?? 1} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                    <VarFollowSelect value={cmd.intensityVariableId} onChange={id => updateCommand({ intensityVariableId: id } as any)} project={project} range="0–1" mode="run" />
+                </FormField>
                 <FormField label={t('fx.boomSfx')}>
                     <Select value={cmd.sfxId || ''} onChange={e => updateCommand({ sfxId: e.target.value || null } as any)}>
                         <option value="">{t('fx.none')}</option>
@@ -1202,6 +1363,9 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                     <button onClick={() => addLight('christmas')} className={btnCls}>{t('lights.addChristmas')}</button>
                 </div>
                 <p className="text-xs text-[var(--text-secondary)]">{t('lights.placeHint')}</p>
+                <FormField label={t('lights.brightnessFollow', 'Brightness of all lights')}>
+                    <VarFollowSelect value={cmd.brightnessVariableId} onChange={id => updateCommand({ brightnessVariableId: id } as any)} project={project} range="0–2 (1 = as set)" mode="live" />
+                </FormField>
                 {lights.length === 0 && <p className="text-xs text-[var(--text-secondary)] italic mt-1">{t('lights.none')}</p>}
                 {lights.map((l, i) => (
                     <div key={l.id} className="border border-[var(--border-subtle)] rounded p-2 my-1 space-y-1">
@@ -1238,9 +1402,15 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                     </Select>
                 </FormField>
                 {cmd.enabled && <>
-                    <FormField label={t('fx.lightRadiusPct', { value: cmd.radius ?? 22 })}><RangeInput min="8" max="60" value={cmd.radius ?? 22} onChange={e => updateCommand({ radius: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={t('fx.lightRadiusPct', { value: cmd.radius ?? 22 })}>
+                        <RangeInput min="8" max="60" value={cmd.radius ?? 22} onChange={e => updateCommand({ radius: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                        <VarFollowSelect value={cmd.radiusVariableId} onChange={id => updateCommand({ radiusVariableId: id } as any)} project={project} range="1–100" mode="live" />
+                    </FormField>
                     <FormField label={t('fx.edgeSoftnessPct', { value: Math.round((cmd.softness ?? 0.6) * 100) })}><RangeInput min="0" max="1" step="0.05" value={cmd.softness ?? 0.6} onChange={e => updateCommand({ softness: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                    <FormField label={t('fx.darknessPct', { value: Math.round((cmd.darkness ?? 0.85) * 100) })}><RangeInput min="0.2" max="1" step="0.05" value={cmd.darkness ?? 0.85} onChange={e => updateCommand({ darkness: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={t('fx.darknessPct', { value: Math.round((cmd.darkness ?? 0.85) * 100) })}>
+                        <RangeInput min="0.2" max="1" step="0.05" value={cmd.darkness ?? 0.85} onChange={e => updateCommand({ darkness: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                        <VarFollowSelect value={cmd.darknessVariableId} onChange={id => updateCommand({ darknessVariableId: id } as any)} project={project} range="0–1" mode="live" />
+                    </FormField>
                     <FormField label={t('fx.darkColor')}><TextInput type="text" value={cmd.color ?? '#000000'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
                     <FormField label={t('fx.playerToggleKey')}><TextInput type="text" value={cmd.toggleKey ?? ''} onChange={e => updateCommand({ toggleKey: e.target.value || undefined } as any)} placeholder="e.g. f" maxLength={1} /></FormField>
                     <FormField label={t('fx.soundOnToggle')}>
@@ -1252,6 +1422,38 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                     <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.affectsDialogue !== false} onChange={e => updateCommand({ affectsDialogue: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.dimDialogueToo')}</span></label>
                     <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.darkWhenOff === true} onChange={e => updateCommand({ darkWhenOff: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.keepDarkWhenOff')}</span></label>
                     <p className="text-xs text-[var(--text-secondary)]">{t('fx.flashlightHint')}</p>
+                </>}
+            </>;
+        }
+        case CommandType.Spotlight: {
+            const audioOpts = Object.values(project.audio || {}) as any[];
+            return <>
+                <FormField label={t('fx.spotlight', 'Spotlight')}>
+                    <Select value={cmd.enabled ? 'on' : 'off'} onChange={e => updateCommand({ enabled: e.target.value === 'on' } as any)}>
+                        <option value="on">{t('fx.turnOn')}</option>
+                        <option value="off">{t('fx.turnOff')}</option>
+                    </Select>
+                </FormField>
+                {cmd.enabled && <>
+                    <FormField label={t('fx.spotlightName', 'Spotlight name (use different names for multiple beams)')}><TextInput type="text" value={cmd.spotlightId ?? 'main'} onChange={e => updateCommand({ spotlightId: e.target.value || 'main' } as any)} placeholder="main" /></FormField>
+                    <SpotlightPlacementField cmd={cmd} updateCommand={updateCommand} project={project} t={t} />
+                    <FormField label={`${t('fx.beamWidth', 'Beam width (far end)')} (${cmd.beamWidth ?? 45}%)`}><RangeInput min="5" max="100" value={cmd.beamWidth ?? 45} onChange={e => updateCommand({ beamWidth: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={`${t('fx.beamSourceWidth', 'Source width')} (${cmd.sourceWidth ?? 8}%)`}><RangeInput min="0" max="60" value={cmd.sourceWidth ?? 8} onChange={e => updateCommand({ sourceWidth: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={`${t('fx.beamHeight', 'Beam length / reach')} (${cmd.height ?? 100}%)`}><RangeInput min="10" max="200" value={cmd.height ?? 100} onChange={e => updateCommand({ height: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={`${t('fx.beamFalloff', 'Edge softness')} (${Math.round((cmd.falloff ?? 0.5) * 100)}%)`}><RangeInput min="0" max="1" step="0.05" value={cmd.falloff ?? 0.5} onChange={e => updateCommand({ falloff: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={`${t('fx.darknessOutsideBeam', 'Darkness outside the beam')} (${Math.round((cmd.intensity ?? 0.85) * 100)}%)`}><RangeInput min="0.2" max="1" step="0.05" value={cmd.intensity ?? 0.85} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={t('fx.beamColor', 'Beam color')}><TextInput type="text" value={cmd.color ?? '#fff3d6'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
+                    <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.followMouse !== false} onChange={e => updateCommand({ followMouse: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.spotlightSwivel', 'Swivel the beam toward the mouse')}</span></label>
+                    {cmd.followMouse !== false && <FormField label={`${t('fx.spotlightSwivelMax', 'Max swivel')} (${cmd.swivelMax ?? 30}°)`}><RangeInput min="0" max="80" value={cmd.swivelMax ?? 30} onChange={e => updateCommand({ swivelMax: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>}
+                    <FormField label={t('fx.playerToggleKey')}><TextInput type="text" value={cmd.toggleKey ?? ''} onChange={e => updateCommand({ toggleKey: e.target.value || undefined } as any)} placeholder="e.g. f" maxLength={1} /></FormField>
+                    <FormField label={t('fx.soundOnToggle')}>
+                        <Select value={cmd.sfxId || ''} onChange={e => updateCommand({ sfxId: e.target.value || null } as any)}>
+                            <option value="">{t('fx.none')}</option>
+                            {audioOpts.map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+                        </Select>
+                    </FormField>
+                    <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.affectsDialogue !== false} onChange={e => updateCommand({ affectsDialogue: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.dimDialogueToo')}</span></label>
+                    <p className="text-xs text-[var(--text-secondary)]">{t('fx.spotlightHint', 'The screen dims except a beam of light. Turn on “Swivel” and it aims toward the mouse; set a toggle key so players can switch it on/off.')}</p>
                 </>}
             </>;
         }
@@ -1283,6 +1485,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                 </FormField>
                 <FormField label={t('screen.intensityPct', { value: Math.round(intensity * 100) })}>
                     <RangeInput min="0" max="1" step="0.01" value={intensity} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                    <VarFollowSelect value={cmd.intensityVariableId} onChange={id => updateCommand({ intensityVariableId: id } as any)} project={project} range="0–1" mode="live" />
                 </FormField>
                 {supportsColor && (
                     <FormField label={t('screen.color')}>
@@ -1316,6 +1519,14 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
             return <FormField label={t('screen.uiScreen')}>
                 <Select value={cmd.screenId} onChange={e => updateCommand({ screenId: e.target.value } as any)}>
                     {Object.keys(project.uiScreens).length === 0 && <option disabled>{t('screen.noUIScreens')}</option>}
+                    {Object.values(project.uiScreens).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+            </FormField>;
+        case CommandType.HideScreen:
+            return <FormField label={t('screen.hideWhich', 'Screen to hide')}>
+                <Select value={cmd.all ? '__all__' : (cmd.screenId || '')} onChange={e => { const v = e.target.value; if (v === '__all__') updateCommand({ all: true, screenId: '' } as any); else updateCommand({ all: false, screenId: v } as any); }}>
+                    <option value="">{t('screen.hideTopmost', 'The most recent screen')}</option>
+                    <option value="__all__">{t('screen.hideAll', 'All open screens')}</option>
                     {Object.values(project.uiScreens).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </Select>
             </FormField>;
@@ -1409,6 +1620,38 @@ export const PhonePortraitPicker: React.FC<{ senderId: VNID | 'player'; value?: 
     );
 };
 
+/** Resolve a picked asset id to a phone media ref — video when it lives in videos OR is a
+ *  video uploaded under images/backgrounds (the asset-collection-siloing rule). */
+export const phoneMediaRef = (project: VNProject, id: VNID | null): { type: 'image' | 'video'; id: VNID } | null => {
+    if (!id) return null;
+    const isVid = !!(project.videos as any)?.[id] || !!((project.images as any)?.[id]?.videoUrl) || !!((project.backgrounds as any)?.[id]?.videoUrl);
+    return { type: isVid ? 'video' : 'image', id };
+};
+
+/** Declutter helpers — one-line summaries for collapsed sections so the header still tells the
+ *  story ("Mia: 'Hey, are you up?…' 🎙 ↩2") without expanding anything. */
+const truncPreview = (s: string | undefined, n = 34): string => {
+    const v = (s || '').trim();
+    return v.length > n ? `${v.slice(0, n - 1)}…` : v;
+};
+const phoneSpeakerName = (project: VNProject, id: VNID | 'player', t: any): string =>
+    id === 'player' ? t('phoneCmd.player', 'Player (you)') : ((project.characters as any)?.[id]?.name || '?');
+const phoneLineBadges = (line: any): string => {
+    const b: string[] = [];
+    if (line.voiceAudioId) b.push('🎙');
+    if (line.image) b.push('📷');
+    if (line.conditions?.length) b.push('⚑');
+    if (line.replies?.length) b.push(`↩${line.replies.length}`);
+    return b.length ? ` ${b.join(' ')}` : '';
+};
+const phonePortraitSummary = (cmd: any, t: any): string => {
+    const bits: string[] = [];
+    if (cmd.image) bits.push(t('phoneCmd.sumPhoto', 'photo attached'));
+    const m = cmd.portrait?.mode;
+    if (m === 'expression' || m === 'custom') bits.push(t('phoneCmd.sumPortrait', 'custom portrait'));
+    return bits.length ? bits.join(' · ') : t('phoneCmd.sumNone', 'none');
+};
+
 const ShowPhoneTextGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowPhoneTextCommand; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
     if (groupId !== 'content') return null;
     const senderOptions = [
@@ -1424,30 +1667,35 @@ const ShowPhoneTextGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowPhoneTe
             <SearchableSelect options={senderOptions} value={cmd.senderId} onChange={(v) => updateCommand({ senderId: v } as any)} />
         </FormField>
         <FormField label={t('phoneCmd.message', 'Message')}>
-            <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value } as any)} />
+            <TextArea rows={5} value={cmd.text} onChange={e => updateCommand({ text: e.target.value } as any)} />
         </FormField>
-        <PhonePortraitPicker senderId={cmd.senderId} value={cmd.portrait} onChange={(p) => updateCommand({ portrait: p } as any)} project={project} t={t} />
-        <div className="mt-1">
-            <div className="flex items-center justify-between mb-0.5">
-                <span className="text-xs font-semibold text-[var(--text-secondary)]">{t('phoneCmd.replies', 'Reply options (optional)')}</span>
-                <button onClick={addChoice} className="p-1 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]" title={t('phoneCmd.addReply', 'Add reply')}><PlusIcon className="w-3 h-3" /></button>
-            </div>
-            <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('phoneCmd.repliesHint', 'If set, the player taps a reply in the phone; its actions run and the scene continues. Leave empty for a one-way message.')}</p>
-            {choices.map((c, i) => (
-                <div key={c.id} className="border border-[var(--border-subtle)] rounded p-1.5 mb-1 space-y-1">
-                    <div className="flex gap-1 items-center">
-                        <TextInput value={c.text} onChange={e => updateChoice(i, { text: e.target.value })} />
-                        <button onClick={() => removeChoice(i)} className="p-1 text-red-400 hover:text-red-300" title={t('phoneCmd.removeReply', 'Remove')}><TrashIcon className="w-3 h-3" /></button>
+        <div className="space-y-1.5">
+            <CollapsibleSection title={t('phoneCmd.photoPortrait', 'Photo & portrait')} summary={phonePortraitSummary(cmd, t)}>
+                <PhonePortraitPicker senderId={cmd.senderId} value={cmd.portrait} onChange={(p) => updateCommand({ portrait: p } as any)} project={project} t={t} />
+                <AssetSelector label={t('phoneCmd.attachPhoto', 'Attach photo / video (optional)')} assetType="images" allowVideo value={cmd.image?.id || null} onChange={id => updateCommand({ image: phoneMediaRef(project, id) } as any)} />
+                {cmd.image && <p className="text-[10px] text-[var(--text-muted)] mt-1">{t('phoneCmd.attachHint', 'Shows in the bubble (tap = fullscreen) and saves into the phone Gallery. Message text is optional.')}</p>}
+            </CollapsibleSection>
+            <CollapsibleSection title={t('phoneCmd.repliesShort', 'Replies')} badge={String(choices.length)}
+                summary={choices[0] ? `"${truncPreview(choices[0].text)}"` : t('phoneCmd.sumNone', 'none')}
+                hint={choices.length === 0 ? t('phoneCmd.repliesHint', 'If set, the player taps a reply in the phone; its actions run and the scene continues. Leave empty for a one-way message.') : undefined}
+                action={<button onClick={addChoice} className="p-1 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]" title={t('phoneCmd.addReply', 'Add reply')}><PlusIcon className="w-3 h-3" /></button>}>
+                <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('phoneCmd.repliesHint', 'If set, the player taps a reply in the phone; its actions run and the scene continues. Leave empty for a one-way message.')}</p>
+                {choices.map((c, i) => (
+                    <div key={c.id} className="border border-[var(--border-subtle)] rounded p-1.5 mb-1 space-y-1">
+                        <div className="flex gap-1 items-center">
+                            <div className="flex-1 min-w-0"><TextInput value={c.text} onChange={e => updateChoice(i, { text: e.target.value })} /></div>
+                            <button onClick={() => removeChoice(i)} className="p-1 text-red-400 hover:text-red-300 flex-shrink-0" title={t('phoneCmd.removeReply', 'Remove')}><TrashIcon className="w-3 h-3" /></button>
+                        </div>
+                        <UIActionsListEditor actions={c.actions || []} project={project} onChange={(acts) => updateChoice(i, { actions: acts })} label={t('phoneCmd.replyActions', 'Reply actions')} />
                     </div>
-                    <UIActionsListEditor actions={c.actions || []} project={project} onChange={(acts) => updateChoice(i, { actions: acts })} label={t('phoneCmd.replyActions', 'Reply actions')} />
-                </div>
-            ))}
+                ))}
+            </CollapsibleSection>
         </div>
     </>;
 };
 
 /** Helper: sender/caller dropdown options (Player + all characters). */
-const phoneSenderOptions = (project: VNProject, t: any) => [
+export const phoneSenderOptions = (project: VNProject, t: any) => [
     { value: 'player', label: t('phoneCmd.player', 'Player (you)') },
     ...Object.values(project.characters).map((c: any) => ({ value: c.id, label: c.name })),
 ];
@@ -1466,113 +1714,303 @@ const PhoneIncomingTextGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; up
             <SearchableSelect options={phoneSenderOptions(project, t)} value={cmd.senderId} onChange={v => updateCommand({ senderId: v } as any)} />
         </FormField>
         <FormField label={t('phoneCmd.message', 'Message')}>
-            <TextArea value={cmd.text || ''} onChange={e => updateCommand({ text: e.target.value } as any)} />
+            <TextArea rows={5} value={cmd.text || ''} onChange={e => updateCommand({ text: e.target.value } as any)} />
         </FormField>
-        <PhonePortraitPicker senderId={cmd.senderId} value={cmd.portrait} onChange={p => updateCommand({ portrait: p } as any)} project={project} t={t} />
-        <FormField label={t('phoneCmd.presentation', 'How it arrives')}>
-            <Select value={cmd.presentation || 'notify'} onChange={e => updateCommand({ presentation: e.target.value } as any)}>
-                <option value="notify">{t('phoneCmd.presentNotify', 'Banner + ding (keep playing)')}</option>
-                <option value="open">{t('phoneCmd.presentOpen', 'Open the phone to it')}</option>
-            </Select>
-        </FormField>
-        {cmd.presentation === 'open' && (
-            <FormField label={t('phoneCmd.typingMs', 'Typing time before it lands (ms)')}>
-                <TextInput type="number" min={0} value={cmd.typingMs ?? 0} onChange={e => updateCommand({ typingMs: Math.max(0, parseInt(e.target.value) || 0) } as any)} />
-                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('phoneCmd.typingMsHint', '0 = appears instantly. Otherwise the sender shows “…” for this long, then the message arrives.')}</p>
-            </FormField>
-        )}
-        <FormField label={t('phoneCmd.ding', 'Notification sound')}>
-            <AssetSelector label="" assetType="audio" value={cmd.soundId || null} onChange={id => updateCommand({ soundId: id } as any)} />
-        </FormField>
-        <label className="flex items-center gap-1 mt-1">
-            <input type="checkbox" checked={cmd.showBadge !== false} onChange={e => updateCommand({ showBadge: e.target.checked } as any)} className="w-4 h-4" />
-            <span className="text-xs text-[var(--text-secondary)]">{t('phoneCmd.showBadge', 'Show a notification badge')}</span>
-        </label>
-        <div className="mt-2">
-            <div className="flex items-center justify-between mb-0.5">
-                <span className="text-xs font-semibold text-[var(--text-secondary)]">{t('phoneCmd.replies', 'Reply options (optional)')}</span>
-                <button onClick={addReply} className="p-1 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]" title={t('phoneCmd.addReply', 'Add reply')}><PlusIcon className="w-3 h-3" /></button>
-            </div>
-            {replies.map((r: any, i: number) => (
-                <div key={r.id} className="border border-[var(--border-subtle)] rounded p-1.5 mb-1 space-y-1">
-                    <div className="flex gap-1 items-center">
-                        <TextInput value={r.text} onChange={e => updateReply(i, { text: e.target.value })} />
-                        <button onClick={() => removeReply(i)} className="p-1 text-red-400 hover:text-red-300" title={t('phoneCmd.removeReply', 'Remove')}><TrashIcon className="w-3 h-3" /></button>
-                    </div>
-                    <PhoneFollowUpsEditor followUps={r.followUps || []} onChange={fu => updateReply(i, { followUps: fu })} project={project} t={t} />
-                    <UIActionsListEditor actions={r.actions || []} project={project} onChange={acts => updateReply(i, { actions: acts })} label={t('phoneCmd.replyActions', 'Reply actions')} />
+        <div className="space-y-1.5">
+            <CollapsibleSection title={t('phoneCmd.photoPortrait', 'Photo & portrait')} summary={phonePortraitSummary(cmd, t)}>
+                <PhonePortraitPicker senderId={cmd.senderId} value={cmd.portrait} onChange={p => updateCommand({ portrait: p } as any)} project={project} t={t} />
+                <AssetSelector label={t('phoneCmd.attachPhoto', 'Attach photo / video (optional)')} assetType="images" allowVideo value={cmd.image?.id || null} onChange={id => updateCommand({ image: phoneMediaRef(project, id) } as any)} />
+                {cmd.image && <p className="text-[10px] text-[var(--text-muted)] mt-1">{t('phoneCmd.attachHint', 'Shows in the bubble (tap = fullscreen) and saves into the phone Gallery. Message text is optional.')}</p>}
+            </CollapsibleSection>
+            <CollapsibleSection title={t('phoneCmd.deliverySound', 'Delivery & sound')}
+                summary={`${cmd.presentation === 'open' ? t('phoneCmd.sumOpens', 'opens the phone') : t('phoneCmd.sumBanner', 'banner + ding')}${cmd.soundId ? ` · ${t('phoneCmd.sumSound', 'sound')}` : ''}`}>
+                <FormField label={t('phoneCmd.presentation', 'How it arrives')}>
+                    <Select value={cmd.presentation || 'notify'} onChange={e => updateCommand({ presentation: e.target.value } as any)}>
+                        <option value="notify">{t('phoneCmd.presentNotify', 'Banner + ding (keep playing)')}</option>
+                        <option value="open">{t('phoneCmd.presentOpen', 'Open the phone to it')}</option>
+                    </Select>
+                </FormField>
+                {cmd.presentation === 'open' && (
+                    <FormField label={t('phoneCmd.typingMs', 'Typing time before it lands (ms)')}>
+                        <TextInput type="number" min={0} value={cmd.typingMs ?? 0} onChange={e => updateCommand({ typingMs: Math.max(0, parseInt(e.target.value) || 0) } as any)} />
+                        <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('phoneCmd.typingMsHint', '0 = appears instantly. Otherwise the sender shows “…” for this long, then the message arrives.')}</p>
+                    </FormField>
+                )}
+                <FormField label={t('phoneCmd.ding', 'Notification sound')}>
+                    <AssetSelector label="" assetType="audio" value={cmd.soundId || null} onChange={id => updateCommand({ soundId: id } as any)} />
+                </FormField>
+                <label className="flex items-center gap-1 mt-1">
+                    <input type="checkbox" checked={cmd.showBadge !== false} onChange={e => updateCommand({ showBadge: e.target.checked } as any)} className="w-4 h-4" />
+                    <span className="text-xs text-[var(--text-secondary)]">{t('phoneCmd.showBadge', 'Show a notification badge')}</span>
+                </label>
+            </CollapsibleSection>
+            <CollapsibleSection title={t('phoneCmd.repliesShort', 'Replies')} badge={String(replies.length)}
+                summary={replies[0] ? `"${truncPreview(replies[0].text)}"` : t('phoneCmd.sumNone', 'none')}
+                action={<button onClick={addReply} className="p-1 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]" title={t('phoneCmd.addReply', 'Add reply')}><PlusIcon className="w-3 h-3" /></button>}>
+                <div className="space-y-1">
+                    {replies.length === 0 && <p className="text-[10px] text-[var(--text-muted)]">{t('phoneCmd.repliesHint2', 'The player taps a reply in the phone; the sender can text back and actions can run.')}</p>}
+                    {replies.map((r: any, i: number) => (
+                        <CollapsibleSection key={r.id} title={`${t('phoneCmd.reply', 'Reply')} ${i + 1}`}
+                            summary={`"${truncPreview(r.text)}"${r.followUps?.length ? ` · ${r.followUps.length} ${t('phoneCmd.sumFollowUps', 'follow-ups')}` : ''}`}
+                            defaultOpen={!r.text || r.text === 'Reply'}
+                            action={<button onClick={() => removeReply(i)} className="p-1 text-red-400 hover:text-red-300" title={t('phoneCmd.removeReply', 'Remove')}><TrashIcon className="w-3 h-3" /></button>}>
+                            <div className="space-y-1">
+                                <TextInput value={r.text} onChange={e => updateReply(i, { text: e.target.value })} />
+                                <PhoneFollowUpsEditor followUps={r.followUps || []} onChange={fu => updateReply(i, { followUps: fu })} project={project} t={t} />
+                                <UIActionsListEditor actions={r.actions || []} project={project} onChange={acts => updateReply(i, { actions: acts })} label={t('phoneCmd.replyActions', 'Reply actions')} />
+                            </div>
+                        </CollapsibleSection>
+                    ))}
                 </div>
-            ))}
+            </CollapsibleSection>
         </div>
     </>;
 };
 
 /** Inline editor for the sender's follow-up messages (the character texting back, in sequence). */
-const PhoneFollowUpsEditor: React.FC<{ followUps: any[]; onChange: (fu: any[]) => void; project: VNProject; t: any }> = ({ followUps, onChange, project, t }) => {
+export const PhoneFollowUpsEditor: React.FC<{ followUps: any[]; onChange: (fu: any[]) => void; project: VNProject; t: any; showVoice?: boolean }> = ({ followUps, onChange, project, t, showVoice }) => {
     const update = (i: number, patch: any) => onChange(followUps.map((f, idx) => idx === i ? { ...f, ...patch } : f));
     const add = () => onChange([...followUps, { senderId: Object.keys(project.characters)[0] || 'player', text: '', delayMs: 900 }]);
     const remove = (i: number) => onChange(followUps.filter((_, idx) => idx !== i));
     return (
-        <div className="pl-1 border-l-2 border-[var(--border-subtle)]">
-            <div className="flex items-center justify-between mb-0.5">
-                <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">{t('phoneCmd.followUps', 'Sender replies with…')}</span>
-                <button onClick={add} className="p-0.5 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]" title={t('phoneCmd.addFollowUp', 'Add message')}><PlusIcon className="w-3 h-3" /></button>
-            </div>
+        <CollapsibleSection title={t('phoneCmd.followUps', 'Sender replies with…')} badge={String(followUps.length)}
+            summary={followUps[0] ? `"${truncPreview(followUps[0].text)}"` : t('phoneCmd.sumNone', 'none')}
+            defaultOpen={followUps.length > 0 && !followUps[followUps.length - 1].text}
+            action={<button onClick={add} className="p-0.5 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]" title={t('phoneCmd.addFollowUp', 'Add message')}><PlusIcon className="w-3 h-3" /></button>}>
             {followUps.map((f, i) => (
                 <div key={i} className="mb-1.5">
                     <div className="flex gap-1 items-center">
-                        <select className="bg-[var(--bg-secondary)] text-[var(--text-primary)] text-xs rounded px-1 py-0.5 border border-[var(--border-subtle)] max-w-[6rem]" value={f.senderId} onChange={e => update(i, { senderId: e.target.value })}>
+                        <select className="bg-[var(--bg-secondary)] text-[var(--text-primary)] text-xs rounded px-1 py-0.5 border border-[var(--border-subtle)] max-w-[6rem] flex-shrink-0" value={f.senderId} onChange={e => update(i, { senderId: e.target.value })}>
                             {phoneSenderOptions(project, t).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
-                        <TextInput value={f.text} onChange={e => update(i, { text: e.target.value })} />
-                        <button onClick={() => remove(i)} className="p-1 text-red-400 hover:text-red-300" title={t('phoneCmd.removeFollowUp', 'Remove')}><TrashIcon className="w-3 h-3" /></button>
+                        <div className="flex-1 min-w-0"><TextInput value={f.text} onChange={e => update(i, { text: e.target.value })} /></div>
+                        <button onClick={() => remove(i)} className="p-1 text-red-400 hover:text-red-300 flex-shrink-0" title={t('phoneCmd.removeFollowUp', 'Remove')}><TrashIcon className="w-3 h-3" /></button>
                     </div>
                     <label className="flex items-center gap-1 mt-0.5 text-[10px] text-[var(--text-muted)]">
                         {t('phoneCmd.typingDelay', 'Typing “…” before it (ms)')}
                         <input type="number" min={0} className="bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded px-1 py-0.5 border border-[var(--border-subtle)] w-20" value={f.delayMs ?? 900} onChange={e => update(i, { delayMs: Math.max(0, parseInt(e.target.value) || 0) })} />
                     </label>
+                    {showVoice && (
+                        <div className="mt-0.5">
+                            <AssetSelector label={t('phoneCmd.voiceClip', 'Voice clip')} assetType="audio" value={f.voiceAudioId || null} onChange={id => update(i, { voiceAudioId: id })} />
+                        </div>
+                    )}
+                    {!showVoice && (
+                        <div className="mt-0.5">
+                            <AssetSelector label={t('phoneCmd.attachPhoto2', 'Attach photo / video')} assetType="images" allowVideo value={f.image?.id || null} onChange={id => update(i, { image: phoneMediaRef(project, id) })} />
+                        </div>
+                    )}
                 </div>
             ))}
-        </div>
+        </CollapsibleSection>
     );
 };
 
 /** Editor for an Incoming Call — caller, portrait, modal/non-blocking, ringtone, timeout behavior,
  *  and accept/decline/timeout action lists. */
 const PhoneIncomingCallGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
+    const [studioOpen, setStudioOpen] = (React as any).useState(false);
     if (groupId !== 'content') return null;
     return <>
         <FormField label={t('phoneCmd.caller', 'Caller')}>
             <SearchableSelect options={phoneSenderOptions(project, t)} value={cmd.callerId} onChange={v => updateCommand({ callerId: v } as any)} />
         </FormField>
-        <PhonePortraitPicker senderId={cmd.callerId} value={cmd.portrait} onChange={p => updateCommand({ portrait: p } as any)} project={project} t={t} />
         <FormField label={t('phoneCmd.callMode', 'Ring style')}>
             <Select value={cmd.mode || 'modal'} onChange={e => updateCommand({ mode: e.target.value } as any)}>
                 <option value="modal">{t('phoneCmd.callModal', 'Full screen — accept / decline (pauses)')}</option>
                 <option value="nonblocking">{t('phoneCmd.callNonblocking', 'Corner — ring while the scene plays')}</option>
             </Select>
         </FormField>
-        <FormField label={t('phoneCmd.ringtone', 'Ringtone')}>
-            <AssetSelector label="" assetType="audio" value={cmd.ringtoneId || null} onChange={id => updateCommand({ ringtoneId: id } as any)} />
+        <div className="space-y-1.5">
+            {cmd.callerId !== 'player' && (
+                <CollapsibleSection title={t('phoneCmd.callerPortrait', 'Caller portrait')}
+                    summary={(cmd.portrait?.mode === 'expression' || cmd.portrait?.mode === 'custom') ? t('phoneCmd.sumPortrait', 'custom portrait') : t('phoneCmd.sumBaseSprite', 'base sprite')}>
+                    <PhonePortraitPicker senderId={cmd.callerId} value={cmd.portrait} onChange={p => updateCommand({ portrait: p } as any)} project={project} t={t} />
+                </CollapsibleSection>
+            )}
+            <CollapsibleSection title={t('phoneCmd.ringTiming', 'Ringtone & timing')}
+                summary={`${cmd.ringtoneId ? t('phoneCmd.sumCustomRing', 'custom ringtone') : t('phoneCmd.sumDefaultRing', 'default ringtone')} · ${cmd.ringDurationMs ?? 12000}ms`}>
+                <FormField label={t('phoneCmd.ringtone', 'Ringtone')}>
+                    <AssetSelector label="" assetType="audio" value={cmd.ringtoneId || null} onChange={id => updateCommand({ ringtoneId: id } as any)} />
+                </FormField>
+                <FormField label={t('phoneCmd.ringDuration', 'Ring time before timeout (ms)')}>
+                    <TextInput type="number" value={cmd.ringDurationMs ?? 12000} onChange={e => updateCommand({ ringDurationMs: parseInt(e.target.value) || 0 } as any)} />
+                </FormField>
+                <FormField label={t('phoneCmd.onTimeout', 'If unanswered')}>
+                    <Select value={cmd.onTimeout || 'missed'} onChange={e => updateCommand({ onTimeout: e.target.value } as any)}>
+                        <option value="missed">{t('phoneCmd.timeoutMissed', 'Mark as missed (continue)')}</option>
+                        <option value="runActions">{t('phoneCmd.timeoutActions', 'Run “missed call” actions')}</option>
+                    </Select>
+                </FormField>
+                {cmd.onTimeout === 'runActions' && (
+                    <UIActionsListEditor actions={cmd.timeoutActions || []} project={project} onChange={acts => updateCommand({ timeoutActions: acts } as any)} label={t('phoneCmd.timeoutActionsLabel', 'Missed-call actions')} />
+                )}
+                <label className="flex items-center gap-1 mt-1">
+                    <input type="checkbox" checked={cmd.showBadge !== false} onChange={e => updateCommand({ showBadge: e.target.checked } as any)} className="w-4 h-4" />
+                    <span className="text-xs text-[var(--text-secondary)]">{t('phoneCmd.showBadgeMissed', 'Badge on missed call')}</span>
+                </label>
+            </CollapsibleSection>
+            <CollapsibleSection title={t('phoneCmd.acceptDecline', 'Accept / decline actions')}
+                summary={`${(cmd.acceptActions || []).length + (cmd.declineActions || []).length} ${t('phoneCmd.sumActions', 'actions')}`}>
+                <UIActionsListEditor actions={cmd.acceptActions || []} project={project} onChange={acts => updateCommand({ acceptActions: acts } as any)} label={t('phoneCmd.acceptActions', 'When accepted')} />
+                <UIActionsListEditor actions={cmd.declineActions || []} project={project} onChange={acts => updateCommand({ declineActions: acts } as any)} label={t('phoneCmd.declineActions', 'When declined')} />
+            </CollapsibleSection>
+            <CollapsibleSection title={t('phoneCmd.callConversation', 'In-call conversation (optional)')} badge={String(cmd.conversation?.lines?.length || 0)}
+                summary={cmd.conversation?.lines?.length ? `${cmd.conversation.lines.length} ${t('phoneCmd.sumLines', 'lines')}` : t('phoneCmd.sumNone', 'none')}
+                hint={t('phoneCmd.callConversationHint', "Answering plays these lines on the call screen — voiced, with tappable replies. Leave empty for the classic behavior (accept just runs the actions above).")}
+                action={<button onClick={() => setStudioOpen(true)} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30" title={t('phoneCmd.openStudio', 'Open the big chat-style editor')}>⛶ Studio</button>}>
+                <PhoneCallConversationEditor conversation={cmd.conversation} onChange={c => updateCommand({ conversation: c } as any)} project={project} t={t} />
+            </CollapsibleSection>
+        </div>
+        {studioOpen && <ConversationStudio isOpen onClose={() => setStudioOpen(false)} project={project} kind="call"
+            title={t('phoneCmd.incomingCallStudio', 'Incoming call — conversation')}
+            conversation={cmd.conversation || { lines: [] }} onChangeConversation={c => updateCommand({ conversation: c } as any)} />}
+    </>;
+};
+
+/** Shared editor for a scripted in-call conversation: voiced lines (with optional voice-paced
+ *  timing), per-line conditions, and tappable replies that can speak back, run actions, or hang
+ *  up. Used by Incoming Call, Start Phone Call, and the Contacts "Call conversation". */
+export const PhoneCallConversationEditor: React.FC<{ conversation: any; onChange: (c: any) => void; project: VNProject; t: any }> = ({ conversation, onChange, project, t }) => {
+    const conv = conversation || { lines: [] };
+    const lines: any[] = conv.lines || [];
+    // Freshly added lines open for editing; everything else collapses to a summary card.
+    const [openLineId, setOpenLineId] = (React as any).useState(null);
+    const setConv = (patch: any) => onChange({ ...conv, ...patch });
+    const setLines = (l: any[]) => setConv({ lines: l });
+    const updateLine = (i: number, patch: any) => setLines(lines.map((l, idx) => idx === i ? { ...l, ...patch } : l));
+    const addLine = () => {
+        const id = `cl-${Math.random().toString(36).slice(2, 9)}`;
+        setOpenLineId(id);
+        setLines([...lines, { id, speakerId: Object.keys(project.characters)[0] || 'player', text: '', delayMs: 900 }]);
+    };
+    const removeLine = (i: number) => setLines(lines.filter((_, idx) => idx !== i));
+    const moveLine = (i: number, dir: -1 | 1) => {
+        const j = i + dir;
+        if (j < 0 || j >= lines.length) return;
+        const next = [...lines];
+        [next[i], next[j]] = [next[j], next[i]];
+        setLines(next);
+    };
+    const updateReplies = (i: number, replies: any[]) => updateLine(i, { replies });
+    return (
+        <div className="space-y-1.5">
+            {lines.map((line, i) => (
+                <CollapsibleSection key={line.id || i}
+                    title={`${i + 1}. ${phoneSpeakerName(project, line.speakerId, t)}`}
+                    summary={`${line.text ? `"${truncPreview(line.text)}"` : '—'}${phoneLineBadges(line)}`}
+                    defaultOpen={line.id === openLineId || !line.text}
+                    action={<div className="flex items-center gap-0.5">
+                        <button onClick={() => moveLine(i, -1)} disabled={i === 0} className="p-0.5 text-[var(--text-muted)] hover:text-white disabled:opacity-30" title={t('phoneCmd.moveUp', 'Move up')}><ChevronUpIcon className="w-3 h-3" /></button>
+                        <button onClick={() => moveLine(i, 1)} disabled={i === lines.length - 1} className="p-0.5 text-[var(--text-muted)] hover:text-white disabled:opacity-30" title={t('phoneCmd.moveDown', 'Move down')}><ChevronDownIcon className="w-3 h-3" /></button>
+                        <button onClick={() => removeLine(i)} className="p-1 text-red-400 hover:text-red-300" title={t('phoneCmd.removeLine', 'Remove line')}><TrashIcon className="w-3 h-3" /></button>
+                    </div>}>
+                    <div className="space-y-1">
+                        <div className="flex gap-1 items-start">
+                            <select className="bg-[var(--bg-secondary)] text-[var(--text-primary)] text-xs rounded px-1 py-1 border border-[var(--border-subtle)] max-w-[6rem] flex-shrink-0" value={line.speakerId} onChange={e => updateLine(i, { speakerId: e.target.value })}>
+                                {phoneSenderOptions(project, t).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                            {/* min-w-0 wrapper: a bare textarea in a flex row refuses to shrink below its
+                                intrinsic width and spills past the card border in narrow panels. */}
+                            <div className="flex-1 min-w-0">
+                                <TextArea rows={2} value={line.text} onChange={e => updateLine(i, { text: e.target.value })} />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex-1 min-w-[8rem]">
+                                <AssetSelector label={t('phoneCmd.voiceClip', 'Voice clip')} assetType="audio" value={line.voiceAudioId || null} onChange={id => updateLine(i, { voiceAudioId: id })} />
+                            </div>
+                            <label className="flex items-center gap-1 text-[10px] text-[var(--text-muted)]" title={t('phoneCmd.waitForVoiceTip', 'The next line waits until this voice clip finishes (instead of the timed beat).')}>
+                                <input type="checkbox" checked={!!line.waitForVoice} onChange={e => updateLine(i, { waitForVoice: e.target.checked || undefined })} className="w-3.5 h-3.5" />
+                                {t('phoneCmd.waitForVoice', 'Time this line to the voice')}
+                            </label>
+                            {!line.waitForVoice && (
+                                <label className="flex items-center gap-1 text-[10px] text-[var(--text-muted)]">
+                                    {t('phoneCmd.lineDelay', 'Beat before it (ms)')}
+                                    <input type="number" min={0} className="bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded px-1 py-0.5 border border-[var(--border-subtle)] w-20" value={line.delayMs ?? 900} onChange={e => updateLine(i, { delayMs: Math.max(0, parseInt(e.target.value) || 0) })} />
+                                </label>
+                            )}
+                        </div>
+                        <AssetSelector label={t('phoneCmd.attachPhoto2', 'Attach photo / video')} assetType="images" allowVideo value={line.image?.id || null} onChange={id => updateLine(i, { image: phoneMediaRef(project, id) })} />
+                        <ConditionsEditor collapsible title={t('phoneCmd.lineConditions', 'Only say this when…')} conditions={line.conditions || []} project={project} onChange={(cs: any) => updateLine(i, { conditions: cs })} />
+                        {/* Replies pause the call until the player taps one. */}
+                        <div>
+                            <div className="flex items-center justify-between mb-0.5">
+                                <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">{t('phoneCmd.callReplies', 'Player can reply (pauses the call)')}</span>
+                                <button onClick={() => updateReplies(i, [...(line.replies || []), { id: `pr-${Math.random().toString(36).slice(2, 9)}`, text: 'Reply', followUps: [], actions: [] }])} className="p-0.5 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]" title={t('phoneCmd.addReply', 'Add reply')}><PlusIcon className="w-3 h-3" /></button>
+                            </div>
+                            <div className="space-y-1">
+                                {(line.replies || []).map((r: any, ri: number) => (
+                                    <CollapsibleSection key={r.id} title={`${t('phoneCmd.reply', 'Reply')} ${ri + 1}`}
+                                        summary={`"${truncPreview(r.text)}"${r.endsCall ? ` · ${t('phoneCmd.sumEndsCall', 'ends call')}` : ''}${r.followUps?.length ? ` · ${r.followUps.length} ${t('phoneCmd.sumFollowUps', 'follow-ups')}` : ''}`}
+                                        defaultOpen={!r.text || r.text === 'Reply'}
+                                        action={<button onClick={() => updateReplies(i, (line.replies || []).filter((_: any, xi: number) => xi !== ri))} className="p-1 text-red-400 hover:text-red-300" title={t('phoneCmd.removeReply', 'Remove')}><TrashIcon className="w-3 h-3" /></button>}>
+                                        <div className="space-y-1">
+                                            <TextInput value={r.text} onChange={e => updateReplies(i, (line.replies || []).map((x: any, xi: number) => xi === ri ? { ...x, text: e.target.value } : x))} />
+                                            <label className="flex items-center gap-1 text-[10px] text-[var(--text-muted)]">
+                                                <input type="checkbox" checked={!!r.endsCall} onChange={e => updateReplies(i, (line.replies || []).map((x: any, xi: number) => xi === ri ? { ...x, endsCall: e.target.checked || undefined } : x))} className="w-3.5 h-3.5" />
+                                                {t('phoneCmd.replyEndsCall', 'Hang up after this reply')}
+                                            </label>
+                                            <PhoneFollowUpsEditor followUps={r.followUps || []} onChange={fu => updateReplies(i, (line.replies || []).map((x: any, xi: number) => xi === ri ? { ...x, followUps: fu } : x))} project={project} t={t} showVoice />
+                                            <UIActionsListEditor actions={r.actions || []} project={project} onChange={acts => updateReplies(i, (line.replies || []).map((x: any, xi: number) => xi === ri ? { ...x, actions: acts } : x))} label={t('phoneCmd.replyActions', 'Reply actions')} />
+                                            <ConditionsEditor collapsible title={t('phoneCmd.replyConditions', 'Only offer this reply when…')} conditions={r.conditions || []} project={project} onChange={(cs: any) => updateReplies(i, (line.replies || []).map((x: any, xi: number) => xi === ri ? { ...x, conditions: cs } : x))} />
+                                        </div>
+                                    </CollapsibleSection>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </CollapsibleSection>
+            ))}
+            <button onClick={addLine} className="w-full p-1.5 text-xs rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-center gap-1"><PlusIcon className="w-3 h-3" /> {t('phoneCmd.addLine', 'Add call line')}</button>
+            {lines.length > 0 && <>
+                <label className="flex items-center gap-1 mt-1">
+                    <input type="checkbox" checked={conv.autoEnd !== false} onChange={e => setConv({ autoEnd: e.target.checked ? undefined : false })} className="w-4 h-4" />
+                    <span className="text-xs text-[var(--text-secondary)]">{t('phoneCmd.autoEnd', 'Hang up automatically after the last line')}</span>
+                </label>
+                <CollapsibleSection title={t('phoneCmd.endActions', 'When the call ends')} summary={`${(conv.endActions || []).length} ${t('phoneCmd.sumActions', 'actions')}`}>
+                    <UIActionsListEditor actions={conv.endActions || []} project={project} onChange={acts => setConv({ endActions: acts })} label="" />
+                </CollapsibleSection>
+            </>}
+        </div>
+    );
+};
+
+/** Editor for Start Phone Call — the player dials a contact; a voiced transcript plays. */
+const StartPhoneCallGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
+    const [studioOpen, setStudioOpen] = (React as any).useState(false);
+    if (groupId !== 'content') return null;
+    const contact = (project.ui.phoneContacts || []).find((c: any) => c.characterId === cmd.contactId);
+    const hasOwnLines = !!cmd.conversation?.lines?.length;
+    return <>
+        <FormField label={t('phoneCmd.callContact', 'Who is being called')}>
+            <SearchableSelect options={Object.values(project.characters).map((c: any) => ({ value: c.id, label: c.name }))} value={cmd.contactId} onChange={v => updateCommand({ contactId: v } as any)} placeholder={t('shared.selectCharacter')} />
         </FormField>
-        <FormField label={t('phoneCmd.ringDuration', 'Ring time before timeout (ms)')}>
-            <TextInput type="number" value={cmd.ringDurationMs ?? 12000} onChange={e => updateCommand({ ringDurationMs: parseInt(e.target.value) || 0 } as any)} />
-        </FormField>
-        <FormField label={t('phoneCmd.onTimeout', 'If unanswered')}>
-            <Select value={cmd.onTimeout || 'missed'} onChange={e => updateCommand({ onTimeout: e.target.value } as any)}>
-                <option value="missed">{t('phoneCmd.timeoutMissed', 'Mark as missed (continue)')}</option>
-                <option value="runActions">{t('phoneCmd.timeoutActions', 'Run “missed call” actions')}</option>
-            </Select>
-        </FormField>
-        {cmd.onTimeout === 'runActions' && (
-            <UIActionsListEditor actions={cmd.timeoutActions || []} project={project} onChange={acts => updateCommand({ timeoutActions: acts } as any)} label={t('phoneCmd.timeoutActionsLabel', 'Missed-call actions')} />
-        )}
-        <UIActionsListEditor actions={cmd.acceptActions || []} project={project} onChange={acts => updateCommand({ acceptActions: acts } as any)} label={t('phoneCmd.acceptActions', 'When accepted')} />
-        <UIActionsListEditor actions={cmd.declineActions || []} project={project} onChange={acts => updateCommand({ declineActions: acts } as any)} label={t('phoneCmd.declineActions', 'When declined')} />
-        <label className="flex items-center gap-1 mt-1">
-            <input type="checkbox" checked={cmd.showBadge !== false} onChange={e => updateCommand({ showBadge: e.target.checked } as any)} className="w-4 h-4" />
-            <span className="text-xs text-[var(--text-secondary)]">{t('phoneCmd.showBadgeMissed', 'Badge on missed call')}</span>
-        </label>
+        <div className="space-y-1.5">
+            <CollapsibleSection title={t('phoneCmd.callOptions', 'Call options')}
+                summary={`${cmd.dialingMs ?? 1200}ms ${t('phoneCmd.sumDial', 'dial')} · ${cmd.blocking !== false ? t('phoneCmd.sumBlocks', 'blocks scene') : t('phoneCmd.sumNonBlocking', 'non-blocking')}`}>
+                <PhonePortraitPicker senderId={cmd.contactId} value={cmd.portrait} onChange={p => updateCommand({ portrait: p } as any)} project={project} t={t} />
+                <FormField label={t('phoneCmd.dialingMs', '"Calling…" time before it connects (ms)')}>
+                    <TextInput type="number" min={0} value={cmd.dialingMs ?? 1200} onChange={e => updateCommand({ dialingMs: Math.max(0, parseInt(e.target.value) || 0) } as any)} />
+                </FormField>
+                <label className="flex items-center gap-1 mt-1">
+                    <input type="checkbox" checked={cmd.blocking !== false} onChange={e => updateCommand({ blocking: e.target.checked } as any)} className="w-4 h-4" />
+                    <span className="text-xs text-[var(--text-secondary)]">{t('phoneCmd.callBlocking', 'Scene waits until the call ends')}</span>
+                </label>
+            </CollapsibleSection>
+            {!hasOwnLines && (contact?.callConversation?.lines?.length || (contact as any)?.callConversations?.length) ? (
+                <p className="text-[11px] text-[var(--text-muted)]">{t('phoneCmd.usesContactConvo2', "No lines here — this call will use the contact's saved conversations from the Phone editor (the first whose conditions pass).")}</p>
+            ) : null}
+            <CollapsibleSection title={t('phoneCmd.callConversation2', 'Call conversation')} defaultOpen badge={String(cmd.conversation?.lines?.length || 0)}
+                summary={cmd.conversation?.lines?.length ? `${cmd.conversation.lines.length} ${t('phoneCmd.sumLines', 'lines')}` : t('phoneCmd.sumNone', 'none')}
+                hint={t('phoneCmd.callConversation2Hint', "The voiced lines of the call. Leave empty to use the contact's saved conversation instead.")}
+                action={<button onClick={() => setStudioOpen(true)} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30" title={t('phoneCmd.openStudio', 'Open the big chat-style editor')}>⛶ Studio</button>}>
+                <PhoneCallConversationEditor conversation={cmd.conversation} onChange={c => updateCommand({ conversation: c } as any)} project={project} t={t} />
+            </CollapsibleSection>
+        </div>
+        {studioOpen && <ConversationStudio isOpen onClose={() => setStudioOpen(false)} project={project} kind="call"
+            title={t('phoneCmd.startCallStudio', 'Make Phone Call — conversation')}
+            conversation={cmd.conversation || { lines: [] }} onChangeConversation={c => updateCommand({ conversation: c } as any)} />}
     </>;
 };
 
@@ -1864,7 +2302,7 @@ const CreditRollGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCom
 // SpawnParticles (tag/preset/duration; full particle config)
 // ─────────────────────────────────────────────────────────────────────────────
 const numInputStyle: React.CSSProperties = { backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' };
-const SpawnParticlesGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand: UpdateCommand; t: any }> = ({ groupId, cmd, updateCommand, t }) => {
+const SpawnParticlesGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
     const cfg = cmd.config || {};
     const setCfg = (patch: any) => updateCommand({ config: { ...cfg, ...patch } } as any);
     const isCustom = !cfg.preset || cfg.preset === 'none';
@@ -1900,6 +2338,10 @@ const SpawnParticlesGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updat
             <FormField label={t('particles.density')}>
                 <RangeInput min="1" max="200" value={cfg.emitRate || 20} onChange={e => setCfg({ emitRate: parseInt(e.target.value) || 20 })} className="w-full" />
                 <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.densityHint', { value: cfg.emitRate || 20 })}</span>
+                <VarFollowSelect value={cmd.emitRateVariableId} onChange={id => updateCommand({ emitRateVariableId: id } as any)} project={project} range="1–200" mode="live" />
+            </FormField>
+            <FormField label={t('particles.opacityFollow', 'Opacity')}>
+                <VarFollowSelect value={cmd.opacityVariableId} onChange={id => updateCommand({ opacityVariableId: id } as any)} project={project} range="0–1" mode="live" />
             </FormField>
             <FormField label={t('particles.speed')}>
                 <div className="flex gap-1">
@@ -1957,10 +2399,12 @@ const SpawnParticlesGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updat
                 <FormField label={t('particles.gravity')}>
                     <RangeInput min="-100" max="100" value={cfg.gravity || 0} onChange={e => setCfg({ gravity: parseFloat(e.target.value) })} className="w-full" />
                     <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.gravityHint', { value: cfg.gravity || 0 })}</span>
+                    <VarFollowSelect value={cmd.gravityVariableId} onChange={id => updateCommand({ gravityVariableId: id } as any)} project={project} range="-100–100" mode="live" />
                 </FormField>
                 <FormField label={t('particles.wind')}>
                     <RangeInput min="-50" max="50" value={cfg.wind || 0} onChange={e => setCfg({ wind: parseFloat(e.target.value) })} className="w-full" />
                     <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{cfg.wind || 0}</span>
+                    <VarFollowSelect value={cmd.windVariableId} onChange={id => updateCommand({ windVariableId: id } as any)} project={project} range="-50–50" mode="live" />
                 </FormField>
                 <FormField label={t('particles.colors')}>
                     <TextInput value={(cfg.colors || ['#FFFFFF']).join(', ')} onChange={e => setCfg({ colors: e.target.value.split(',').map((c: string) => c.trim()).filter(Boolean) })} placeholder="#FF0000, #00FF00, #0000FF" />
@@ -2104,8 +2548,11 @@ const MoveCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; update
     const setOpt = (key: string, raw: string) => updateCommand({ [key]: raw === '' ? undefined : (parseFloat(raw) || 0) } as any);
     return <>
         <FormField label={t('moveChar.character', 'Character')}>
-            <Select value={cmd.characterId || ''} onChange={e => updateCommand({ characterId: e.target.value } as any)}>
+            <Select value={characterSelectValue(cmd)} onChange={e => e.target.value === PLAYER_CHARACTER_OPTION
+                ? updateCommand({ characterSource: 'player' } as any)
+                : updateCommand({ characterSource: 'fixed', characterId: e.target.value } as any)}>
                 {characters.length === 0 && <option value="">{t('moveChar.noCharacters', 'No characters')}</option>}
+                <option value={PLAYER_CHARACTER_OPTION}>{PLAYER_CHARACTER_LABEL}</option>
                 {characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
         </FormField>
@@ -2204,6 +2651,27 @@ const TimerGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand; upda
         <div className="mt-2 pt-2 border-t border-[var(--border-subtle)]">
             <UIActionsListEditor actions={c.onComplete || []} project={project} onChange={(acts) => updateCommand({ onComplete: acts } as any)} label={t('timer.onComplete', 'When it finishes, run')} />
         </div>
+    </>;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SetTimeOfDay (drives the day/night color grade)
+// ─────────────────────────────────────────────────────────────────────────────
+const SetTimeOfDayGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand: UpdateCommand; t: any }> = ({ groupId, cmd, updateCommand, t }) => {
+    if (groupId !== 'content') return null;
+    const mode = cmd.mode === 'advance' ? 'advance' : 'set';
+    return <>
+        <FormField label={t('timeOfDay.mode', 'Action')}>
+            <Select value={mode} onChange={e => updateCommand({ mode: e.target.value } as any)}>
+                <option value="set">{t('timeOfDay.set', 'Set time to…')}</option>
+                <option value="advance">{t('timeOfDay.advance', 'Advance by…')}</option>
+            </Select>
+        </FormField>
+        {mode === 'set'
+            ? <FormField label={t('timeOfDay.hour', 'Hour (0–24)')}><TextInput type="number" min="0" max="24" step="0.5" value={cmd.hour ?? 12} onChange={e => updateCommand({ hour: parseFloat(e.target.value) || 0 } as any)} /></FormField>
+            : <FormField label={t('timeOfDay.hours', 'Advance by (hours; negative = back)')}><TextInput type="number" step="0.5" value={cmd.hours ?? 1} onChange={e => updateCommand({ hours: parseFloat(e.target.value) || 0 } as any)} /></FormField>}
+        <FormField label={t('timeOfDay.transition', 'Transition (seconds)')}><TextInput type="number" min="0" step="0.5" value={cmd.transitionDuration ?? 2} onChange={e => updateCommand({ transitionDuration: parseFloat(e.target.value) || 0 } as any)} /></FormField>
+        <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{t('timeOfDay.hint', 'Drives the Day/Night color grade — enable it in Settings → Day / Night.')}</p>
     </>;
 };
 
@@ -2674,8 +3142,10 @@ export function summarizeGroup(groupId: InspectorGroupId, command: VNCommand, pr
             case CommandType.PlaceLights: return `${(c.lights || []).length} light${(c.lights || []).length === 1 ? '' : 's'}`;
             case CommandType.ClearLights: return 'clear lights';
             case CommandType.Flashlight: return c.enabled ? `on · r${c.radius ?? 22}%` : 'off';
+            case CommandType.Spotlight: return c.enabled ? `on · ${c.beamWidth ?? 45}%${c.followMouse !== false ? ' · swivel' : ''}` : 'off';
             case CommandType.SetScreenOverlayEffect: return c.effectType || '';
             case CommandType.ShowScreen: return project.uiScreens[c.screenId]?.name || '—';
+            case CommandType.HideScreen: return c.all ? 'all screens' : (project.uiScreens[c.screenId]?.name || 'most recent');
             case CommandType.Label:
             case CommandType.JumpToLabel: return c.labelId || '';
             case CommandType.BranchStart: return c.name || '';

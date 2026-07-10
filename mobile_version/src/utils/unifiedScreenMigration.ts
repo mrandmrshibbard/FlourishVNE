@@ -174,7 +174,7 @@ function migrateHotSpot(spot: VNHotSpot): UIHotSpotElement {
         anchorY: 0,
         interactive: true,
         shape: spot.shape,
-        trigger: spot.trigger,
+        trigger: spot.trigger || 'click',
         acceptedElementIds: spot.acceptedElementIds,
         actions: spot.actions,
         conditions: spot.conditions,

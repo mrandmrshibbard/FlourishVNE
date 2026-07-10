@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { RangeInput, ColorInput } from './ui/Form';
+import { RangeInput, ColorInput, FormField, Select, TextInput } from './ui/Form';
+import { VNDayNightCycle, VNDayNightPhase, VNGradeLayer } from '../types/project';
+import { VNVariable } from '../features/variables/types';
+import { createDefaultDayNightCycle } from './live-preview/systems/dayNightGrade';
 import { useTranslation, Trans } from 'react-i18next';
 import { SUPPORTED_LANGUAGES, setLanguage } from '../i18n';
 import { VNProject, VNProjectFont, CGGalleryConfig, CGGalleryEntry } from '../types/project';
@@ -31,7 +34,7 @@ interface SettingsManagerProps {
 const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
     const { dispatch } = useProject();
     const { t } = useTranslation('settings');
-    const [activeSection, setActiveSection] = useState<'general' | 'fonts' | 'screens' | 'accessibility' | 'analytics' | 'cg-gallery'>('general');
+    const [activeSection, setActiveSection] = useState<'general' | 'fonts' | 'screens' | 'accessibility' | 'analytics' | 'cg-gallery' | 'day-night'>('general');
 
     const updateUI = (updates: Partial<VNProjectUI>) => {
         editorDebugLog('[SettingsManager] updateUI called with:', updates);
@@ -48,6 +51,7 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
         { id: 'fonts' as const, name: t('sections.fonts'), icon: BookOpenIcon },
         { id: 'screens' as const, name: t('sections.screens'), icon: UIScreensIcon },
         { id: 'cg-gallery' as const, name: t('sections.cgGallery'), icon: PhotoIcon },
+        { id: 'day-night' as const, name: t('sections.dayNight', 'Day / Night'), icon: ClockIcon },
         { id: 'accessibility' as const, name: t('sections.accessibility'), icon: SparklesIcon },
         { id: 'analytics' as const, name: t('sections.analytics'), icon: ClockIcon },
     ];
@@ -97,6 +101,9 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
                 )}
                 {activeSection === 'cg-gallery' && (
                     <CGGallerySettings project={project} onUpdate={updateProject} />
+                )}
+                {activeSection === 'day-night' && (
+                    <DayNightSettings project={project} onUpdate={updateProject} />
                 )}
                 {activeSection === 'analytics' && (
                     <AnalyticsSettings />
@@ -2023,6 +2030,126 @@ const AnalyticsSettings: React.FC = () => {
                     </div>
                 )}
             </div>
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Day / Night cycle settings (time-of-day color grade)
+// ─────────────────────────────────────────────────────────────────────────────
+const GradeLayerEditor: React.FC<{ label: string; layer: VNGradeLayer; onChange: (l: VNGradeLayer) => void }> = ({ label, layer, onChange }) => {
+    const patch = (u: Partial<VNGradeLayer>) => onChange({ ...layer, ...u });
+    return (
+        <div className="border border-[var(--border-subtle)] rounded-md p-2 flex-1 min-w-0">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)] mb-1.5">
+                <input type="checkbox" checked={layer.enabled} onChange={e => patch({ enabled: e.target.checked })} className="h-3.5 w-3.5" />
+                {label}
+            </label>
+            {layer.enabled && <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-[var(--text-muted)] w-16">Tint</span>
+                    <ColorInput value={layer.tint} onChange={(v: string) => patch({ tint: v })} />
+                </div>
+                <div>
+                    <div className="text-[10px] text-[var(--text-muted)] mb-0.5">Tint strength ({Math.round(layer.tintOpacity * 100)}%)</div>
+                    <RangeInput min={0} max={1} step={0.01} value={layer.tintOpacity} onChange={(e: any) => patch({ tintOpacity: parseFloat(e.target.value) })} className="w-full" />
+                </div>
+                <div>
+                    <div className="text-[10px] text-[var(--text-muted)] mb-0.5">Brightness ({layer.brightness.toFixed(2)}×)</div>
+                    <RangeInput min={0} max={2} step={0.01} value={layer.brightness} onChange={(e: any) => patch({ brightness: parseFloat(e.target.value) })} className="w-full" />
+                </div>
+                <div>
+                    <div className="text-[10px] text-[var(--text-muted)] mb-0.5">Saturation ({layer.saturation.toFixed(2)}×)</div>
+                    <RangeInput min={0} max={2} step={0.01} value={layer.saturation} onChange={(e: any) => patch({ saturation: parseFloat(e.target.value) })} className="w-full" />
+                </div>
+            </div>}
+        </div>
+    );
+};
+
+const DayNightSettings: React.FC<{ project: VNProject; onUpdate: (u: Partial<VNProject>) => void }> = ({ project, onUpdate }) => {
+    const { t } = useTranslation('settings');
+    const cycle = project.dayNightCycle;
+    const enabled = !!cycle?.enabled;
+
+    const newId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `dn_${Date.now()}_${Math.floor(Math.random() * 1e6)}`);
+
+    const setCycle = (c: VNDayNightCycle) => onUpdate({ dayNightCycle: c });
+
+    const toggleEnabled = (on: boolean) => {
+        if (!on) { if (cycle) setCycle({ ...cycle, enabled: false }); return; }
+        // Turning on: seed a default cycle + a managed "Time of Day" number variable (0–24) the first time.
+        const base = cycle ?? createDefaultDayNightCycle();
+        let timeVariableId = base.timeVariableId;
+        let variables = project.variables;
+        if (!timeVariableId || !project.variables[timeVariableId]) {
+            timeVariableId = newId();
+            const v: VNVariable = { id: timeVariableId, name: 'Time of Day', type: 'number', defaultValue: 8, scope: 'global', min: 0, max: 24, isInternal: true };
+            variables = { ...project.variables, [timeVariableId]: v };
+        }
+        onUpdate({ dayNightCycle: { ...base, enabled: true, timeVariableId }, variables });
+    };
+
+    const updatePhase = (idx: number, u: Partial<VNDayNightPhase>) => {
+        if (!cycle) return;
+        const phases = cycle.phases.map((p, i) => i === idx ? { ...p, ...u } : p);
+        setCycle({ ...cycle, phases });
+    };
+    const addPhase = () => {
+        if (!cycle) return;
+        const mk = (): VNGradeLayer => ({ enabled: true, tint: '#ffffff', tintOpacity: 0, brightness: 1, saturation: 1 });
+        setCycle({ ...cycle, phases: [...cycle.phases, { id: newId(), name: 'Phase', atHour: 0, background: mk(), sprites: mk() }] });
+    };
+    const removePhase = (idx: number) => { if (cycle) setCycle({ ...cycle, phases: cycle.phases.filter((_, i) => i !== idx) }); };
+
+    return (
+        <div className="p-6 max-w-3xl">
+            <h3 className="text-xl font-bold text-white mb-1">{t('sections.dayNight', 'Day / Night')}</h3>
+            <p className="text-sm text-[var(--text-secondary)] mb-4">{t('dayNight.intro', 'Shift scene colors with the time of day — warm mornings to cold nights. Use the “Set Time of Day” command (or button action) to change the time, or gate events on the time variable in conditions.')}</p>
+
+            <label className="flex items-center gap-2 mb-4">
+                <input type="checkbox" checked={enabled} onChange={e => toggleEnabled(e.target.checked)} className="h-4 w-4" />
+                <span className="text-sm font-medium text-[var(--text-primary)]">{t('dayNight.enable', 'Enable day/night cycle')}</span>
+            </label>
+
+            {enabled && cycle && <>
+                <div className="border-t border-[var(--border-subtle)] pt-3 mb-4">
+                    <label className="flex items-center gap-2 mb-2">
+                        <input type="checkbox" checked={!!cycle.autoAdvance?.enabled} onChange={e => setCycle({ ...cycle, autoAdvance: { secondsPerHour: cycle.autoAdvance?.secondsPerHour ?? 60, enabled: e.target.checked } })} className="h-4 w-4" />
+                        <span className="text-sm text-[var(--text-primary)]">{t('dayNight.autoAdvance', 'Auto-advance the clock during play')}</span>
+                    </label>
+                    {cycle.autoAdvance?.enabled && (
+                        <FormField label={t('dayNight.secondsPerHour', 'Real seconds per in-game hour')}>
+                            <TextInput type="number" min="1" step="1" value={cycle.autoAdvance.secondsPerHour} onChange={e => setCycle({ ...cycle, autoAdvance: { enabled: true, secondsPerHour: Math.max(1, parseFloat(e.target.value) || 60) } })} />
+                        </FormField>
+                    )}
+                </div>
+
+                <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-semibold text-[var(--text-primary)]">{t('dayNight.phases', 'Phases')}</h4>
+                    <button onClick={addPhase} className="text-xs text-sky-400 hover:text-sky-300">+ {t('dayNight.addPhase', 'Add phase')}</button>
+                </div>
+                <div className="space-y-3">
+                    {[...cycle.phases].sort((a, b) => a.atHour - b.atHour).map(p => {
+                        const idx = cycle.phases.indexOf(p);
+                        return (
+                            <div key={p.id} className="border border-[var(--border-default)] rounded-lg p-3 bg-[var(--bg-primary)]/40">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <TextInput value={p.name} onChange={e => updatePhase(idx, { name: e.target.value })} className="flex-1" />
+                                    <label className="text-[10px] text-[var(--text-muted)]">{t('dayNight.atHour', 'at hour')}</label>
+                                    <input type="number" min={0} max={24} step={0.5} value={p.atHour} onChange={e => updatePhase(idx, { atHour: Math.max(0, Math.min(24, parseFloat(e.target.value) || 0)) })} className="w-16 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-xs" />
+                                    <button onClick={() => removePhase(idx)} title={t('dayNight.removePhase', 'Remove phase')} className="text-red-400 hover:text-red-300 p-1"><TrashIcon className="w-4 h-4" /></button>
+                                </div>
+                                <div className="flex gap-2">
+                                    <GradeLayerEditor label={t('dayNight.background', 'Background')} layer={p.background} onChange={l => updatePhase(idx, { background: l })} />
+                                    <GradeLayerEditor label={t('dayNight.sprites', 'Sprites')} layer={p.sprites} onChange={l => updatePhase(idx, { sprites: l })} />
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                <p className="text-[10px] text-[var(--text-muted)] mt-3">{t('dayNight.sceneHint', 'Tip: a scene can pin a fixed time or opt out of grading in its Scene Settings. The time is the “Time of Day” variable — show it on a Meter or in {Time of Day} text, or use it in conditions.')}</p>
+            </>}
         </div>
     );
 };

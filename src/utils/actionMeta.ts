@@ -38,10 +38,20 @@ export function defaultActionForType(type: UIActionType, project: VNProject): VN
         }
         case UIActionType.SetVariable:
             return { ...base, variableId: firstKey(project.variables), operator: 'set', value: '' };
+        case UIActionType.OpenPhoneApp:
+            return { ...base, appId: 'chat' };
+        case UIActionType.ShowMap:
+            return { ...base, mapId: firstKey((project as any).maps) };
+        case UIActionType.ShowMiniGame:
+            return { ...base, gameId: firstKey((project as any).miniGames) };
         case UIActionType.ResetVariable:
             return { ...base, variableId: firstKey(project.variables) };
         case UIActionType.PlaySound:
             return { ...base, audioId: firstKey(project.audio), volume: 1, loop: false };
+        case UIActionType.PlayMusic:
+            return { ...base, audioId: firstKey(project.audio), volume: 1, loop: true, fadeDuration: 1 };
+        case UIActionType.StopMusic:
+            return { ...base, fadeDuration: 1 };
         case UIActionType.CycleLayerAsset: {
             const firstCharId = firstKey(project.characters);
             const firstChar = (project.characters as any)[firstCharId];
@@ -80,6 +90,12 @@ export function defaultActionForType(type: UIActionType, project: VNProject): VN
             return { ...base, timerId: '', mode: 'countdown', duration: 10, from: 0, interval: 1, loop: false, onComplete: [] };
         case UIActionType.StopTimer:
             return { ...base, timerId: '' };
+        case UIActionType.SetTimeOfDay:
+            return { ...base, mode: 'set', hour: 18, hours: 1, transitionDuration: 2 };
+        case UIActionType.ShowFlashlight:
+            return { ...base, radius: 22, softness: 0.6, darkness: 0.85, color: '#000000', toggleKey: 'f', affectsDialogue: true };
+        case UIActionType.ShowSpotlight:
+            return { ...base, intensity: 0.85, beamWidth: 45, sourceWidth: 8, height: 100, falloff: 0.5, color: '#fff3d6', followMouse: true, swivelMax: 30, toggleKey: 'f', affectsDialogue: true };
         default:
             return base;
     }
@@ -99,7 +115,14 @@ export function actionSummaryDetail(action: VNUIAction, project: VNProject): str
             return (project.scenes[a.targetSceneId] as any)?.name || '';
         case UIActionType.JumpToLabel:
             return a.targetLabel || '';
+        case UIActionType.OpenPhoneApp:
+            return a.appId || '';
+        case UIActionType.ShowMap:
+            return ((project as any).maps?.[a.mapId] as any)?.name || '';
+        case UIActionType.ShowMiniGame:
+            return ((project as any).miniGames?.[a.gameId] as any)?.name || '';
         case UIActionType.PlaySound:
+        case UIActionType.PlayMusic:
             return (project.audio[a.audioId] as any)?.name || '';
         case UIActionType.CallCommonEvent:
             return ((project as any).commonEvents?.[a.commonEventId])?.name || '';
@@ -118,6 +141,8 @@ export function actionSummaryDetail(action: VNUIAction, project: VNProject): str
             return `${a.mode === 'stopwatch' ? '⏱' : '⏳'} ${a.timerId || 'default'} · ${a.duration ?? 0}s`;
         case UIActionType.StopTimer:
             return a.timerId || 'default';
+        case UIActionType.SetTimeOfDay:
+            return a.mode === 'advance' ? `+${a.hours ?? 0}h` : `→ ${a.hour ?? 0}h`;
         default:
             return '';
     }

@@ -189,8 +189,28 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
             const command = { type, callerId: firstCharId || 'player', mode: 'modal', ringDurationMs: 12000, onTimeout: 'missed', acceptActions: [] as any[], declineActions: [] as any[], timeoutActions: [] as any[], showBadge: true };
             return command;
         }
+        case CommandType.StartPhoneCall: {
+            const command = { type, contactId: firstCharId || '', dialingMs: 1200, blocking: true, conversation: { lines: [] as any[] } };
+            return command;
+        }
+        case CommandType.ShowMap: {
+            const command = { type, mapId: Object.keys(project.maps || {})[0] || '', allowCancel: false };
+            return command;
+        }
+        case CommandType.ShowMiniGame: {
+            const command = { type, gameId: Object.keys(project.miniGames || {})[0] || '' };
+            return command;
+        }
+        case CommandType.PhoneNotify: {
+            const command = { type, title: '', text: '', icon: 'chat', showBadge: true, presentation: 'notify', tapActions: [] as any[] };
+            return command;
+        }
         case CommandType.Flashlight: {
             const command = { type, enabled: true, radius: 22, softness: 0.6, darkness: 0.85, color: '#000000', toggleKey: 'f', sfxId: null };
+            return command;
+        }
+        case CommandType.Spotlight: {
+            const command = { type, enabled: true, spotlightId: 'main', sourceX: 50, sourceY: 0, aimAngle: 0, intensity: 0.85, beamWidth: 45, sourceWidth: 8, height: 100, falloff: 0.5, color: '#fff3d6', followMouse: true, swivelMax: 30, toggleKey: 'f', sfxId: null };
             return command;
         }
         case CommandType.SetScreenOverlayEffect: {
@@ -199,6 +219,10 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
         }
         case CommandType.ShowScreen: {
             const command = { type, screenId: firstScreenId || '' };
+            return command;
+        }
+        case CommandType.HideScreen: {
+            const command = { type, screenId: '', all: false };
             return command;
         }
         case CommandType.ShowText: {
@@ -495,6 +519,9 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
         }
         case CommandType.StopTimer: {
             return { type, timerId: '' } as Omit<VNCommand, 'id'>;
+        }
+        case CommandType.SetTimeOfDay: {
+            return { type, mode: 'set' as const, hour: 18, hours: 1, transitionDuration: 2 } as Omit<VNCommand, 'id'>;
         }
         default:
             return null;

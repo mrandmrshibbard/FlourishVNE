@@ -27,3 +27,7 @@ build-tools
 *.njsproj
 *.sln
 *.sw?
+
+# Built APK/AAB deliverables (build artifacts)
+*.apk
+*.aab

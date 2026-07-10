@@ -10,6 +10,7 @@ import { migrateProjectToUnifiedScreens } from '../utils/unifiedScreenMigration'
 import { migrateProjectRemoveLegacyCommands } from '../utils/legacyCommandMigration';
 import { migrateItemCountVariableBounds, migrateStatVariables, repairOrphanBranchMarkers } from '../utils/itemVariableMigration';
 import { migrateInventorySlotButton } from '../utils/inventoryElementMigration';
+import { migrateMapLocationActions } from '../utils/mapLocationMigration';
 import { pluginManager } from '../features/plugins/PluginManagerService';
 import { externalizeProjectAssets, type MigrationProgress } from '../utils/assetMigration';
 import { isElectronAssetStore } from '../utils/assetStore';
@@ -53,7 +54,7 @@ export const ProjectProvider: React.FC<{
   // or stranded hot zone data never makes it into `screen.elements`.
   const [history, setHistory] = useState<UndoRedoState>(() => ({
     past: [],
-    present: repairOrphanBranchMarkers(migrateStatVariables(migrateItemCountVariableBounds(migrateInventorySlotButton(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject)))))),
+    present: migrateMapLocationActions(repairOrphanBranchMarkers(migrateStatVariables(migrateItemCountVariableBounds(migrateInventorySlotButton(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject))))))),
     future: []
   }));
   const [lastAutoSave, setLastAutoSave] = useState<number | null>(null);

@@ -46,7 +46,7 @@ All effects are stackable with adjustable intensity, speed, blend mode, and colo
 
 ### 🧙 12 Template Systems + Content Wizards
 Build complex game systems without coding:
-- **Character Creator** — let players customize their character with asset cyclers and live preview
+- **Character Creator & Dress-Up** — let players create their own character (choose, dress up, name) or dress up any cast member, with live preview and automatic outfit-fit rules
 - **Shop System** — buy/sell with variable-tracked inventory
 - **Dating Sim** — relationship stat tracking
 - **Combat, Stat Tracker, CG Gallery, Inventory** — and more

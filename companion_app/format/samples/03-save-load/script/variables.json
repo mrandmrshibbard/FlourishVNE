@@ -1,0 +1,6 @@
+{
+  "variables": [
+    { "id": "player_name", "name": "player_name", "type": "string", "default": "", "scope": "persistent" },
+    { "id": "chapter", "name": "chapter", "type": "number", "default": 0, "scope": "global" }
+  ]
+}

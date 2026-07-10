@@ -4,6 +4,7 @@ import { VNID } from '../../../types';
 import { CommandContext, CommandResult } from './types';
 import { TweenManager } from '../systems/tweenManager';
 import { resolveFieldUrl } from '../../../utils/assetStore';
+import { resolveCommandCharacterId } from '../../../utils/playerCharacter';
 
 /** Build the stacked image/video URLs for a character from a resolved per-layer asset selection
  *  (base first, then each layer in definition order). Shared by ShowCharacter + SetCharacterLayer. */
@@ -39,15 +40,26 @@ export function handleShowCharacter(
   context: CommandContext
 ): CommandResult {
   const { project, playerState, activeEffectTimeoutsRef, advance, setPlayerState } = context;
-  const charData = project.characters[command.characterId];
-  const exprData = charData?.expressions[command.expressionId];
+  // ⟨Player's Character⟩ targeting: when characterSource==='player', show whichever character the
+  // player created (resolved from project.ui.playerCharacterVarId) instead of a hard-coded id. The
+  // character is stored on stage under this RESOLVED id so Hide/Move('player') find the same slot.
+  // Resolve ⟨Player's Character⟩; if none is chosen/configured yet, fall back to the command's own
+  // character so authoring/testing always previews something (the real player character shows once
+  // a Character Creator sets one).
+  const characterId = resolveCommandCharacterId(command, project, playerState.variables) || command.characterId;
+  const charData = characterId ? project.characters[characterId] : undefined;
+  // The command's expressionId may belong to a different (author-picked) character; fall back to the
+  // resolved character's first expression. The look is driven by the customizer variables regardless.
+  const exprData = charData
+    ? (charData.expressions[command.expressionId] || Object.values(charData.expressions)[0])
+    : undefined;
 
-  if (!charData || !exprData) {
+  if (!characterId || !charData || !exprData) {
     return { advance: true };
   }
 
   // Clear any resting tween values so the new position takes effect cleanly
-  TweenManager.cancelForTarget(command.characterId, 'character');
+  TweenManager.cancelForTarget(characterId, 'character');
 
   // Managed asset refs ("assets/…") → flourish-asset:// URL; data:/http pass through.
   const wrap = (u: string): string => resolveFieldUrl(project.id, u) || u;
@@ -57,7 +69,7 @@ export function handleShowCharacter(
   const finalBindings: Record<VNID, VNID> = {};
   
   // Use existing bindings if the character is already on stage
-  const existingChar = playerState?.stageState.characters[command.characterId];
+  const existingChar = playerState?.stageState.characters[characterId];
   
   // For each layer, determine the best variable binding
   Object.values(charData.layers).forEach((layer: VNCharacterLayer) => {
@@ -119,8 +131,18 @@ export function handleShowCharacter(
         const assetId = String(varValue);
         layerSelections[layer.id] = (assetId && layer.assets[assetId]) ? assetId : null;
       }
-    } else {
+    } else if (Object.prototype.hasOwnProperty.call(exprData.layerConfiguration, layer.id)) {
+      // The expression explicitly defines this layer (an assetId, or null = off) → honor it.
       layerSelections[layer.id] = exprData.layerConfiguration[layer.id] ?? null;
+    } else if (existingChar?.layerSelections && Object.prototype.hasOwnProperty.call(existingChar.layerSelections, layer.id)) {
+      // The expression doesn't define this layer at all — e.g. an accessory (a hat) added later via
+      // Set Character Layer that no expression was authored to control. Preserve its CURRENT value
+      // instead of dropping it, so re-showing the character (to flip it, change pose, etc.) doesn't
+      // silently wipe a Set-Character-Layer layer. (Fixes: flipping a character with Show Character
+      // removing its hat until the next expression change re-added it.)
+      layerSelections[layer.id] = existingChar.layerSelections[layer.id];
+    } else {
+      layerSelections[layer.id] = null;
     }
   });
 
@@ -140,7 +162,7 @@ export function handleShowCharacter(
   // To crossfade a pose change in place we keep a transient "ghost" of the old pose that
   // fades out under a synthetic id while the real slot shows the new pose fading in.
   const hasShowTransitionFlag = requestedTransition && requestedTransition !== 'instant';
-  const existingSameChar = currentCharacters[command.characterId];
+  const existingSameChar = currentCharacters[characterId];
   const isPoseChange = !!existingSameChar && !!hasShowTransitionFlag &&
     (existingSameChar.imageUrls.join(',') !== imageUrls.join(',') || existingSameChar.expressionId !== command.expressionId);
 
@@ -150,7 +172,7 @@ export function handleShowCharacter(
   if (command.keepPosition && existingSameChar) {
     finalPosition = existingSameChar.position;
   }
-  const ghostKey = isPoseChange ? `__ghost_${command.characterId}_${Date.now()}` : null;
+  const ghostKey = isPoseChange ? `__ghost_${characterId}_${Date.now()}` : null;
   const ghostEntry = isPoseChange ? {
     charId: ghostKey as string,
     position: existingSameChar!.position,
@@ -182,7 +204,7 @@ export function handleShowCharacter(
   );
 
   const characterState = {
-    charId: command.characterId,
+    charId: characterId,
     layer: command.layer,
     parallaxDepth: command.parallaxDepth,
     position: finalPosition,
@@ -233,7 +255,7 @@ export function handleShowCharacter(
           ...prev.characters,
           // Old pose ghost (fades out) when changing pose of the same character
           ...(ghostEntry && ghostKey ? { [ghostKey]: ghostEntry } : {}),
-          [command.characterId]: characterState,
+          [characterId]: characterState,
         },
       }),
       delay: duration,
@@ -255,7 +277,7 @@ export function handleShowCharacter(
   return {
     advance: true,
     stagePatch: (prev) => ({
-      characters: { ...prev.characters, [command.characterId]: characterState },
+      characters: { ...prev.characters, [characterId]: characterState },
     }),
   };
 }
@@ -268,16 +290,21 @@ export function handleHideCharacter(
   command: HideCharacterCommand,
   context: CommandContext
 ): CommandResult {
-  const { playerState, setPlayerState, advance } = context;
+  const { project, playerState, setPlayerState, advance } = context;
   const hideTransitionType = command.transition;
 
-  const existingChar = playerState.stageState.characters[command.characterId];
-  if (!existingChar) {
+  // ⟨Player's Character⟩ targeting — resolve to the player-created character's id when requested.
+  // Resolve ⟨Player's Character⟩; if none is chosen/configured yet, fall back to the command's own
+  // character so authoring/testing always previews something (the real player character shows once
+  // a Character Creator sets one).
+  const characterId = resolveCommandCharacterId(command, project, playerState.variables) || command.characterId;
+  const existingChar = characterId ? playerState.stageState.characters[characterId] : undefined;
+  if (!characterId || !existingChar) {
     // Character not on stage, nothing to do
     return { advance: true };
   }
 
-  TweenManager.cancelForTarget(command.characterId, 'character');
+  TweenManager.cancelForTarget(characterId, 'character');
 
   if (hideTransitionType && hideTransitionType !== 'instant') {
     // Block advancing while hide animation runs
@@ -302,14 +329,14 @@ export function handleHideCharacter(
       advance: false,
       // Functional patch (composes with other stacked/parallel character commands).
       stagePatch: (prev) => ({
-        characters: { ...prev.characters, [command.characterId]: characterWithTransition },
+        characters: { ...prev.characters, [characterId]: characterWithTransition },
       }),
       delay: duration,
       callback: () => {
         // Remove character after transition
         setPlayerState((p) => {
           if (!p) return null;
-          const { [command.characterId]: _, ...remaining } =
+          const { [characterId]: _, ...remaining } =
             p.stageState.characters;
           return {
             ...p,
@@ -328,7 +355,7 @@ export function handleHideCharacter(
     return {
       advance: true,
       stagePatch: (prev) => {
-        const { [command.characterId]: _, ...remaining } = prev.characters;
+        const { [characterId]: _, ...remaining } = prev.characters;
         return { characters: remaining };
       },
     };

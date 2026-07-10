@@ -196,6 +196,10 @@ export interface ScriptAPI {
     flashlight?: (opts?: Record<string, any>) => Promise<void>;
     /** Turn the flashlight off. */
     flashlightOff?: () => Promise<void>;
+    /** Turn the spotlight on (opts map to the Spotlight command's fields). */
+    spotlight?: (opts?: Record<string, any>) => Promise<void>;
+    /** Turn the spotlight off. */
+    spotlightOff?: () => Promise<void>;
     /** Apply a screen overlay effect (fog/haze/CRT…) by type (opts: intensity, variant, duration…). */
     screenOverlay?: (effectType: string, opts?: Record<string, any>) => Promise<void>;
     /** Roll credits (opts map to the Credit Roll command's fields). */

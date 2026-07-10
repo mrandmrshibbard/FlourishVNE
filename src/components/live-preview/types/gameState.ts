@@ -6,7 +6,7 @@ import React from 'react';
 import { VNID, VNPosition, VNTransition } from '../../../types';
 import { VNCommand } from '../../../features/scene/types';
 import { ChoiceOption } from '../../../features/scene/types';
-import type { PhoneReply, PhoneIncomingCallCommand } from '../../../features/scene/types';
+import type { PhoneReply, PhoneFollowUp, PhoneIncomingCallCommand, PhoneCallConversation } from '../../../features/scene/types';
 import type { VNScreenOverlayEffect } from '../../../types';
 import type { VNCharacterVisualEffect, VNDialogueTextEffect, VNParticleConfig, VNLight } from '../../../features/scene/types';
 import type { PhonePortraitSource } from '../../../features/ui/types';
@@ -272,6 +272,9 @@ export interface StageState {
     lights?: VNLight[];
     /** Whether the placed lights render in front of characters (from the PlaceLights command). */
     lightsAbove?: boolean;
+    /** LIVE binding: number variable multiplying every placed light's brightness (0-2, 1 = as
+     *  authored). Additive-optional. */
+    lightsBrightnessVariableId?: VNID | null;
     /** Interactive scene hot spots (ShowHotSpot). Optional for back-compat with older saves. */
     hotSpotOverlays?: HotSpotOverlay[];
     /** Persistent movie overlays (transparent, looping) that play behind characters */
@@ -299,6 +302,10 @@ export interface StageState {
     screen: {
         shake: { active: boolean; intensity: number };
         tint: string;
+        /** Tint coverage 0-100 (undefined = 100 — old saves render identically). */
+        tintOpacity?: number;
+        /** LIVE binding: number variable driving tint opacity while the tint is on screen. */
+        tintOpacityVariableId?: VNID | null;
         zoom: number;
         panX: number;
         panY: number;
@@ -313,6 +320,9 @@ export interface StageState {
         startTime: number;
         /** Auto-stop duration (0 = persistent) */
         duration: number;
+        /** LIVE bindings: number variables driving emitter knobs while the effect runs
+         *  (resolved into the config every render; static config values = fallbacks). */
+        varBindings?: { emitRate?: VNID | null; wind?: VNID | null; gravity?: VNID | null; opacity?: VNID | null };
         /** Whether the effect is fading out */
         fadingOut?: boolean;
         /** Fade out duration remaining */
@@ -358,6 +368,11 @@ export interface PlayerState {
     /** Command ids of "pick up once" Show Item pickups the player has already collected, so they don't
      *  reappear on scene revisits. Persisted in saves; reset on a new game. */
     pickedUpItems?: VNID[];
+    /** Palette→UI restyle from a won coloring mini game: UI-target → hex color (e.g.
+     *  dialogueBg → the color the player painted the "dress" slot). Consulted by
+     *  DialogueBox/ChoiceMenu over the authored colors; cleared by the Clear UI Palette
+     *  action. Additive-optional; persisted in saves (old saves simply have none). */
+    uiPaletteOverride?: Record<string, string> | null;
     history: HistoryEntry[];
     /** Saved choice/input responses for skip-backward replay (keyed by `sceneId:commandIndex`) */
     savedInputs: Record<string, { type: 'choice'; choice: ChoiceOption } | { type: 'textInput'; value: string }>;
@@ -375,6 +390,12 @@ export interface PlayerState {
             textboxThemeId?: VNID | null;
             /** Per-line text-speed override (1-100); unset = use the global Text Speed setting. */
             textSpeed?: number;
+            /** Per-line auto-advance timer, SECONDS, counted from typewriter completion. */
+            timeLimit?: number;
+            /** Timer-only advance: clicks/keys reveal text but never advance the line. */
+            timeLimitLocked?: boolean;
+            /** Show a countdown bar while the timer runs. */
+            showTimer?: boolean;
         } | null;
         choices: ChoiceOption[] | null;
         /** Layout for the active choice menu (from the Choice command). undefined = vertical stack. */
@@ -409,6 +430,15 @@ export interface PlayerState {
         screenSceneId: VNID | null; // Track which scene a UI screen was opened from
         /** Whether skip-forward is currently active */
         isSkipping: boolean;
+        /** A full-screen travel map overlay (TRANSIENT — not saved; like choices, a paused Show
+         *  Map command re-presents on load). `fromCommand` = the scene is paused on it (tap/cancel
+         *  must advance); false = opened by a button action (closing just closes). */
+        mapOverlay?: { mapId: VNID; allowCancel?: boolean; fromCommand?: boolean } | null;
+        /** A full-screen mini game overlay (TRANSIENT — not saved; a paused Show Mini Game
+         *  command re-presents on load, so progress deliberately never enters saves).
+         *  `fromCommand` = the scene is paused on it (win/skip/fail exits must advance);
+         *  false = opened by a button action (resolving just closes). */
+        miniGameOverlay?: { gameId: VNID; fromCommand?: boolean } | null;
         /** In-game phone: open state + accumulated chat history. Persists in saves. */
         phone?: {
             open: boolean;
@@ -419,9 +449,11 @@ export interface PlayerState {
             pendingChoices?: ChoiceOption[];
             /** Richer reply options (text + follow-up sender messages + actions) for incoming texts. */
             pendingReplies?: PhoneReply[];
-            /** Which built-in phone view is showing: the home screen (app buttons), the chat thread,
-             *  the recents/history log, or the Contacts app. App buttons only appear on 'home'. */
-            view?: 'home' | 'chat' | 'history' | 'contacts';
+            /** Which phone APP is showing. The legacy union values ('home'|'chat'|'history'|
+             *  'contacts') double as app ids VERBATIM, so saves from before the app registry load
+             *  unchanged; newer apps just add ids. Unknown/disabled ids fall back to 'home' at
+             *  render (see PHONE_APPS). */
+            view?: PhoneAppId;
             /** The contact whose chat thread is currently open (filters the chat view). null = all messages. */
             activeContactId?: VNID | null;
             /** An in-progress OUTGOING call (player tapped Call in Contacts) → "Calling…" screen. */
@@ -432,13 +464,41 @@ export interface PlayerState {
             typing?: { senderId: VNID | 'player' } | null;
             /** An active incoming call (ringing) or the just-ended call awaiting teardown. */
             incomingCall?: PhoneIncomingCallState | null;
+            /** A LIVE scripted call (post-accept / post-dialing): the voiced transcript playing on
+             *  the call screen. Rides the saved phone slice — a save mid-call resumes (the next
+             *  line's timer is re-armed on load; 'dialing' is dropped like outgoingCall).
+             *  Additive-optional. */
+            activeCall?: PhoneActiveCallState | null;
             /** Persistent log of calls (accepted / declined / missed) for the recents view. */
             callLog?: PhoneCallLogEntry[];
             /** Unread/notification badge flag (drives the dialogue-box / HUD badge). */
             unread?: boolean;
+            /** Photos received via texts — the Gallery app's "Photos" tab. Additive-optional. */
+            cameraRoll?: PhoneCameraRollEntry[];
+            /** The player's wallpaper pick (Settings app; a phoneWallpapers entry id). Rides the
+             *  save. Unset / stale / condition-failing → the author's default wallpaper. */
+            wallpaperId?: VNID | null;
+            /** Notification history (texts, missed calls, Phone Notification command) — listed at
+             *  the top of the Recents app; opening the phone marks them read. Additive-optional. */
+            notifications?: PhoneNotificationEntry[];
+            /** Per-thread "messages seen" counts for the Messages inbox unread pills. Key = the
+             *  thread's contact/character id ('' = legacy unfiled messages). Value = how many of
+             *  that thread's messages the player had seen when they last opened it. Missing on
+             *  old saves → seeded from current counts at load (everything reads as seen). */
+            threadLastRead?: Record<string, number>;
+            /** Conversation-list entries (calls + texts) that already played — `once` entries in
+             *  this list are skipped by the picker. Marked when a conversation STARTS. */
+            playedConversations?: VNID[];
+            /** A scripted text conversation currently playing in a chat thread. */
+            activeTextConvo?: PhoneActiveTextState | null;
         } | null;
     };
 }
+
+/** The phone's app ids. The first four are the legacy `view` values (saved games store them, so
+ *  they must never be renamed); the rest are the app-registry additions. The registry itself
+ *  (render functions, icons, enablement) lives in live-preview/phone/phoneApps.tsx. */
+export type PhoneAppId = 'home' | 'chat' | 'history' | 'contacts' | 'gallery' | 'map' | 'settings' | 'call';
 
 /** One chat bubble in the in-game phone. `senderId` = a character id, or 'player' for the player's
  *  own (right-aligned) message. Stored in player state so the conversation persists across save/load. */
@@ -451,14 +511,49 @@ export interface PhoneMessage {
     /** The contact thread this message belongs to (a character id). Character messages = senderId;
      *  player replies = the active thread. Lets the Contacts app filter per-conversation. */
     contactId?: VNID;
+    /** Photo/video attached to the message (tap = fullscreen; collected into the camera roll). */
+    image?: { type: 'image' | 'video'; id: VNID } | null;
 }
 
-/** A non-blocking incoming-text banner. */
+/** One photo in the phone Gallery's camera roll (received via texts). Per-playthrough; rides the
+ *  saved phone slice. De-duped by the originating message id. */
+export interface PhoneCameraRollEntry {
+    id: VNID;
+    image: { type: 'image' | 'video'; id: VNID };
+    senderId?: VNID | 'player';
+    contactId?: VNID;
+    caption?: string;
+    order: number;
+}
+
+/** A non-blocking notification banner (incoming texts, missed calls, and the generic
+ *  Phone Notification command). senderId became optional when generic notifications arrived —
+ *  old saves always have it, so nothing breaks. */
 export interface PhoneNotification {
-    senderId: VNID | 'player';
+    senderId?: VNID | 'player';
     text: string;
     portrait?: PhonePortraitSource;
     visible: boolean;
+    /** Generic-notification extras (additive). */
+    title?: string;
+    icon?: string;                                 // PHONE_GLYPHS key
+    iconImage?: { type: 'image'; id: VNID } | null;
+    /** Tapping the banner runs these (default = open the phone, today's behavior). */
+    tapActions?: any[];
+}
+
+/** One row in the phone's notification list (top of the Recents app). */
+export interface PhoneNotificationEntry {
+    id: VNID;
+    title?: string;
+    text: string;
+    icon?: string;
+    iconImage?: { type: 'image'; id: VNID } | null;
+    portrait?: PhonePortraitSource;
+    senderId?: VNID | 'player';
+    read?: boolean;
+    tapActions?: any[];
+    order: number;
 }
 
 /** Live state of an incoming call. Carries the originating command so a save can fully restore the
@@ -481,6 +576,50 @@ export interface PhoneCallLogEntry {
     status: 'accepted' | 'declined' | 'missed';
     portrait?: PhonePortraitSource;
     order: number;
+    /** Which way the call went (additive; unset = legacy incoming). */
+    direction?: 'incoming' | 'outgoing';
+    /** How long a transcript call lasted (additive; unset for legacy/no-transcript calls). */
+    durationMs?: number;
+}
+
+/** A LIVE scripted call (the voiced in-call transcript). The RINGING stage stays on
+ *  `incomingCall` (so its save/load re-arm is untouched); this begins at accept / after dialing.
+ *  The whole object rides the saved phone slice; `conversation` is carried like
+ *  `incomingCall.cmd` so a load can resume from `lineIndex`/`queue`. */
+export interface PhoneActiveCallState {
+    contactId: VNID | 'player';
+    direction: 'incoming' | 'outgoing';
+    portrait?: PhonePortraitSource;
+    /** dialing (outgoing connect beat) → active (lines playing) → ended (brief "Call ended" beat). */
+    phase: 'dialing' | 'active' | 'ended';
+    /** The authored conversation being played. */
+    conversation?: PhoneCallConversation;
+    /** Next conversation line to land (index into conversation.lines). */
+    lineIndex: number;
+    /** Reply-injected follow-up lines pending before lineIndex resumes. */
+    queue?: PhoneFollowUp[];
+    /** Call-styled bubbles spoken so far (kept separate from texting messages). */
+    transcript: PhoneMessage[];
+    /** Replies currently offered (playback paused until a tap). */
+    pendingReplies?: PhoneReply[];
+    /** Accumulated talk time in ms — snapshotted at save; the live timer adds (now − resumedAt). */
+    elapsedMs: number;
+    /** Scene waits for the call to end (advance on end). */
+    blocking?: boolean;
+}
+
+/** A LIVE scripted TEXT conversation (a contact's gated textConversations entry playing out in
+ *  the chat thread: typing dots → lines land as messages → pauses on replies). Mirrors the
+ *  activeCall save/load contract: rides the phone slice verbatim; a load re-arms the next-line
+ *  timer unless it's paused on replies (landed lines are already in `messages`). */
+export interface PhoneActiveTextState {
+    contactId: VNID;
+    /** The authored conversation being played (carried like activeCall.conversation). */
+    conversation: PhoneCallConversation;
+    /** Next conversation line to land (index into conversation.lines). */
+    lineIndex: number;
+    /** The contact-list entry that started this (for the editor / debugging). */
+    entryId?: VNID;
 }
 
 export interface GameStateSave {

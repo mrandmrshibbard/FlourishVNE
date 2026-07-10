@@ -1,0 +1,4 @@
+{
+  "dialogueBox": { "position": "bottom", "opacity": 0.85, "textColor": "#ffffff" },
+  "choiceMenu": { "layout": "list" }
+}

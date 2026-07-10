@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flourishvne.dev/vnbundle/0.1.0/manifest.schema.json",
+  "title": "vnbundle manifest",
+  "type": "object",
+  "required": ["bundle_format_version", "game", "entry", "files"],
+  "properties": {
+    "bundle_format_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "generator": {
+      "type": "object",
+      "properties": { "name": { "type": "string" }, "version": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "game": {
+      "type": "object",
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9_\\-]+$" },
+        "title": { "type": "string" },
+        "author": { "type": "string" },
+        "version": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "entry": {
+      "type": "object",
+      "required": ["scene"],
+      "properties": { "scene": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "resolution": {
+      "type": "object",
+      "required": ["width", "height"],
+      "properties": { "width": { "type": "number", "minimum": 1 }, "height": { "type": "number", "minimum": 1 } },
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "scripts": { "type": "boolean" },
+        "plugins": { "type": "boolean" },
+        "miniGames": { "type": "boolean" },
+        "phone": { "type": "boolean" },
+        "inventory": { "type": "boolean" },
+        "maps": { "type": "boolean" },
+        "video": { "type": "boolean" },
+        "particles": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "files": {
+      "type": "object",
+      "required": ["scenes"],
+      "properties": {
+        "scenes": { "type": "string" },
+        "variables": { "type": "string" },
+        "logic": { "type": "string" },
+        "characters": { "type": "string" },
+        "ui": { "type": "string" },
+        "save": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

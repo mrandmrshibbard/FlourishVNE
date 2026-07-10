@@ -183,13 +183,17 @@ const CharacterItem: React.FC<CharacterItemProps> = ({
     const { t } = useTranslation('common');
     const { project: cardProject } = useProject();
     const { inputProps: renameInputProps } = useInlineRename(character.name, onCommitRename);
+    // The row is drag-to-reorder (draggable). Pressing on the NAME temporarily suppresses
+    // dragging so a double-click reliably enters rename mode instead of being swallowed as a
+    // drag-start (the native HTML5 drag preempts dblclick on the slightest movement).
+    const [suppressDrag, setSuppressDrag] = useState(false);
 
     // Get thumbnail from base image (managed refs → flourish-asset:// URL).
     const thumbnailUrl = resolveFieldUrl(cardProject.id, character.baseImageUrl) || undefined;
 
     return (
         <div
-            draggable={!isRenaming}
+            draggable={!isRenaming && !suppressDrag}
             onClick={onSelect}
             onDoubleClick={onStartRenaming}
             onDragStart={onDragStart}
@@ -222,14 +226,21 @@ const CharacterItem: React.FC<CharacterItemProps> = ({
                         className="w-full bg-slate-900 text-white p-1 rounded text-sm outline-none ring-1 ring-sky-500"
                     />
                 ) : (
-                    <span className="text-sm">{character.name}</span>
+                    <span
+                        className="text-sm block cursor-text"
+                        onMouseDown={() => setSuppressDrag(true)}
+                        onMouseUp={() => setSuppressDrag(false)}
+                        onMouseLeave={() => setSuppressDrag(false)}
+                        onDoubleClick={(e) => { e.stopPropagation(); onStartRenaming(); }}
+                        title={t('doubleClickToRename', 'Double-click to rename')}
+                    >{character.name}</span>
                 )}
             </div>
 
             <div className="flex items-center gap-1 flex-shrink-0">
                 <button
                     onClick={(e) => { e.stopPropagation(); onStartRenaming(); }}
-                    className="p-1 text-slate-500 hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-1 text-slate-500 hover:text-sky-400 transition-colors"
                     title={t('rename')}
                 >
                     <PencilIcon className="w-3 h-3" />

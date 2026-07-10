@@ -1,7 +1,7 @@
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 // FIX: UIActionType is exported from shared types.
-import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UICustomElement, DropdownOption } from '../features/ui/types';
+import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UITimerElement, UICustomElement, DropdownOption } from '../features/ui/types';
 import { UIActionType } from '../types/shared';
 
 const generateId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}`;
@@ -18,7 +18,7 @@ export const createCustomUIElement = (
     x: 40, y: 40,
     width: defaultSize?.width ?? 20,
     height: defaultSize?.height ?? 15,
-    anchorX: 0, anchorY: 0,
+    anchorX: 0.5, anchorY: 0.5, // center — see createUIElement note
     type: UIElementType.Custom,
     pluginType,
     props: { ...(defaultProps || {}) },
@@ -29,7 +29,10 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
         id: generateId(),
         name: `${type} Element`,
         x: 40, y: 40, width: 20, height: 10,
-        anchorX: 0, anchorY: 0,
+        // Center anchor (0.5) — matches scene overlays (Show Button/Image) AND the shipped
+        // default menu screens, so the same x/y lands an element in the same spot on a scene
+        // and on a screen. Existing projects keep whatever anchor they stored (no migration).
+        anchorX: 0.5, anchorY: 0.5,
     };
 
     switch(type) {
@@ -104,17 +107,20 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
             return el;
         }
         case UIElementType.Customizer: {
-            const firstCharId = Object.keys(project.characters)[0] || '';
-            const firstChar = firstCharId ? project.characters[firstCharId] : null;
-            const firstExprId = firstChar ? Object.keys(firstChar.expressions)[0] : undefined;
-
+            // Start with NO character chosen: picking one in Properties auto-includes its layers as
+            // cycle pickers (the inspector creates the backing variables), so it works out of the box.
             const el: UICustomizerElement = {
                 ...base, name: 'Customizer', type,
                 x: 20, y: 15, width: 60, height: 70,
-                characterId: firstCharId,
-                expressionId: firstExprId,
+                characterId: '',
+                expressionId: undefined,
                 categories: [],
-                layout: 'preview-left',
+                // Default to the box-less Free layout: the character floats (no box) so authors place
+                // their own art behind it, and the controls panel is hidden too. Presets stay available.
+                layout: 'free',
+                previewRect: { x: 8, y: 12, width: 30, height: 76 },
+                pickersRect: { x: 44, y: 12, width: 48, height: 76 },
+                hidePickersPanel: true,
                 previewPercent: 45,
                 showLabels: true,
                 font: project.ui.choiceTextFont,
@@ -298,6 +304,17 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
                 valueFormat: 'valueMax',
                 labelFont: project.ui.dialogueTextFont,
                 valueFont: project.ui.dialogueTextFont,
+            };
+            return el;
+        }
+        case UIElementType.Timer: {
+            const el: UITimerElement = {
+                ...base, name: 'Timer', type,
+                width: 10, height: 6,
+                durationSeconds: 3,
+                showCountdown: false,
+                loop: false,
+                actions: [],
             };
             return el;
         }

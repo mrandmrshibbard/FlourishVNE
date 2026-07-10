@@ -72,6 +72,7 @@ export enum CommandType {
     FlashScreen = 'FlashScreen',
     SetScreenOverlayEffect = 'SetScreenOverlayEffect',
     ShowScreen = 'ShowScreen',
+    HideScreen = 'HideScreen',
     ShowText = 'ShowText',
     ShowImage = 'ShowImage',
     HideText = 'HideText',
@@ -97,6 +98,7 @@ export enum CommandType {
     SellItem = 'SellItem',     // Sell an item to a shop list (gains currency)
     Lightning = 'Lightning',   // One-shot lightning flash(es), optionally synced with a thunder SFX
     Flashlight = 'Flashlight', // Darken the screen except a soft circle of light that follows the mouse
+    Spotlight = 'Spotlight',   // Darken the screen except a stage-light beam that can swivel with the mouse
     Fireworks = 'Fireworks',   // One-shot fireworks burst/volley, optionally synced with a boom SFX
     PlaceLights = 'PlaceLights', // Place individually-positioned twinkling lights (candle/star/christmas)
     ClearLights = 'ClearLights', // Remove all placed lights
@@ -107,8 +109,13 @@ export enum CommandType {
     HidePhoneText = 'HidePhoneText', // Clear the chat conversation. Labeled "Hide Text"
     PhoneIncomingText = 'PhoneIncomingText', // A text "arrives": banner+ding (or auto-open), with replies/follow-ups
     PhoneIncomingCall = 'PhoneIncomingCall', // A call rings: accept/decline overlay (or non-blocking ring)
+    StartPhoneCall = 'StartPhoneCall', // Player-dialed scripted call: dialing beat → voiced transcript
+    ShowMap = 'ShowMap', // Full-screen travel map: tap a location → its actions/scene jump (pauses like Choice)
+    PhoneNotify = 'PhoneNotify', // Generic phone notification: banner + badge + notification list
     StartTimer = 'StartTimer', // Start a countdown/stopwatch that ticks a number variable; runs actions when it finishes
     StopTimer = 'StopTimer',   // Stop a running timer (by id)
+    SetTimeOfDay = 'SetTimeOfDay', // Set/advance the day/night clock (drives the time-of-day color grade)
+    ShowMiniGame = 'ShowMiniGame', // Full-screen mini game overlay: pauses until won/skipped/failed (its exits advance)
 }
 
 /**
@@ -171,6 +178,10 @@ export interface VNDialogueTextEffect {
 export interface DialogueCommand extends BaseCommand {
     type: CommandType.Dialogue;
     characterId: VNID | null;
+    /** ⟨Player's Character⟩ targeting. When 'player', the speaker is the player-created character
+     *  and the name box shows the player-entered name (project.ui.playerCharacterNameVarId), falling
+     *  back to that character's name. Absent/'fixed' = classic behavior. Additive-optional. */
+    characterSource?: 'fixed' | 'player';
     text: string;
     /** Optional voice audio clip to play with this dialogue line */
     voiceAudioId?: VNID | null;
@@ -184,6 +195,14 @@ export interface DialogueCommand extends BaseCommand {
     /** Per-line text-speed override (chars/sec scale, same 1-100 range as the global Text Speed
      *  setting). Unset = use the player's global text speed. Additive-optional. */
     textSpeed?: number;
+    /** Time limit in SECONDS (like Choice.timeLimit): once the text finishes typing, the story
+     *  advances by itself after this long. 0/unset = none. Additive-optional. */
+    timeLimit?: number;
+    /** With a timeLimit: true = the line advances ONLY by the timer (clicks/keys just reveal the
+     *  text) — the "novel plays itself" pacing tool. Default false = players may click ahead. */
+    timeLimitLocked?: boolean;
+    /** Show a countdown bar on the dialogue box while the timer runs (default false). */
+    showTimer?: boolean;
 }
 
 export interface SetBackgroundCommand extends BaseCommand {
@@ -232,6 +251,11 @@ export interface VNCharacterVisualEffect {
 export interface ShowCharacterCommand extends BaseCommand {
     type: CommandType.ShowCharacter;
     characterId: VNID;
+    /** ⟨Player's Character⟩ targeting. When 'player', the engine ignores `characterId` and shows
+     *  whichever character the player created (project.ui.playerCharacterVarId). Absent/'fixed' =
+     *  classic behavior (show `characterId`). `characterId` is kept as an editor-preview fallback.
+     *  Additive-optional. */
+    characterSource?: 'fixed' | 'player';
     expressionId: VNID;
     position: VNPosition;
     transition: VNTransition;
@@ -264,6 +288,8 @@ export interface ShowCharacterCommand extends BaseCommand {
 export interface HideCharacterCommand extends BaseCommand {
     type: CommandType.HideCharacter;
     characterId: VNID;
+    /** ⟨Player's Character⟩ targeting — hide the player-created character. Additive-optional. */
+    characterSource?: 'fixed' | 'player';
     transition: VNTransition;
     duration: number; // in seconds
     startPosition?: VNPosition; // for slide transitions
@@ -359,6 +385,16 @@ export interface StopTimerCommand extends BaseCommand {
     type: CommandType.StopTimer;
     /** Which timer to stop. Blank = 'default'. */
     timerId?: string;
+}
+
+export interface SetTimeOfDayCommand extends BaseCommand {
+    type: CommandType.SetTimeOfDay;
+    /** 'set' = jump to `hour`; 'advance' = add `hours` (wraps past 24). */
+    mode: 'set' | 'advance';
+    hour?: number;   // 0–24, for mode 'set'
+    hours?: number;  // delta, for mode 'advance'
+    /** Seconds to smoothly ease the color grade to the new time (0 = instant). */
+    transitionDuration?: number;
 }
 
 export interface BranchStartCommand extends BaseCommand {
@@ -508,12 +544,19 @@ export interface ShakeScreenCommand extends BaseCommand {
     type: CommandType.ShakeScreen;
     duration: number; // in seconds
     intensity: number;
+    /** Follow a number variable for intensity (1-10, read when the command RUNS). Additive. */
+    intensityVariableId?: VNID | null;
 }
 
 export interface TintScreenCommand extends BaseCommand {
     type: CommandType.TintScreen;
     color: string;
     duration: number; // in seconds
+    /** How strongly the tint covers the screen, 0-100 (undefined = 100). Additive-optional. */
+    opacity?: number;
+    /** LIVE binding: a number variable (0-100) that drives the tint opacity while the tint is
+     *  on screen — changes to the variable fade the tint in real time. Additive-optional. */
+    opacityVariableId?: VNID | null;
 }
 export interface PanZoomScreenCommand extends BaseCommand {
     type: CommandType.PanZoomScreen;
@@ -521,6 +564,11 @@ export interface PanZoomScreenCommand extends BaseCommand {
     panX: number; // percentage (0-100)
     panY: number; // percentage (0-100)
     duration: number; // in seconds
+    /** Follow number variables (read when the command RUNS — live values would fight screen
+     *  tweens): zoom 0.1-5, panX/panY -100..100. Additive-optional. */
+    zoomVariableId?: VNID | null;
+    panXVariableId?: VNID | null;
+    panYVariableId?: VNID | null;
 }
 export interface ResetScreenEffectsCommand extends BaseCommand {
     type: CommandType.ResetScreenEffects;
@@ -530,12 +578,16 @@ export interface FlashScreenCommand extends BaseCommand {
     type: CommandType.FlashScreen;
     color: string;
     duration: number; // in seconds
+    /** Follow a number variable for duration in seconds (read when the command RUNS). Additive. */
+    durationVariableId?: VNID | null;
 }
 
 export interface LightningCommand extends BaseCommand {
     type: CommandType.Lightning;
     color?: string;        // flash color (default near-white #EAF2FF)
     intensity?: number;    // 0..1 peak brightness (default 0.9)
+    /** Follow a number variable for intensity (0-1, read when the command RUNS). Additive. */
+    intensityVariableId?: VNID | null;
     duration?: number;     // total flicker duration in seconds (default 0.7)
     flashes?: 1 | 2 | 3;   // flicker pattern (default 2)
     thunderSfxId?: VNID | null; // optional thunder audio asset
@@ -551,6 +603,11 @@ export interface FireworksCommand extends BaseCommand {
     bursts?: number;        // rockets in this volley (default 3)
     duration?: number;      // total seconds the volley runs (default 2.5)
     intensity?: number;     // 0..1 overall brightness/opacity (default 1)
+    /** Follow number variables (read when the command RUNS): bursts 1-20, intensity 0-1,
+     *  burst height 0-1. Additive. */
+    burstsVariableId?: VNID | null;
+    intensityVariableId?: VNID | null;
+    burstHeightVariableId?: VNID | null;
     burstHeight?: number;   // 0..1 how high the bursts explode (0 = low, 1 = near top; default 0.7)
     sfxId?: VNID | null;    // optional boom SFX
     sfxDelay?: number;      // seconds before the first boom (default 0.3)
@@ -582,6 +639,9 @@ export interface PlaceLightsCommand extends BaseCommand {
     lights: VNLight[];
     /** Render the lights in FRONT of characters (default false = behind characters, on the scene). */
     aboveCharacters?: boolean;
+    /** LIVE binding: a number variable used as a brightness MULTIPLIER for all placed lights
+     *  (0-2; 1 = as authored) — e.g. candles dimming as a "power" variable drains. Additive. */
+    brightnessVariableId?: VNID | null;
 }
 
 export interface ClearLightsCommand extends BaseCommand {
@@ -598,6 +658,10 @@ export interface FlashlightCommand extends BaseCommand {
     softness?: number;
     /** How dark the rest of the screen gets, 0..1 (default 0.85). */
     darkness?: number;
+    /** LIVE bindings: number variables that drive radius (1-100) / darkness (0-1) while the
+     *  flashlight is on — e.g. a shrinking beam as a battery variable drains. Additive-optional. */
+    radiusVariableId?: VNID | null;
+    darknessVariableId?: VNID | null;
     /** Darkness/vignette color (default black). */
     color?: string;
     /** Optional key the player can press to toggle the flashlight on/off (e.g. "f"). */
@@ -612,11 +676,50 @@ export interface FlashlightCommand extends BaseCommand {
     darkWhenOff?: boolean;
 }
 
+export interface SpotlightCommand extends BaseCommand {
+    type: CommandType.Spotlight;
+    /** Turn the spotlight on or off. */
+    enabled: boolean;
+    /** Identity of THIS beam — multiple Spotlight commands with different ids = multiple independent
+     *  beams; the same id updates/removes that beam. Default 'main'. */
+    spotlightId?: string;
+    /** Source point (where the beam originates), % of screen. Default 50 / 0 = top-centre. */
+    sourceX?: number;
+    sourceY?: number;
+    /** Aim direction in degrees: 0 = straight down, positive = toward the right. Default 0. */
+    aimAngle?: number;
+    /** How dark the rest of the screen gets outside the beam, 0..1 (default 0.85). */
+    intensity?: number;
+    /** Beam width at the far end, as % of screen width (default 45). */
+    beamWidth?: number;
+    /** Beam width at the SOURCE (top), as % of screen width (default 8) — a narrow source = a tight cone. */
+    sourceWidth?: number;
+    /** How far down the beam reaches, as % of screen height (default 100 = full height). */
+    height?: number;
+    /** Softness of the beam's light falloff, 0..1 (default 0.5). */
+    falloff?: number;
+    /** Beam LIGHT colour (default warm white). */
+    color?: string;
+    /** When true the beam swivels side-to-side to aim toward the mouse (default true). */
+    followMouse?: boolean;
+    /** Max swivel angle to each side in degrees when following the mouse (default 30). */
+    swivelMax?: number;
+    /** Optional key the player can press to toggle the spotlight on/off (e.g. "f"). */
+    toggleKey?: string;
+    /** Optional SFX played when the spotlight turns on. */
+    sfxId?: VNID | null;
+    /** When false, the dialogue box stays fully lit above the darkness (default true = it dims too). */
+    affectsDialogue?: boolean;
+}
+
 export interface SetScreenOverlayEffectCommand extends BaseCommand {
     type: CommandType.SetScreenOverlayEffect;
     effectType: VNScreenOverlayEffectType;
     /** 0..1 (0 disables) */
     intensity: number;
+    /** LIVE binding: a number variable (0-1) that drives intensity while the effect is active
+     *  (e.g. rain thickening as a storm variable rises). Additive-optional. */
+    intensityVariableId?: VNID | null;
     /** Only used for snowAsh */
     variant?: VNSnowAshVariant;
     /** Optional color for the effect (hex string like #FFAA00) */
@@ -629,6 +732,14 @@ export interface SetScreenOverlayEffectCommand extends BaseCommand {
 export interface ShowScreenCommand extends BaseCommand {
     type: CommandType.ShowScreen;
     screenId: VNID;
+}
+
+export interface HideScreenCommand extends BaseCommand {
+    type: CommandType.HideScreen;
+    /** Which screen to hide; empty = the most recently shown screen. */
+    screenId?: VNID;
+    /** Hide every open screen/HUD at once. */
+    all?: boolean;
 }
 
 export interface VNTextShadow {
@@ -983,6 +1094,13 @@ export interface SpawnParticlesCommand extends BaseCommand {
     config: VNParticleConfig;
     /** Duration before auto-stop (0 = persistent until StopParticles) */
     duration: number;
+    /** LIVE bindings: number variables that drive emitter knobs while the effect runs —
+     *  density (emitRate, particles/sec), wind, gravity, opacity (0-1). The config's static
+     *  values are the fallbacks. Additive-optional. */
+    emitRateVariableId?: VNID | null;
+    windVariableId?: VNID | null;
+    gravityVariableId?: VNID | null;
+    opacityVariableId?: VNID | null;
 }
 
 export interface StopParticlesCommand extends BaseCommand {
@@ -1115,6 +1233,8 @@ export interface MoveCharacterCommand extends BaseCommand {
     type: CommandType.MoveCharacter;
     /** The on-stage character to move. */
     characterId: VNID;
+    /** ⟨Player's Character⟩ targeting — move the player-created character. Additive-optional. */
+    characterSource?: 'fixed' | 'player';
     /** Destination (point B). Preset ('left'/'center'/'right'/…) or custom {x,y} percentage. */
     toPosition: VNPosition;
     /** Optional start override (point A). Unset = animate from wherever the character currently is. */
@@ -1138,15 +1258,15 @@ export type VNCommand =
     | ChoiceCommand | BranchStartCommand | BranchElseIfCommand | BranchElseCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
   | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | StopMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand
-    | FlashScreenCommand | LightningCommand | FlashlightCommand | FireworksCommand | PlaceLightsCommand | ClearLightsCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
+    | FlashScreenCommand | LightningCommand | FlashlightCommand | SpotlightCommand | FireworksCommand | PlaceLightsCommand | ClearLightsCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | HideScreenCommand | ShowTextCommand | ShowImageCommand
   | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | ShowItemCommand | CreditRollCommand | GroupCommand | RunScriptCommand
   | SpawnParticlesCommand | StopParticlesCommand | CallCommonEventCommand
   | ShowHotSpotCommand | HideHotSpotCommand
   | TweenElementCommand | MoveCharacterCommand
   | GiveItemCommand | UseItemCommand | DestroyItemCommand | RestockCollectionCommand | BuyItemCommand | SellItemCommand
   | ShowPhoneCommand | HidePhoneCommand | ShowPhoneTextCommand | HidePhoneTextCommand
-  | PhoneIncomingTextCommand | PhoneIncomingCallCommand
-  | StartTimerCommand | StopTimerCommand;
+  | PhoneIncomingTextCommand | PhoneIncomingCallCommand | StartPhoneCallCommand | ShowMapCommand | PhoneNotifyCommand
+  | StartTimerCommand | StopTimerCommand | SetTimeOfDayCommand | ShowMiniGameCommand;
 
 /** Phone (in-game cellphone) commands. */
 export interface ShowPhoneCommand extends BaseCommand { type: CommandType.ShowPhone; }
@@ -1160,6 +1280,9 @@ export interface ShowPhoneTextCommand extends BaseCommand {
     choices?: ChoiceOption[];
     /** Optional avatar source for this message (base sprite / chosen pose / custom). Unset = base. */
     portrait?: PhonePortraitSource;
+    /** Photo/video attached to the message (renders in the bubble; tap = fullscreen; received
+     *  photos auto-collect into the phone Gallery's camera roll). Text may be empty. Additive. */
+    image?: { type: 'image' | 'video'; id: VNID } | null;
 }
 /** Clears the chat conversation (the phone shell can stay open). */
 export interface HidePhoneTextCommand extends BaseCommand { type: CommandType.HidePhoneText; }
@@ -1172,6 +1295,11 @@ export interface PhoneFollowUp {
     portrait?: PhonePortraitSource;
     soundId?: VNID | null;   // optional ding for this follow-up
     delayMs?: number;        // typing delay before it lands (default ~900ms)
+    /** Voice clip spoken when this line lands — used by CALL conversations (texting editors don't
+     *  surface it). Falls back to the speaker's default voice. Additive-optional. */
+    voiceAudioId?: VNID | null;
+    /** Photo/video attached to this follow-up message. Additive-optional. */
+    image?: { type: 'image' | 'video'; id: VNID } | null;
 }
 
 /** One reply the player can tap on an incoming text. Beyond the player's own bubble, it can make the
@@ -1182,6 +1310,9 @@ export interface PhoneReply {
     conditions?: VNCondition[];
     followUps?: PhoneFollowUp[];
     actions?: VNUIAction[];
+    /** CALL conversations only: tapping this reply hangs up (after its followUps play).
+     *  Texting ignores it. Additive-optional. */
+    endsCall?: boolean;
 }
 
 /** A text "arrives" mid-scene. `presentation:'notify'` (default) shows a non-blocking banner + ding +
@@ -1196,6 +1327,8 @@ export interface PhoneIncomingTextCommand extends BaseCommand {
     showBadge?: boolean;         // dialogue-box / HUD notification badge
     typingMs?: number;           // optional "…" beat before the message lands (0 = instant)
     replies?: PhoneReply[];
+    /** Photo/video attached to the message (bubble render + camera-roll collection). Additive. */
+    image?: { type: 'image' | 'video'; id: VNID } | null;
 }
 
 /** A call rings. `mode:'modal'` (default) shows an accept/decline overlay that pauses the scene;
@@ -1213,6 +1346,106 @@ export interface PhoneIncomingCallCommand extends BaseCommand {
     acceptActions?: VNUIAction[];
     declineActions?: VNUIAction[];
     showBadge?: boolean;
+    /** Scripted in-call conversation played on ACCEPT (voice-styled transcript with replies).
+     *  Unset = legacy behavior (accept just runs acceptActions). Additive-optional. */
+    conversation?: PhoneCallConversation;
+}
+
+/** One scripted line of an in-call conversation (voiced, condition-gated, reply-pausable). */
+export interface PhoneCallLine {
+    id: VNID;
+    speakerId: VNID | 'player';
+    text: string;
+    portrait?: PhonePortraitSource;
+    /** Voice clip spoken as the line lands. Falls back to the speaker's default voice (same rule
+     *  as Dialogue). */
+    voiceAudioId?: VNID | null;
+    /** Pace this line by its voice clip: the NEXT line lands when the clip finishes (falls back
+     *  to delayMs when there's no clip or audio is blocked). */
+    waitForVoice?: boolean;
+    /** Beat before the line lands (default ~900ms, like text follow-ups). */
+    delayMs?: number;
+    soundId?: VNID | null;
+    /** Attached photo/video — renders in the bubble (text conversations collect it into the
+     *  Gallery; call transcripts show it inline). Additive-optional. */
+    image?: { type: 'image' | 'video'; id: VNID } | null;
+    /** Line plays only when met — earlier replies' actions (Set Variable…) steer later lines. */
+    conditions?: VNCondition[];
+    /** When set, playback pauses for a tap; the chosen reply's followUps speak (voiced via
+     *  PhoneFollowUp.voiceAudioId), its actions run, then lines resume (or endsCall hangs up). */
+    replies?: PhoneReply[];
+}
+
+/** A whole scripted call: lines + what happens when it ends. */
+export interface PhoneCallConversation {
+    lines: PhoneCallLine[];
+    /** Run when the call ends (hang-up, endsCall reply, or lines exhausted). */
+    endActions?: VNUIAction[];
+    /** End automatically when lines run out (default true). false = stays on the call screen
+     *  until the player hangs up. */
+    autoEnd?: boolean;
+}
+
+/** One entry in a contact's conversation LIST (calls or texts). The engine plays the FIRST
+ *  entry whose conditions pass — so a contact can hold many conversations and the story's
+ *  variables pick the right one. `once` entries are skipped after they've played (tracked in
+ *  phone.playedConversations, rides the save). Additive-optional. */
+export interface PhoneConversationEntry {
+    id: VNID;
+    /** Author label ("After the party") — editor-only. */
+    name?: string;
+    /** Gate — first passing entry wins. Empty/unset = always eligible. */
+    conditions?: VNCondition[];
+    /** Play at most once per playthrough (marked as played when it starts). */
+    once?: boolean;
+    conversation: PhoneCallConversation;
+}
+
+/** A generic phone notification (news alert, quest update, app ping…): shows the themed banner
+ *  (+ ding + badge) and lands in the phone's notification list. Non-blocking. */
+export interface PhoneNotifyCommand extends BaseCommand {
+    type: CommandType.PhoneNotify;
+    title?: string;
+    text: string;
+    icon?: string;                                  // PHONE_GLYPHS key
+    iconImage?: { type: 'image'; id: VNID } | null;
+    soundId?: VNID | null;                          // ding; falls back to the themed default
+    showBadge?: boolean;                            // default true
+    /** Run when the player taps the banner or the list row (default: just opens the phone). */
+    tapActions?: VNUIAction[];
+    /** 'notify' (default) = banner + list; 'silent' = list + badge only (no banner). */
+    presentation?: 'notify' | 'silent';
+}
+
+/** Show a travel map full-screen. Pauses the scene (exactly like a Choice) until the player taps
+ *  an unlocked location — its actions run, then the scene jump — or cancels (when allowed). */
+export interface ShowMapCommand extends BaseCommand {
+    type: CommandType.ShowMap;
+    mapId: VNID;
+    /** Show a ✕ so the player can close the map without traveling (advances the scene). */
+    allowCancel?: boolean;
+}
+
+/** Show a mini game full-screen. Pauses the scene (exactly like a Choice) until the player wins,
+ *  skips, or fails it — each exit runs its authored actions, then the scene advances. Progress is
+ *  transient: a save taken mid-game re-presents this command on load. */
+export interface ShowMiniGameCommand extends BaseCommand {
+    type: CommandType.ShowMiniGame;
+    gameId: VNID;
+}
+
+/** Player-dialed scripted call from the story ("you call Mom"): dialing beat → transcript. */
+export interface StartPhoneCallCommand extends BaseCommand {
+    type: CommandType.StartPhoneCall;
+    /** The character being called (shown as the call screen's contact). */
+    contactId: VNID;
+    portrait?: PhonePortraitSource;
+    /** Unset = use the contact's "Call conversation" from the Contacts editor. */
+    conversation?: PhoneCallConversation;
+    /** "Calling…" beat before the call connects (ms, default 1200). */
+    dialingMs?: number;
+    /** Scene waits until the call ends (default true). */
+    blocking?: boolean;
 }
 
 /** Inventory item commands — sugar over the item's count variable. */
@@ -1233,4 +1466,7 @@ export interface VNScene {
     outTransitionDuration?: number;  // Exit transition duration in seconds (default 0.5)
     /** Optional parallax for this scene's stage (off by default). */
     parallax?: VNParallaxSettings;
+    /** Day/night override for this scene. 'cycle' (default) follows the global clock; 'fixed' pins the
+     *  time on entry; 'off' disables grading here. Additive-optional. */
+    dayNight?: { mode: 'cycle' | 'fixed' | 'off'; fixedHour?: number };
 }

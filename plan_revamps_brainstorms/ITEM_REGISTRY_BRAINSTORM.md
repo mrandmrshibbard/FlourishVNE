@@ -1,7 +1,12 @@
 # Item Registry — Design Brainstorm
 
-> **Status:** Brainstorm only. Nothing implemented yet. This is a parking-lot doc to
-> resume from later. Captured 2026-06-03.
+> **Status:** BUILT & SHIPPED (verified 2026-07-08) — this brainstorm was realized as the
+> Inventory pilot of the Systems framework (see SYSTEMS_ROADMAP.md, which supersedes this doc).
+> The registry lives at `project.items` (`src/features/items/types.ts`), is managed in the
+> **Items tab of `SystemsManager.tsx`**, and is auto-rendered by `UIInventoryGridElement`.
+> Shipped in commit `f8b1003`. The original brainstorm text below is kept for history.
+>
+> _(Historical, captured 2026-06-03:)_ Parking-lot doc to resume from later.
 >
 > Context: the current "inventory" is hand-rolled — image-map regions write a
 > `selected_item` string variable and element visibility is gated by conditions.

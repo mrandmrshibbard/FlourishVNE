@@ -1,0 +1,53 @@
+{
+  "variables": [
+    {
+      "id": "var-9pz4vfh",
+      "name": "helped_kais_mom",
+      "type": "boolean",
+      "default": false,
+      "scope": "global"
+    },
+    {
+      "id": "var-8c6f8s3",
+      "name": "chose_male",
+      "type": "boolean",
+      "default": false,
+      "scope": "global"
+    },
+    {
+      "id": "var-vkeosws",
+      "name": "chose_female",
+      "type": "boolean",
+      "default": false,
+      "scope": "global"
+    },
+    {
+      "id": "var-7ffu73c",
+      "name": "chose_enby",
+      "type": "boolean",
+      "default": false,
+      "scope": "global"
+    },
+    {
+      "id": "var-cfrg7gf",
+      "name": "name",
+      "type": "string",
+      "default": "",
+      "scope": "global"
+    },
+    {
+      "id": "var-nqgtc19",
+      "name": "player_full",
+      "type": "string",
+      "default": "",
+      "scope": "global"
+    },
+    {
+      "id": "var-n614b5m",
+      "name": "i_win",
+      "type": "boolean",
+      "default": false,
+      "scope": "global"
+    }
+  ]
+}

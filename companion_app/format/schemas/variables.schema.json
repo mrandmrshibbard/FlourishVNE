@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flourishvne.dev/vnbundle/0.1.0/variables.schema.json",
+  "title": "vnbundle variables",
+  "type": "object",
+  "required": ["variables"],
+  "properties": {
+    "variables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type", "default"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Za-z0-9_\\-]+$" },
+          "name": { "type": "string" },
+          "type": { "enum": ["string", "number", "boolean"] },
+          "default": {},
+          "scope": { "enum": ["local", "global", "persistent"] },
+          "min": { "type": "number" },
+          "max": { "type": "number" },
+          "trueLabel": { "type": "string" },
+          "falseLabel": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -13,6 +13,7 @@ import ResizableDraggable from './menu-editor/ResizableDraggable';
 import CanvasSnapGuides from './menu-editor/CanvasSnapGuides';
 import { snapRect, insetRect, SnapGuide, SnapRect } from '../utils/canvasSnap';
 import { computeCharacterFitPlacement } from '../utils/characterFit';
+import { computeGrade, gradeToBackgroundStyle, gradeToCharacterFilter, gradeToSpriteTint } from './live-preview/systems/dayNightGrade';
 import ContentBoxEditor from './menu-editor/ContentBoxEditor';
 import { computeAlphaBounds } from '../utils/alphaBounds';
 
@@ -70,6 +71,7 @@ import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { EyeIcon, EyeSlashIcon, FilmIcon, VariablesIcon } from './icons';
 import { computeArrangedPositions } from '../utils/characterArrange';
 import Panel from './ui/Panel';
+import CanvasEdgeFrame from './ui/CanvasEdgeFrame';
 import TrimmedVideo from './ui/TrimmedVideo';
 import { canvasPointPick, useCanvasPointPick } from '../utils/canvasPointPick';
 import { useCommandRadial } from './inspector/CommandRadialContext';
@@ -160,6 +162,9 @@ interface ButtonOverlay {
     text: string;
     x: number;
     y: number;
+    /** 0-1 anchor (which point of the button sits on x/y); default 0.5 = center. */
+    anchorX: number;
+    anchorY: number;
     width: number;
     height: number;
     backgroundColor: string;
@@ -441,9 +446,14 @@ const StagingArea: React.FC<{
                     if (charData && exprData) {
                         // Resolve each layer: per-layer override wins, else the expression (preset) config.
                         const sel: Record<string, string | null> = {};
+                        const prevChar = characters[command.characterId];
                         Object.values(charData.layers).forEach((layer: VNCharacterLayer) => {
                             if (command.layerOverrides && Object.prototype.hasOwnProperty.call(command.layerOverrides, layer.id)) sel[layer.id] = command.layerOverrides[layer.id] || null;
-                            else sel[layer.id] = exprData.layerConfiguration[layer.id] ?? null;
+                            else if (Object.prototype.hasOwnProperty.call(exprData.layerConfiguration, layer.id)) sel[layer.id] = exprData.layerConfiguration[layer.id] ?? null;
+                            // Preserve accessory layers the expression doesn't define (e.g. a hat added via
+                            // Set Character Layer) — mirrors the runtime so the canvas doesn't drop them on a flip.
+                            else if ((prevChar as any)?.layerSelections && Object.prototype.hasOwnProperty.call((prevChar as any).layerSelections, layer.id)) sel[layer.id] = (prevChar as any).layerSelections[layer.id];
+                            else sel[layer.id] = null;
                         });
                         const imageUrls: string[] = [];
                         if (charData.baseImageUrl) imageUrls.push(charData.baseImageUrl);
@@ -464,6 +474,26 @@ const StagingArea: React.FC<{
                 case CommandType.HideCharacter:
                     delete characters[command.characterId];
                     break;
+                case CommandType.MoveCharacter: {
+                    // Mirror the runtime: a Move Character updates where the character RESTS, so a later
+                    // "Show Character" with "Keep current position" inherits the moved-to spot instead of
+                    // snapping back to the pre-move position.
+                    const mc = characters[command.characterId];
+                    if (mc) {
+                        // When the author is editing THIS move, the on-canvas character must belong to the
+                        // move command so dragging it sets the move's DESTINATION (point B) — not the
+                        // original Show Character's position (which would "reset" where the char starts).
+                        const isSelectedMove = selectedCommandIndex !== null && scene.commands[selectedCommandIndex]?.id === command.id;
+                        characters[command.characterId] = {
+                            ...mc,
+                            position: command.toPosition,
+                            ...(command.scale !== undefined ? { scale: command.scale } : {}),
+                            ...(command.rotation !== undefined ? { rotation: command.rotation } : {}),
+                            ...(isSelectedMove ? { sourceCommandId: command.id } : {}),
+                        };
+                    }
+                    break;
+                }
                 case CommandType.SetCharacterLayer: {
                     const cur = characters[command.characterId];
                     const cData = project.characters[command.characterId];
@@ -553,6 +583,8 @@ const StagingArea: React.FC<{
                             text: buttonCmd.text,
                             x: buttonCmd.x,
                             y: buttonCmd.y,
+                            anchorX: buttonCmd.anchorX ?? 0.5,
+                            anchorY: buttonCmd.anchorY ?? 0.5,
                             // Mirror the runtime defaults (overlayHandler) so a button with
                             // unset size/colors still renders on the canvas instead of
                             // collapsing to an invisible 0-size element.
@@ -592,6 +624,8 @@ const StagingArea: React.FC<{
                             text: '',
                             x: itemCmd.x,
                             y: itemCmd.y,
+                            anchorX: itemCmd.anchorX ?? 0.5,
+                            anchorY: itemCmd.anchorY ?? 0.5,
                             width: itemCmd.width || 10,
                             height: itemCmd.height || 10,
                             backgroundColor: 'transparent',
@@ -889,6 +923,27 @@ const StagingArea: React.FC<{
     const [overlaySnapGuides, setOverlaySnapGuides] = useState<SnapGuide[]>([]);
     // Smart-snap toggle (editor-only UI pref; default ON). Hold Alt to bypass per-interaction.
     const [snapEnabled, setSnapEnabled] = useState(false);
+    // Show the game HUD's click-capturing areas on the scene canvas (default ON) — an always-on
+    // HUD renders over every scene in-game, so an author's scene hotspot placed underneath one
+    // silently loses the click. Persisted per user.
+    const [showHudOverlays, setShowHudOverlays] = useState<boolean>(() => {
+        try { return localStorage.getItem('flourish:stagingShowHudOverlays') !== 'off'; } catch { return true; }
+    });
+    const toggleHudOverlays = () => setShowHudOverlays(s => {
+        try { localStorage.setItem('flourish:stagingShowHudOverlays', s ? 'off' : 'on'); } catch { /* ignore */ }
+        return !s;
+    });
+    // The game HUD's interactive (click-capturing) elements: hotspots, buttons, and
+    // draggable/interactive elements. Rendered as faint outlines so overlaps are visible.
+    const hudInteractiveElements = React.useMemo(() => {
+        const hudId = project.ui?.gameHudScreenId;
+        const hud = hudId ? project.uiScreens?.[hudId] : null;
+        if (!hud) return [];
+        return (Object.values(hud.elements || {}) as any[]).filter(el =>
+            el.type === 'HotSpot' || el.type === 'Button' || el.type === 'draggableImageElement'
+            || el.interactive === true || el.draggable === true
+        );
+    }, [project.ui?.gameHudScreenId, project.uiScreens]);
 
     // Top-left-% rect + anchor for every snappable overlay, keyed by command id. Used both as the
     // sibling set for alignment snapping and to convert a dragged overlay's anchor → top-left.
@@ -1050,10 +1105,23 @@ const StagingArea: React.FC<{
                     const idx = scene.commands.findIndex((c: VNCommand) => c.id === drag.sourceCommandId);
                     if (idx < 0) continue;
                     const cmd = scene.commands[idx];
-                    if (drag.kind === 'character') {
+                    if (drag.kind === 'character' && cmd.type === CommandType.MoveCharacter) {
+                        // Dragging the character while editing a Move command sets its DESTINATION
+                        // (point B) — it must NOT touch the original Show Character's position.
                         dispatch({
                             type: 'UPDATE_COMMAND',
-                            payload: { sceneId: scene.id, commandIndex: idx, command: { ...cmd, position: { x: newX, y: newY } } },
+                            payload: { sceneId: scene.id, commandIndex: idx, command: { ...cmd, toPosition: { x: newX, y: newY } } },
+                        });
+                    } else if (drag.kind === 'character') {
+                        // Dragging to reposition is an explicit position intent. If this command has
+                        // "Keep current position (expression change only)" on, that flag would discard
+                        // the new position on the next render (snapping the sprite back to where it was).
+                        // So turn it off when the author actually moves the character.
+                        const charCmd: any = { ...cmd, position: { x: newX, y: newY } };
+                        if (charCmd.keepPosition) charCmd.keepPosition = undefined;
+                        dispatch({
+                            type: 'UPDATE_COMMAND',
+                            payload: { sceneId: scene.id, commandIndex: idx, command: charCmd },
                         });
                     } else {
                         dispatch({
@@ -1675,6 +1743,18 @@ const StagingArea: React.FC<{
     const selectedCmd = selectedCommandIndex != null ? (project.scenes[activeSceneId]?.commands[selectedCommandIndex] as VNCommand | undefined) : undefined;
     const selectedCmdId = selectedCmd?.id ?? null;
 
+    // Day/night grade preview (WYSIWYG): use the scene's fixed hour, else the time variable's default.
+    const dnc = project.dayNightCycle;
+    const sceneDN = project.scenes[activeSceneId]?.dayNight;
+    const dnPreviewActive = !!(dnc?.enabled && dnc.phases?.length && sceneDN?.mode !== 'off');
+    const dnPreviewHour = sceneDN?.mode === 'fixed'
+        ? (sceneDN.fixedHour ?? 12)
+        : Number((dnc?.timeVariableId ? project.variables[dnc.timeVariableId]?.defaultValue : undefined) ?? 12);
+    const dnGrade = dnPreviewActive ? computeGrade(dnPreviewHour, dnc!.phases) : null;
+    const dnBg = dnGrade ? gradeToBackgroundStyle(dnGrade.background) : null;
+    const dnCharFilter = dnGrade ? gradeToCharacterFilter(dnGrade.sprites) : '';
+    const dnSpriteTint = dnGrade ? gradeToSpriteTint(dnGrade.sprites) : null;
+
     const stageInner = (
             <div ref={containerRef} className="w-full h-full flex items-center justify-center p-2">
                 <div
@@ -1704,8 +1784,12 @@ const StagingArea: React.FC<{
                         </div>
                     )}
                     {stageState.backgroundUrl && (stageState.backgroundIsVideo
-                        ? <TrimmedVideo key={`stage-bg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={stageState.backgroundUrl} autoPlay loop muted trimStart={stageState.backgroundTrimStart} trimEnd={stageState.backgroundTrimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" />
-                        : <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" />
+                        ? <TrimmedVideo key={`stage-bg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={stageState.backgroundUrl} autoPlay loop muted trimStart={stageState.backgroundTrimStart} trimEnd={stageState.backgroundTrimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" style={dnBg ? { filter: dnBg.filter } : undefined} />
+                        : <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" style={dnBg ? { filter: dnBg.filter } : undefined} />
+                    )}
+                    {/* Day/night background grade preview (tint), above the background, below characters. */}
+                    {dnBg && dnBg.overlayColor !== 'transparent' && (
+                        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 3, backgroundColor: dnBg.overlayColor }} />
                     )}
 
                     {/* Stacked background planes (SetBackground `stack`): shown at their layer so the
@@ -1867,11 +1951,20 @@ const StagingArea: React.FC<{
                                 ...finalStyle,
                                 zIndex: isDragging ? 100000 : 5 + (char.layer ?? 0) * 100,
                                 cursor: char.sourceCommandId ? (isDragging ? 'grabbing' : 'grab') : undefined,
+                                ...(dnSpriteTint ? { isolation: 'isolate' as const } : {}),
                             }}
                             onMouseDown={char.sourceCommandId ? (e) => handleCharMouseDown(e, char) : undefined}
                             onContextMenu={(commandRadial && char.sourceCommandId) ? (e) => { e.preventDefault(); commandRadial.openById(char.sourceCommandId!, e.clientX, e.clientY); } : undefined}
                         >
-                            {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: index }} />)}
+                            {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: index, filter: dnCharFilter || undefined }} />)}
+                            {/* Day/night sprite tint preview — true color overlay masked to each layer. */}
+                            {dnSpriteTint && char.imageUrls.map((url, index) => (
+                                <div key={`dn-tint-${index}`} aria-hidden className="absolute inset-0" style={{
+                                    zIndex: index, backgroundColor: dnSpriteTint.color, opacity: dnSpriteTint.opacity, mixBlendMode: 'multiply', pointerEvents: 'none',
+                                    WebkitMaskImage: `url("${url}")`, maskImage: `url("${url}")`,
+                                    WebkitMaskSize: 'contain', maskSize: 'contain', WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskPosition: 'center',
+                                }} />
+                            ))}
                             {/* Resize handles — grab ANY corner to scale the sprite uniformly. Placed at the
                                 CONTENT BOX corners (the visible art) so they stay reachable even when the
                                 sprite has large transparent padding; fall back to the frame corners when
@@ -2038,7 +2131,9 @@ const StagingArea: React.FC<{
                                     width: `${displayW}%`,
                                     // Image buttons let the height follow the image aspect (box conforms to art).
                                     height: btn.imageUrl ? 'auto' : `${displayH}%`,
-                                    transform: `translate(-50%, -50%) ${buildOrientationTransform({ rotation: btn.rotation, flipX: btn.flipX, flipY: btn.flipY })}`.trim(),
+                                    // Honor the button's anchor (default 0.5) so the editor preview matches
+                                    // the runtime — a non-center anchor no longer renders centered here.
+                                    transform: `translate(-${(btn.anchorX ?? 0.5) * 100}%, -${(btn.anchorY ?? 0.5) * 100}%) ${buildOrientationTransform({ rotation: btn.rotation, flipX: btn.flipX, flipY: btn.flipY })}`.trim(),
                                     opacity: btn.opacity ?? 1,
                                     cursor: isResizing ? 'nwse-resize' : (isDragging ? 'grabbing' : 'grab'),
                                     zIndex: (isDragging || isResizing) ? 100000 : 1 + (btn.layer ?? 0) * 100,
@@ -2170,7 +2265,7 @@ const StagingArea: React.FC<{
                 )}
                 
                 {showVariableState && (
-                    <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-sm p-2.5 rounded-lg text-xs max-w-xs max-h-56 overflow-y-auto z-[9999] border border-white/10 shadow-xl">
+                    <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-sm p-2.5 rounded-lg text-xs max-w-xs max-h-56 overflow-y-auto z-[8000] border border-white/10 shadow-xl">
                         <h4 className="font-bold mb-1.5 flex items-center gap-1.5 text-sky-300"><VariablesIcon className="w-3.5 h-3.5" />{t('variableStateHeading')}</h4>
                         {Object.keys(currentVariables).length === 0 ? (
                             <p className="text-[var(--text-muted)] italic">{t('variableStateEmpty')}</p>
@@ -2192,6 +2287,31 @@ const StagingArea: React.FC<{
                         )}
                     </div>
                 )}
+
+                 {/* Player-screen boundary — marks exactly where the game frame cuts off. */}
+                 <CanvasEdgeFrame />
+
+                 {/* Game-HUD awareness: faint outlines of the always-on HUD's click-capturing
+                     elements. In-game the HUD sits ABOVE the scene, so a scene hotspot placed
+                     under one of these silently loses its clicks — make that visible here. */}
+                 {showHudOverlays && hudInteractiveElements.map((el: any) => (
+                    <div
+                        key={`hud-${el.id}`}
+                        className="absolute pointer-events-none"
+                        style={{
+                            left: `${el.x}%`, top: `${el.y}%`, width: `${el.width}%`, height: `${el.height}%`,
+                            border: '1.5px dashed rgba(251,191,36,0.75)',
+                            background: 'rgba(251,191,36,0.07)',
+                            borderRadius: el.shape === 'circle' ? '50%' : 4,
+                            zIndex: 9997,
+                        }}
+                    >
+                        {/* Label above the box, or inside it when the box touches the top edge (would clip). */}
+                        <span className={`absolute left-0 text-[9px] font-semibold px-1 py-px rounded-sm whitespace-nowrap ${el.y < 5 ? 'top-0.5' : '-top-0.5 -translate-y-full'}`} style={{ background: 'rgba(251,191,36,0.9)', color: '#1a1a1a' }}>
+                            {t('hudOverlayLabel', 'HUD')} · {el.name || el.type}
+                        </span>
+                    </div>
+                 ))}
 
                  {/* Smart-snap alignment guides (drawn during a drag/resize). */}
                  <CanvasSnapGuides guides={overlaySnapGuides} />
@@ -2222,6 +2342,19 @@ const StagingArea: React.FC<{
                     >
                         <span>{t('snapToggle')}</span>
                     </button>
+                    {hudInteractiveElements.length > 0 && (
+                        <button
+                            onClick={toggleHudOverlays}
+                            className={`flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                                showHudOverlays
+                                    ? 'bg-amber-500/80 border-amber-400/50 text-white shadow-lg shadow-amber-500/20'
+                                    : 'bg-[var(--bg-primary)]/80 border-[var(--border-default)]/50 text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]/90 hover:border-slate-400/60'
+                            }`}
+                            title={t('hudOverlayTip', "Show the game HUD's clickable areas on this canvas. The HUD sits above the scene in-game — a scene hot spot underneath one won't receive clicks.")}
+                        >
+                            <span>{t('hudOverlayToggle', 'HUD areas')}</span>
+                        </button>
+                    )}
                     <button
                         onClick={() => setShowVariableState(s => !s)}
                         className={`flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${

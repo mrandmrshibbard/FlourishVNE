@@ -17,11 +17,22 @@ export function handleSpawnParticles(
     const { playerState, activeEffectTimeoutsRef, advance, setPlayerState } = context;
     const tag = command.particleTag || `particles_${command.id}`;
 
+    const hasBindings = !!(command.emitRateVariableId || command.windVariableId || command.gravityVariableId || command.opacityVariableId);
     const particleEntry = {
         tag,
         config: command.config,
         startTime: Date.now(),
         duration: command.duration || 0,
+        // LIVE variable bindings ride the entry; the stage render resolves them into the
+        // config each frame-render so the emitter reacts while running.
+        ...(hasBindings ? {
+            varBindings: {
+                emitRate: command.emitRateVariableId ?? null,
+                wind: command.windVariableId ?? null,
+                gravity: command.gravityVariableId ?? null,
+                opacity: command.opacityVariableId ?? null,
+            },
+        } : {}),
     };
 
     console.log('[ParticleHandler] SpawnParticles:', { tag, preset: command.config?.preset, emitRate: command.config?.emitRate, duration: command.duration, configKeys: Object.keys(command.config || {}) });

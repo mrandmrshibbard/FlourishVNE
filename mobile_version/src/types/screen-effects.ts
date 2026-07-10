@@ -70,6 +70,10 @@ export interface VNScreenOverlayEffect {
   type: VNScreenOverlayEffectType;
   /** 0..1 (0 disables) */
   intensity: number;
+  /** LIVE binding: a number variable that drives intensity while the effect is active (0..1,
+   *  clamped). The static `intensity` is the fallback when the variable is missing/non-numeric.
+   *  Additive-optional. */
+  intensityVariableId?: VNID | null;
   /** Only used for snowAsh */
   variant?: VNSnowAshVariant;
   /** Optional color for the effect (hex string like #FFAA00) */
@@ -91,7 +95,8 @@ export function normalizeOverlayEffects(
   const byType = new Map<VNScreenOverlayEffectType, VNScreenOverlayEffect>();
   for (const effect of effects) {
     const intensity = clamp01(effect.intensity ?? 0);
-    if (intensity <= 0) continue;
+    // Variable-bound effects survive a 0 base intensity — the variable drives them live.
+    if (intensity <= 0 && !effect.intensityVariableId) continue;
     byType.set(effect.type, {
       ...effect,
       intensity,
@@ -113,7 +118,7 @@ export function upsertOverlayEffect(
   const intensity = clamp01(next.intensity ?? 0);
 
   const without = normalized.filter((e) => e.type !== next.type);
-  if (intensity <= 0) return without;
+  if (intensity <= 0 && !next.intensityVariableId) return without;
 
   return normalizeOverlayEffects([
     ...without,

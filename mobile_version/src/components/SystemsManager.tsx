@@ -16,7 +16,13 @@ import { createUIElement } from '../utils/uiElementFactory';
 import { UIElementType, UIInventoryGridElement, UIMeterElement, VNProjectUI } from '../features/ui/types';
 import { findSystemScreenLinks, SystemScreenLink } from '../utils/systemScreenLinks';
 import SystemWizard from './menu-editor/SystemWizard';
+import CharacterCreatorWizard from './menu-editor/CharacterCreatorWizard';
+import MapEditor from './MapEditor';
 import { applySystemWizardResult } from '../features/systems/applySystem';
+import { applyCharacterCreator, applyDressUp } from '../features/systems/applyCharacterCreator';
+import { applyPhoneSetup, PHONE_STYLE_PRESETS, PhoneStylePresetId, PhoneSetupResult } from '../features/systems/applyPhoneSetup';
+import { PHONE_APP_CHOICES } from './live-preview/phone/phoneApps';
+import { PHONE_GLYPHS } from '../features/ui/phoneIcons';
 import { UIActionType, VNCondition } from '../types/shared';
 import { VNID } from '../types';
 import { FormField, TextInput, TextArea, Select, ColorInput } from './ui/Form';
@@ -26,18 +32,20 @@ import ConditionsEditor from './ui/ConditionsEditor';
 import { CollapsibleSection } from './ui/CollapsibleSection';
 import { PlusIcon, TrashIcon, SparklesIcon, ArchiveBoxIcon, GridIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon, AdjustmentsIcon } from './icons';
 
-type SystemId = 'inventory' | 'items' | 'stats';
+type SystemId = 'inventory' | 'items' | 'stats' | 'characterCreator' | 'maps' | 'phone';
 
 interface SystemsManagerProps {
     project?: VNProject;
     /** Jump to the UI editor with a screen (and optionally an element) selected. */
     onOpenScreenInEditor?: (screenId: VNID, elementId?: VNID) => void;
+    /** Jump to the In-Game UI editor (deep styling for phone/HUD chrome). */
+    onOpenInGameUI?: () => void;
     /** One-shot deep link from the UI editor ("Manage in Systems" on a grid/meter). */
     initialSelection?: { system: SystemId; id?: VNID } | null;
     onSelectionConsumed?: () => void;
 }
 
-const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, onOpenScreenInEditor, initialSelection, onSelectionConsumed }) => {
+const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, onOpenScreenInEditor, onOpenInGameUI, initialSelection, onSelectionConsumed }) => {
     const { project: ctxProject, dispatch } = useProject();
     const project = projectProp || ctxProject;
     const [selectedSystem, setSelectedSystem] = useState<SystemId>('items');
@@ -46,6 +54,30 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
     const [selectedStatId, setSelectedStatId] = useState<VNID | null>(null);
     const [inventoryExpanded, setInventoryExpanded] = useState(true);
     const [wizardKind, setWizardKind] = useState<'shop' | 'inventory' | null>(null);
+    // Unified Character Creator & Dress-Up wizard, deep-linked to the chosen mode.
+    const [creatorWizardMode, setCreatorWizardMode] = useState<'player' | 'dressup' | null>(null);
+    const [showMapEditor, setShowMapEditor] = useState(false);
+    // Phone quick-setup wizard form state.
+    const [phonePreset, setPhonePreset] = useState<PhoneStylePresetId>('keep');
+    const [phoneApps, setPhoneApps] = useState<Set<string>>(() => new Set(['chat', 'contacts', 'history', 'gallery', 'settings']));
+    const [phoneContactChars, setPhoneContactChars] = useState<Set<VNID>>(() => new Set());
+    const [phoneWallpaperIds, setPhoneWallpaperIds] = useState<Set<VNID>>(() => new Set());
+    const [phoneApplied, setPhoneApplied] = useState<PhoneSetupResult | null>(null);
+
+    // Every screen holding a Customizer element = a dress-up surface (any screen category —
+    // authors drop them on menus too). The player-creator screen is listed separately above.
+    const dressUpScreens = useMemo(() => {
+        const out: { screen: any; customizer: any; charName: string }[] = [];
+        (Object.values(project.uiScreens || {}) as any[]).forEach(screen => {
+            if (screen.id === project.ui.characterCreatorScreenId) return;
+            (Object.values(screen.elements || {}) as any[]).forEach(el => {
+                if (el.type === 'Customizer') {
+                    out.push({ screen, customizer: el, charName: project.characters[el.characterId]?.name || '—' });
+                }
+            });
+        });
+        return out;
+    }, [project.uiScreens, project.ui.characterCreatorScreenId, project.characters]);
 
     // Consume a deep link from the UI editor exactly once, then clear it so it
     // can't fight subsequent user clicks.
@@ -278,10 +310,226 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-secondary)] text-[var(--text-secondary)]">{items.length}</span>)}
                     {sysBtn('stats', <AdjustmentsIcon className="w-5 h-5" />, 'Stats',
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-secondary)] text-[var(--text-secondary)]">{stats.length}</span>)}
+                    {sysBtn('characterCreator', <SparklesIcon className="w-5 h-5" />, 'Character Creator & Dress-Up')}
+                    {sysBtn('maps', <GridIcon className="w-5 h-5" />, 'Maps & Travel',
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-secondary)] text-[var(--text-secondary)]">{Object.keys(project.maps || {}).length}</span>)}
+                    {sysBtn('phone', <span className="text-base leading-none">📱</span>, 'Phone',
+                        project.ui.phoneEnabled
+                            ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--accent-mint)]/20 text-[var(--accent-mint)]">on</span>
+                            : <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-secondary)] text-[var(--text-secondary)]">off</span>)}
                 </div>
             </div>
 
-            {selectedSystem === 'items' ? (
+            {selectedSystem === 'phone' ? (
+                <div className="flex-1 overflow-y-auto p-6">
+                    <div className="max-w-xl">
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2">📱 In-Game Phone</h3>
+                        <p className="text-sm text-[var(--text-secondary)] mt-2 mb-3">A full phone your players use inside the story: texting with photos, voiced calls, contacts, a travel map, a photo/CG gallery, notifications, and a wallpaper picker. This quick setup wires the basics — every color, font, and screen can be restyled afterwards in <b>In-Game UI → Phone</b>.</p>
+
+                        {/* ── Status ── */}
+                        <div className="flex flex-wrap gap-1.5 mb-4">
+                            {(() => {
+                                const chip = (ok: boolean, label: string) => (
+                                    <span key={label} className={`text-[10px] px-2 py-0.5 rounded-full ${ok ? 'bg-[var(--accent-mint)]/20 text-[var(--accent-mint)]' : 'bg-[var(--bg-secondary)] text-[var(--text-muted)]'}`}>{ok ? '✓ ' : ''}{label}</span>
+                                );
+                                const appBtnCount = (project.ui.phoneButtons || []).filter(b => b.appId).length;
+                                const contactCount = (project.ui.phoneContacts || []).length;
+                                const wpCount = (project.ui.phoneWallpapers || []).length;
+                                return <>
+                                    {chip(!!project.ui.phoneEnabled, project.ui.phoneEnabled ? 'Phone enabled' : 'Phone off')}
+                                    {chip(appBtnCount > 0, `${appBtnCount} app icon${appBtnCount === 1 ? '' : 's'}`)}
+                                    {chip(contactCount > 0, `${contactCount} contact${contactCount === 1 ? '' : 's'}`)}
+                                    {chip(!!project.ui.phoneMapId, project.ui.phoneMapId ? 'Map app set' : 'No map app')}
+                                    {chip(wpCount > 0, `${wpCount} wallpaper${wpCount === 1 ? '' : 's'}`)}
+                                </>;
+                            })()}
+                        </div>
+
+                        {phoneApplied ? (
+                            /* ── Done screen: what happened + deep links ── */
+                            <div className="bg-[var(--bg-secondary)]/40 rounded-lg p-4 border border-[var(--accent-mint)]/30">
+                                <h4 className="text-sm font-bold text-[var(--accent-mint)]">✓ Phone set up</h4>
+                                <p className="text-xs text-[var(--text-secondary)] mt-1.5">Added {phoneApplied.addedButtons} app icon{phoneApplied.addedButtons === 1 ? '' : 's'}, {phoneApplied.addedContacts} contact{phoneApplied.addedContacts === 1 ? '' : 's'} and {phoneApplied.addedWallpapers} wallpaper{phoneApplied.addedWallpapers === 1 ? '' : 's'}. Anything that already existed was left untouched.</p>
+                                <div className="flex flex-wrap gap-2 mt-3">
+                                    {onOpenInGameUI && <button onClick={onOpenInGameUI} className="px-3 py-1.5 text-xs rounded-lg bg-[var(--accent-lavender)]/20 text-[var(--accent-lavender)] border border-[var(--accent-lavender)]/40 hover:bg-[var(--accent-lavender)]/30">🎨 Style it: In-Game UI → Phone</button>}
+                                    <button onClick={() => { setSelectedSystem('maps'); }} className="px-3 py-1.5 text-xs rounded-lg bg-[var(--accent-lavender)]/20 text-[var(--accent-lavender)] border border-[var(--accent-lavender)]/40 hover:bg-[var(--accent-lavender)]/30">🗺️ Add a travel map</button>
+                                    <button onClick={() => setPhoneApplied(null)} className="px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-white">Run setup again</button>
+                                </div>
+                                <p className="text-[11px] text-[var(--text-muted)] mt-3">In your scenes, use the <span className="font-mono">Phone</span> command group (Incoming Text, Make Phone Call, Phone Notification…). Players open the phone with its hotkey or a <span className="font-mono">Show Phone</span> command/action.</p>
+                            </div>
+                        ) : <>
+                            {/* ── 1. Style preset ── */}
+                            <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">1 · Look</h4>
+                            <div className="grid grid-cols-2 gap-2 mb-4">
+                                <button onClick={() => setPhonePreset('keep')}
+                                    className={`p-2.5 rounded-lg text-left border transition-all ${phonePreset === 'keep' ? 'border-[var(--accent-lavender)] bg-[var(--accent-lavender)]/10' : 'border-[var(--border-subtle)] bg-[var(--bg-secondary)]/40 hover:bg-[var(--bg-secondary)]'}`}>
+                                    <div className="text-sm text-white font-medium">Keep my current look</div>
+                                    <div className="text-[11px] text-[var(--text-muted)]">Only add wiring — no colors touched.</div>
+                                </button>
+                                {(Object.entries(PHONE_STYLE_PRESETS) as Array<[PhoneStylePresetId, typeof PHONE_STYLE_PRESETS.midnight]>).map(([id, p]) => (
+                                    <button key={id} onClick={() => setPhonePreset(id)}
+                                        className={`p-2.5 rounded-lg text-left border transition-all ${phonePreset === id ? 'border-[var(--accent-lavender)] bg-[var(--accent-lavender)]/10' : 'border-[var(--border-subtle)] bg-[var(--bg-secondary)]/40 hover:bg-[var(--bg-secondary)]'}`}>
+                                        <div className="text-sm text-white font-medium flex items-center gap-1.5">
+                                            {p.name}
+                                            <span className="inline-flex gap-0.5">
+                                                {[p.fields.phoneShellColor, p.fields.phoneScreenColor, p.fields.phoneOutgoingBubbleColor].map((c, i) => (
+                                                    <span key={i} className="w-3 h-3 rounded-full border border-white/20" style={{ background: c }} />
+                                                ))}
+                                            </span>
+                                        </div>
+                                        <div className="text-[11px] text-[var(--text-muted)]">{p.blurb}</div>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* ── 2. Apps ── */}
+                            <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">2 · Home-screen apps</h4>
+                            <div className="grid grid-cols-2 gap-1.5 mb-1">
+                                {PHONE_APP_CHOICES.map(app => {
+                                    const already = (project.ui.phoneButtons || []).some(b => b.appId === app.id);
+                                    const mapMissing = app.id === 'map' && !project.ui.phoneMapId;
+                                    return (
+                                        <label key={app.id} className={`flex items-center gap-2 p-2 rounded-lg border text-sm ${already ? 'border-[var(--accent-mint)]/30 bg-[var(--accent-mint)]/5 text-[var(--text-muted)]' : 'border-[var(--border-subtle)] bg-[var(--bg-secondary)]/40 text-white cursor-pointer hover:bg-[var(--bg-secondary)]'}`}>
+                                            <input type="checkbox" className="w-4 h-4" disabled={already}
+                                                checked={already || phoneApps.has(app.id)}
+                                                onChange={e => setPhoneApps(prev => { const n = new Set(prev); e.target.checked ? n.add(app.id) : n.delete(app.id); return n; })} />
+                                            <span>{PHONE_GLYPHS[app.glyph] || ''} {app.label}</span>
+                                            {already && <span className="text-[9px] text-[var(--accent-mint)] ml-auto">✓ added</span>}
+                                            {mapMissing && !already && <span className="text-[9px] text-amber-400 ml-auto" title="Works once a map is assigned as the phone's Map app.">needs a map</span>}
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                            <p className="text-[11px] text-[var(--text-muted)] mb-4">Icons are placed on a real-phone home grid (you can switch to a bottom bar or free layout later).</p>
+
+                            {/* ── 3. Contacts ── */}
+                            <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">3 · Contacts</h4>
+                            {Object.keys(project.characters).length === 0
+                                ? <p className="text-[11px] text-amber-400 mb-4">No characters yet — add some in the Characters tab and re-run this setup.</p>
+                                : <div className="max-h-44 overflow-y-auto space-y-1 mb-4 pr-1">
+                                    {(Object.values(project.characters) as any[]).map(ch => {
+                                        const already = (project.ui.phoneContacts || []).some(c => c.characterId === ch.id);
+                                        return (
+                                            <label key={ch.id} className={`flex items-center gap-2 p-1.5 rounded-md text-sm ${already ? 'text-[var(--text-muted)]' : 'text-white cursor-pointer hover:bg-[var(--bg-secondary)]'}`}>
+                                                <input type="checkbox" className="w-4 h-4" disabled={already}
+                                                    checked={already || phoneContactChars.has(ch.id)}
+                                                    onChange={e => setPhoneContactChars(prev => { const n = new Set(prev); e.target.checked ? n.add(ch.id) : n.delete(ch.id); return n; })} />
+                                                <span className="truncate">{ch.name}</span>
+                                                {already && <span className="text-[9px] text-[var(--accent-mint)] ml-auto">✓ contact</span>}
+                                            </label>
+                                        );
+                                    })}
+                                </div>}
+
+                            {/* ── 4. Wallpapers ── */}
+                            <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">4 · Player wallpapers <span className="normal-case font-normal">(optional)</span></h4>
+                            <p className="text-[11px] text-[var(--text-muted)] mb-1.5">Images the player can pick as their phone wallpaper in the Settings app.</p>
+                            {(() => {
+                                const assets = [...(Object.values(project.backgrounds || {}) as any[]), ...(Object.values(project.images || {}) as any[])];
+                                if (assets.length === 0) return <p className="text-[11px] text-[var(--text-muted)] italic mb-4">No image assets yet — upload backgrounds/images in the Assets tab.</p>;
+                                return <div className="max-h-44 overflow-y-auto space-y-1 mb-4 pr-1">
+                                    {assets.map(a => {
+                                        const already = (project.ui.phoneWallpapers || []).some(w => w.image?.id === a.id);
+                                        return (
+                                            <label key={a.id} className={`flex items-center gap-2 p-1.5 rounded-md text-sm ${already ? 'text-[var(--text-muted)]' : 'text-white cursor-pointer hover:bg-[var(--bg-secondary)]'}`}>
+                                                <input type="checkbox" className="w-4 h-4" disabled={already}
+                                                    checked={already || phoneWallpaperIds.has(a.id)}
+                                                    onChange={e => setPhoneWallpaperIds(prev => { const n = new Set(prev); e.target.checked ? n.add(a.id) : n.delete(a.id); return n; })} />
+                                                <span className="truncate">{a.name || a.id}</span>
+                                                {already && <span className="text-[9px] text-[var(--accent-mint)] ml-auto">✓ wallpaper</span>}
+                                            </label>
+                                        );
+                                    })}
+                                </div>;
+                            })()}
+
+                            <button onClick={() => {
+                                const result = applyPhoneSetup({
+                                    stylePreset: phonePreset,
+                                    appIds: [...phoneApps],
+                                    contactCharacterIds: [...phoneContactChars],
+                                    wallpaperImageIds: [...phoneWallpaperIds],
+                                }, project, dispatch);
+                                setPhoneApplied(result);
+                            }}
+                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--accent-lavender)]/20 hover:bg-[var(--accent-lavender)]/30 text-[var(--accent-lavender)] rounded-lg font-medium transition-all border border-[var(--accent-lavender)]/40">
+                                <SparklesIcon className="w-4 h-4" /> Set up my phone
+                            </button>
+                            <p className="text-[11px] text-[var(--text-muted)] mt-2">Safe to re-run: existing icons, contacts, wallpapers and styling are never overwritten.</p>
+                        </>}
+                    </div>
+                </div>
+            ) : selectedSystem === 'maps' ? (
+                <div className="flex-1 overflow-y-auto p-6">
+                    <div className="max-w-xl">
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2">🗺️ Maps & Travel</h3>
+                        <p className="text-sm text-[var(--text-secondary)] mt-2 mb-4">Design touchable travel maps: a backdrop image with location markers players tap to <b>travel to a scene</b>. Lock locations behind conditions so the world opens up as the story progresses. Use them with the <span className="font-mono">Show Map</span> command (story moments), a button's <span className="font-mono">Show Map</span> action, or the <b>phone's Map app</b> (free roam — set it up in In-Game UI → Phone).</p>
+                        <button onClick={() => setShowMapEditor(true)}
+                            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--accent-lavender)]/20 hover:bg-[var(--accent-lavender)]/30 text-[var(--accent-lavender)] rounded-lg font-medium transition-all border border-[var(--accent-lavender)]/40">
+                            <SparklesIcon className="w-4 h-4" /> Open the Map Editor
+                        </button>
+                        {Object.keys(project.maps || {}).length > 0 && (
+                            <div className="mt-5">
+                                <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Maps in this project</h4>
+                                <div className="space-y-1.5">
+                                    {(Object.values(project.maps || {}) as any[]).map(m => (
+                                        <div key={m.id} className="flex items-center gap-2 bg-[var(--bg-secondary)]/40 rounded-lg p-2 border border-transparent hover:border-[var(--border-default)]">
+                                            <span className="text-base">🗺️</span>
+                                            <span className="text-sm text-white truncate flex-1">{m.name} <span className="text-[var(--text-muted)]">· {m.locations.length} location{m.locations.length === 1 ? '' : 's'}</span></span>
+                                            {project.ui.phoneMapId === m.id && <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--accent-mint)]/20 text-[var(--accent-mint)]">📱 phone app</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            ) : selectedSystem === 'characterCreator' ? (
+                <div className="flex-1 overflow-y-auto p-6">
+                    <div className="max-w-xl">
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2"><SparklesIcon className="w-5 h-5 text-[var(--accent-lavender)]" /> Character Creator & Dress-Up</h3>
+                        <p className="text-sm text-[var(--text-secondary)] mt-2 mb-4">One tool, two jobs: let players <b>create their own character</b> (choose, dress up, name — shown anywhere via <span className="text-[var(--accent-lavender)]">⟨ Player's Character ⟩</span>), or make a <b>dress-up screen for any story character</b> whose new look carries into your scenes automatically. Guided setup builds the whole screen and wires it up for you.</p>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button onClick={() => setCreatorWizardMode('player')} disabled={Object.keys(project.characters).length === 0}
+                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--accent-lavender)]/20 hover:bg-[var(--accent-lavender)]/30 text-[var(--accent-lavender)] rounded-lg font-medium transition-all border border-[var(--accent-lavender)]/40 disabled:opacity-50">
+                                🎮 Player character creator
+                            </button>
+                            <button onClick={() => setCreatorWizardMode('dressup')} disabled={Object.keys(project.characters).length === 0}
+                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--accent-lavender)]/20 hover:bg-[var(--accent-lavender)]/30 text-[var(--accent-lavender)] rounded-lg font-medium transition-all border border-[var(--accent-lavender)]/40 disabled:opacity-50">
+                                🧥 Dress-up for a character
+                            </button>
+                        </div>
+                        {Object.keys(project.characters).length === 0 && <p className="text-[11px] text-amber-400 mt-2">Add at least one character (with layers/outfits) in the Characters tab first.</p>}
+
+                        {/* ── What exists already ── */}
+                        {(project.ui.playerCharacterVarId || dressUpScreens.length > 0) && (
+                            <div className="mt-5">
+                                <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">In this project</h4>
+                                <div className="space-y-1.5">
+                                    {project.ui.playerCharacterVarId && (
+                                        <div className="flex items-center gap-2 bg-[var(--bg-secondary)]/40 rounded-lg p-2 border border-transparent hover:border-[var(--border-default)]">
+                                            <span className="text-base">🎮</span>
+                                            <span className="text-sm text-white truncate flex-1">Player character creator <span className="text-[var(--accent-mint)]">✓ ⟨Player's Character⟩ configured</span></span>
+                                            {project.ui.characterCreatorScreenId && project.uiScreens[project.ui.characterCreatorScreenId] && (
+                                                <button onClick={() => onOpenScreenInEditor?.(project.ui.characterCreatorScreenId!)} className="flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300"><PencilIcon className="w-3.5 h-3.5" /> Edit</button>
+                                            )}
+                                        </div>
+                                    )}
+                                    {dressUpScreens.map(({ screen, customizer, charName }) => (
+                                        <div key={screen.id} className="flex items-center gap-2 bg-[var(--bg-secondary)]/40 rounded-lg p-2 border border-transparent hover:border-[var(--border-default)]">
+                                            <span className="text-base">🧥</span>
+                                            <span className="text-sm text-white truncate flex-1">{screen.name} <span className="text-[var(--text-muted)]">· {charName}</span></span>
+                                            <button onClick={() => onOpenScreenInEditor?.(screen.id, customizer.id)} className="flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300"><PencilIcon className="w-3.5 h-3.5" /> Edit</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <p className="text-[11px] text-[var(--text-muted)] mt-4">Tip: open a generated screen in-game with a <span className="font-mono">Show Screen</span> command (e.g. at the start of your first scene) or a button's <span className="font-mono">Toggle Screen</span> action. Its Start/Done button closes it and the story continues.</p>
+                    </div>
+                </div>
+            ) : selectedSystem === 'items' ? (
                 <>
                     {/* ── Pane 2: item list ── */}
                     <div className="w-72 flex-shrink-0 bg-[var(--bg-primary)] border-r border-[var(--border-subtle)] flex flex-col">
@@ -395,6 +643,12 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                                             </div>
                                         )}
                                     </div>
+                                </CollapsibleSection>
+
+                                <CollapsibleSection title="Slot button actions">
+                                    <p className="text-[11px] text-[var(--text-muted)] mb-1">Extra actions run when this item's inventory slot button (Use / Buy / Sell) is clicked — after the built-in behaviour. Use it for a per-item touch like a unique sound, a story flag, or calling a Common Event when this item is bought.</p>
+                                    <UIActionsListEditor actions={selected.slotButtonActions || []} project={project} onChange={acts => update(selected.id, { slotButtonActions: acts })} label="When this item's button is clicked, also run" />
+                                    <p className="text-[11px] text-[var(--text-muted)] mt-1">When set, these <strong>replace</strong> the grid's element-level slot-button actions for this item.</p>
                                 </CollapsibleSection>
 
                                 <CollapsibleSection title="Inventory display">
@@ -798,6 +1052,24 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                     onGenerate={(result) => {
                         const { screenId } = applySystemWizardResult(result, project, dispatch);
                         setWizardKind(null);
+                        if (screenId) onOpenScreenInEditor?.(screenId);
+                    }}
+                />
+            )}
+
+            {showMapEditor && <MapEditor isOpen onClose={() => setShowMapEditor(false)} />}
+
+            {creatorWizardMode && (
+                <CharacterCreatorWizard
+                    isOpen
+                    project={project}
+                    initialMode={creatorWizardMode}
+                    onClose={() => setCreatorWizardMode(null)}
+                    onGenerate={(result) => {
+                        const { screenId } = result.kind === 'player'
+                            ? applyCharacterCreator(result.config, project, dispatch)
+                            : applyDressUp(result.config, project, dispatch);
+                        setCreatorWizardMode(null);
                         if (screenId) onOpenScreenInEditor?.(screenId);
                     }}
                 />

@@ -13,6 +13,9 @@ import { CollapsibleSection } from './ui/CollapsibleSection';
 import { VNProject } from '../types/project';
 import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings, VNConfirmVariantStyle, QuickMenuButtonKey, QuickMenuButtonConfig, QuickMenuCustomButton, PhoneButtonConfig, PhoneContact } from '../features/ui/types';
 import { PHONE_GLYPHS, PHONE_ICON_KEYS } from '../features/ui/phoneIcons';
+import { PHONE_APP_CHOICES } from './live-preview/phone/phoneApps';
+import { PhoneCallConversationEditor } from './inspector/CommandGroupFields';
+import ConversationStudio from './ConversationStudio';
 import { VNID } from '../types';
 import { useProject } from '../contexts/ProjectContext';
 import { isManagerWindow, isMultiWindowSupported, openManagerWindow, syncInGameState, onInGameStateUpdate, type InGameUIState } from '../utils/windowManager';
@@ -22,6 +25,7 @@ import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUti
 import { GradientText } from './ui/GradientText';
 import ResizableDraggable from './menu-editor/ResizableDraggable';
 import CanvasSnapGuides from './menu-editor/CanvasSnapGuides';
+import CanvasEdgeFrame from './ui/CanvasEdgeFrame';
 import { SnapRect, SnapGuide } from '../utils/canvasSnap';
 import TextboxThemeManager from './ui/TextboxThemeManager';
 import DialogueReactiveStatesEditor from './ui/DialogueReactiveStatesEditor';
@@ -711,6 +715,18 @@ const PhonePreview: React.FC<{ ui: VNProjectUI; project: VNProject; hideFreeButt
             <div style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden' }}>
                 {view === 'contacts' ? (
                     contactsRegion ? null : contactRows
+                ) : ui.phoneButtonLayout === 'grid' ? (
+                    /* Home grid preview — mirrors the runtime home app's icon grid. */
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, ui.phoneHomeGridColumns ?? 3)}, 1fr)`, gap: '4%', padding: '4% 2%', alignContent: 'start' }}>
+                        {buttons.map(b => { const ci = url(b.iconImage as any); const cols = Math.max(1, ui.phoneHomeGridColumns ?? 3); const iconPct = Math.max(6, Math.min(40, ui.phoneHomeIconSize ?? 18)); return (
+                            <div key={b.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, color: ui.phoneButtonIconColor || '#cbd5e1' }}>
+                                <span style={{ width: `${(iconPct / (100 / cols)) * 100}%`, maxWidth: '86%', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', background: ui.phoneHomeIconBgColor || 'transparent', borderRadius: ui.phoneHomeIconRadius ?? 14, containerType: 'size' } as React.CSSProperties}>
+                                    {ci ? <img src={ci} alt="" style={{ width: '86cqmin', height: '86cqmin', objectFit: 'contain' }} /> : <span style={{ fontSize: '64cqmin', lineHeight: 1 }}>{(b.builtinIcon && PHONE_GLYPHS[b.builtinIcon]) || '●'}</span>}
+                                </span>
+                                {ui.phoneHomeShowLabels !== false && b.label && <span style={{ fontSize: 'calc(var(--font-scale,1) * 9px)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textShadow: '0 1px 3px rgba(0,0,0,0.7)', ...(ui.phoneHomeLabelFont ? fontToStyle(ui.phoneHomeLabelFont) : {}) }}>{b.label}</span>}
+                            </div>
+                        ); })}
+                    </div>
                 ) : (
                     <>
                         <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
@@ -732,7 +748,7 @@ const PhonePreview: React.FC<{ ui: VNProjectUI; project: VNProject; hideFreeButt
                     {b.label && <span style={{ fontSize: '18cqmin', lineHeight: 1, whiteSpace: 'nowrap' }}>{b.label}</span>}
                 </div>
             ); })}
-            {ui.phoneButtonLayout !== 'free' && buttons.length > 0 && (
+            {ui.phoneButtonLayout !== 'free' && ui.phoneButtonLayout !== 'grid' && buttons.length > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-around', padding: '6px 4px', background: ui.phoneButtonBarColor || 'rgba(0,0,0,0.35)' }}>
                     {buttons.map(b => { const ci = url(b.iconImage as any); return (
                         <div key={b.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: ui.phoneButtonIconColor || '#cbd5e1', fontSize: 'calc(var(--font-scale,1) * 9px)' }}>
@@ -837,6 +853,50 @@ const PhoneBgSelect: React.FC<{ project: VNProject; cls: string; value?: { type:
         </optgroup>
     </select>
 );
+
+/** Editor for a contact's gated conversation LIST (calls or texts): named entries with a
+ *  "Plays when…" gate and a play-once flag. At runtime the FIRST entry whose conditions pass
+ *  (and isn't a played-out once) wins — so one contact holds many conversations and the story's
+ *  variables pick the right one. */
+const PhoneConversationListEditor: React.FC<{ entries: any[] | undefined; onChange: (e: any[] | undefined) => void; project: VNProject; t: any; cls: string; kind: 'call' | 'text'; studioTitle?: string }> = ({ entries, onChange, project, t, cls, kind, studioTitle }) => {
+    const list = entries || [];
+    const [studioOpen, setStudioOpen] = (React as any).useState(false);
+    const upd = (i: number, patch: any) => onChange(list.map((x, idx) => idx === i ? { ...x, ...patch } : x));
+    const move = (i: number, dir: -1 | 1) => { const j = i + dir; if (j < 0 || j >= list.length) return; const next = [...list]; [next[i], next[j]] = [next[j], next[i]]; onChange(next); };
+    const remove = (i: number) => { const next = list.filter((_: any, idx: number) => idx !== i); onChange(next.length ? next : undefined); };
+    return (
+        <div className="space-y-1.5">
+            <button onClick={() => setStudioOpen(true)} className="w-full flex items-center justify-center gap-1 px-2 py-1.5 text-xs rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30" title="The big chat-style editor — see the conversation as real bubbles">
+                ⛶ Open Conversation Studio
+            </button>
+            {studioOpen && <ConversationStudio isOpen onClose={() => setStudioOpen(false)} project={project} kind={kind}
+                title={studioTitle} entries={list} onChangeEntries={next => onChange(next.length ? next : undefined)} />}
+            <p className="text-[10px] text-[var(--text-muted)]">{kind === 'text'
+                ? 'When the player opens this chat, the FIRST conversation whose conditions pass plays (typing dots, replies, photos). "Once" entries are skipped after they\'ve played; entries without "Once" replay on every visit until their conditions change.'
+                : 'When the player calls, the FIRST conversation whose conditions pass plays on the call screen. "Once" entries are skipped after they\'ve played.'}</p>
+            {list.map((e: any, i: number) => (
+                <CollapsibleSection key={e.id} title={e.name || `Conversation ${i + 1}`}
+                    summary={`${e.conversation?.lines?.length || 0} lines${e.once ? ' · once' : ''}${e.conditions?.length ? ' · gated' : ''}`}
+                    defaultOpen={!e.conversation?.lines?.length}
+                    action={<div className="flex items-center gap-0.5">
+                        <button onClick={() => move(i, -1)} disabled={i === 0} className="p-0.5 text-[var(--text-muted)] hover:text-white disabled:opacity-30 text-xs" title="Move up">↑</button>
+                        <button onClick={() => move(i, 1)} disabled={i === list.length - 1} className="p-0.5 text-[var(--text-muted)] hover:text-white disabled:opacity-30 text-xs" title="Move down">↓</button>
+                        <button onClick={() => remove(i)} className="p-1 text-red-400 hover:text-red-300 text-xs" title="Remove">✕</button>
+                    </div>}>
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                            <input className={cls + ' flex-1 min-w-0'} value={e.name ?? ''} placeholder="Name (e.g. After the party)" onChange={ev => upd(i, { name: ev.target.value || undefined })} />
+                            <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)] flex-shrink-0" title="Play at most once per playthrough"><input type="checkbox" checked={!!e.once} onChange={ev => upd(i, { once: ev.target.checked || undefined })} />Once</label>
+                        </div>
+                        <ConditionsEditor collapsible title="Plays when…" conditions={e.conditions || []} project={project} onChange={(cs: any) => upd(i, { conditions: cs && cs.length ? cs : undefined })} />
+                        <PhoneCallConversationEditor conversation={e.conversation} onChange={(conv: any) => upd(i, { conversation: conv || { lines: [] } })} project={project} t={t} />
+                    </div>
+                </CollapsibleSection>
+            ))}
+            <button onClick={() => onChange([...list, { id: `pcv-${Date.now()}-${list.length}`, conversation: { lines: [] } }])} className="text-xs px-2 py-1 rounded border border-dashed border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]">+ Add conversation</button>
+        </div>
+    );
+};
 
 const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject; variant?: ConfirmVariant }> = ({ ui, project, variant = 'quit' }) => {
     const { t } = useTranslation('ui');
@@ -1173,6 +1233,57 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                             <NumInput label="Speaker zoom %" value={ui.speakerEmphasisScale != null ? Math.round(ui.speakerEmphasisScale * 100) : undefined} fallback={104} min={100} max={120} onChange={v => onUpdate({ speakerEmphasisScale: Math.max(1, Math.min(1.3, v / 100)) })} />
                         </div>
                     )}
+                </CollapsibleSection>
+
+                <CollapsibleSection title={t('inGameUi.groupRevealHighlight', 'Reveal highlight (karaoke)')}>
+                    <p className="text-[10px] text-[var(--text-muted)] mb-2">{t('inGameUi.revealHighlightHint', 'While a line types out, the word currently being revealed lights up — like sing-along lyrics. Off = no change.')}</p>
+                    {(() => {
+                        const rh = ui.dialogueRevealHighlight || {};
+                        const patch = (p: any) => onUpdate({ dialogueRevealHighlight: { ...rh, ...p } });
+                        return <>
+                            <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                                <input type="checkbox" checked={rh.enabled ?? false} onChange={e => patch({ enabled: e.target.checked })} className="cursor-pointer" />
+                                {t('inGameUi.revealHighlightOn', 'Highlight the word being revealed')}
+                            </label>
+                            {rh.enabled && (
+                                <div className="space-y-2 mt-2">
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="text-[10px] text-[var(--text-muted)] block mb-0.5">{t('inGameUi.revealHighlightStyle', 'Style')}</label>
+                                            <select value={rh.style || 'color'} onChange={e => patch({ style: e.target.value })}
+                                                className="w-full bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1.5 py-1 text-white text-xs">
+                                                <option value="color">{t('inGameUi.revealHlColor', 'Recolor the word')}</option>
+                                                <option value="glow">{t('inGameUi.revealHlGlow', 'Soft glow')}</option>
+                                                <option value="underline">{t('inGameUi.revealHlUnderline', 'Underline')}</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-[var(--text-muted)] block mb-0.5">{t('inGameUi.revealHighlightColor', 'Highlight color')}</label>
+                                            <ColorInput value={rh.color || '#facc15'} onChange={(v: string) => patch({ color: v })} />
+                                        </div>
+                                    </div>
+                                    <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                                        <input type="checkbox" checked={rh.useSpeakerColor ?? false} onChange={e => patch({ useSpeakerColor: e.target.checked })} className="cursor-pointer" />
+                                        {t('inGameUi.revealHighlightSpeaker', 'Use the speaker’s name color instead')}
+                                    </label>
+                                    <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                                        <input type="checkbox" checked={rh.syncToVoice ?? false} onChange={e => patch({ syncToVoice: e.target.checked })} className="cursor-pointer" />
+                                        {t('inGameUi.revealHighlightVoice', 'Sync to voice lines (word timing read from the audio)')}
+                                    </label>
+                                    {rh.syncToVoice && (
+                                        <p className="text-[10px] text-[var(--text-muted)]">{t('inGameUi.revealHighlightVoiceHint', 'On voiced lines the highlight follows the recording — surging and pausing with the actor. Lines without voice fall back to typing sync. Timing is estimated from loudness, so it’s word-accurate, not lip-sync-accurate.')}</p>
+                                    )}
+                                </div>
+                            )}
+                        </>;
+                    })()}
+                    <div className="border-t border-[var(--border-subtle)] mt-2 pt-2">
+                        <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                            <input type="checkbox" checked={ui.voicePacedText ?? false} onChange={e => onUpdate({ voicePacedText: e.target.checked })} className="cursor-pointer" />
+                            {t('inGameUi.voicePacedText', 'Voice-paced text: the reveal finishes together with the voice clip')}
+                        </label>
+                        <p className="text-[10px] text-[var(--text-muted)] mt-1">{t('inGameUi.voicePacedTextHint', 'Only affects voiced lines; a per-line Text Speed override still wins.')}</p>
+                    </div>
                 </CollapsibleSection>
 
                 <CollapsibleSection title={t('inGameUi.groupReactiveStates', 'Reactive states')}>
@@ -1774,14 +1885,31 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         <Field label="Layout">
                             <select className={inputCls} value={ui.phoneButtonLayout || 'bar'} onChange={e => onUpdate({ phoneButtonLayout: e.target.value === 'bar' ? undefined : e.target.value as any })}>
                                 <option value="bar">Bottom bar (evenly spaced)</option>
+                                <option value="grid">Home grid (full-screen app icons)</option>
                                 <option value="free">Free placement (app icons anywhere)</option>
                             </select>
                         </Field>
-                        <p className="text-[10px] text-[var(--text-muted)] -mt-1">Free placement positions each button by its own X/Y on the phone screen — like home-screen app icons. Each still runs any button action.</p>
+                        <p className="text-[10px] text-[var(--text-muted)] -mt-1">Home grid fills the home screen with app icons in rows, like a real phone. Free placement positions each button by its own X/Y.</p>
                         <div className="grid grid-cols-2 gap-2">
                             <ColorField label="Bar color" value={ui.phoneButtonBarColor ?? '#00000059'} onChange={v => onUpdate({ phoneButtonBarColor: v })} />
                             <ColorField label="Icon color" value={ui.phoneButtonIconColor ?? '#cbd5e1'} onChange={v => onUpdate({ phoneButtonIconColor: v })} />
                         </div>
+                        {ui.phoneButtonLayout === 'grid' && (
+                            <div className="space-y-2 border border-[var(--border-subtle)] rounded p-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <NumInput label="Icons per row" value={ui.phoneHomeGridColumns} fallback={3} min={1} max={6} onChange={v => onUpdate({ phoneHomeGridColumns: v })} />
+                                    <NumInput label="Icon size %" value={ui.phoneHomeIconSize} fallback={18} min={6} max={40} onChange={v => onUpdate({ phoneHomeIconSize: v })} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <ColorField label="Icon backing" value={ui.phoneHomeIconBgColor ?? '#00000000'} onChange={v => onUpdate({ phoneHomeIconBgColor: v })} />
+                                    <NumInput label="Backing radius" value={ui.phoneHomeIconRadius} fallback={14} min={0} max={60} onChange={v => onUpdate({ phoneHomeIconRadius: v })} />
+                                </div>
+                                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                                    <input type="checkbox" checked={ui.phoneHomeShowLabels !== false} onChange={e => onUpdate({ phoneHomeShowLabels: e.target.checked ? undefined : false })} className="w-3.5 h-3.5" /> Show labels under icons
+                                </label>
+                                <FontEditor label="Label font" font={(ui.phoneHomeLabelFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneHomeLabelFont: { ...((ui.phoneHomeLabelFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
+                            </div>
+                        )}
                         {buttons.map((b, i) => (
                             <div key={b.id} className="border border-[var(--border-subtle)] rounded p-2 space-y-1.5">
                                 <div className="flex items-center gap-1">
@@ -1809,10 +1937,22 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                                         <NumInput label="H %" value={b.height} fallback={16} min={4} max={100} onChange={v => updateBtn(i, { height: v })} />
                                     </div>
                                 )}
-                                <div>
-                                    <span className="text-[10px] text-[var(--text-secondary)]">Action when tapped</span>
-                                    <ActionEditor action={b.action ?? { type: UIActionType.None } as VNUIAction} onActionChange={(a) => updateBtn(i, { action: a.type === UIActionType.None ? undefined : a })} />
-                                </div>
+                                <Field label="Opens">
+                                    <select className={inputCls} value={b.appId || '__custom__'} onChange={e => {
+                                        const v = e.target.value;
+                                        if (v === '__custom__') updateBtn(i, { appId: undefined });
+                                        else updateBtn(i, { appId: v, builtinIcon: b.builtinIcon || PHONE_APP_CHOICES.find(a => a.id === v)?.glyph, label: b.label || PHONE_APP_CHOICES.find(a => a.id === v)?.label });
+                                    }}>
+                                        {PHONE_APP_CHOICES.map(a => <option key={a.id} value={a.id}>{PHONE_GLYPHS[a.glyph]} {a.label} app</option>)}
+                                        <option value="__custom__">Custom action…</option>
+                                    </select>
+                                </Field>
+                                {!b.appId && (
+                                    <div>
+                                        <span className="text-[10px] text-[var(--text-secondary)]">Action when tapped</span>
+                                        <ActionEditor action={b.action ?? { type: UIActionType.None } as VNUIAction} onActionChange={(a) => updateBtn(i, { action: a.type === UIActionType.None ? undefined : a })} />
+                                    </div>
+                                )}
                             </div>
                         ))}
                         <button onClick={addBtn} className="w-full p-1.5 text-xs rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-center gap-1"><PlusIcon className="w-3 h-3" /> Add button</button>
@@ -1923,6 +2063,113 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                             {PHONE_ICON_KEYS.map(k => <option key={k} value={k}>{PHONE_GLYPHS[k]} {k}</option>)}
                         </select>
                     </Field>
+                    <hr className="border-[var(--border-subtle)] my-2" />
+                    <p className="text-[10px] text-[var(--text-muted)] mb-1">In-call transcript (scripted call conversations play on the phone's call screen).</p>
+                    <div className="grid grid-cols-2 gap-2">
+                        <Field label="End Call label"><input className={inputCls} value={ui.phoneCallEndLabel ?? ''} placeholder="End Call" onChange={e => onUpdate({ phoneCallEndLabel: e.target.value || undefined })} /></Field>
+                        <ColorField label="End Call color" value={ui.phoneCallEndColor ?? '#ef4444'} onChange={v => onUpdate({ phoneCallEndColor: v })} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <ColorField label="Call timer" value={ui.phoneCallTimerColor ?? '#ffffffb3'} onChange={v => onUpdate({ phoneCallTimerColor: v })} />
+                        <Field label='"Calling…" text'><input className={inputCls} value={ui.phoneCallDialingText ?? ''} placeholder="Calling…" onChange={e => onUpdate({ phoneCallDialingText: e.target.value || undefined })} /></Field>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <ColorField label="Their line bubble" value={ui.phoneCallLineIncomingColor ?? '#2a2f3a'} onChange={v => onUpdate({ phoneCallLineIncomingColor: v })} />
+                        <ColorField label="Your line bubble" value={ui.phoneCallLineOutgoingColor ?? '#2f6bff'} onChange={v => onUpdate({ phoneCallLineOutgoingColor: v })} />
+                    </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Wallpapers & Settings app">
+                    <p className="text-[10px] text-[var(--text-muted)] mb-1">Give players wallpapers to choose from — a <b>Settings app</b> appears on the phone (add an app button that opens "Settings"). Their pick is remembered in saves. Wallpapers with conditions unlock over the story.</p>
+                    <Field label="Settings header"><input className={inputCls} value={ui.phoneSettingsHeader ?? ''} placeholder="Settings" onChange={e => onUpdate({ phoneSettingsHeader: e.target.value || undefined })} /></Field>
+                    <Field label="Wallpaper section label"><input className={inputCls} value={ui.phoneSettingsWallpaperLabel ?? ''} placeholder="Wallpaper" onChange={e => onUpdate({ phoneSettingsWallpaperLabel: e.target.value || undefined })} /></Field>
+                    {(ui.phoneWallpapers || []).map((w, i) => (
+                        <div key={w.id} className="border border-[var(--border-subtle)] rounded p-2 space-y-1.5 mb-1.5">
+                            <div className="flex items-center gap-1">
+                                <input className={inputCls} value={w.name ?? ''} placeholder="Name (optional)" onChange={e => onUpdate({ phoneWallpapers: (ui.phoneWallpapers || []).map((x, xi) => xi === i ? { ...x, name: e.target.value || undefined } : x) })} />
+                                <button onClick={() => onUpdate({ phoneWallpapers: (ui.phoneWallpapers || []).filter((_, xi) => xi !== i) })} className="p-1 text-red-400 hover:text-red-300" title="Remove"><TrashIcon className="w-4 h-4" /></button>
+                            </div>
+                            <Field label="Image / video">
+                                <PhoneBgSelect project={project} value={w.image} onChange={ref => onUpdate({ phoneWallpapers: (ui.phoneWallpapers || []).map((x, xi) => xi === i ? { ...x, image: ref || x.image } : x) })} />
+                            </Field>
+                            <ConditionsEditor collapsible title="Unlocked when…" conditions={w.conditions || []} project={project} onChange={cond => onUpdate({ phoneWallpapers: (ui.phoneWallpapers || []).map((x, xi) => xi === i ? { ...x, conditions: cond && cond.length ? cond : undefined } : x) })} />
+                        </div>
+                    ))}
+                    <button onClick={() => onUpdate({ phoneWallpapers: [...(ui.phoneWallpapers || []), { id: `wp-${Math.random().toString(36).slice(2, 9)}`, image: { type: 'image', id: '' as VNID } }] })} className="w-full p-1.5 text-xs rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-center gap-1"><PlusIcon className="w-3 h-3" /> Add wallpaper option</button>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Home widgets">
+                    <p className="text-[10px] text-[var(--text-muted)] mb-1">Decorative pieces on the phone's home screen: a clock (uses the status-bar clock text), custom text (supports {'{variables}'}), or an image. Positioned in % of the phone screen.</p>
+                    {(ui.phoneHomeWidgets || []).map((w, i) => {
+                        const patchW = (patch: any) => onUpdate({ phoneHomeWidgets: (ui.phoneHomeWidgets || []).map((x, xi) => xi === i ? { ...x, ...patch } : x) });
+                        return (
+                            <div key={w.id} className="border border-[var(--border-subtle)] rounded p-2 space-y-1.5 mb-1.5">
+                                <div className="flex items-center gap-1">
+                                    <select className={inputCls} value={w.type} onChange={e => patchW({ type: e.target.value })}>
+                                        <option value="clock">🕐 Clock</option>
+                                        <option value="text">Text</option>
+                                        <option value="image">Image</option>
+                                    </select>
+                                    <button onClick={() => onUpdate({ phoneHomeWidgets: (ui.phoneHomeWidgets || []).filter((_, xi) => xi !== i) })} className="p-1 text-red-400 hover:text-red-300" title="Remove"><TrashIcon className="w-4 h-4" /></button>
+                                </div>
+                                {w.type === 'text' && <input className={inputCls} value={w.text ?? ''} placeholder="Text ({variables} work)" onChange={e => patchW({ text: e.target.value })} />}
+                                {w.type === 'image' && <PhoneBgSelect project={project} value={w.image || null} onChange={ref => patchW({ image: ref })} />}
+                                <div className="grid grid-cols-4 gap-1">
+                                    <NumInput label="X %" value={w.x} fallback={10} min={0} max={100} onChange={v => patchW({ x: v })} />
+                                    <NumInput label="Y %" value={w.y} fallback={8} min={0} max={100} onChange={v => patchW({ y: v })} />
+                                    <NumInput label="W %" value={w.width} fallback={80} min={2} max={100} onChange={v => patchW({ width: v })} />
+                                    <NumInput label="H %" value={w.height} fallback={10} min={2} max={100} onChange={v => patchW({ height: v })} />
+                                </div>
+                                {w.type !== 'image' && (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <ColorField label="Color" value={w.color ?? '#ffffff'} onChange={v => patchW({ color: v })} />
+                                        <div><FontEditor label="Font" font={(w.font as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => patchW({ font: { ...((w.font as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} /></div>
+                                    </div>
+                                )}
+                                <ConditionsEditor collapsible title="Show when…" conditions={w.conditions || []} project={project} onChange={cond => patchW({ conditions: cond && cond.length ? cond : undefined })} />
+                            </div>
+                        );
+                    })}
+                    <button onClick={() => onUpdate({ phoneHomeWidgets: [...(ui.phoneHomeWidgets || []), { id: `hw-${Math.random().toString(36).slice(2, 9)}`, type: 'clock' as const, x: 10, y: 8, width: 80, height: 12 }] })} className="w-full p-1.5 text-xs rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-center gap-1"><PlusIcon className="w-3 h-3" /> Add widget</button>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Map app">
+                    <p className="text-[10px] text-[var(--text-muted)] mb-1">Free-roam travel from the phone: the player opens the Map app and taps a location to go there. Design maps in <b>Systems → Maps & Travel</b>; browsing is always allowed, traveling honors the gate below.</p>
+                    <Field label="Map shown in the app">
+                        <select className={inputCls} value={ui.phoneMapId || ''} onChange={e => onUpdate({ phoneMapId: (e.target.value || null) as any })}>
+                            <option value="">None (Map app disabled)</option>
+                            {(Object.values(project.maps || {}) as any[]).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                    </Field>
+                    <Field label="Header"><input className={inputCls} value={ui.phoneMapHeader ?? ''} placeholder="Map" onChange={e => onUpdate({ phoneMapHeader: e.target.value || undefined })} /></Field>
+                    <ConditionsEditor collapsible title="Travel allowed when…" hint="Leave empty = always. E.g. add a 'can_travel is true' condition and flip that variable with Set Variable when the story permits moving." conditions={ui.phoneMapTravelConditions || []} project={project} onChange={cond => onUpdate({ phoneMapTravelConditions: cond && cond.length ? cond : undefined })} />
+                    <Field label="Blocked-travel message"><input className={inputCls} value={ui.phoneMapTravelLockedText ?? ''} placeholder="You can't leave right now." onChange={e => onUpdate({ phoneMapTravelLockedText: e.target.value || undefined })} /></Field>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Gallery app">
+                    <p className="text-[10px] text-[var(--text-muted)] mb-1">The phone's Gallery: <b>Photos</b> collects every photo characters text the player; <b>Collection</b> mirrors the project's CG Gallery (same unlocks). Open it with an app button set to "Gallery app".</p>
+                    <Field label="Header"><input className={inputCls} value={ui.phoneGalleryHeader ?? ''} placeholder="Gallery" onChange={e => onUpdate({ phoneGalleryHeader: e.target.value || undefined })} /></Field>
+                    <div className="grid grid-cols-2 gap-2">
+                        <NumInput label="Columns" value={ui.phoneGalleryColumns} fallback={3} min={1} max={6} onChange={v => onUpdate({ phoneGalleryColumns: v })} />
+                        <Field label="Show CG tab">
+                            <select className={inputCls} value={ui.phoneGalleryShowCG === false ? 'no' : 'yes'} onChange={e => onUpdate({ phoneGalleryShowCG: e.target.value === 'no' ? false : undefined })}>
+                                <option value="yes">Yes (when a CG gallery exists)</option>
+                                <option value="no">No (photos only)</option>
+                            </select>
+                        </Field>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <Field label="Photos tab label"><input className={inputCls} value={ui.phoneGalleryPhotosLabel ?? ''} placeholder="Photos" onChange={e => onUpdate({ phoneGalleryPhotosLabel: e.target.value || undefined })} /></Field>
+                        <Field label="CG tab label"><input className={inputCls} value={ui.phoneGalleryCGLabel ?? ''} placeholder="Collection" onChange={e => onUpdate({ phoneGalleryCGLabel: e.target.value || undefined })} /></Field>
+                    </div>
+                    <Field label="Empty text"><input className={inputCls} value={ui.phoneGalleryEmptyText ?? ''} placeholder="No photos yet" onChange={e => onUpdate({ phoneGalleryEmptyText: e.target.value || undefined })} /></Field>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Messages app (threads inbox)">
+                    <p className="text-[10px] text-[var(--text-muted)] mb-1">The Messages app opens to an inbox — one row per conversation with a preview and an unread pill; tapping a row opens that chat. Rows reuse the Contacts row colors.</p>
+                    <Field label="Header"><input className={inputCls} value={ui.phoneMessagesHeader ?? ''} placeholder="Messages" onChange={e => onUpdate({ phoneMessagesHeader: e.target.value || undefined })} /></Field>
+                    <Field label="Empty text"><input className={inputCls} value={ui.phoneMessagesEmptyText ?? ''} placeholder="No messages yet" onChange={e => onUpdate({ phoneMessagesEmptyText: e.target.value || undefined })} /></Field>
+                    <Field label="New-conversation hint"><input className={inputCls} value={ui.phoneMessagesNewHint ?? ''} placeholder="New conversation" onChange={e => onUpdate({ phoneMessagesNewHint: e.target.value || undefined })} /></Field>
                 </CollapsibleSection>
 
                 <CollapsibleSection title="Recents (history)">
@@ -1975,10 +2222,32 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                                     <Field label="Chat background (this thread)">
                                         <PhoneBgSelect project={project} cls={inputCls} value={c.chatBackground} onChange={v => update({ chatBackground: v })} />
                                     </Field>
-                                    <div>
-                                        <div className="text-[10px] text-[var(--text-muted)] mb-0.5">When "Call" is tapped (after the Calling… screen)</div>
-                                        <ActionEditor action={c.callAction ?? { type: UIActionType.None } as VNUIAction} onActionChange={(a) => update({ callAction: a.type === UIActionType.None ? undefined : a })} />
-                                    </div>
+                                    <CollapsibleSection title="Call conversations" badge={String((c.callConversations || []).length)}
+                                        summary={(c.callConversations || []).length ? undefined : 'none'}>
+                                        <PhoneConversationListEditor entries={c.callConversations} onChange={list => update({ callConversations: list as any })} project={project} t={t} cls={inputCls} kind="call"
+                                            studioTitle={`${c.displayName || (project.characters as any)[c.characterId]?.name || 'Contact'} — Call conversations`} />
+                                    </CollapsibleSection>
+                                    <CollapsibleSection title="Text conversations" badge={String((c.textConversations || []).length)}
+                                        summary={(c.textConversations || []).length ? undefined : 'none'}>
+                                        <PhoneConversationListEditor entries={c.textConversations} onChange={list => update({ textConversations: list as any })} project={project} t={t} cls={inputCls} kind="text"
+                                            studioTitle={`${c.displayName || (project.characters as any)[c.characterId]?.name || 'Contact'} — Text conversations`} />
+                                    </CollapsibleSection>
+                                    {!!c.callConversation?.lines?.length && (
+                                        <CollapsibleSection title="(Legacy) Call conversation" summary={`${c.callConversation.lines.length} lines · always the fallback`}>
+                                            <p className="text-[10px] text-[var(--text-muted)] mb-1">This single conversation predates the gated list above. It still plays when no list entry passes. Move it into the list to give it conditions.</p>
+                                            <button className="mb-1 text-[10px] px-2 py-1 rounded bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] hover:bg-white/10"
+                                                onClick={() => update({ callConversations: [...(c.callConversations || []), { id: `pcv-${Date.now()}` as VNID, name: 'Default call', conversation: c.callConversation! }], callConversation: undefined })}>
+                                                Move into the list ↑
+                                            </button>
+                                            <PhoneCallConversationEditor conversation={c.callConversation} onChange={conv => update({ callConversation: conv?.lines?.length ? conv : undefined })} project={project} t={t} />
+                                        </CollapsibleSection>
+                                    )}
+                                    {!c.callConversation?.lines?.length && !(c.callConversations || []).length && (
+                                        <div>
+                                            <div className="text-[10px] text-[var(--text-muted)] mb-0.5">When "Call" is tapped (after the Calling… screen)</div>
+                                            <ActionEditor action={c.callAction ?? { type: UIActionType.None } as VNUIAction} onActionChange={(a) => update({ callAction: a.type === UIActionType.None ? undefined : a })} />
+                                        </div>
+                                    )}
                                     <ConditionsEditor conditions={c.conditions} project={project} onChange={cond => update({ conditions: cond && cond.length ? cond : undefined })} collapsible title="Unlock conditions" />
                                 </div>
                             );
@@ -2644,6 +2913,8 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                     {showSnapGuides && <SnapGuideOverlay gridSize={5} />}
                     {/* Smart-snap alignment guides (live during a drag/resize). */}
                     <CanvasSnapGuides guides={inGameSnapGuides} />
+                    {/* Player-screen boundary — marks exactly where the game frame cuts off. */}
+                    <CanvasEdgeFrame />
                     {/* Smart-snap toggle. */}
                     <button
                         onMouseDown={(e) => { e.stopPropagation(); setSnapEnabled(s => !s); }}

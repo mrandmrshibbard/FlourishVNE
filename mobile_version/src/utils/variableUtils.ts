@@ -99,19 +99,23 @@ export const coerceValueToType = (
             }
             
             const normalized = changeValStr.trim().toLowerCase();
-            
-            // Empty string means toggle
-            if (normalized === '') {
-                return !currentValue;
-            }
-            
-            if (normalized === 'true' || normalized === '1') {
+
+            // An un-touched boolean "Set to" leaves the value empty/undefined while every editor SHOWS
+            // "Yes" (the first option) as the default — so an empty value is the uninitialised default
+            // (→ true), NOT a toggle. This previously toggled, which made repeatedly setting the SAME
+            // value (e.g. a slot-button action "set good_snacks = Yes" on several items) flip the variable
+            // Yes/No/Yes on each click. No editor exposes an explicit empty-as-toggle control.
+            if (normalized === '' || normalized === 'undefined' || normalized === 'null') {
                 return true;
             }
-            if (normalized === 'false' || normalized === '0') {
+
+            if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+                return true;
+            }
+            if (normalized === 'false' || normalized === '0' || normalized === 'no') {
                 return false;
             }
-            
+
             return !!value;
             
         case 'string':

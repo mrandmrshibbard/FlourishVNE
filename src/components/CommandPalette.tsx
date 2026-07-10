@@ -9,7 +9,7 @@ export const COMMAND_CATEGORIES = {
     'Story': {
         color: 'bg-purple-500/20 border-purple-500 text-purple-300',
         headerColor: 'bg-purple-600/30 text-purple-200',
-        commands: [CommandType.Dialogue, CommandType.Choice, CommandType.Label, CommandType.Jump, CommandType.JumpToLabel]
+        commands: [CommandType.Dialogue, CommandType.Choice, CommandType.Label, CommandType.Jump, CommandType.JumpToLabel, CommandType.ShowMap, CommandType.ShowMiniGame]
     },
     'Characters': {
         color: 'bg-blue-500/20 border-blue-500 text-blue-300',
@@ -39,12 +39,12 @@ export const COMMAND_CATEGORIES = {
     'Screen FX': {
         color: 'bg-orange-500/20 border-orange-500 text-orange-300',
         headerColor: 'bg-orange-600/30 text-orange-200',
-        commands: [CommandType.ShakeScreen, CommandType.TintScreen, CommandType.PanZoomScreen, CommandType.FlashScreen, CommandType.Lightning, CommandType.Flashlight, CommandType.Fireworks, CommandType.PlaceLights, CommandType.ClearLights, CommandType.SetScreenOverlayEffect, CommandType.ResetScreenEffects, CommandType.SpawnParticles, CommandType.StopParticles, CommandType.TweenElement]
+        commands: [CommandType.ShakeScreen, CommandType.TintScreen, CommandType.PanZoomScreen, CommandType.FlashScreen, CommandType.Lightning, CommandType.Flashlight, CommandType.Spotlight, CommandType.Fireworks, CommandType.PlaceLights, CommandType.ClearLights, CommandType.SetScreenOverlayEffect, CommandType.SetTimeOfDay, CommandType.ResetScreenEffects, CommandType.SpawnParticles, CommandType.StopParticles, CommandType.TweenElement]
     },
     'UI Elements': {
         color: 'bg-cyan-500/20 border-cyan-500 text-cyan-300',
         headerColor: 'bg-cyan-600/30 text-cyan-200',
-        commands: [CommandType.ShowText, CommandType.HideText, CommandType.ShowImage, CommandType.HideImage, CommandType.ShowButton, CommandType.HideButton, CommandType.ShowHotSpot, CommandType.HideHotSpot, CommandType.ShowScreen]
+        commands: [CommandType.ShowText, CommandType.HideText, CommandType.ShowImage, CommandType.HideImage, CommandType.ShowButton, CommandType.HideButton, CommandType.ShowHotSpot, CommandType.HideHotSpot, CommandType.ShowScreen, CommandType.HideScreen]
     },
     'Media': {
         color: 'bg-red-500/20 border-red-500 text-red-300',
@@ -59,7 +59,7 @@ export const COMMAND_CATEGORIES = {
     'Phone': {
         color: 'bg-rose-500/20 border-rose-500 text-rose-300',
         headerColor: 'bg-rose-600/30 text-rose-200',
-        commands: [CommandType.PhoneIncomingText, CommandType.PhoneIncomingCall, CommandType.ShowPhone, CommandType.HidePhone, CommandType.ShowPhoneText, CommandType.HidePhoneText]
+        commands: [CommandType.PhoneIncomingText, CommandType.PhoneIncomingCall, CommandType.StartPhoneCall, CommandType.PhoneNotify, CommandType.ShowPhone, CommandType.HidePhone, CommandType.ShowPhoneText, CommandType.HidePhoneText]
     }
 } as const;
 

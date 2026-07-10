@@ -52,6 +52,13 @@ export enum UIActionType {
     ShowPhoneHistory = 'ShowPhoneHistory',
     /** Open the phone's Contacts app (roster with per-contact Call / Message). */
     ShowPhoneContacts = 'ShowPhoneContacts',
+    /** Open a specific phone app by id (opens the phone if closed). The generic form of
+     *  ShowPhoneHistory/ShowPhoneContacts, covering registry apps (gallery, map, settings…). */
+    OpenPhoneApp = 'OpenPhoneApp',
+    /** Show a travel map full-screen (buttons/hotspots; the scene keeps its current position). */
+    ShowMap = 'ShowMap',
+    /** Show a mini game full-screen (buttons/hotspots; the scene keeps its current position). */
+    ShowMiniGame = 'ShowMiniGame',
     ReturnToGame = 'ReturnToGame',
     ReturnToPreviousScreen = 'ReturnToPreviousScreen',
     QuitToTitle = 'QuitToTitle',
@@ -63,6 +70,18 @@ export enum UIActionType {
     ResetVariable = 'ResetVariable',
     /** Plays a selected audio asset (one-shot or looping) when the button is clicked. */
     PlaySound = 'PlaySound',
+    /** Plays a track as background MUSIC (single music channel, cross-fades, loops) — same as the Play Music command. */
+    PlayMusic = 'PlayMusic',
+    /** Fades out and stops the background music — same as the Stop Music command. */
+    StopMusic = 'StopMusic',
+    /** Show a spotlight beam (carries its own look, so a screen button can turn one on from scratch). */
+    ShowSpotlight = 'ShowSpotlight',
+    /** Turn the current spotlight beam off. */
+    HideSpotlight = 'HideSpotlight',
+    /** Show a flashlight (carries its own look, so a screen button can turn one on from scratch). */
+    ShowFlashlight = 'ShowFlashlight',
+    /** Turn the flashlight off. */
+    HideFlashlight = 'HideFlashlight',
     CycleLayerAsset = 'CycleLayerAsset',
     ToggleScreen = 'ToggleScreen',
     OpenURL = 'OpenURL',
@@ -116,6 +135,11 @@ export enum UIActionType {
     StartTimer = 'StartTimer',
     /** Stops a running timer by id. */
     StopTimer = 'StopTimer',
+    /** Sets/advances the day/night clock (drives the time-of-day color grade). */
+    SetTimeOfDay = 'SetTimeOfDay',
+    /** Reverts the palette→UI restyle a coloring mini game applied (clears
+     *  playerState.uiPaletteOverride so the UI returns to its authored colors). */
+    ClearUiPalette = 'ClearUiPalette',
 }
 
 export interface BaseUIAction {
@@ -134,6 +158,12 @@ export interface SetVariableAction extends BaseUIAction { type: UIActionType.Set
 export const RESET_ALL_VARIABLES = '__ALL_VARIABLES__' as VNID;
 export interface ResetVariableAction extends BaseUIAction { type: UIActionType.ResetVariable; variableId: VNID; }
 export interface PlaySoundAction extends BaseUIAction { type: UIActionType.PlaySound; audioId: VNID; volume?: number; loop?: boolean; }
+export interface PlayMusicAction extends BaseUIAction { type: UIActionType.PlayMusic; audioId: VNID; volume?: number; loop?: boolean; fadeDuration?: number; }
+export interface StopMusicAction extends BaseUIAction { type: UIActionType.StopMusic; fadeDuration?: number; }
+export interface ShowSpotlightAction extends BaseUIAction { type: UIActionType.ShowSpotlight; spotlightId?: string; sourceX?: number; sourceY?: number; aimAngle?: number; intensity?: number; beamWidth?: number; sourceWidth?: number; height?: number; falloff?: number; color?: string; followMouse?: boolean; swivelMax?: number; toggleKey?: string; affectsDialogue?: boolean; sfxId?: VNID | null; }
+export interface HideSpotlightAction extends BaseUIAction { type: UIActionType.HideSpotlight; spotlightId?: string; }
+export interface ShowFlashlightAction extends BaseUIAction { type: UIActionType.ShowFlashlight; radius?: number; softness?: number; darkness?: number; color?: string; toggleKey?: string; affectsDialogue?: boolean; sfxId?: VNID | null; }
+export interface HideFlashlightAction extends BaseUIAction { type: UIActionType.HideFlashlight; }
 export interface LoadGameAction extends BaseUIAction { type: UIActionType.LoadGame; slotNumber: number; }
 export interface SaveGameAction extends BaseUIAction { type: UIActionType.SaveGame; slotNumber: number; }
 export interface DeleteSaveAction extends BaseUIAction { type: UIActionType.DeleteSave; slotNumber: number; }
@@ -143,6 +173,11 @@ export interface ShowPhoneTextAction extends BaseUIAction { type: UIActionType.S
 export interface HidePhoneTextAction extends BaseUIAction { type: UIActionType.HidePhoneText; }
 export interface ShowPhoneHistoryAction extends BaseUIAction { type: UIActionType.ShowPhoneHistory; }
 export interface ShowPhoneContactsAction extends BaseUIAction { type: UIActionType.ShowPhoneContacts; }
+/** appId matches PhoneAppId (live-preview/types/gameState.ts) — kept as string here so shared
+ *  types stay dependency-free; the runtime falls back to 'home' for unknown/disabled ids. */
+export interface OpenPhoneAppAction extends BaseUIAction { type: UIActionType.OpenPhoneApp; appId: string; }
+export interface ShowMapAction extends BaseUIAction { type: UIActionType.ShowMap; mapId: VNID; }
+export interface ShowMiniGameAction extends BaseUIAction { type: UIActionType.ShowMiniGame; gameId: VNID; }
 export interface CycleLayerAssetAction extends BaseUIAction { type: UIActionType.CycleLayerAsset; characterId: VNID; layerId: VNID; variableId: VNID; direction: 'next' | 'prev'; }
 export interface ToggleScreenAction extends BaseUIAction { type: UIActionType.ToggleScreen; targetScreenId: VNID; }
 export interface OpenURLAction extends BaseUIAction { type: UIActionType.OpenURL; url: string; newTab?: boolean; }
@@ -165,5 +200,9 @@ export interface SellSelectedItemAction extends BaseUIAction { type: UIActionTyp
  *  the timer runs regardless. For on-finish ACTIONS or pausing the story, use the Start Timer COMMAND. */
 export interface StartTimerAction extends BaseUIAction { type: UIActionType.StartTimer; timerId?: string; variableId?: VNID; mode?: 'countdown' | 'stopwatch'; duration: number; from?: number; interval?: number; loop?: boolean; onComplete?: VNUIAction[]; }
 export interface StopTimerAction extends BaseUIAction { type: UIActionType.StopTimer; timerId?: string; }
+/** Set/advance the day/night clock from a button. */
+export interface SetTimeOfDayAction extends BaseUIAction { type: UIActionType.SetTimeOfDay; mode: 'set' | 'advance'; hour?: number; hours?: number; transitionDuration?: number; }
+/** Clear the palette→UI restyle applied by a coloring mini game. */
+export interface ClearUiPaletteAction extends BaseUIAction { type: UIActionType.ClearUiPalette; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | StartTimerAction | StopTimerAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | PlayMusicAction | StopMusicAction | ShowSpotlightAction | HideSpotlightAction | ShowFlashlightAction | HideFlashlightAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | OpenPhoneAppAction | ShowMapAction | ShowMiniGameAction | StartTimerAction | StopTimerAction | SetTimeOfDayAction | ClearUiPaletteAction;

@@ -10,6 +10,7 @@ import { TweenElementCommand, MoveCharacterCommand } from '../../../features/sce
 import { VNPosition } from '../../../types';
 import { CommandContext, CommandResult } from './types';
 import { TweenManager, TweenableProperties } from '../systems/tweenManager';
+import { resolveCommandCharacterId } from '../../../utils/playerCharacter';
 import type { TweenTargetType } from '../systems/tweenManager';
 
 const PRESET_COORDS: Record<string, { x: number; y: number }> = {
@@ -196,10 +197,12 @@ export function handleMoveCharacter(
     context: CommandContext
 ): CommandResult {
     const { advance } = context;
-    const char = context.playerState.stageState.characters[command.characterId];
-    if (!char) return { advance: true }; // not on stage → nothing to move
+    // ⟨Player's Character⟩ targeting — move the player-created character when requested.
+    const characterId = resolveCommandCharacterId(command, context.project, context.playerState.variables) || command.characterId;
+    const char = characterId ? context.playerState.stageState.characters[characterId] : undefined;
+    if (!characterId || !char) return { advance: true }; // not on stage → nothing to move
 
-    const resting = TweenManager.getRestingValues(command.characterId, 'character');
+    const resting = TweenManager.getRestingValues(characterId, 'character');
     const curPos = typeof char.position === 'object' ? char.position : (PRESET_COORDS[char.position] ?? { x: 50, y: 10 });
     const fromPos = command.fromPosition ? posToCoords(command.fromPosition) : { x: resting?.x ?? curPos.x, y: resting?.y ?? curPos.y };
     const toPos = posToCoords(command.toPosition);
@@ -212,7 +215,7 @@ export function handleMoveCharacter(
 
     const waitForCompletion = command.waitForCompletion !== false; // default true
     TweenManager.start({
-        targetId: command.characterId,
+        targetId: characterId,
         targetType: 'character',
         from,
         to,
@@ -221,5 +224,18 @@ export function handleMoveCharacter(
         onComplete: waitForCompletion ? () => advance() : undefined,
     });
 
-    return { advance: !waitForCompletion };
+    // Persist the destination into the character's stage state so its STORED position reflects where it
+    // actually ends up. Without this, a later "Show Character" with "Keep current position (expression
+    // change only)" reads the PRE-MOVE position and snaps the sprite back to where it started. The tween
+    // still drives the A→B animation on top of this base position, so there's no visual jump.
+    const stagePatch = (prev: typeof context.playerState.stageState): Partial<typeof context.playerState.stageState> => {
+        const existing = prev.characters[characterId];
+        if (!existing) return {};
+        const updated: typeof existing = { ...existing, position: command.toPosition };
+        if (command.scale !== undefined) (updated as { scale?: number }).scale = command.scale;
+        if (command.rotation !== undefined) (updated as { rotation?: number }).rotation = command.rotation;
+        return { characters: { ...prev.characters, [characterId]: updated } };
+    };
+
+    return { advance: !waitForCompletion, stagePatch };
 }

@@ -28,9 +28,11 @@ export const CollapsibleSection: React.FC<{
                     onClick={() => setIsOpen(!isOpen)}
                     className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2 hover:bg-slate-700/30 transition-colors text-left"
                 >
-                    <span className={`text-[10px] text-slate-500 transition-transform ${isOpen ? 'rotate-90' : ''}`}>▶</span>
-                    {glyph && <span className="text-xs">{glyph}</span>}
-                    <span className="text-xs font-semibold text-slate-300 flex-shrink-0">{title}</span>
+                    <span className={`text-[10px] text-slate-500 transition-transform flex-shrink-0 ${isOpen ? 'rotate-90' : ''}`}>▶</span>
+                    {glyph && <span className="text-xs flex-shrink-0">{glyph}</span>}
+                    {/* Title ellipsizes rather than pushing the badge/summary/action out of the header
+                        (long titles in narrow panels were overflowing the section boundary). */}
+                    <span className="text-xs font-semibold text-slate-300 truncate">{title}</span>
                     {!isOpen && summary && (
                         <span className="text-[10px] text-slate-500 truncate ml-auto pl-2">{summary}</span>
                     )}

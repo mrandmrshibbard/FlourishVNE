@@ -457,6 +457,8 @@ export class TemplateService {
    * Initialize default templates for common VN patterns
    */
   private initializeDefaultTemplates(): void {
+    // NOTE: currently UNWIRED/dead (the TemplateGallery UI has no trigger) and superseded by the
+    // unified Character Creator & Dress-Up wizard (Systems tab / UI editor Template Wizard).
     // Layered Character Creator Template
     this.addDefaultTemplate({
       id: 'template-character-creator',

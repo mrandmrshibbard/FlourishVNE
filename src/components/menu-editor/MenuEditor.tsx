@@ -11,6 +11,7 @@ import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import { UIActionType } from '../../types/shared';
 import ResizableDraggable from './ResizableDraggable';
 import CanvasSnapGuides from './CanvasSnapGuides';
+import CanvasEdgeFrame from '../ui/CanvasEdgeFrame';
 import ContentBoxEditor from './ContentBoxEditor';
 import { SnapRect, SnapGuide, insetRect } from '../../utils/canvasSnap';
 import { computeAlphaBounds } from '../../utils/alphaBounds';
@@ -20,10 +21,11 @@ import { useExtensionUIElementTypes } from '../ExtensionPanelsHost';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../../utils/styleUtils';
 import { GradientText } from '../ui/GradientText';
 import { PlusIcon, SparklesIcon } from '../icons';
-import CharacterCustomizationWizard, { GeneratedConfig } from './CharacterCustomizationWizard';
+import CharacterCreatorWizard, { UnifiedWizardResult } from './CharacterCreatorWizard';
 import CGGalleryWizard, { CGGalleryGeneratedConfig } from './CGGalleryWizard';
 import SystemWizard from './SystemWizard';
 import { applySystemWizardResult } from '../../features/systems/applySystem';
+import { applyCharacterCreator, applyDressUp } from '../../features/systems/applyCharacterCreator';
 import { HotSpotOverlay, InteractiveElementOverlay } from '../interactive-elements/InteractiveElementOverlays';
 import { isHotSpotElement, isInteractiveElement } from '../../utils/interactiveElements';
 import { useElementRadial } from './ElementRadialContext';
@@ -57,9 +59,57 @@ const SafeUIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject
 // author drags/resizes each box exactly like any other element. All slots map to a
 // single parent element; selecting a slot selects that element's inspector.
 
-/** Static preview of a single slot, matching the in-game look (empty save card / CG thumb). */
-const FreeSlotPreview: React.FC<{ element: UISaveSlotGridElement | UICGGalleryElement, index: number, ring: boolean }> = ({ element, index, ring }) => {
+/** Resolve the items an inventory grid shows, in display order (shared by grid + free previews). */
+const resolveInvItems = (inv: UIInventoryGridElement, project: VNProject): any[] => {
+    const boundColl = inv.collectionId ? project.itemCollections?.[inv.collectionId] : undefined;
+    const everything = () => (Object.values(project.items || {}) as any[]).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const allItems = !boundColl
+        ? everything()
+        : (boundColl.tracksOwnedItems && boundColl.entries.length === 0)
+            ? everything()
+            : boundColl.entries.map(e => project.items?.[e.itemId]).filter(Boolean) as any[];
+    return inv.categoryFilter ? allItems.filter(it => it.category === inv.categoryFilter) : allItems;
+};
+
+/** Inner content of one inventory slot (icon / quantity / name / button). Shared so the grid
+ *  preview and the free-placement preview render an item identically (the two drifting is what
+ *  caused "edits don't show on canvas" — keep them on this one renderer). */
+const InvSlotInner: React.FC<{ inv: UIInventoryGridElement, project: VNProject, it: any }> = ({ inv, project, it }) => {
+    const qtyCorner = { 'top-left': 'top-1 left-1', 'top-right': 'top-1 right-1', 'bottom-left': 'bottom-1 left-1', 'bottom-right': 'bottom-1 right-1' }[inv.quantityPosition || 'top-right'];
+    const qtyStyle: React.CSSProperties = { backgroundColor: inv.quantityBgColor || 'rgba(0,0,0,0.7)', color: inv.quantityColor || '#ffffff', ...(inv.quantityFont ? fontSettingsToStyle(inv.quantityFont) : {}) };
+    const btnMode = inv.slotButton ?? 'none';
+    const btnLabel = inv.useButtonText || (btnMode === 'buy' ? 'Buy' : btnMode === 'sell' ? 'Sell' : 'Use');
+    const btnArt = inv.useButtonImage?.id ? ((project.images[inv.useButtonImage.id] as any)?.imageUrl || (project.backgrounds[inv.useButtonImage.id] as any)?.imageUrl) : null;
+    const url = it?.icon?.id ? ((project.images[it.icon.id] as any)?.imageUrl || (project.videos?.[it.icon.id] as any)?.videoUrl) : null;
+    return <>
+        {url ? <img src={url} alt="" className="w-full flex-1 min-h-0 object-contain" /> : <span className="flex-1 min-h-0" />}
+        {it && inv.showQuantity !== false && <span className={`absolute ${qtyCorner} text-[10px] rounded px-1 leading-tight`} style={qtyStyle}>×2</span>}
+        {it && inv.showNames !== false && <span className="truncate w-full text-center" style={{ ...(inv.nameFont ? fontSettingsToStyle(inv.nameFont) : {}) }}>{it.name}</span>}
+        {it && btnMode !== 'none' && (
+            <span className="mt-0.5 px-1.5 py-0.5 leading-tight" style={{
+                borderRadius: `${inv.useButtonRadius ?? 6}px`,
+                background: btnArt ? `center / cover no-repeat url(${btnArt})` : (inv.useButtonColor || '#0ea5e9'),
+                color: inv.useButtonTextColor || '#ffffff', fontSize: '9px',
+                ...(inv.useButtonFont ? fontSettingsToStyle(inv.useButtonFont) : {}),
+            }}>{btnLabel}</span>
+        )}
+    </>;
+};
+
+/** Static preview of a single slot, matching the in-game look (empty save card / CG thumb / item slot). */
+const FreeSlotPreview: React.FC<{ element: UISaveSlotGridElement | UICGGalleryElement | UIInventoryGridElement, index: number, ring: boolean, project: VNProject }> = ({ element, index, ring, project }) => {
     const ringShadow = ring ? '0 0 0 1px rgba(56,189,248,0.7)' : undefined;
+    if (element.type === UIElementType.Inventory) {
+        const el = element as UIInventoryGridElement;
+        const it = resolveInvItems(el, project)[index];
+        return (
+            <div className="relative flex flex-col items-center justify-center text-[10px] text-white/80 p-1" style={{ width: '100%', height: '100%', backgroundColor: el.hideSlotBox ? 'transparent' : (el.slotColor || 'rgba(255,255,255,0.04)'), border: el.hideSlotBox ? 'none' : `2px solid ${el.slotBorderColor || '#4D3273'}`, borderRadius: el.slotBorderRadius ?? 8, overflow: 'hidden', boxShadow: ringShadow }}>
+                {it
+                    ? <InvSlotInner inv={el} project={project} it={it} />
+                    : <span style={{ fontSize: 11, color: '#cbd5e1', ...(el.nameFont ? fontSettingsToStyle(el.nameFont) : {}) }}>Item {index + 1}</span>}
+            </div>
+        );
+    }
     if (element.type === UIElementType.SaveSlotGrid) {
         const el = element as UISaveSlotGridElement;
         const slotBgColor = el.slotBackgroundColor || '#1e293b';
@@ -92,7 +142,8 @@ const FreeSlotPreview: React.FC<{ element: UISaveSlotGridElement | UICGGalleryEl
 };
 
 const FreeSlotHandles: React.FC<{
-    element: UISaveSlotGridElement | UICGGalleryElement;
+    element: UISaveSlotGridElement | UICGGalleryElement | UIInventoryGridElement;
+    project: VNProject;
     parentSize: { width: number; height: number };
     isElementSelected: boolean;
     focusedSlot: string | null;
@@ -101,10 +152,11 @@ const FreeSlotHandles: React.FC<{
     onContextMenu: (e: React.MouseEvent) => void;
     snapEnabled?: boolean;
     onGuides?: (g: SnapGuide[]) => void;
-}> = ({ element, parentSize, isElementSelected, focusedSlot, onSelectSlot, onUpdateSlot, onContextMenu, snapEnabled, onGuides }) => {
+}> = ({ element, project, parentSize, isElementSelected, focusedSlot, onSelectSlot, onUpdateSlot, onContextMenu, snapEnabled, onGuides }) => {
     const isSave = element.type === UIElementType.SaveSlotGrid;
+    const isInv = element.type === UIElementType.Inventory;
     const allRects = element.slotRects || [];
-    // Save grids cap visible slots at slotCount (the engine does too); galleries show every placed box.
+    // Save grids cap visible slots at slotCount (the engine does too); galleries + inventory show every placed box.
     const rects = isSave ? allRects.slice(0, (element as UISaveSlotGridElement).slotCount) : allRects;
     const layer = (element as { layer?: number }).layer ?? 0;
     return (
@@ -128,9 +180,9 @@ const FreeSlotHandles: React.FC<{
                         snapEnabled={snapEnabled}
                         siblings={rects.filter((_, j) => j !== i).filter(Boolean).map(r => ({ x: r!.x, y: r!.y, width: r!.width, height: r!.height }))}
                         onGuides={onGuides}
-                        label={isSave ? `Slot ${i + 1}` : `CG ${i + 1}`}
+                        label={isSave ? `Slot ${i + 1}` : isInv ? `Item ${i + 1}` : `CG ${i + 1}`}
                     >
-                        <FreeSlotPreview element={element} index={i} ring={isElementSelected && !focused} />
+                        <FreeSlotPreview element={element} index={i} ring={isElementSelected && !focused} project={project} />
                     </ResizableDraggable>
                 );
             })}
@@ -144,14 +196,7 @@ const InventoryPreview: React.FC<{ inv: UIInventoryGridElement, project: VNProje
     const invCols = inv.columns || 4;
     const colGap = inv.columnGap ?? inv.gap ?? 8;
     const rowGap = inv.rowGap ?? inv.gap ?? 8;
-    const boundColl = inv.collectionId ? project.itemCollections?.[inv.collectionId] : undefined;
-    const everything = () => (Object.values(project.items || {}) as any[]).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    const allItems = !boundColl
-        ? everything()
-        : (boundColl.tracksOwnedItems && boundColl.entries.length === 0)
-            ? everything()
-            : boundColl.entries.map(e => project.items?.[e.itemId]).filter(Boolean) as any[];
-    const invItems = inv.categoryFilter ? allItems.filter(it => it.category === inv.categoryFilter) : allItems;
+    const invItems = resolveInvItems(inv, project);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const [autoRows, setAutoRows] = useState(0);
@@ -176,23 +221,132 @@ const InventoryPreview: React.FC<{ inv: UIInventoryGridElement, project: VNProje
 
     const minRows = (inv.rows && inv.rows > 0) ? inv.rows : Math.max(autoRows, 1);
     const slots = Math.max(invItems.length, invCols * minRows);
-    return <div ref={containerRef} className="w-full h-full overflow-hidden rounded p-2" style={{ backgroundColor: inv.backgroundColor || 'rgba(15, 23, 42, 0.9)' }}>
+    // Faithful preview: mirror the engine slot so editing styling actually shows on the canvas.
+    const square = inv.squareSlots !== false;
+    const hideBox = inv.hideSlotBox === true;
+    return <div ref={containerRef} className="w-full h-full overflow-hidden rounded p-2" style={{ backgroundColor: inv.hideBackgroundPanel ? 'transparent' : (inv.backgroundColor || 'rgba(15, 23, 42, 0.9)') }}>
         <div className="grid" style={{ gridTemplateColumns: `repeat(${invCols}, 1fr)`, columnGap: `${colGap}px`, rowGap: `${rowGap}px` }}>
             {Array.from({ length: slots }).map((_, i) => {
                 const it = invItems[i];
-                const url = it?.icon?.id ? ((project.images[it.icon.id] as any)?.imageUrl || (project.videos?.[it.icon.id] as any)?.videoUrl) : null;
-                return <div key={i} className="flex flex-col items-center justify-center text-[10px] text-white/80 p-1" style={{
-                    backgroundColor: inv.slotColor || 'rgba(255,255,255,0.04)',
+                return <div key={i} className="relative flex flex-col items-center justify-center text-[10px] text-white/80 p-1" style={{
+                    backgroundColor: hideBox ? 'transparent' : (inv.slotColor || 'rgba(255,255,255,0.04)'),
                     borderRadius: `${inv.slotBorderRadius ?? 8}px`,
-                    border: `1px solid ${inv.slotBorderColor || '#4D3273'}`,
-                    aspectRatio: '1 / 1', overflow: 'hidden',
+                    border: hideBox ? 'none' : `1px solid ${inv.slotBorderColor || '#4D3273'}`,
+                    ...(square ? { aspectRatio: '1 / 1' } : {}), overflow: 'hidden',
                 }}>
-                    {url ? <img src={url} alt="" className="w-full flex-1 min-h-0 object-contain" /> : <span className="flex-1 min-h-0" />}
-                    {it && inv.showNames !== false && <span className="truncate w-full text-center">{it.name}</span>}
+                    <InvSlotInner inv={inv} project={project} it={it} />
                 </div>;
             })}
         </div>
     </div>;
+};
+
+/** The character composite (base + each category's selected layer asset) for a Customizer.
+ *  Shared by the preset-layout preview and the free-placement preview box so the canvas mirrors
+ *  the engine. Selection uses each category variable's DEFAULT (canvas isn't playing). */
+const CustomizerSprite: React.FC<{ cz: UICustomizerElement, project: VNProject, bottom?: boolean }> = ({ cz, project, bottom }) => {
+    const czChar = cz.characterId ? project.characters[cz.characterId] : null;
+    if (!czChar) return null;
+    const czFallback = (cz.expressionId && czChar.expressions[cz.expressionId]) || Object.values(czChar.expressions)[0];
+    const imgs: string[] = []; const vids: string[] = []; let hasVid = false;
+    if (czChar.baseVideoUrl) { vids.push(czChar.baseVideoUrl); hasVid = true; }
+    else if (czChar.baseImageUrl) { imgs.push(czChar.baseImageUrl); }
+    Object.entries(czChar.layers).forEach(([layerId, layer]: [string, any]) => {
+        const cat = (cz.categories || []).find(c => c.layerId === layerId);
+        let assetId: string | null = null;
+        if (cat) assetId = String((project.variables[cat.variableId]?.defaultValue ?? '') || '') || null;
+        if (!assetId && czFallback) assetId = czFallback.layerConfiguration[layerId] || null;
+        const asset = assetId ? layer.assets[assetId] : null;
+        if (asset?.videoUrl) { vids.push(asset.videoUrl); hasVid = true; }
+        else if (asset?.imageUrl) { imgs.push(asset.imageUrl); }
+    });
+    const op = bottom ? 'bottom' : 'center';
+    return <div className="relative w-full h-full">
+        {(hasVid ? vids : imgs).map((u, i) => hasVid
+            ? <video key={i} src={u} autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, objectPosition: op }} />
+            : <img key={i} src={u} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, objectPosition: op }} />)}
+    </div>;
+};
+
+/** The category pickers panel for a Customizer (swatch/arrow/button/dropdown styles). Shared by the
+ *  preset-layout preview and the free-placement pickers box. Non-interactive mirror of the runtime. */
+const CustomizerPickers: React.FC<{ cz: UICustomizerElement, project: VNProject }> = ({ cz, project }) => {
+    const czChar = cz.characterId ? project.characters[cz.characterId] : null;
+    if (!czChar) return null;
+    const czFallback = (cz.expressionId && czChar.expressions[cz.expressionId]) || Object.values(czChar.expressions)[0];
+    const czSwatchSize = cz.swatchSize ?? 48;
+    const czSwatchGap = cz.swatchGap ?? 6;
+    const czSel = cz.selectedColor || '#8a2be2';
+    const czArrowColor = cz.arrowColor || '#ffffff';
+    const czArrowSize = cz.arrowSize ?? 28;
+    const czButtonColor = cz.buttonColor || 'rgba(255,255,255,0.12)';
+    const czButtonText = cz.buttonTextColor || '#ffffff';
+    const czUiImg = (a?: { id: string } | null) => a ? ((project.images[a.id] as any)?.imageUrl || (project.backgrounds[a.id] as any)?.imageUrl || null) : null;
+    const czArrowUrl = czUiImg(cz.arrowImage);
+    const czAssetUrl = (a: any) => a?.imageUrl || a?.videoUrl || null;
+    const czRenderPicker = (cat: any, cur: string, assets: any[]) => {
+        const pstyle = cat.pickerStyle || 'swatches';
+        if (pstyle === 'arrows') {
+            const curAsset = assets.find(a => a.id === cur) || assets[0];
+            const cu = curAsset ? czAssetUrl(curAsset) : null;
+            const arrow = (flip: boolean) => czArrowUrl
+                ? <img src={czArrowUrl} alt="" style={{ width: czArrowSize, height: czArrowSize, objectFit: 'contain', transform: flip ? 'scaleX(-1)' : undefined }} />
+                : <span style={{ fontSize: czArrowSize, lineHeight: 1, color: czArrowColor }}>{flip ? '◀' : '▶'}</span>;
+            return <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {arrow(true)}
+                <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+                    {cu && <div style={{ width: czSwatchSize, height: czSwatchSize, margin: '0 auto' }}><img src={cu} alt="" className="w-full h-full object-contain" /></div>}
+                    <div className="text-[10px] text-white/80 truncate">{curAsset?.name || ''}</div>
+                </div>
+                {arrow(false)}
+            </div>;
+        }
+        if (pstyle === 'dropdown') {
+            const curAsset = assets.find(a => a.id === cur) || assets[0];
+            return <div style={{ width: '100%', padding: '4px 6px', borderRadius: 6, background: 'rgba(0,0,0,0.35)', color: czButtonText, border: `1px solid ${cz.borderColor || 'rgba(255,255,255,0.2)'}`, fontSize: 11 }} className="flex items-center justify-between"><span className="truncate">{curAsset?.name || ''}</span><span>▾</span></div>;
+        }
+        if (pstyle === 'buttons') {
+            return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {assets.map(a => <span key={a.id} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: cur === a.id ? czSel : czButtonColor, color: czButtonText }}>{a.name}</span>)}
+            </div>;
+        }
+        return <div style={{ display: 'flex', flexWrap: 'wrap', gap: czSwatchGap }}>
+            {assets.map(asset => {
+                const meta = cz.optionMeta?.[asset.id];
+                const swUrl = meta?.swatchImage ? czUiImg(meta.swatchImage) : null;
+                return (
+                    <div key={asset.id} title={asset.name} style={{ position: 'relative', width: czSwatchSize, height: czSwatchSize, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: 'rgba(0,0,0,0.3)', boxShadow: cur === asset.id ? `0 0 0 3px ${czSel}` : 'inset 0 0 0 1px rgba(255,255,255,0.15)' }}>
+                        {swUrl ? <img src={swUrl} alt="" className="w-full h-full object-contain" /> : asset.imageUrl ? <img src={asset.imageUrl} alt="" className="w-full h-full object-contain" /> : asset.videoUrl ? <video src={asset.videoUrl} muted className="w-full h-full object-contain" /> : <div className="w-full h-full" />}
+                        {meta?.conditions?.length ? <span style={{ position: 'absolute', top: 1, right: 2, fontSize: 9 }}>🔒</span> : null}
+                    </div>
+                );
+            })}
+        </div>;
+    };
+    return (
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0, width: '100%', height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8, padding: 6 }}>
+            {(cz.categories || []).map(cat => {
+                const layer = czChar.layers[cat.layerId];
+                if (!layer) return null;
+                let cur = String((project.variables[cat.variableId]?.defaultValue ?? '') || '');
+                if (!cur && czFallback) cur = czFallback.layerConfiguration[cat.layerId] || '';
+                const assets = Object.values(layer.assets) as any[];
+                return (
+                    <div key={cat.layerId}>
+                        {cz.showLabels !== false && <div className="text-[10px] text-white/80 mb-1 truncate">{cat.label || layer.name}</div>}
+                        {czRenderPicker(cat, cur, assets)}
+                    </div>
+                );
+            })}
+            {(cz.categories || []).length === 0 && <div className="text-[10px] text-white/50">No categories yet — set them up in the Customizer's properties.</div>}
+            {(cz.showRandomize || cz.showReset) && (cz.categories || []).length > 0 && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                    {cz.showRandomize && <span style={{ fontSize: 10, padding: '4px 12px', borderRadius: 6, background: czButtonColor, color: czButtonText }}>{cz.randomizeLabel || 'Randomize'}</span>}
+                    {cz.showReset && <span style={{ fontSize: 10, padding: '4px 12px', borderRadius: 6, background: czButtonColor, color: czButtonText }}>{cz.resetLabel || 'Reset'}</span>}
+                </div>
+            )}
+        </div>
+    );
 };
 
 const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = ({ element, project }) => {
@@ -213,16 +367,18 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                     : project.images[btn.image.id]?.imageUrl || project.backgrounds[btn.image.id]?.imageUrl
             ) : null;
             const btnAlignClass = { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[btn.font?.align || 'center'];
+            // Corner rounding (px, scaled with the canvas) — mirrors the runtime; absent keeps `rounded`.
+            const btnRadius = btn.borderRadius != null ? `calc(var(--font-scale, 1) * ${btn.borderRadius}px)` : undefined;
             // WYSIWYG with the engine's "fit to content": art shrinks to its fitted rect, centered.
             if (btn.fitToContent && btnImageUrl) {
                 return <div className="w-full h-full flex items-center justify-center overflow-hidden" style={{ pointerEvents: 'none' }}>
-                    <img src={btnImageUrl} alt="" style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }} />
+                    <img src={btnImageUrl} alt="" style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block', borderRadius: btnRadius }} />
                     {btn.text && <GradientText className="absolute" style={{...fontSettingsToStyle(btn.font), ...(extractTextGradientStyle(btn.font) || {})}}>{btn.text}</GradientText>}
                 </div>;
             }
             return <div
                 className={`w-full h-full border border-white/20 rounded flex items-center ${btnAlignClass} relative overflow-hidden`}
-                style={{ pointerEvents: 'none', paddingLeft: `${btn.paddingX ?? 0}%`, paddingRight: `${btn.paddingX ?? 0}%`, boxSizing: 'border-box' }}
+                style={{ pointerEvents: 'none', paddingLeft: `${btn.paddingX ?? 0}%`, paddingRight: `${btn.paddingX ?? 0}%`, boxSizing: 'border-box', borderRadius: btnRadius }}
             >
                 {btnImageUrl ? (
                     <img src={btnImageUrl} alt="" className="absolute inset-0 w-full h-full object-fill" />
@@ -373,8 +529,8 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
              const charEl = element as UICharacterPreviewElement;
              const char = project.characters[charEl.characterId] as VNCharacter | undefined;
              if (!char) {
-                 return <div className="w-full h-full border-2 border-dashed border-[var(--bg-tertiary)] flex items-center justify-center text-[var(--text-secondary)]">
-                     <span className="bg-black/50 p-1 rounded">{t('menuEditor.noCharacterSelected')}</span>
+                 return <div className="w-full h-full border-2 border-dashed border-[var(--bg-tertiary)] flex items-center justify-center text-center text-[var(--text-secondary)]">
+                     <span className="bg-black/50 p-1 rounded text-xs">{charEl.characterSource === 'player' ? "⟨ Player's Character ⟩ — shown in-game" : t('menuEditor.noCharacterSelected')}</span>
                  </div>;
              }
              
@@ -612,114 +768,29 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                 </div>
             </div>;
         }
+        case UIElementType.Timer: {
+            const tm = element as any;
+            return <div className="w-full h-full flex items-center justify-center gap-1 rounded border border-dashed" style={{ borderColor: 'rgba(251,191,36,0.6)', background: 'rgba(245,158,11,0.12)', color: '#fcd34d', fontSize: 10, fontWeight: 600 }}>⏱ {tm.durationSeconds ?? 3}s{tm.loop ? ' ↻' : ''}</div>;
+        }
         case UIElementType.Customizer: {
             const cz = element as UICustomizerElement;
             const czChar = cz.characterId ? project.characters[cz.characterId] : null;
             if (!czChar) return <div className="w-full h-full border-2 border-dashed border-[var(--accent-purple)] flex items-center justify-center text-[var(--text-secondary)]"><span className="bg-black/50 p-1 rounded text-xs">Customizer — pick a character</span></div>;
-            // Composite using each category's variable DEFAULT (canvas has no live values); fall back to
-            // the chosen/first expression for layers without a category.
-            const czFallback = (cz.expressionId && czChar.expressions[cz.expressionId]) || Object.values(czChar.expressions)[0];
-            const czImgs: string[] = [];
-            const czVids: string[] = [];
-            let czHasVid = false;
-            if (czChar.baseVideoUrl) { czVids.push(czChar.baseVideoUrl); czHasVid = true; }
-            else if (czChar.baseImageUrl) { czImgs.push(czChar.baseImageUrl); }
-            Object.entries(czChar.layers).forEach(([layerId, layer]: [string, any]) => {
-                const cat = (cz.categories || []).find(c => c.layerId === layerId);
-                let assetId: string | null = null;
-                if (cat) assetId = String((project.variables[cat.variableId]?.defaultValue ?? '') || '') || null;
-                if (!assetId && czFallback) assetId = czFallback.layerConfiguration[layerId] || null;
-                const asset = assetId ? layer.assets[assetId] : null;
-                if (asset?.videoUrl) { czVids.push(asset.videoUrl); czHasVid = true; }
-                else if (asset?.imageUrl) { czImgs.push(asset.imageUrl); }
-            });
-            // Faithful preview: mirror the runtime (composite + per-category swatch grids) so every
-            // property adjustment (layout, swatch size/gap, selected highlight, colors, labels) shows
-            // live on the canvas. Selection uses each category variable's DEFAULT (canvas isn't playing).
-            const czSwatchSize = cz.swatchSize ?? 48;
-            const czSwatchGap = cz.swatchGap ?? 6;
-            const czSel = cz.selectedColor || '#8a2be2';
-            const czArrowColor = cz.arrowColor || '#ffffff';
-            const czArrowSize = cz.arrowSize ?? 28;
-            const czButtonColor = cz.buttonColor || 'rgba(255,255,255,0.12)';
-            const czButtonText = cz.buttonTextColor || '#ffffff';
-            const czLayout = cz.layout || 'preview-left';
+            // Free layout is rendered as two independent draggable boxes by the canvas (see the
+            // free-customizer branch in the element map) — this whole-element preview is only for the
+            // preset layouts (preview-left/right/top).
+            const czLayout = cz.layout === 'free' ? 'preview-left' : (cz.layout || 'preview-left');
             const czPv = `${cz.previewPercent ?? 45}%`;
             const czUiImg = (a?: { id: string } | null) => a ? ((project.images[a.id] as any)?.imageUrl || (project.backgrounds[a.id] as any)?.imageUrl || null) : null;
-            const czArrowUrl = czUiImg(cz.arrowImage);
             const czFrameUrl = czUiImg(cz.backgroundImage);
-            const czAssetUrl = (a: any) => a?.imageUrl || a?.videoUrl || null;
+            // Faithful preview: mirror the runtime via the shared CustomizerSprite + CustomizerPickers
+            // so every property adjustment shows live on the canvas (and the free boxes reuse the same).
             const czPreview = (
                 <div className="relative" style={czLayout === 'preview-top' ? { height: czPv, width: '100%', flexShrink: 0 } : { width: czPv, height: '100%', flexShrink: 0 }}>
-                    {(czHasVid ? czVids : czImgs).map((u, i) => czHasVid
-                        ? <video key={i} src={u} autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i }} />
-                        : <img key={i} src={u} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i }} />)}
+                    <CustomizerSprite cz={cz} project={project} />
                 </div>
             );
-            // Non-interactive mirror of one category's picker so the canvas matches the runtime style.
-            const czRenderPicker = (cat: any, cur: string, assets: any[]) => {
-                const pstyle = cat.pickerStyle || 'swatches';
-                if (pstyle === 'arrows') {
-                    const curAsset = assets.find(a => a.id === cur) || assets[0];
-                    const cu = curAsset ? czAssetUrl(curAsset) : null;
-                    const arrow = (flip: boolean) => czArrowUrl
-                        ? <img src={czArrowUrl} alt="" style={{ width: czArrowSize, height: czArrowSize, objectFit: 'contain', transform: flip ? 'scaleX(-1)' : undefined }} />
-                        : <span style={{ fontSize: czArrowSize, lineHeight: 1, color: czArrowColor }}>{flip ? '◀' : '▶'}</span>;
-                    return <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {arrow(true)}
-                        <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
-                            {cu && <div style={{ width: czSwatchSize, height: czSwatchSize, margin: '0 auto' }}><img src={cu} alt="" className="w-full h-full object-contain" /></div>}
-                            <div className="text-[10px] text-white/80 truncate">{curAsset?.name || ''}</div>
-                        </div>
-                        {arrow(false)}
-                    </div>;
-                }
-                if (pstyle === 'dropdown') {
-                    const curAsset = assets.find(a => a.id === cur) || assets[0];
-                    return <div style={{ width: '100%', padding: '4px 6px', borderRadius: 6, background: 'rgba(0,0,0,0.35)', color: czButtonText, border: `1px solid ${cz.borderColor || 'rgba(255,255,255,0.2)'}`, fontSize: 11 }} className="flex items-center justify-between"><span className="truncate">{curAsset?.name || ''}</span><span>▾</span></div>;
-                }
-                if (pstyle === 'buttons') {
-                    return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {assets.map(a => <span key={a.id} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: cur === a.id ? czSel : czButtonColor, color: czButtonText }}>{a.name}</span>)}
-                    </div>;
-                }
-                return <div style={{ display: 'flex', flexWrap: 'wrap', gap: czSwatchGap }}>
-                    {assets.map(asset => {
-                        const meta = cz.optionMeta?.[asset.id];
-                        const swUrl = meta?.swatchImage ? czUiImg(meta.swatchImage) : null;
-                        return (
-                            <div key={asset.id} title={asset.name} style={{ position: 'relative', width: czSwatchSize, height: czSwatchSize, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: 'rgba(0,0,0,0.3)', boxShadow: cur === asset.id ? `0 0 0 3px ${czSel}` : 'inset 0 0 0 1px rgba(255,255,255,0.15)' }}>
-                                {swUrl ? <img src={swUrl} alt="" className="w-full h-full object-contain" /> : asset.imageUrl ? <img src={asset.imageUrl} alt="" className="w-full h-full object-contain" /> : asset.videoUrl ? <video src={asset.videoUrl} muted className="w-full h-full object-contain" /> : <div className="w-full h-full" />}
-                                {meta?.conditions?.length ? <span style={{ position: 'absolute', top: 1, right: 2, fontSize: 9 }}>🔒</span> : null}
-                            </div>
-                        );
-                    })}
-                </div>;
-            };
-            const czPickers = (
-                <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8, padding: 6 }}>
-                    {(cz.categories || []).map(cat => {
-                        const layer = czChar.layers[cat.layerId];
-                        if (!layer) return null;
-                        let cur = String((project.variables[cat.variableId]?.defaultValue ?? '') || '');
-                        if (!cur && czFallback) cur = czFallback.layerConfiguration[cat.layerId] || '';
-                        const assets = Object.values(layer.assets) as any[];
-                        return (
-                            <div key={cat.layerId}>
-                                {cz.showLabels !== false && <div className="text-[10px] text-white/80 mb-1 truncate">{cat.label || layer.name}</div>}
-                                {czRenderPicker(cat, cur, assets)}
-                            </div>
-                        );
-                    })}
-                    {(cz.categories || []).length === 0 && <div className="text-[10px] text-white/50">No categories yet — set them up in the Customizer's properties.</div>}
-                    {(cz.showRandomize || cz.showReset) && (cz.categories || []).length > 0 && (
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                            {cz.showRandomize && <span style={{ fontSize: 10, padding: '4px 12px', borderRadius: 6, background: czButtonColor, color: czButtonText }}>{cz.randomizeLabel || 'Randomize'}</span>}
-                            {cz.showReset && <span style={{ fontSize: 10, padding: '4px 12px', borderRadius: 6, background: czButtonColor, color: czButtonText }}>{cz.resetLabel || 'Reset'}</span>}
-                        </div>
-                    )}
-                </div>
-            );
+            const czPickers = <CustomizerPickers cz={cz} project={project} />;
             return <div className="w-full h-full overflow-hidden flex" style={{ background: cz.backgroundColor || 'rgba(0,0,0,0.25)', ...(czFrameUrl ? { backgroundImage: `url(${czFrameUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}), borderRadius: cz.borderRadius ?? 8, border: cz.borderColor ? `1px solid ${cz.borderColor}` : '1px dashed var(--accent-purple)', flexDirection: czLayout === 'preview-top' ? 'column' : 'row' }}>
                 {czLayout === 'preview-right' ? <>{czPickers}{czPreview}</> : <>{czPreview}{czPickers}</>}
             </div>;
@@ -753,7 +824,10 @@ const MenuEditor: React.FC<{
     setSelectedElementIds: (ids: VNID[]) => void,
     /** True while the Live Preview overlay is open — canvas drops its <video> backgrounds then. */
     isPlaying?: boolean,
-}> = ({ activeScreenId, selectedElementIds, setSelectedElementIds, isPlaying }) => {
+    /** Switch the UI editor to another screen (used when a wizard generates a new one).
+     *  Optional — hosts without screen navigation (popped-out canvas) fall back to a toast. */
+    onNavigateToScreen?: (screenId: VNID) => void,
+}> = ({ activeScreenId, selectedElementIds, setSelectedElementIds, isPlaying, onNavigateToScreen }) => {
     const { t } = useTranslation('ui');
     const { project, dispatch } = useProject();
     const toast = useToast();
@@ -802,6 +876,29 @@ const MenuEditor: React.FC<{
         elementRects.forEach((r, k) => { if (k !== id) out.push(r); });
         return out;
     }, [elementRects]);
+
+    // Callback ref that makes the mouse wheel scroll a horizontal row left/right. Uses a NON-passive
+    // native listener (React's onWheel is passive, so preventDefault there is ignored) so vertical
+    // wheel deltas convert to horizontal scroll without the page also scrolling.
+    const hWheelNodeRef = useRef<HTMLDivElement | null>(null);
+    const hWheelFnRef = useRef<((e: WheelEvent) => void) | null>(null);
+    const horizontalWheelRef = useCallback((el: HTMLDivElement | null) => {
+        if (hWheelNodeRef.current && hWheelFnRef.current) hWheelNodeRef.current.removeEventListener('wheel', hWheelFnRef.current);
+        hWheelNodeRef.current = el;
+        if (el) {
+            const onWheel = (e: WheelEvent) => {
+                if (el.scrollWidth <= el.clientWidth) return;          // nothing to scroll
+                const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;     // vertical wheel → horizontal
+                if (!delta) return;
+                e.preventDefault();
+                el.scrollLeft += delta;
+            };
+            hWheelFnRef.current = onWheel;
+            el.addEventListener('wheel', onWheel, { passive: false });
+        } else {
+            hWheelFnRef.current = null;
+        }
+    }, []);
 
     // Defer rendering elements to give the browser time to settle
     const [isReady, setIsReady] = useState(false);
@@ -1007,6 +1104,11 @@ const MenuEditor: React.FC<{
         handleUpdateElement(elementId, { slotRects: rects } as Partial<VNUIElement>);
     };
 
+    /** Customizer free-layout: commit the preview box or the pickers panel box (screen-%). */
+    const handleUpdateCustomizerRect = (elementId: VNID, field: 'previewRect' | 'pickersRect', rect: { x: number; y: number; width: number; height: number }) => {
+        handleUpdateElement(elementId, { [field]: rect } as Partial<VNUIElement>);
+    };
+
     /** Hot spots / draggable elements / image maps are all `VNUIElement` entries
      *  in `screen.elements`. The overlay components emit geometric patches
      *  (`{x, y, width, height}`) which apply identically to all element types. */
@@ -1070,79 +1172,30 @@ const MenuEditor: React.FC<{
         elementRadial?.openByElementId(elementId, e.clientX, e.clientY);
     };
 
-    const handleWizardGenerate = (config: GeneratedConfig) => {
-        const character = project.characters[config.characterId];
-        if (!character) return;
-
-        // 1. Create variables
-        config.variables.forEach(varConfig => {
-            dispatch({
-                type: 'ADD_VARIABLE',
-                payload: {
-                    id: varConfig.id,
-                    name: varConfig.name,
-                    type: 'string',
-                    defaultValue: ''
-                }
-            });
-        });
-
-        // 2. Create asset cyclers (positioned vertically on the left)
-        let yPosition = 10;
-        config.cyclers.forEach((cyclerConfig, index) => {
-            const layer = character.layers[cyclerConfig.layerId];
-            const cyclerElement = createUIElement(UIElementType.AssetCycler, project) as UIAssetCyclerElement;
-            if (cyclerElement) {
-                cyclerElement.name = `${cyclerConfig.label} Cycler`;
-                cyclerElement.characterId = config.characterId;
-                cyclerElement.layerId = cyclerConfig.layerId;
-                cyclerElement.variableId = cyclerConfig.variableId;
-                cyclerElement.assetIds = cyclerConfig.assetIds;
-                cyclerElement.label = cyclerConfig.label;
-                cyclerElement.x = 5;
-                cyclerElement.y = yPosition;
-                cyclerElement.width = 35;
-                cyclerElement.height = 12;
-                
-                // Add asset conditions if this is a conditional cycler
-                if (cyclerConfig.assetConditions && cyclerConfig.assetConditions.length > 0) {
-                    cyclerElement.assetConditions = cyclerConfig.assetConditions;
-                }
-                
-                dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: cyclerElement } });
-                yPosition += 15;
+    // Unified Character Creator & Dress-Up wizard (replaces the legacy AssetCycler generator —
+    // both modes are generated by features/systems/applyCharacterCreator).
+    const handleWizardGenerate = (result: UnifiedWizardResult) => {
+        if (result.kind === 'player') {
+            const { screenId } = applyCharacterCreator(result.config, project, dispatch);
+            if (screenId) {
+                if (onNavigateToScreen) onNavigateToScreen(screenId);
+                else toast.success(`Screen "${result.config.screenName}" created — select it in the screens list.`);
             }
-        });
-
-        // 3. Create character preview (on the right side)
-        const previewElement = createUIElement(UIElementType.CharacterPreview, project) as UICharacterPreviewElement;
-        if (previewElement) {
-            previewElement.name = `${character.name} Preview`;
-            previewElement.characterId = config.characterId;
-            previewElement.layerVariableMap = config.preview.layerVariableMap;
-            previewElement.x = 45;
-            previewElement.y = 5;
-            previewElement.width = 50;
-            previewElement.height = 85;
-            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: previewElement } });
+            return;
         }
-
-        // 4. Create a "Done" button at the bottom
-        const buttonElement = createUIElement(UIElementType.Button, project) as UIButtonElement;
-        if (buttonElement) {
-            buttonElement.name = 'Done Button';
-            buttonElement.text = 'Done';
-            buttonElement.x = 5;
-            buttonElement.y = 85;
-            buttonElement.width = 35;
-            buttonElement.height = 8;
-            buttonElement.actions = [{ type: UIActionType.ReturnToPreviousScreen }];
-            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: buttonElement } });
+        const { screenId, elementId } = applyDressUp(result.config, project, dispatch);
+        if (result.config.target.kind === 'existing-screen') {
+            if (elementId) setSelectedElementIds([elementId]);
+        } else if (screenId) {
+            if (onNavigateToScreen) onNavigateToScreen(screenId);
+            else toast.success(`Screen "${result.config.screenName}" created — select it in the screens list.`);
         }
     };
 
     const handleCGGalleryGenerate = (config: CGGalleryGeneratedConfig) => {
-        // 1. Create unlock variables (if locked by default)
+        // 1. Create unlock variables (if locked by default). PERSISTENT scope so an unlock earned
+        //    in any playthrough stays unlocked across New Game (the point of a CG gallery).
+        //    Existing projects' unlock vars are untouched.
         config.unlockVariables.forEach(varConfig => {
             dispatch({
                 type: 'ADD_VARIABLE',
@@ -1151,6 +1204,7 @@ const MenuEditor: React.FC<{
                     name: varConfig.name,
                     type: 'boolean',
                     defaultValue: false,
+                    scope: 'persistent',
                 },
             });
         });
@@ -1220,11 +1274,13 @@ const MenuEditor: React.FC<{
                         onMouseDown={(e) => { e.stopPropagation(); setSnapEnabled(s => !s); }}
                         title={t('menuEditor.snapTip', 'Smart snapping to edges, centers & other elements. Hold Alt while dragging to place freely.')}
                         className={`absolute top-1 left-1 px-2 py-0.5 rounded text-[10px] font-medium border ${snapEnabled ? 'bg-sky-500/80 border-sky-400/50 text-white' : 'bg-slate-800/80 border-slate-600/50 text-slate-200'}`}
-                        style={{ zIndex: 99999 }}
+                        style={{ zIndex: 8000 }} /* below the test-play overlay (z-[9000]) — canvas chrome escapes to root stacking */
                     >
                         {t('menuEditor.snap', 'Snap')}
                     </button>
                     <CanvasSnapGuides guides={menuSnapGuides} />
+                    {/* Player-screen boundary — marks exactly where the game frame cuts off. */}
+                    <CanvasEdgeFrame />
 
                     {/* Main video background — CSS can't show a video, so render a real <video>.
                         Dropped while Test Play is open (it's covered by the overlay): the browser
@@ -1245,7 +1301,7 @@ const MenuEditor: React.FC<{
                     {/* Parallax indicator: warns the author that elements with a parallax depth will
                         drift in-game (the editor canvas shows them at rest). */}
                     {parallaxActive && (
-                        <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-purple-900/80 text-purple-200 text-[10px] font-medium pointer-events-none flex items-center gap-1" style={{ zIndex: 99999 }}>
+                        <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-purple-900/80 text-purple-200 text-[10px] font-medium pointer-events-none flex items-center gap-1" style={{ zIndex: 8000 }}>
                             <SparklesIcon className="w-3 h-3" /> {t('menuEditor.parallaxActive', { mode: screen.parallax!.mode })}
                         </div>
                     )}
@@ -1276,14 +1332,16 @@ const MenuEditor: React.FC<{
                         interactive-element overlays below, read from `screen.elements`. */}
                     {isReady && stageSize.width > 0 && Object.values(screen.elements).map((element: VNUIElement) => {
                         if (isInteractiveElement(element)) return null;
-                        // Free-placement SaveSlotGrid / CGGallery: render per-slot drag handles
-                        // instead of one box for the whole element.
-                        if ((element.type === UIElementType.SaveSlotGrid || element.type === UIElementType.CGGallery)
-                            && (element as UISaveSlotGridElement | UICGGalleryElement).slotLayout === 'free') {
+                        // Free-placement SaveSlotGrid / CGGallery / Inventory: render per-slot drag
+                        // handles instead of one box for the whole element.
+                        if ((element.type === UIElementType.SaveSlotGrid || element.type === UIElementType.CGGallery || element.type === UIElementType.Inventory)
+                            && (element as UISaveSlotGridElement | UICGGalleryElement | UIInventoryGridElement).slotLayout === 'free'
+                            && (element as UISaveSlotGridElement | UICGGalleryElement | UIInventoryGridElement).slotRects?.length) {
                             return (
                                 <FreeSlotHandles
                                     key={element.id}
-                                    element={element as UISaveSlotGridElement | UICGGalleryElement}
+                                    element={element as UISaveSlotGridElement | UICGGalleryElement | UIInventoryGridElement}
+                                    project={project}
                                     parentSize={stageSize}
                                     isElementSelected={selectedElementIds.includes(element.id)}
                                     focusedSlot={freeSlotFocus}
@@ -1297,6 +1355,69 @@ const MenuEditor: React.FC<{
                                     snapEnabled={snapEnabled}
                                     onGuides={setMenuSnapGuides}
                                 />
+                            );
+                        }
+                        // Free-placement Customizer: the preview + the pickers panel are two independently
+                        // placed/sized boxes instead of one box for the whole element.
+                        if (element.type === UIElementType.Customizer && (element as UICustomizerElement).layout === 'free') {
+                            const cz = element as UICustomizerElement;
+                            const pr = cz.previewRect ?? { x: 8, y: 12, width: 30, height: 76 };
+                            const kr = cz.pickersRect ?? { x: 44, y: 12, width: 48, height: 76 };
+                            const previewFrameUrl = cz.previewBackgroundImage ? ((project.images[cz.previewBackgroundImage.id] as any)?.imageUrl || (project.backgrounds[cz.previewBackgroundImage.id] as any)?.imageUrl) : null;
+                            const pickersFrameUrl = cz.backgroundImage ? ((project.images[cz.backgroundImage.id] as any)?.imageUrl || (project.backgrounds[cz.backgroundImage.id] as any)?.imageUrl) : null;
+                            const selected = selectedElementIds.includes(element.id);
+                            const boxes: Array<{ field: 'previewRect' | 'pickersRect'; rect: typeof pr; content: React.ReactNode; style: React.CSSProperties }> = [
+                                {
+                                    // No editor-only box: the preview shows ONLY what the engine shows (transparent
+                                    // unless the author set a preview background/border). ResizableDraggable draws the
+                                    // selection outline + handles when selected, so unselected = no box at all.
+                                    field: 'previewRect', rect: pr,
+                                    style: {
+                                        overflow: 'hidden',
+                                        ...(cz.previewBackgroundColor ? { background: cz.previewBackgroundColor } : {}),
+                                        ...(previewFrameUrl ? { backgroundImage: `url(${previewFrameUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                                        ...(cz.previewBorderColor ? { border: `1px solid ${cz.previewBorderColor}` } : {}),
+                                        ...(cz.previewBorderRadius !== undefined ? { borderRadius: cz.previewBorderRadius } : {}),
+                                    },
+                                    content: <CustomizerSprite cz={cz} project={project} bottom />,
+                                },
+                                {
+                                    field: 'pickersRect', rect: kr,
+                                    style: {
+                                        overflow: 'hidden',
+                                        // Mirror the engine: no panel when hidden; otherwise the author's real frame
+                                        // (background/border only if set) — no editor-only dashed box.
+                                        ...(cz.hidePickersPanel ? {} : {
+                                            ...(cz.backgroundColor ? { background: cz.backgroundColor } : {}),
+                                            ...(pickersFrameUrl ? { backgroundImage: `url(${pickersFrameUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                                            ...(cz.borderColor ? { border: `1px solid ${cz.borderColor}` } : {}),
+                                            borderRadius: cz.borderRadius ?? 8,
+                                        }),
+                                    },
+                                    content: <CustomizerPickers cz={cz} project={project} />,
+                                },
+                            ];
+                            return (
+                                <React.Fragment key={element.id}>
+                                    {boxes.map(b => (
+                                        <ResizableDraggable
+                                            key={b.field}
+                                            x={b.rect.x} y={b.rect.y} width={b.rect.width} height={b.rect.height}
+                                            anchorX={0} anchorY={0}
+                                            parentSize={stageSize}
+                                            isSelected={selected}
+                                            onSelect={(e) => { e.stopPropagation(); handleSelectElement(element.id, e); }}
+                                            onUpdate={(u) => handleUpdateCustomizerRect(element.id, b.field, u)}
+                                            onContextMenu={(e) => handleElementContextMenu(element.id, e)}
+                                            zIndex={(element as any).layer ?? 0}
+                                            snapGrid={1}
+                                            snapEnabled={snapEnabled}
+                                            onGuides={setMenuSnapGuides}
+                                        >
+                                            <div className="w-full h-full" style={b.style}>{b.content}</div>
+                                        </ResizableDraggable>
+                                    ))}
+                                </React.Fragment>
                             );
                         }
                         return (
@@ -1389,12 +1510,13 @@ const MenuEditor: React.FC<{
                 {/* Individual Element Buttons — a single horizontally-scrollable row so the toolbar
                     keeps a fixed (one-row) height instead of wrapping into many rows in a narrow
                     window (which previously squeezed the canvas, especially when popped out). */}
-                <div className="flex flex-nowrap overflow-x-auto gap-2 pb-1 [&>button]:flex-shrink-0 [&>button]:whitespace-nowrap">
+                <div ref={horizontalWheelRef} className="flex flex-nowrap overflow-x-auto gap-2 pb-1 [&>button]:flex-shrink-0 [&>button]:whitespace-nowrap">
                     <button onClick={() => handleAddElement(UIElementType.Button)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Button</button>
                     <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text</button>
                     <button onClick={() => handleAddElement(UIElementType.Image)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Image</button>
                     <button onClick={handleAddVideoElement} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Video</button>
                     <button onClick={() => handleAddElement(UIElementType.Customizer)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Customizer</button>
+                    <button onClick={() => handleAddElement(UIElementType.CharacterPreview)} title="Show a character (or the player's created character) on this screen" className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Character</button>
                     <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text Input</button>
                     <button onClick={() => handleAddElement(UIElementType.Dropdown)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Dropdown</button>
                     <button onClick={() => handleAddElement(UIElementType.Checkbox)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Checkbox</button>
@@ -1403,6 +1525,7 @@ const MenuEditor: React.FC<{
                     <button onClick={() => handleAddElement(UIElementType.CGGallery)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> CG Gallery</button>
                     <button onClick={() => handleAddElement(UIElementType.Inventory)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Inventory</button>
                     <button onClick={() => handleAddElement(UIElementType.Meter)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Meter</button>
+                    <button onClick={() => handleAddElement(UIElementType.Timer)} title="Runs actions after a delay when this screen opens" className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Timer</button>
                     {extensionUIElementTypes.map(({ def }) => (
                         <button key={def.type} onClick={() => handleAddCustomElement(def)} title={`From extension: ${def.type}`} className="bg-violet-700 hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-violet-400/30"><PlusIcon /> {def.icon ? def.icon + ' ' : ''}{def.displayName}</button>
                     ))}
@@ -1429,8 +1552,8 @@ const MenuEditor: React.FC<{
                             >
                                 <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center text-2xl">👤</div>
                                 <div>
-                                    <div className="font-semibold">{t('menuEditor.charCustomizer')}</div>
-                                    <div className="text-xs text-white/70">{t('menuEditor.charCustomizerDesc')}</div>
+                                    <div className="font-semibold">{t('menuEditor.charCreator', 'Character Creator & Dress-Up')}</div>
+                                    <div className="text-xs text-white/70">{t('menuEditor.charCreatorDesc', 'Let players create their character, or dress up any story character')}</div>
                                 </div>
                             </button>
                             
@@ -1459,14 +1582,16 @@ const MenuEditor: React.FC<{
                 </div>
             )}
             
-            {/* Character Customization Wizard */}
-            <CharacterCustomizationWizard
-                isOpen={showWizard}
-                onClose={() => setShowWizard(false)}
-                project={project}
-                screenId={activeScreenId}
-                onGenerate={handleWizardGenerate}
-            />
+            {/* Unified Character Creator & Dress-Up wizard */}
+            {showWizard && (
+                <CharacterCreatorWizard
+                    isOpen
+                    onClose={() => setShowWizard(false)}
+                    project={project}
+                    currentScreenId={activeScreenId}
+                    onGenerate={handleWizardGenerate}
+                />
+            )}
 
             {/* CG Gallery Wizard */}
             <CGGalleryWizard

@@ -41,6 +41,9 @@ interface UIManagerProps {
     selectedUIElementIds: VNID[];
     setSelectedUIElementIds: (ids: VNID[]) => void;
     onEditorModeChange?: (mode: UIEditorMode) => void;
+    /** Mode to open in when (re)mounted — lets deep links (e.g. Systems → "Style it: In-Game UI")
+     *  land directly on the In-Game UI editor, and preserves the last mode across tab switches. */
+    initialEditorMode?: UIEditorMode;
     /** True while the Live Preview overlay is open — the canvas drops its <video> backgrounds
      *  then (they're covered anyway) and remounts them fresh on return, avoiding the evicted/
      *  broken video state the browser leaves behind a fullscreen overlay. */
@@ -54,11 +57,12 @@ const UIManager: React.FC<UIManagerProps> = ({
     selectedUIElementIds,
     setSelectedUIElementIds,
     onEditorModeChange,
+    initialEditorMode,
     isPlaying
 }) => {
     const { dispatch } = useProject();
     const { t } = useTranslation('ui');
-    const [editorMode, setEditorModeLocal] = useState<UIEditorMode>('screens');
+    const [editorMode, setEditorModeLocal] = useState<UIEditorMode>(initialEditorMode || 'screens');
     // Keep parent in sync when component mounts/remounts
     useEffect(() => { onEditorModeChange?.(editorMode); }, []);
     const setEditorMode = (mode: UIEditorMode) => { setEditorModeLocal(mode); onEditorModeChange?.(mode); };
@@ -292,6 +296,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                                         selectedElementIds={selectedUIElementIds}
                                         setSelectedElementIds={setSelectedUIElementIds}
                                         isPlaying={isPlaying}
+                                        onNavigateToScreen={(id) => { setActiveMenuScreenId(id); setSelectedUIElementIds([]); }}
                                     />
                                 ) : (
                                     <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">

@@ -170,7 +170,9 @@ const UIElementInspector: React.FC<{
     setSelectedElementId: (id: VNID | null) => void;
     /** Deep link to the Systems tab (items/lists/stats) — the reverse of "Edit screen". */
     onOpenSystems?: (sel: { system: 'items' | 'inventory' | 'stats'; id?: VNID }) => void;
-}> = ({ screenId, elementId, setSelectedElementId, onOpenSystems }) => {
+    /** Deep link to the Characters tab (Customizer → edit its character's layers/art). */
+    onOpenCharacters?: (charId: VNID) => void;
+}> = ({ screenId, elementId, setSelectedElementId, onOpenSystems, onOpenCharacters }) => {
     const { t } = useTranslation('ui');
     const { project, dispatch } = useProject();
     const screen = project.uiScreens[screenId];
@@ -211,7 +213,7 @@ const UIElementInspector: React.FC<{
 
     return (
         <Panel title={`Properties: ${element.type}`} className="w-96 flex-shrink-0">
-            <div className="flex-grow overflow-y-auto pr-1 space-y-2">
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-2">
                 {systemsLink && (
                     <button onClick={() => onOpenSystems!(systemsLink.sel)}
                         className="w-full text-left text-xs px-2.5 py-2 rounded-lg bg-[var(--accent-lavender)]/10 hover:bg-[var(--accent-lavender)]/20 text-[var(--accent-lavender)] border border-[var(--accent-lavender)]/30 transition-colors">
@@ -227,7 +229,7 @@ const UIElementInspector: React.FC<{
                         summary={summarizeElementGroup(element, g, project)}
                         defaultOpen={g === 'content'}
                     >
-                        <ElementGroupFields groupId={g} element={element} project={project} updateElement={updateElement} />
+                        <ElementGroupFields groupId={g} element={element} project={project} updateElement={updateElement} onOpenCharacters={onOpenCharacters} />
                     </CollapsibleSection>
                 ))}
             </div>

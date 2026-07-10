@@ -7,6 +7,7 @@
     "variables": "Variables",
     "commonEvents": "Events",
     "systems": "Systems",
+    "miniGames": "Mini Games",
     "settings": "Settings"
   },
   "desc": {
@@ -17,6 +18,7 @@
     "variables": "Create and manage story variables and game state",
     "commonEvents": "Reusable command sequences triggered from scenes",
     "systems": "Opt-in gameplay systems like Inventory, and the item registry",
+    "miniGames": "Build playable mini games shown by the Show Mini Game command",
     "settings": "Configure project settings and preferences"
   },
   "rightClickHint": " | Right-click to focus manager window",

@@ -14,29 +14,35 @@ import { resolveVideoTrim } from '../utils/videoTrim';
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject, CGGalleryEntry } from '../types/project';
 import {
-    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, SaveGameAction, LoadGameAction, DeleteSaveAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, CallCommonEventAction, RESET_ALL_VARIABLES
+    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, SaveGameAction, LoadGameAction, DeleteSaveAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, CallCommonEventAction, OpenPhoneAppAction, ShowMapAction, ShowMiniGameAction, RESET_ALL_VARIABLES
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
-    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UICustomElement, GameSetting, GameToggleSetting, UIElementType, UIAppearanceState,
+    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UITimerElement, UICustomElement, GameSetting, GameToggleSetting, UIElementType, UIAppearanceState,
     VNHotSpot, VNHotZoneElement, VNConfirmDialogSettings, QuickMenuButtonConfig, QuickMenuButtonKey, VNProjectUI, PhonePortraitSource
 } from '../features/ui/types';
 import { PHONE_GLYPHS } from '../features/ui/phoneIcons';
+import { PHONE_APPS, resolvePhoneApp, renderContactsRoster, fireAppButton, PhoneGlyph, PhonePortrait, resolvePhonePortrait, PhoneAppContext, MapSurface } from './live-preview/phone/phoneApps';
+import { collectToCameraRoll, phoneThreadKey, countPhoneThread } from './live-preview/command-handlers/phoneHandler';
+import { resolveVarNumber } from './live-preview/systems/resolveVarNumber';
+import MiniGameFrame from './live-preview/minigames/MiniGameFrame';
+import type { PhoneAppId } from './live-preview/types/gameState';
 import { resolveFieldUrl } from '../utils/assetStore';
+import { resolvePlayerCharacterId } from '../utils/playerCharacter';
 import { VNItem, VNItemCollection } from '../features/items/types';
 import {
     VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand, DialogueCommand,
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand,
     PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
-    FlashScreenCommand, LightningCommand, FlashlightCommand, FireworksCommand, PlaceLightsCommand, VNLight, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
+    FlashScreenCommand, LightningCommand, FlashlightCommand, SpotlightCommand, FireworksCommand, PlaceLightsCommand, VNLight, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
     ShowPhoneCommand, HidePhoneCommand, ShowPhoneTextCommand, HidePhoneTextCommand,
-    PhoneIncomingTextCommand, PhoneIncomingCallCommand, PhoneReply, PhoneFollowUp,
+    PhoneIncomingTextCommand, PhoneIncomingCallCommand, StartPhoneCallCommand, ShowMapCommand, ShowMiniGameCommand, PhoneNotifyCommand, PhoneReply, PhoneFollowUp, PhoneCallConversation, PhoneConversationEntry,
     ShowButtonCommand, HideButtonCommand, ShowItemCommand, BranchStartCommand, BranchElseIfCommand, BranchElseCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
     CreditRollCommand, CreditBackground, CreditMedia, RunScriptCommand,
     SpawnParticlesCommand, StopParticlesCommand,
     CallCommonEventCommand,
     ShowHotSpotCommand, HideHotSpotCommand,
-    TweenElementCommand, MoveCharacterCommand, StartTimerCommand, StopTimerCommand, REACTIVE_VISUAL_TYPES,
+    TweenElementCommand, MoveCharacterCommand, StartTimerCommand, StopTimerCommand, SetTimeOfDayCommand, REACTIVE_VISUAL_TYPES,
 } from '../features/scene/types';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
@@ -46,6 +52,7 @@ import { ScreenOverlayEffects, runFireworksSim } from './live-preview/ScreenOver
 import { ParticleSystem } from './live-preview/ParticleSystem';
 import { registerDropTarget, hitTestDropTarget } from './live-preview/dropTargetRegistry';
 import { AnimatedDialogueText, useRainbowTick } from './live-preview/AnimatedDialogueText';
+import { analyzeVoiceWordStarts } from './live-preview/voiceWordTiming';
 import { 
     normalizeSetVariableOperator as normalizeOperator,
     calculateVariableValue 
@@ -300,6 +307,7 @@ import {
     HistoryEntry,
     PhoneMessage,
     PhoneCallLogEntry,
+    PhoneNotificationEntry,
 } from './live-preview/types/gameState';
 
 type StageSize = { width: number; height: number };
@@ -307,6 +315,7 @@ type StageSize = { width: number; height: number };
 // Import utility functions from extracted modules
 import { getOverlayTransitionClass } from './live-preview/systems/transitionUtils';
 import { TweenManager } from './live-preview/systems/tweenManager';
+import { computeGrade, gradeToBackgroundStyle, gradeToCharacterFilter, gradeToSpriteTint } from './live-preview/systems/dayNightGrade';
 import { useTween } from './live-preview/hooks/useTween';
 
 const defaultSettings: GameSettings = {
@@ -1003,7 +1012,7 @@ const HotSpotOverlayElement: React.FC<{
             id: `scene-${overlay.commandId}`,
             rectPct: { x: overlay.x, y: overlay.y, width: overlay.width, height: overlay.height },
             acceptTag: overlay.acceptedTag || undefined,
-            onDrop: () => { overlay.actions.forEach(a => onAction(a)); },
+            onDrop: () => { (overlay.actions || []).forEach(a => onAction(a)); },
         });
     }, [active, overlay, onAction]);
 
@@ -1011,7 +1020,7 @@ const HotSpotOverlayElement: React.FC<{
 
     const fire = (e: React.MouseEvent) => {
         e.stopPropagation();
-        overlay.actions.forEach(a => onAction(a));
+        (overlay.actions || []).forEach(a => onAction(a));
         if (overlay.advanceOnTrigger && onAdvance) onAdvance();
     };
 
@@ -1026,7 +1035,7 @@ const HotSpotOverlayElement: React.FC<{
         // drag-drop spots are pure drop zones (coordinate hit-test) — don't capture clicks,
         // so empty/drag clicks still reach the stage. click/hover spots capture.
         pointerEvents: overlay.trigger === 'drag-drop' ? 'none' : 'auto',
-        cursor: overlay.trigger === 'click' ? 'pointer' : 'default',
+        cursor: (overlay.trigger || 'click') === 'click' ? 'pointer' : 'default',
         // Honor "Draw the spot during play" (overlay.visible) ONLY — an invisible spot is fully
         // invisible even in test-play. (Authors still see/position it on the scene editor canvas,
         // which always draws hot spots with a label.)
@@ -1037,8 +1046,8 @@ const HotSpotOverlayElement: React.FC<{
     return (
         <div
             style={style}
-            onClick={overlay.trigger === 'click' ? fire : undefined}
-            onMouseEnter={overlay.trigger === 'hover' ? () => overlay.actions.forEach(a => onAction(a)) : undefined}
+            onClick={(overlay.trigger || 'click') === 'click' ? fire : undefined}
+            onMouseEnter={overlay.trigger === 'hover' ? () => (overlay.actions || []).forEach(a => onAction(a)) : undefined}
         />
     );
 };
@@ -1059,12 +1068,16 @@ interface GameStateSave {
         selectedItemId?: VNID | null;
         selectedElementId?: VNID | null;
         pickedUpItems?: VNID[];
+        /** Palette→UI restyle from a coloring mini game (additive; old saves have none). */
+        uiPaletteOverride?: Record<string, string> | null;
         phone?: PlayerState['uiState']['phone'];
     }
 }
 
 // --- Typewriter Hook ---
-const useTypewriter = (text: string, speed: number) => {
+// `msPerCharOverride` (voice-paced text): when set, it replaces the speed-derived interval
+// so the reveal finishes together with the line's voice clip.
+const useTypewriter = (text: string, speed: number, msPerCharOverride?: number | null) => {
     const [displayText, setDisplayText] = useState('');
     const hasFinished = displayText.length === text.length;
 
@@ -1081,10 +1094,10 @@ const useTypewriter = (text: string, speed: number) => {
                     return prev;
                 }
             });
-        }, 1000 / speed);
+        }, msPerCharOverride ?? (1000 / speed));
 
         return () => clearInterval(interval);
-    }, [text, speed]);
+    }, [text, speed, msPerCharOverride]);
     
     const skip = () => setDisplayText(text);
 
@@ -1303,12 +1316,56 @@ const pickReactiveTextboxState = (
     return null;
 };
 
-const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], settings: GameSettings, projectUI: any, onFinished: () => void, variables: Record<VNID, string | number | boolean>, project: VNProject, reactiveState?: any }> = ({ dialogue, settings, projectUI, onFinished, variables, project, reactiveState }) => {
+const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], settings: GameSettings, projectUI: any, onFinished: () => void, variables: Record<VNID, string | number | boolean>, project: VNProject, reactiveState?: any, timerPaused?: boolean, uiPalette?: Record<string, string> | null, voiceRef?: React.MutableRefObject<HTMLAudioElement | null> }> = ({ dialogue, settings, projectUI, onFinished, variables, project, reactiveState, timerPaused, uiPalette, voiceRef }) => {
     if (!dialogue) return null;
     const interpolatedText = interpolateVariables(dialogue.text, variables, project);
     // Per-line text-speed override (Dialogue command) takes precedence over the global setting.
     const effectiveTextSpeed = (dialogue.textSpeed != null && dialogue.textSpeed > 0) ? dialogue.textSpeed : settings.textSpeed;
-    const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, effectiveTextSpeed);
+
+    // ── Voice-paced text: fit the reveal to the clip's length ──
+    // Poll the shared voice element briefly for its duration (metadata lands within ~1 tick for
+    // local/data URLs). Per-line textSpeed overrides win; unvoiced lines are unaffected.
+    const wantVoicePacing = !!projectUI.voicePacedText && !!dialogue.voiceAudioId && !(dialogue.textSpeed != null && dialogue.textSpeed > 0);
+    const [voiceDurationMs, setVoiceDurationMs] = useState<number | null>(null);
+    useEffect(() => {
+        setVoiceDurationMs(null);
+        if (!wantVoicePacing || !voiceRef) return;
+        let tries = 0;
+        const id = window.setInterval(() => {
+            const d = voiceRef.current?.duration;
+            if (d && isFinite(d) && d > 0) { setVoiceDurationMs(d * 1000); clearInterval(id); }
+            else if (++tries > 25) clearInterval(id); // ~2.5s — give up, use normal speed
+        }, 100);
+        return () => clearInterval(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dialogue.text, dialogue.voiceAudioId, wantVoicePacing]);
+    const pacedMsPerChar = wantVoicePacing && voiceDurationMs && interpolatedText.length > 0
+        ? Math.max(8, Math.min(200, (voiceDurationMs * 0.92) / interpolatedText.length))
+        : null;
+
+    const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, effectiveTextSpeed, pacedMsPerChar);
+
+    // ── Per-line auto-advance timer (Dialogue.timeLimit, seconds) ──
+    // Counts from TYPEWRITER COMPLETION (fairer than the global Auto delay, which can't see
+    // typing) and advances by itself; mirrors the timed-choice rAF countdown. While paused
+    // (pause menu / choices / history open) the countdown suspends and restarts in full.
+    const timeLimit = (dialogue.timeLimit && dialogue.timeLimit > 0) ? dialogue.timeLimit : 0;
+    const timerLocked = !!(timeLimit && dialogue.timeLimitLocked);
+    const [timerRemaining, setTimerRemaining] = useState(0);
+    useEffect(() => {
+        if (!timeLimit || !hasFinished || timerPaused) return;
+        let raf = 0; let fired = false;
+        const start = performance.now();
+        const tick = () => {
+            const left = timeLimit - (performance.now() - start) / 1000;
+            setTimerRemaining(Math.max(0, left));
+            if (left <= 0) { if (!fired) { fired = true; onFinished(); } return; }
+            raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [timeLimit, hasFinished, timerPaused, dialogue.text]);
 
     // Per-character textbox overrides (appearance only). Resolves a per-line theme override > the
     // character's assigned theme (+ inline custom on top). Any field left undefined falls back to
@@ -1333,6 +1390,12 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
         : undefined;
     
     const handleClick = () => {
+        // Locked timed line: clicking reveals the full text but NEVER advances — only the timer
+        // moves the story ("the novel plays itself" pacing tool).
+        if (timerLocked) {
+            if (!hasFinished && settings.enableSkip) skip();
+            return;
+        }
         if (hasFinished) {
             onFinished();
         } else if (settings.enableSkip) {
@@ -1367,7 +1430,9 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     // New appearance settings (character override, else global)
     const dialogueSizeMode = charTb?.dialogueBoxSizeMode ?? projectUI.dialogueBoxSizeMode ?? 'stretch';
     const dialogueSlice = charTb?.dialogueBoxSlice ?? projectUI.dialogueBoxSlice ?? 30;
-    const dialogueColor = charTb?.dialogueBoxColor ?? projectUI.dialogueBoxColor ?? '#0f172a';
+    // Palette→UI: a won coloring mini game's captured colors outrank the authored look
+    // (theme + global), and are themselves outranked by nothing — that's the feature.
+    const dialogueColor = uiPalette?.dialogueBg ?? charTb?.dialogueBoxColor ?? projectUI.dialogueBoxColor ?? '#0f172a';
     const dialogueOpacity = charTb?.dialogueBoxOpacity ?? projectUI.dialogueBoxOpacity ?? 90;
     const dialogueBorderRadius = charTb?.dialogueBoxBorderRadius ?? projectUI.dialogueBoxBorderRadius ?? 8;
 
@@ -1376,7 +1441,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     const nameboxImageUrl = nameboxImage
         ? resolveFieldUrl(project.id, project.images[nameboxImage.id]?.imageUrl || project.backgrounds[nameboxImage.id]?.imageUrl)
         : null;
-    const nameboxColor = charTb?.nameboxColor ?? projectUI.nameboxColor ?? '#0f172a';
+    const nameboxColor = uiPalette?.dialogueName ?? charTb?.nameboxColor ?? projectUI.nameboxColor ?? '#0f172a';
     const nameboxOpacity = charTb?.nameboxOpacity ?? projectUI.nameboxOpacity ?? 92;
     const nameboxPadding = charTb?.nameboxPadding ?? projectUI.nameboxPadding ?? 8;
     const nameboxHPadding = charTb?.nameboxHorizontalPadding ?? projectUI.nameboxHorizontalPadding ?? 14;
@@ -1396,8 +1461,79 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
         ...(characterFont ? { fontFamily: characterFont } : {}),
         ...(characterFontSize ? { fontSize: `calc(var(--font-scale, 1) * ${characterFontSize}px)` } : {}),
         ...(characterFontWeight ? { fontWeight: characterFontWeight } : {}),
-        ...(characterFontItalic ? { fontStyle: 'italic' } : {})
+        ...(characterFontItalic ? { fontStyle: 'italic' } : {}),
+        // Speaker-tinted lines: this character's dialogue renders in their name color (or a
+        // custom one). Wins over theme/global text color; a palette→UI restyle still wins.
+        ...(character?.dialogueTextColorMode === 'character' && dialogue.characterColor ? { color: dialogue.characterColor }
+            : character?.dialogueTextColorMode === 'custom' && character.dialogueTextColor ? { color: character.dialogueTextColor } : {}),
+        ...(uiPalette?.dialogueText ? { color: uiPalette.dialogueText } : {})
     };
+
+    // Reveal highlight ("karaoke"): emphasize the word currently being spoken/revealed.
+    // Two drivers: the TYPEWRITER (default — trailing word while typing) or, on voiced lines
+    // with syncToVoice, the clip's estimated per-word timings (voiceWordTiming envelope
+    // analysis) — the highlight then follows the ACTOR, pauses included, even after the
+    // text has fully revealed. Analysis failure falls back to the typewriter driver.
+    const rhCfg = projectUI.dialogueRevealHighlight;
+    const wordRanges = useMemo(() => {
+        const out: { start: number; end: number }[] = [];
+        const re = /\S+/g;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(interpolatedText))) out.push({ start: m.index, end: m.index + m[0].length });
+        return out;
+    }, [interpolatedText]);
+
+    const wantVoiceSync = !!(rhCfg?.enabled && rhCfg.syncToVoice && dialogue.voiceAudioId && voiceRef);
+    const [voiceWordStarts, setVoiceWordStarts] = useState<number[] | null>(null);
+    const [syncWordIdx, setSyncWordIdx] = useState(-1);
+    useEffect(() => {
+        setVoiceWordStarts(null); setSyncWordIdx(-1);
+        if (!wantVoiceSync || !wordRanges.length) return;
+        let alive = true;
+        const asset: any = (project.audio as any)?.[dialogue.voiceAudioId as any];
+        const url = asset ? resolveFieldUrl(project.id, asset.audioUrl) : null;
+        if (!url) return;
+        analyzeVoiceWordStarts(url, wordRanges.map(w => w.end - w.start + 1))
+            .then(starts => { if (alive && starts) setVoiceWordStarts(starts); })
+            .catch(() => { /* analysis is best-effort — typewriter fallback */ });
+        return () => { alive = false; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dialogue.text, dialogue.voiceAudioId, wantVoiceSync]);
+    useEffect(() => {
+        if (!voiceWordStarts || !voiceRef) return;
+        let raf = 0;
+        const tick = () => {
+            const a = voiceRef.current;
+            if (!a || a.ended || a.paused && a.currentTime === 0) { setSyncWordIdx(-1); raf = requestAnimationFrame(tick); return; }
+            const t = a.currentTime * 1000;
+            let idx = -1;
+            for (let i = 0; i < voiceWordStarts.length; i++) { if (t >= voiceWordStarts[i]) idx = i; else break; }
+            if (a.ended) idx = -1;
+            setSyncWordIdx(prev => (prev === idx ? prev : idx));
+            raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [voiceWordStarts, voiceRef]);
+
+    let revealHighlight: { start: number; end?: number; color: string; style: 'color' | 'glow' | 'underline' } | null = null;
+    if (rhCfg?.enabled && displayText.length > 0) {
+        const hlColor = (rhCfg.useSpeakerColor && dialogue.characterColor && dialogue.characterColor !== '#FFFFFF')
+            ? dialogue.characterColor
+            : (rhCfg.color || '#facc15');
+        const style = rhCfg.style || 'color';
+        // syncWordIdx can be stale for one frame across a line change (state resets in an
+        // effect, render happens first) — the length check keeps that frame safe.
+        const syncRange = wantVoiceSync && voiceWordStarts && syncWordIdx >= 0 && syncWordIdx < wordRanges.length ? wordRanges[syncWordIdx] : null;
+        if (syncRange && syncRange.start < displayText.length) {
+            // Voice-driven: the word the actor is on (clamped to what's revealed so far).
+            revealHighlight = { start: syncRange.start, end: Math.min(syncRange.end, displayText.length), color: hlColor, style };
+        } else if (!syncRange && !hasFinished) {
+            // Typewriter-driven: the trailing word being revealed.
+            const m = displayText.match(/(\S+)$/);
+            if (m && m.index != null) revealHighlight = { start: m.index, color: hlColor, style };
+        }
+    }
 
     const hasCustomImage = dialogueBoxUrl || dialogueBorderUrl;
     const showNamebox = dialogue.characterName !== 'Narrator' && !reactiveState?.hideNamebox;
@@ -1511,7 +1647,9 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                         transition: reactiveTransition,
                         ...(hasCustomImage ? {} : {
                             backgroundColor: dialogueBgColor,
-                            border: '1px solid rgba(148,163,184,0.25)',
+                            // dialogueBorder palette slot restyles the default box edge (image-
+                            // skinned boxes keep their border art — that's authored pixels).
+                            border: uiPalette?.dialogueBorder ? `2px solid ${uiPalette.dialogueBorder}` : '1px solid rgba(148,163,184,0.25)',
                             boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
                             backdropFilter: 'blur(8px)',
                             WebkitBackdropFilter: 'blur(8px)',
@@ -1547,10 +1685,11 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                         paddingRight: textPadRight ? scalePx(textPadRight) : undefined,
                     }}>
                         <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'normal' as const, overflowWrap: 'break-word' as const}}>
-                            <AnimatedDialogueText 
+                            <AnimatedDialogueText
                                 displayText={displayText}
                                 textEffect={dialogue.textEffect}
                                 gradientStyle={extractTextGradientStyle(projectUI.dialogueTextFont) || undefined}
+                                revealHighlight={revealHighlight}
                             />
                             {!hasFinished && (
                                 <span style={{ 
@@ -1565,8 +1704,8 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                                 }} />
                             )}
                         </p>
-                        {/* Click-to-advance indicator */}
-                        {hasFinished && (
+                        {/* Click-to-advance indicator (hidden on locked timed lines — clicking won't advance) */}
+                        {hasFinished && !timerLocked && (
                             <div style={{
                                 position: 'absolute',
                                 bottom: '8px',
@@ -1580,6 +1719,15 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                             </div>
                         )}
                     </div>
+                    {/* Per-line time-limit countdown bar (author-toggled) — shrinks along the top edge */}
+                    {timeLimit > 0 && dialogue.showTimer && hasFinished && (
+                        <div style={{
+                            position: 'absolute', top: 0, left: 0, height: '3px', zIndex: 2,
+                            width: `${Math.max(0, Math.min(100, (timerRemaining / timeLimit) * 100))}%`,
+                            background: projectUI.choiceHoverColor || '#6B4C9A',
+                            transition: 'width 0.12s linear',
+                        }} />
+                    )}
                 </div>
                 {/* Inject keyframe animations */}
                 <style>{`
@@ -1601,7 +1749,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     );
 };
 
-const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: (choice: ChoiceOption) => void, variables: Record<VNID, string | number | boolean>, project: VNProject, layout?: 'vertical' | 'horizontal' | 'free', timeLimit?: number, showTimer?: boolean, onTimeout?: () => void }> = ({ choices, projectUI, onSelect, variables, project, layout, timeLimit, showTimer, onTimeout }) => {
+const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: (choice: ChoiceOption) => void, variables: Record<VNID, string | number | boolean>, project: VNProject, layout?: 'vertical' | 'horizontal' | 'free', timeLimit?: number, showTimer?: boolean, onTimeout?: () => void, uiPalette?: Record<string, string> | null }> = ({ choices, projectUI, onSelect, variables, project, layout, timeLimit, showTimer, onTimeout, uiPalette }) => {
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
     // Time-limited choice: count down while shown; fire onTimeout once at 0. The shrinking bar reads
@@ -1656,7 +1804,9 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
     // New appearance settings
     const choiceSizeMode = projectUI.choiceButtonSizeMode ?? 'stretch';
     const choiceSlice = projectUI.choiceButtonSlice ?? 15;
-    const choiceColor = projectUI.choiceButtonColor ?? '#1e293b';
+    // Palette→UI: a won coloring mini game's captured colors outrank the authored global
+    // style; explicit per-option colors (choice.backgroundColor/textColor) still win.
+    const choiceColor = uiPalette?.choiceBg ?? projectUI.choiceButtonColor ?? '#1e293b';
     const choiceOpacity = projectUI.choiceButtonOpacity ?? 90;
     const choiceBorderRadius = projectUI.choiceButtonBorderRadius ?? 8;
     const choiceHoverColor = projectUI.choiceHoverColor ?? '#334155';
@@ -1722,7 +1872,7 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                         : !hasImg
                             ? {
                                 backgroundColor: isHovered ? optHoverBg : optBg,
-                                border: '1px solid rgba(148,163,184,0.3)',
+                                border: uiPalette?.choiceBorder ? `2px solid ${uiPalette.choiceBorder}` : '1px solid rgba(148,163,184,0.3)',
                                 boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
                                 backdropFilter: 'blur(6px)',
                                 WebkitBackdropFilter: 'blur(6px)',
@@ -1731,6 +1881,7 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                     padding: `${scalePx(choicePadding)} ${scalePx(choicePadding * 2)}`,
                     ...(!fill && choiceHeight ? { height: scalePx(choiceHeight) } : {}),
                     ...fontSettingsToStyle(projectUI.choiceTextFont),
+                    ...(uiPalette?.choiceText ? { color: uiPalette.choiceText } : {}),
                     ...(choice.fontSize ? { fontSize: scalePx(choice.fontSize) } : {}),
                     ...(choice.textColor ? { color: choice.textColor } : {}),
                     textAlign: (projectUI.choiceTextFont?.align || 'center') as any,
@@ -1742,7 +1893,7 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                 {baseIsVideo && baseImg && (
                     <TrimmedVideo src={baseImg} autoPlay loop muted trimStart={baseTrim.start} trimEnd={baseTrim.end} className="absolute inset-0 w-full h-full -z-10" style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(optRadius) }} />
                 )}
-                <span className="relative z-10" style={{ ...(extractTextGradientStyle(projectUI.choiceTextFont) || {}), ...(choice.textColor ? { color: choice.textColor } : {}) }}>{interpolatedText}</span>
+                <span className="relative z-10" style={{ ...(extractTextGradientStyle(projectUI.choiceTextFont) || {}), ...(uiPalette?.choiceText && !choice.textColor ? { color: uiPalette.choiceText, background: 'none', WebkitTextFillColor: uiPalette.choiceText } : {}), ...(choice.textColor ? { color: choice.textColor } : {}) }}>{interpolatedText}</span>
             </button>
         );
     };
@@ -2160,6 +2311,71 @@ const SaveSlotGridComponent: React.FC<{
     );
 };
 
+/** Screen Timer element: once mounted (screen opened), waits `durationSeconds` then runs its actions.
+ *  A dedicated component so mount/unmount gives a real lifecycle — the effect arms ONCE and its cleanup
+ *  clears the interval when the screen closes (no double/late fire). Callbacks are held in refs so a
+ *  parent re-render can't stale them. Uses a 250ms tick (matching the engine's Start/Stop-Timer cadence)
+ *  which also drives the optional visible countdown. */
+/** One live spotlight beam (a positioned, aimable stage light). Runtime-only; not serialized. */
+type SpotlightState = { sourceX: number; sourceY: number; aimAngle: number; intensity: number; beamWidth: number; sourceWidth: number; height: number; falloff: number; color: string; followMouse: boolean; swivelMax: number; toggleKey?: string; affectsDialogue: boolean; on: boolean };
+/** Build a live beam (on) from a Spotlight command / Show Spotlight action's fields, filling defaults. */
+const makeSpotlightState = (c: any): SpotlightState => ({
+    sourceX: c.sourceX ?? 50, sourceY: c.sourceY ?? 0, aimAngle: c.aimAngle ?? 0,
+    intensity: c.intensity ?? 0.85, beamWidth: c.beamWidth ?? 45, sourceWidth: c.sourceWidth ?? 8,
+    height: c.height ?? 100, falloff: c.falloff ?? 0.5, color: c.color || '#fff3d6',
+    followMouse: c.followMouse !== false, swivelMax: c.swivelMax ?? 30, toggleKey: c.toggleKey,
+    affectsDialogue: c.affectsDialogue !== false, on: true,
+});
+
+const TIMER_VAR_MUTATION_TYPES = new Set<UIActionType>([
+    UIActionType.SetVariable, UIActionType.ResetVariable, UIActionType.GiveItem, UIActionType.UseItem,
+    UIActionType.DestroyItem, UIActionType.UseSelectedItem, UIActionType.RestockCollection,
+    UIActionType.BuyItem, UIActionType.SellItem, UIActionType.BuySelectedItem, UIActionType.SellSelectedItem,
+]);
+const TimerElement: React.FC<{
+    element: UITimerElement,
+    style: React.CSSProperties,
+    onAction: (a: VNUIAction) => void,
+    onCommitVariables?: () => void,
+}> = ({ element, style, onAction, onCommitVariables }) => {
+    const [remaining, setRemaining] = useState(Math.max(0, element.durationSeconds || 0));
+    const onActionRef = useRef(onAction); onActionRef.current = onAction;
+    const onCommitRef = useRef(onCommitVariables); onCommitRef.current = onCommitVariables;
+    const actionsRef = useRef(element.actions); actionsRef.current = element.actions;
+    useEffect(() => {
+        let cancelled = false;
+        const total = Math.max(0, element.durationSeconds || 0);
+        const fire = () => {
+            if (cancelled) return;
+            const acts = actionsRef.current || [];
+            // Variable/item mutations first + commit, so writes land before any navigation (same as buttons).
+            const vars = acts.filter(a => TIMER_VAR_MUTATION_TYPES.has(a.type));
+            const others = acts.filter(a => !TIMER_VAR_MUTATION_TYPES.has(a.type));
+            vars.forEach(a => onActionRef.current(a));
+            if (vars.length && onCommitRef.current) onCommitRef.current();
+            others.forEach(a => onActionRef.current(a));
+        };
+        setRemaining(total);
+        let elapsedMs = 0;
+        const TICK = 250;
+        const iv = window.setInterval(() => {
+            if (cancelled) return;
+            elapsedMs += TICK;
+            setRemaining(Math.max(0, total - elapsedMs / 1000));
+            if (elapsedMs >= total * 1000) {
+                fire();
+                if (element.loop) { elapsedMs = 0; setRemaining(total); }
+                else { window.clearInterval(iv); }
+            }
+        }, TICK);
+        return () => { cancelled = true; window.clearInterval(iv); };
+    }, [element.id, element.durationSeconds, element.loop]);
+    if (!element.showCountdown) return <div style={{ ...style, pointerEvents: 'none' }} />;
+    return <div style={{ ...style, pointerEvents: 'none' }} className="flex items-center justify-center text-white text-sm font-semibold">
+        <span style={{ textShadow: '0 1px 3px rgba(0,0,0,0.85)' }}>⏱ {Math.ceil(remaining)}</span>
+    </div>;
+};
+
 const ButtonElement: React.FC<{
     element: UIButtonElement,
     style: React.CSSProperties,
@@ -2211,6 +2427,10 @@ const ButtonElement: React.FC<{
     const buttonBg = element.backgroundColor || '#4D3273';
     const hoverBg = element.hoverBackgroundColor || (element.backgroundColor ? undefined : '#6B4C9A');
 
+    // Corner rounding (px, scaled with the screen like fonts). Absent = undefined so the
+    // legacy `rounded` class (~4px) still applies — existing buttons are unchanged.
+    const btnRadius = element.borderRadius != null ? `calc(var(--font-scale, 1) * ${element.borderRadius}px)` : undefined;
+
     // The incoming `style` carries the parallax transform (updated every frame via --ppx).
     // The button's hover effect uses `transition-transform` — if both lived on the same
     // element, that CSS transition would animate every parallax frame (janky "slow then fast"
@@ -2234,7 +2454,7 @@ const ButtonElement: React.FC<{
                     onMouseLeave={() => setIsHovered(false)}
                     onClick={handleClick}
                 >
-                    <img src={displayUrl!} alt={element.text} draggable={false} style={{ display: 'block', maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain' }} />
+                    <img src={displayUrl!} alt={element.text} draggable={false} style={{ display: 'block', maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', borderRadius: btnRadius }} />
                     {interpolatedText && (
                         <span className="absolute inset-0 flex items-center justify-center z-10" style={{...textStyle, ...(extractTextGradientStyle(element.font) || {}), pointerEvents: 'none'}}>
                             {interpolatedText}
@@ -2261,11 +2481,11 @@ const ButtonElement: React.FC<{
                 onClick={hasCb ? undefined : handleClick}
             >
                 {displayUrl ? (
-                    <img src={displayUrl} alt={element.text} className="absolute inset-0 w-full h-full object-fill" />
+                    <img src={displayUrl} alt={element.text} className="absolute inset-0 w-full h-full object-fill" style={{ borderRadius: btnRadius }} />
                 ) : (
                     <div
                         className="absolute inset-0 w-full h-full rounded"
-                        style={{ backgroundColor: isHovered && hoverBg ? hoverBg : buttonBg }}
+                        style={{ backgroundColor: isHovered && hoverBg ? hoverBg : buttonBg, borderRadius: btnRadius }}
                     />
                 )}
                 <span className="relative z-10" style={{...textStyle, ...(extractTextGradientStyle(element.font) || {}), display: 'inline-block', pointerEvents: 'none'}}>
@@ -2778,7 +2998,10 @@ const InventoryGridElement: React.FC<{
     /** True when an author sort (alpha/category) is active — the grid then shows the given sorted order
      *  and ignores the player's saved drag layout (manual rearrange is disabled while auto-sorted). */
     autoSort?: boolean;
-}> = ({ element, items, variables, project, assetResolver, onAction, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, groupByCategory, categoryOrder, autoSort }) => {
+    /** The element's positioned box style (left/top/width/height/zIndex/opacity). In free mode the box
+     *  is ignored and slots span the screen, reusing only zIndex/opacity (matches SaveSlotGrid). */
+    style?: React.CSSProperties;
+}> = ({ element, items, variables, project, assetResolver, onAction, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, groupByCategory, categoryOrder, autoSort, style }) => {
     const count = (it: VNItem) => Number(variables[it.countVariableId] ?? 0);
     const filteredAll = element.categoryFilter ? items.filter(it => it.category === element.categoryFilter) : items;
     // An item shows when owned (count >= 1). At 0 it's hidden if either the grid hides unowned items
@@ -2853,25 +3076,33 @@ const InventoryGridElement: React.FC<{
         setDragSlot(null);
     };
 
+    // Var-mutating actions must be committed to player state after firing (they otherwise sit in the
+    // uncommitted UI-variable buffer and are lost). Shared by useItem/tradeItem + the slot-button actions.
+    const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable || a.type === UIActionType.GiveItem || a.type === UIActionType.UseItem || a.type === UIActionType.DestroyItem || a.type === UIActionType.UseSelectedItem || a.type === UIActionType.RestockCollection || a.type === UIActionType.BuyItem || a.type === UIActionType.SellItem || a.type === UIActionType.BuySelectedItem || a.type === UIActionType.SellSelectedItem;
+    // Run an action list with the var-mutation→commit→others ordering (mirrors the screen Button flow).
+    const runActionList = (acts: VNUIAction[]) => {
+        const setVarActions = acts.filter(isVarMutation);
+        const otherActions = acts.filter(a => !isVarMutation(a));
+        setVarActions.forEach(a => onAction(a));
+        if (setVarActions.length > 0 && onCommitVariables) onCommitVariables();
+        otherActions.forEach(a => onAction(a));
+    };
+    // Slot-button actions for a given item: the item's own list takes priority (it REPLACES the grid's
+    // element-level list when present), otherwise fall back to the element-level list.
+    const slotButtonActionsFor = (it: VNItem): VNUIAction[] => (it.slotButtonActions?.length ? it.slotButtonActions : (element.slotButtonActions || []));
+
     const useItem = (it: VNItem) => {
         if (!it.usable) return;
         // Carry-to-use items aren't consumed here — they're picked up onto the cursor; the use-effect
         // + consume fire only when the player clicks an accepting drop-zone hot spot.
         if (it.carryToUse) { onAction({ type: UIActionType.CarryItem, itemId: it.id } as VNUIAction); return; }
-        // Mirror the screen Button flow: run SetVariable/ResetVariable mutations FIRST, then COMMIT
-        // them to player state (otherwise they stay in the uncommitted UI-variable buffer and are
-        // lost), then run any navigation/other actions. The count decrement is a var mutation too —
-        // unless the item is reusable (consumeOnUse === false), in which case using only runs the effect.
-        const actions: VNUIAction[] = [
+        // The count decrement is a var mutation too — unless the item is reusable (consumeOnUse === false),
+        // in which case using only runs the effect. The slot-button actions run last.
+        runActionList([
             ...(it.consumeOnUse === false ? [] : [{ type: UIActionType.SetVariable, variableId: it.countVariableId, operator: 'subtract', value: 1 } as VNUIAction]),
             ...(it.useEffect || []),
-        ];
-        const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable || a.type === UIActionType.GiveItem || a.type === UIActionType.UseItem || a.type === UIActionType.DestroyItem || a.type === UIActionType.UseSelectedItem || a.type === UIActionType.RestockCollection || a.type === UIActionType.BuyItem || a.type === UIActionType.SellItem || a.type === UIActionType.BuySelectedItem || a.type === UIActionType.SellSelectedItem;
-        const setVarActions = actions.filter(isVarMutation);
-        const otherActions = actions.filter(a => !isVarMutation(a));
-        setVarActions.forEach(a => onAction(a));
-        if (setVarActions.length > 0 && onCommitVariables) onCommitVariables();
-        otherActions.forEach(a => onAction(a));
+            ...slotButtonActionsFor(it),
+        ]);
     };
 
     // Per-slot button mode (legacy showUseButton is migrated to slotButton on load).
@@ -2883,6 +3114,10 @@ const InventoryGridElement: React.FC<{
         if (!tradeCollectionId) return;
         onAction({ type: slotButtonMode === 'buy' ? UIActionType.BuyItem : UIActionType.SellItem, itemId: it.id, collectionId: tradeCollectionId } as VNUIAction);
         if (onCommitVariables) onCommitVariables();
+        // Extra actions (e.g. play a sound, set a flag, jump) run after the purchase/sale. The item's own
+        // list takes priority over the grid's element-level list (see slotButtonActionsFor).
+        const acts = slotButtonActionsFor(it);
+        if (acts.length) runActionList(acts);
     };
     // Can this item be traded right now? (drives the disabled / dimmed state.)
     const tradeBlocked = (it: VNItem): boolean => {
@@ -2893,8 +3128,14 @@ const InventoryGridElement: React.FC<{
         return 'blocked' in res;
     };
 
-    const slotStyle: React.CSSProperties = { aspectRatio: '1 / 1', borderRadius: `${element.slotBorderRadius ?? 8}px`, border: `2px solid ${element.slotBorderColor || '#4D3273'}`, background: element.slotColor || 'transparent' };
+    // Square (1:1) unless squareSlots is explicitly false (then the slot fills its cell/rect — any shape).
+    // hideSlotBox drops the slot's frame/fill so only the item (icon/name/button) shows.
+    const hideBox = element.hideSlotBox === true;
+    const slotStyle: React.CSSProperties = { ...(element.squareSlots === false ? { width: '100%', height: '100%' } : { aspectRatio: '1 / 1' }), borderRadius: `${element.slotBorderRadius ?? 8}px`, border: hideBox ? 'none' : `2px solid ${element.slotBorderColor || '#4D3273'}`, background: hideBox ? 'transparent' : (element.slotColor || 'transparent') };
     const selectedRing = element.selectedBorderColor || '#38bdf8';
+    // Quantity badge appearance (defaults match the legacy top-right black ×N).
+    const qtyCorner = { 'top-left': 'top-1 left-1', 'top-right': 'top-1 right-1', 'bottom-left': 'bottom-1 left-1', 'bottom-right': 'bottom-1 right-1' }[element.quantityPosition || 'top-right'];
+    const qtyStyle: React.CSSProperties = { backgroundColor: element.quantityBgColor || 'rgba(0,0,0,0.7)', color: element.quantityColor || '#ffffff', ...(element.quantityFont ? fontSettingsToStyle(element.quantityFont) : {}) };
     const gridStyle: React.CSSProperties = { gridTemplateColumns: `repeat(${cols}, 1fr)`, columnGap: `${colGap}px`, rowGap: `${rowGap}px` };
 
     // One slot cell, reused by the flat grid AND each category section. Reorder is POINTER-based
@@ -2917,7 +3158,7 @@ const InventoryGridElement: React.FC<{
                                 ? <img src={url} alt={it.name} className="w-full flex-1 min-h-0 object-contain" draggable={false} />
                                 : <div className="w-full flex-1 min-h-0" />}
                             {element.showQuantity !== false && qty > 1 && (
-                                <span className="absolute top-1 right-1 bg-black/70 text-white text-[10px] rounded px-1 leading-tight">×{qty}</span>
+                                <span className={`absolute ${qtyCorner} text-[10px] rounded px-1 leading-tight`} style={qtyStyle}>×{qty}</span>
                             )}
                             {element.showNames !== false && (
                                 <span className="text-[10px] text-white truncate w-full mt-0.5" style={{ ...(element.nameFont ? fontSettingsToStyle(element.nameFont) : {}), textAlign: 'center' }}>{it.name}</span>
@@ -2985,9 +3226,29 @@ const InventoryGridElement: React.FC<{
         });
     })();
 
+    // ── Free placement ── each slot positioned individually (screen-percent); the element box is
+    // ignored so coordinates line up with the background art. Slots without a rect are hidden.
+    if (element.slotLayout === 'free' && element.slotRects && element.slotRects.length > 0) {
+        const rects = element.slotRects;
+        return (
+            <div style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: style?.zIndex, opacity: style?.opacity as number | undefined, pointerEvents: 'none' }}
+                onPointerUp={reorderEnabled ? (() => setDragSlot(null)) : undefined}>
+                {slots.map((slotId, i) => {
+                    const rect = rects[i];
+                    if (!rect) return null;
+                    return (
+                        <div key={`free-${i}`} style={{ position: 'absolute', left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%`, pointerEvents: 'auto' }}>
+                            {renderSlot(slotId, i)}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
+
     return (
         <div ref={gridContainerRef} className="w-full h-full overflow-y-auto p-2 rounded"
-            style={{ backgroundColor: element.backgroundColor || 'rgba(15, 23, 42, 0.9)' }}
+            style={{ backgroundColor: element.hideBackgroundPanel ? 'transparent' : (element.backgroundColor || 'rgba(15, 23, 42, 0.9)') }}
             onPointerUp={reorderEnabled ? (() => setDragSlot(null)) : undefined}>
             {totalSlots === 0 && (
                 <div className="w-full h-full flex items-center justify-center text-center text-xs text-white/50 px-2">{element.emptyText || ''}</div>
@@ -3389,8 +3650,11 @@ const InteractiveRuntime: React.FC<{
 
     // Handle hot spot click/hover triggers
     const handleSpotClick = useCallback((spot: VNHotSpot) => {
-        if (spot.trigger === 'click') {
-            spot.actions.forEach(a => handleLocalAction(a));
+        // Default a missing/blank trigger to 'click' — older projects predate the explicit `trigger`
+        // field, so their hotspots have `trigger: undefined` and this gate silently swallowed every
+        // click (the editor already shows them as 'click' via `trigger || 'click'`).
+        if ((spot.trigger || 'click') === 'click') {
+            (spot.actions || []).forEach(a => handleLocalAction(a));
         }
     }, [handleLocalAction]);
 
@@ -3419,7 +3683,7 @@ const InteractiveRuntime: React.FC<{
                             backgroundColor: spot.visible ? (spot.highlightColor || 'rgba(59, 130, 246, 0.2)') : 'transparent',
                             border: spot.visible ? `2px dashed ${spot.highlightColor || 'rgba(59, 130, 246, 0.5)'}` : 'none',
                             pointerEvents: spot.trigger === 'drag-drop' ? 'none' : 'auto',
-                            cursor: spot.trigger === 'click' ? 'pointer' : undefined,
+                            cursor: (spot.trigger || 'click') === 'click' ? 'pointer' : undefined,
                         }}
                         onClick={() => handleSpotClick(spot)}
                         onMouseEnter={() => handleSpotHover(spot)}
@@ -3766,6 +4030,10 @@ const UIScreenRenderer: React.FC<{
                 const el = element as UIButtonElement;
                 return <ButtonElement key={el.id} element={el} style={style} playSound={playSound} onAction={onAction} getElementAssetUrl={getElementAssetUrl} variables={variables} project={project} onCommitVariables={onCommitVariables} />;
             }
+            case UIElementType.Timer: {
+                const el = element as UITimerElement;
+                return <TimerElement key={el.id} element={el} style={style} onAction={onAction} onCommitVariables={onCommitVariables} />;
+            }
             case UIElementType.Text: {
                 const el = element as UITextElement;
                 const effectiveAlign = el.textAlign || el.font?.align || 'center';
@@ -4035,7 +4303,11 @@ const UIScreenRenderer: React.FC<{
             }
             case UIElementType.CharacterPreview: {
                 const el = element as UICharacterPreviewElement;
-                const character = project.characters[el.characterId];
+                // ⟨Player's Character⟩ targeting: resolve to the player-created character when requested.
+                const previewCharacterId = el.characterSource === 'player'
+                    ? (resolvePlayerCharacterId(project, variables) || el.characterId)
+                    : el.characterId;
+                const character = previewCharacterId ? project.characters[previewCharacterId] : null;
                 if (!character) return null;
                 
                 runtimeDebugLog(`[CharacterPreview] layerVariableMap:`, el.layerVariableMap);
@@ -4062,7 +4334,15 @@ const UIScreenRenderer: React.FC<{
                 
                 // Add layer assets - process in layer order
                 Object.entries(character.layers).forEach(([layerId, layer]: [string, VNCharacterLayer]) => {
-                    const variableId = el.layerVariableMap[layerId];
+                    let variableId = el.layerVariableMap[layerId];
+                    // ⟨Player's Character⟩: auto-detect the customizer variable holding a valid asset id
+                    // for this layer (mirrors ShowCharacter's auto-bind), so the player's chosen outfit
+                    // shows without the author wiring a layerVariableMap.
+                    if (!variableId && el.characterSource === 'player' && variables) {
+                        const matches = Object.entries(project.variables).filter(([vid, v]: [string, any]) =>
+                            v.type === 'string' && String(variables[vid] || '') in layer.assets);
+                        if (matches.length) variableId = matches[matches.length - 1][0];
+                    }
                     let asset = null;
                     
                     runtimeDebugLog(`[CharacterPreview] Processing layer ${layer.name} (${layerId}), mapped variableId:`, variableId);
@@ -4320,13 +4600,50 @@ const UIScreenRenderer: React.FC<{
                     </div>
                 );
 
+                // ── Circular fit-rule guard ─────────────────────────────────────────────
+                // Old wizard builds baked TWO-WAY rules (jacket gated on body AND body gated on
+                // jacket). Mutually-gated categories hide each other's alternatives and the arrows
+                // DEADLOCK on 1 visible option each. Detect 2-cycles between this customizer's own
+                // categories and ignore the BACKWARD edge (an earlier category gated on a later
+                // one), keeping the legitimate forward rule. One-way gating — including intentional
+                // later→earlier author wiring — is untouched; no element data is modified.
+                const catIdxOfVar = new Map<string, number>();
+                (el.categories || []).forEach((c: any, i: number) => catIdxOfVar.set(c.variableId, i));
+                const catRefs: Set<number>[] = (el.categories || []).map((c: any) => {
+                    const refs = new Set<number>();
+                    const layer = character.layers[c.layerId];
+                    if (layer) (Object.values(layer.assets) as any[]).forEach(a => {
+                        (el.optionMeta?.[a.id]?.conditions || []).forEach((cond: any) => {
+                            const j = catIdxOfVar.get(cond.variableId);
+                            if (j !== undefined) refs.add(j);
+                        });
+                    });
+                    return refs;
+                });
+                const droppedVarsPerCat: Set<string>[] = (el.categories || []).map((_: any, i: number) => {
+                    const dropped = new Set<string>();
+                    catRefs[i]?.forEach(j => {
+                        if (j > i && catRefs[j]?.has(i)) dropped.add((el.categories || [])[j].variableId);
+                    });
+                    return dropped;
+                });
+                const conditionsFor = (catIdx: number, assetId: string) => {
+                    const conds = el.optionMeta?.[assetId]?.conditions;
+                    if (!conds?.length) return conds;
+                    const dropped = droppedVarsPerCat[catIdx];
+                    if (!dropped || dropped.size === 0) return conds;
+                    return conds.filter((c: any) => !dropped.has(c.variableId));
+                };
+
                 // Per-option rules: hide or lock an option when its conditions fail; optional swatch override.
                 const processOptions = (cat: any) => {
                     const layer = character.layers[cat.layerId];
+                    const catIdx = catIdxOfVar.get(cat.variableId) ?? -1;
                     if (!layer) return [] as Array<{ a: any; locked: boolean; swatchUrl: string | null }>;
                     return (Object.values(layer.assets) as any[]).map(a => {
                         const meta = el.optionMeta?.[a.id];
-                        const ok = !meta?.conditions?.length || evaluateConditions(meta.conditions, variables);
+                        const conds = conditionsFor(catIdx, a.id);
+                        const ok = !conds?.length || evaluateConditions(conds, variables);
                         const locked = !ok && meta?.whenUnmet === 'lock';
                         const hidden = !ok && (meta?.whenUnmet ?? 'hide') === 'hide';
                         const swatchUrl = meta?.swatchImage ? getElementAssetUrl(meta.swatchImage) : assetUrlOf(a);
@@ -4334,12 +4651,40 @@ const UIScreenRenderer: React.FC<{
                     }).filter(x => !x.hidden);
                 };
 
+                // Fit rules make categories interact: picking in one category can HIDE another
+                // category's current piece (e.g. switching Body hides the jacket that only fits the
+                // old body). Re-point any now-hidden category to its first visible option, so the
+                // outfit never keeps a non-fitting piece and the arrows never strand on an
+                // invisible selection. Evaluates against the accumulated next values (one pass,
+                // in category order, so chained rules settle too).
+                const pickAndHeal = (srcCat: any, id: string) => {
+                    onVariableChange?.(srcCat.variableId, id);
+                    const next: Record<string, string | number | boolean> = { ...variables, [srcCat.variableId]: id };
+                    (el.categories || []).forEach((c: any, cIdx: number) => {
+                        if (c.variableId === srcCat.variableId) return;
+                        const layer = character.layers[c.layerId];
+                        if (!layer) return;
+                        const isHidden = (assetId: string) => {
+                            const m = el.optionMeta?.[assetId];
+                            const conds = conditionsFor(cIdx, assetId);
+                            return !!conds?.length && !evaluateConditions(conds, next) && (m?.whenUnmet ?? 'hide') === 'hide';
+                        };
+                        const cur = String(next[c.variableId] ?? '');
+                        if (!cur || !layer.assets[cur] || !isHidden(cur)) return;
+                        const firstVisible = (Object.values(layer.assets) as any[]).find(a => !isHidden(a.id));
+                        if (firstVisible) {
+                            next[c.variableId] = firstVisible.id;
+                            onVariableChange?.(c.variableId, firstVisible.id);
+                        }
+                    });
+                };
+
                 // One category's picker, in the configured style (default swatches).
                 const renderPicker = (cat: any, current: string): React.ReactNode => {
                     const opts = processOptions(cat);
                     const selectable = opts.filter(x => !x.locked);
                     const pstyle = cat.pickerStyle || 'swatches';
-                    const pick = (id: string) => onVariableChange?.(cat.variableId, id);
+                    const pick = (id: string) => pickAndHeal(cat, id);
 
                     if (pstyle === 'arrows') {
                         const idx = selectable.findIndex(x => x.a.id === current);
@@ -4429,9 +4774,6 @@ const UIScreenRenderer: React.FC<{
                                 </div>
                             );
                         })}
-                        {(el.categories || []).length === 0 && (
-                            <div style={{ ...labelStyle, opacity: 0.6 }}>No categories yet — set them up in the Customizer's properties.</div>
-                        )}
                         {(el.showRandomize || el.showReset) && (el.categories || []).length > 0 && (
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
                                 {el.showRandomize && <button onClick={randomizeLook} style={{ ...labelStyle, cursor: 'pointer', padding: '4px 12px', borderRadius: 6, background: buttonColor, color: buttonTextColor, border: 'none' }}>{el.randomizeLabel || 'Randomize'}</button>}
@@ -4441,7 +4783,47 @@ const UIScreenRenderer: React.FC<{
                     </div>
                 );
 
-                const layout = el.layout || 'preview-left';
+                // Free placement: the preview and the pickers panel are two independently positioned
+                // boxes over a full-screen click-through overlay (mirrors the Inventory/CGGallery free
+                // branch). The preview has NO box by default — the sprite floats over the author's own art.
+                if (el.layout === 'free' && el.previewRect) {
+                    const pr = el.previewRect;
+                    const kr = el.pickersRect;
+                    const previewFrameUrl = el.previewBackgroundImage ? getElementAssetUrl(el.previewBackgroundImage) : null;
+                    const previewBoxStyle: React.CSSProperties = {
+                        position: 'absolute', left: `${pr.x}%`, top: `${pr.y}%`, width: `${pr.width}%`, height: `${pr.height}%`,
+                        pointerEvents: 'none', overflow: 'hidden',
+                        ...(el.previewBackgroundColor ? { background: el.previewBackgroundColor } : {}),
+                        ...(previewFrameUrl ? { backgroundImage: `url(${previewFrameUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                        ...(el.previewBorderColor ? { border: `1px solid ${el.previewBorderColor}` } : {}),
+                        ...(el.previewBorderRadius !== undefined ? { borderRadius: el.previewBorderRadius } : {}),
+                    };
+                    const pickersFrameUrl = el.backgroundImage ? getElementAssetUrl(el.backgroundImage) : null;
+                    const pickersBoxStyle: React.CSSProperties = {
+                        position: 'absolute', left: `${kr?.x ?? 0}%`, top: `${kr?.y ?? 0}%`, width: `${kr?.width ?? 0}%`, height: `${kr?.height ?? 0}%`,
+                        pointerEvents: 'auto', overflow: 'hidden',
+                        ...(el.hidePickersPanel ? {} : {
+                            background: el.backgroundColor || undefined,
+                            ...(pickersFrameUrl ? { backgroundImage: `url(${pickersFrameUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                            ...(el.borderColor ? { border: `1px solid ${el.borderColor}` } : {}),
+                            borderRadius: el.borderRadius ?? 8,
+                        }),
+                    };
+                    return (
+                        <div key={el.id} style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: (style as React.CSSProperties).zIndex, opacity: (style as React.CSSProperties).opacity, pointerEvents: 'none' }}>
+                            <div style={previewBoxStyle}>
+                                <div className="relative w-full h-full">
+                                    {hasVideo && videoUrls.length > 0
+                                        ? videoUrls.map((u, i) => <video key={i} src={u} autoPlay muted loop={videoLoop} playsInline className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, objectPosition: 'bottom' }} />)
+                                        : imageUrls.map((u, i) => <img key={i} src={u} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, objectPosition: 'bottom' }} />)}
+                                </div>
+                            </div>
+                            {kr && <div style={pickersBoxStyle}>{pickersNode}</div>}
+                        </div>
+                    );
+                }
+
+                const layout = el.layout === 'free' ? 'preview-left' : (el.layout || 'preview-left');
                 const pv = `${el.previewPercent ?? 45}%`;
                 const frameUrl = el.backgroundImage ? getElementAssetUrl(el.backgroundImage) : null;
                 const containerStyle: React.CSSProperties = {
@@ -4553,27 +4935,30 @@ const UIScreenRenderer: React.FC<{
                 // Category grouping (player inventory only) is handled INSIDE InventoryGridElement so it
                 // shares the one slots model — drag still reorders within/across category sections.
                 const groupByCategory = isPlayerInv && !!invUI.inventoryGroupByCategory;
-                return (
-                    <div key={el.id} style={style}>
-                        <InventoryGridElement
-                            element={gridEl}
-                            items={invItems}
-                            variables={variables}
-                            project={project}
-                            assetResolver={assetResolver}
-                            onAction={onAction}
-                            onCommitVariables={onCommitVariables}
-                            inventorySlots={inventorySlots}
-                            onReorderSlots={onReorderSlots}
-                            selectedItemId={selectedItemId}
-                            selectedElementId={selectedElementId}
-                            onSelectItem={onSelectItem}
-                            groupByCategory={groupByCategory}
-                            categoryOrder={catOrder}
-                            autoSort={isPlayerInv && sortMode !== 'manual'}
-                        />
-                    </div>
+                const invGrid = (
+                    <InventoryGridElement
+                        element={gridEl}
+                        items={invItems}
+                        variables={variables}
+                        project={project}
+                        assetResolver={assetResolver}
+                        onAction={onAction}
+                        onCommitVariables={onCommitVariables}
+                        inventorySlots={inventorySlots}
+                        onReorderSlots={onReorderSlots}
+                        selectedItemId={selectedItemId}
+                        selectedElementId={selectedElementId}
+                        onSelectItem={onSelectItem}
+                        groupByCategory={groupByCategory}
+                        categoryOrder={catOrder}
+                        autoSort={isPlayerInv && sortMode !== 'manual'}
+                        style={style}
+                    />
                 );
+                // Free placement spans the screen (the component ignores the element box), like SaveSlotGrid.
+                return gridEl.slotLayout === 'free' && gridEl.slotRects?.length
+                    ? <React.Fragment key={el.id}>{invGrid}</React.Fragment>
+                    : <div key={el.id} style={style}>{invGrid}</div>;
             }
             case UIElementType.Meter: {
                 const el = element as UIMeterElement;
@@ -5060,47 +5445,13 @@ const InGameConfirmDialog: React.FC<{
 };
 
 // --- In-Game Phone (built-in chrome) ---
-const PhoneGlyph: React.FC<{ name?: string }> = ({ name }) => (
-    <span style={{ fontSize: '1.4em', lineHeight: 1 }}>{(name && PHONE_GLYPHS[name]) || '●'}</span>
-);
-
-/** Resolve a phone avatar / caller portrait into a STACK of image URLs (rendered overlapped).
- *  base → the character's base sprite; expression → base (unless hideBase) + the chosen pose's
- *  layer assets; custom → the uploaded image. Returns [] when nothing resolves (caller hides it). */
-function resolvePhonePortrait(
-    source: PhonePortraitSource | undefined,
-    character: any,
-    assetResolver: (id: VNID | null, type: 'audio' | 'video' | 'image') => string | null,
-): string[] {
-    // Resolve through assetResolver (which maps managed refs → flourish-asset:// URLs). The base sprite
-    // resolves by the character's own id; layer assets by their asset id.
-    const baseUrl = character?.id ? assetResolver(character.id, 'image') : null;
-    const mode = source?.mode || 'base';
-    if (mode === 'custom') {
-        const ci = source?.customImage;
-        const url = ci ? assetResolver(ci.id, ci.type === 'video' ? 'video' : 'image') : null;
-        return url ? [url] : (baseUrl ? [baseUrl] : []);
-    }
-    if (mode === 'expression' && character) {
-        const stack: string[] = [];
-        if (!source?.hideBase && baseUrl) stack.push(baseUrl);
-        const expr = source?.expressionId ? character.expressions?.[source.expressionId] : undefined;
-        if (expr) {
-            for (const layer of Object.values(character.layers || {}) as any[]) {
-                const assetId = expr.layerConfiguration?.[layer.id];
-                if (!assetId) continue;
-                const url = assetResolver(assetId, 'image');
-                if (url) stack.push(url);
-            }
-        }
-        return stack;
-    }
-    return baseUrl ? [baseUrl] : [];
-}
+// PhoneGlyph / resolvePhonePortrait / PhonePortrait and the per-app screen bodies live in the
+// phone app registry (live-preview/phone/phoneApps.tsx); PhonePanel below renders the SHELL
+// and delegates the screen content to the registry.
 
 /** The unread badge, styled per `phoneBadgeShape`, with an optional caption underneath. Shared shape
  *  so engine + editor preview match. */
-function renderPhoneBadge(ui: VNProjectUI): React.ReactNode {
+function renderPhoneBadge(ui: VNProjectUI, count: number = 1): React.ReactNode {
     const size = ui.phoneBadgeSize ?? 16;
     const shape = ui.phoneBadgeShape || 'dot';
     const color = ui.phoneBadgeColor || '#ef4444';
@@ -5109,7 +5460,7 @@ function renderPhoneBadge(ui: VNProjectUI): React.ReactNode {
     let shapeEl: React.ReactNode;
     if (shape === 'ring') shapeEl = <span style={{ ...base, width: size, borderRadius: '9999px', border: `${Math.max(2, size * 0.18)}px solid ${color}`, background: 'transparent', boxShadow: 'none' }} />;
     else if (shape === 'square') shapeEl = <span style={{ ...base, width: size, borderRadius: Math.max(3, size * 0.25), background: color }} />;
-    else if (shape === 'count') shapeEl = <span style={{ ...base, padding: '0 5px', borderRadius: '9999px', background: color }}>1</span>;
+    else if (shape === 'count') shapeEl = <span style={{ ...base, padding: '0 5px', borderRadius: '9999px', background: color }}>{Math.max(1, count)}</span>;
     else if (shape === 'icon') shapeEl = <span style={{ ...base, width: size, borderRadius: '9999px', background: color, fontSize: size * 0.62 }}>{(ui.phoneBadgeIcon && PHONE_GLYPHS[ui.phoneBadgeIcon]) || '💬'}</span>;
     else if (shape === 'pulse') shapeEl = (
         <span style={{ position: 'relative', display: 'inline-flex' }}>
@@ -5128,15 +5479,6 @@ function renderPhoneBadge(ui: VNProjectUI): React.ReactNode {
     );
 }
 
-/** A round phone avatar that overlaps a resolved portrait stack (base + pose layers, or custom). */
-const PhonePortrait: React.FC<{ urls: string[]; size: string; fit?: 'cover' | 'contain'; objectPosition?: string }> = ({ urls, size, fit, objectPosition }) => {
-    if (urls.length === 0) return null;
-    return (
-        <div style={{ width: size, height: size, borderRadius: '9999px', overflow: 'hidden', flexShrink: 0, position: 'relative', background: 'rgba(0,0,0,0.2)' }}>
-            {urls.map((u, i) => <img key={i} src={u} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit || 'cover', objectPosition: objectPosition || 'center' }} />)}
-        </div>
-    );
-};
 
 const PhonePanel: React.FC<{
     ui: VNProjectUI;
@@ -5150,7 +5492,16 @@ const PhonePanel: React.FC<{
     onContactMessage: (contactId: VNID) => void;
     onContactCall: (contactId: VNID) => void;
     playTap: () => void;
-}> = ({ ui, project, phone, variables, assetResolver, evaluateConditions, onAction, onReply, onContactMessage, onContactCall, playTap }) => {
+    /** Navigate to a phone app by id (the registry's simple path — plays tap, sets phone.view). */
+    onOpenApp: (id: PhoneAppId) => void;
+    /** In-call transcript callbacks. */
+    onCallReply: (reply: PhoneReply) => void;
+    onEndCall: () => void;
+    /** Settings app: persist the player's wallpaper pick. */
+    onSetWallpaper: (id: VNID | null) => void;
+    /** Messages app: open a thread / back to the inbox. */
+    onOpenThread: (contactId: VNID | null) => void;
+}> = ({ ui, project, phone, variables, assetResolver, evaluateConditions, onAction, onReply, onContactMessage, onContactCall, playTap, onOpenApp, onCallReply, onEndCall, onSetWallpaper, onOpenThread }) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [phone.messages.length, phone.pendingChoices]);
     const pos = ui.phonePosition || 'bottom-right';
@@ -5172,25 +5523,17 @@ const PhonePanel: React.FC<{
     const casingRadius = ui.phoneBorderRadius ?? 28;
     const screenRadius = Math.max(casingRadius - bezel, 6);
     const showHome = ui.phoneShowHomeButton !== false;
-    // Reply buttons come from the richer pendingReplies (incoming texts) or the legacy pendingChoices
-    // (Show Text command) mapped into the same shape.
-    const effectiveReplies: PhoneReply[] = (phone.pendingReplies && phone.pendingReplies.length)
-        ? phone.pendingReplies
-        : (phone.pendingChoices || []).map(o => ({ id: o.id, text: o.text, conditions: o.conditions, actions: o.actions as unknown as VNUIAction[] }));
+    // App registry: the saved view id picks the app; unknown/disabled ids land on home.
     const view = phone.view || 'chat';
-    const showHistory = view === 'history';
-    const isHome = view === 'home';
-    const isContacts = view === 'contacts';
-    // Contacts roster (filtered by per-contact unlock conditions).
-    const contacts = (ui.phoneContacts || []).filter(c => !c.conditions?.length || evaluateConditions(c.conditions, variables));
-    const sortedContacts = [...contacts].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-    // When a contact thread is open, show only that conversation (their messages + the player's replies in it).
+    const app = resolvePhoneApp(view, ui, project);
+    const isHome = app.id === 'home';
+    const isContacts = app.id === 'contacts';
+    const ctx: PhoneAppContext = {
+        ui, project, phone, variables, assetResolver, evaluateConditions,
+        onAction, onReply, onContactMessage, onContactCall, playTap,
+        openApp: onOpenApp, buttons, onCallReply, onEndCall, onSetWallpaper, onOpenThread,
+    };
     const activeContactId = phone.activeContactId;
-    const threadMessages = activeContactId
-        ? phone.messages.filter(m => m.senderId === activeContactId || m.contactId === activeContactId)
-        : phone.messages;
-    const contactAvatarSize = `${ui.phoneContactAvatarSize ?? 2.4}em`;
-    const chatAvatarSize = `${ui.phoneChatAvatarSize ?? 2.2}em`;
     const activeContact = activeContactId ? (ui.phoneContacts || []).find(c => c.characterId === activeContactId) : undefined;
     // Backgrounds can be an image OR a looping video (per the {type,id} ref). Resolve to {url,isVideo}.
     const resolvePhoneBg = (ref?: { type: 'image' | 'video'; id: VNID } | null) => {
@@ -5198,44 +5541,16 @@ const PhonePanel: React.FC<{
         const url = assetResolver(ref.id, ref.type === 'video' ? 'video' : 'image');
         return url ? { url, isVideo: ref.type === 'video', trimStart: (ref as any).trimStart, trimEnd: (ref as any).trimEnd } : null;
     };
-    const wallpaper = resolvePhoneBg(ui.phoneWallpaperImage);
+    // Wallpaper: the player's Settings-app pick wins when it still exists + its conditions pass;
+    // stale/locked picks fall back to the author's default (covers edited projects + old saves).
+    const pickedWallpaper = phone.wallpaperId
+        ? (ui.phoneWallpapers || []).find(w => w.id === phone.wallpaperId && (!w.conditions?.length || evaluateConditions(w.conditions, variables)))
+        : undefined;
+    const wallpaper = resolvePhoneBg(pickedWallpaper?.image || ui.phoneWallpaperImage);
     const chatBg = resolvePhoneBg(activeContact?.chatBackground || ui.phoneChatBackgroundImage);
-    const isChatView = !isHome && !isContacts && !showHistory;
     // One backdrop per screen: chat bg overrides the wallpaper while a thread is open.
-    const screenBg = (isChatView ? chatBg : null) || wallpaper;
+    const screenBg = (app.usesChatBackground ? chatBg : null) || wallpaper;
     const contactsRegion = ui.phoneContactsRegion;
-    const activeContactName = activeContact?.displayName || (activeContactId ? project.characters[activeContactId]?.name : '') || '';
-    const lastMessageFor = (cid: VNID) => {
-        for (let i = phone.messages.length - 1; i >= 0; i--) {
-            const m = phone.messages[i];
-            if (m.senderId === cid || m.contactId === cid) return m.text;
-        }
-        return '';
-    };
-    // Contacts roster (shared between the in-flow content area and the free list region).
-    const contactsRoster = sortedContacts.length === 0 ? (
-        <div style={{ opacity: 0.5, textAlign: 'center', marginTop: 12, fontSize: '0.8em' }}>No contacts</div>
-    ) : sortedContacts.map(c => {
-        const char = project.characters[c.characterId];
-        const curls = resolvePhonePortrait(c.avatar, char, assetResolver);
-        const name = c.displayName || char?.name || 'Unknown';
-        const status = c.statusText ? interpolateVariables(c.statusText, variables, project) : '';
-        const preview = lastMessageFor(c.characterId);
-        return (
-            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 12, background: ui.phoneContactRowColor || ui.phoneHistoryRowColor || 'rgba(255,255,255,0.05)', color: ui.phoneContactTextColor || ui.phoneHistoryTextColor || '#fff' }}>
-                {ui.phoneShowAvatars !== false && <PhonePortrait urls={curls} size={contactAvatarSize} fit={ui.phoneContactAvatarFit} />}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600, ...(ui.phoneContactNameFont ? fontSettingsToStyle(ui.phoneContactNameFont) : {}) }}>{name}</div>
-                    {status && <div style={{ fontSize: '0.7em', opacity: 0.75, ...(ui.phoneContactStatusFont ? fontSettingsToStyle(ui.phoneContactStatusFont) : {}) }}>{status}</div>}
-                    {preview && <div style={{ fontSize: '0.7em', opacity: 0.6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{interpolateVariables(preview, variables, project)}</div>}
-                </div>
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                    {!c.hideCall && <button onClick={() => { playTap(); onContactCall(c.characterId); }} title={ui.phoneContactCallLabel || 'Call'} style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '4px 8px', borderRadius: 9999, border: 'none', cursor: 'pointer', background: ui.phoneCallAcceptColor || '#22c55e', color: '#fff', fontSize: '0.7em' }}>📞</button>}
-                    {!c.hideMessage && <button onClick={() => { playTap(); onContactMessage(c.characterId); }} title={ui.phoneContactMessageLabel || 'Message'} style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '4px 8px', borderRadius: 9999, border: 'none', cursor: 'pointer', background: ui.phoneOutgoingBubbleColor || '#2f6bff', color: '#fff', fontSize: '0.7em' }}>💬</button>}
-                </div>
-            </div>
-        );
-    });
     return (
         // Casing (phone body): the screen is inset by the bezel so it reads as a separate panel.
         <div style={{
@@ -5287,82 +5602,14 @@ const PhonePanel: React.FC<{
             {/* Header */}
             {ui.phoneHeaderText && <div style={{ padding: '2px 16px 6px', ...titleFont }}>{ui.phoneHeaderText}</div>}
             <style>{`@keyframes vn-phone-typing{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-3px);opacity:1}}`}</style>
-            {/* Home (app buttons only — content area stays empty), chat, or recents/history. */}
+            {/* The active app's body (home grid / chat / recents / contacts / future apps). */}
             <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {isHome ? null : isContacts ? (
-                    contactsRegion ? null : contactsRoster
-                ) : showHistory ? (
-                    <>
-                        {(phone.callLog && phone.callLog.length > 0) ? [...phone.callLog].reverse().map(entry => {
-                            const caller = entry.callerId === 'player' ? null : project.characters[entry.callerId];
-                            const purls = resolvePhonePortrait(entry.portrait, caller, assetResolver);
-                            const icon = entry.status === 'missed' ? '↙' : entry.status === 'accepted' ? '↗' : '⊘';
-                            const tint = entry.status === 'missed' ? '#ef4444' : entry.status === 'accepted' ? '#22c55e' : '#9ca3af';
-                            return (
-                                <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 10, background: ui.phoneHistoryRowColor || 'rgba(255,255,255,0.05)', color: ui.phoneHistoryTextColor || '#fff' }}>
-                                    <PhonePortrait urls={purls} size="2em" />
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{caller?.name || 'Unknown'}</div>
-                                        <div style={{ fontSize: '0.7em', opacity: 0.8, color: tint }}>{icon} {entry.status}</div>
-                                    </div>
-                                </div>
-                            );
-                        }) : <div style={{ opacity: 0.5, textAlign: 'center', marginTop: 12, fontSize: '0.8em' }}>No recent calls</div>}
-                    </>
-                ) : (
-                <>
-                {activeContactId && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <button onClick={() => onAction({ type: UIActionType.ShowPhoneContacts } as VNUIAction)} title="Back to contacts" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: '1.1em', lineHeight: 1, padding: '0 4px' }}>‹</button>
-                        <span style={{ fontWeight: 600, fontSize: '0.85em' }}>{activeContactName}</span>
-                    </div>
-                )}
-                {threadMessages.map(m => {
-                    const mine = m.senderId === 'player';
-                    const char = mine ? null : project.characters[m.senderId];
-                    const portraitUrls = mine ? [] : resolvePhonePortrait(m.portrait, char, assetResolver);
-                    return (
-                        <div key={m.id} style={{ display: 'flex', flexDirection: mine ? 'row-reverse' : 'row', gap: 6, alignItems: 'flex-end' }}>
-                            {ui.phoneShowAvatars !== false && !mine && <PhonePortrait urls={portraitUrls} size={chatAvatarSize} fit={ui.phoneChatAvatarFit} />}
-                            <div style={{ maxWidth: '76%' }}>
-                                {!mine && char?.name && <div style={{ fontSize: '0.7em', opacity: 0.75, marginBottom: 1, color: char.color }}>{char.name}</div>}
-                                <div style={{ padding: '6px 10px', borderRadius: 14, wordBreak: 'break-word', background: mine ? (ui.phoneOutgoingBubbleColor || '#2f6bff') : (ui.phoneIncomingBubbleColor || '#2a2f3a'), color: ui.phoneBubbleTextColor || '#fff' }}>
-                                    {interpolateVariables(m.text, variables, project)}
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-                {/* "…" typing indicator */}
-                {phone.typing && (() => {
-                    const tchar = phone.typing.senderId === 'player' ? null : project.characters[phone.typing.senderId];
-                    const turls = tchar ? resolvePhonePortrait(undefined, tchar, assetResolver) : [];
-                    return (
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
-                            {ui.phoneShowAvatars !== false && <PhonePortrait urls={turls} size={chatAvatarSize} fit={ui.phoneChatAvatarFit} />}
-                            <div style={{ padding: '8px 12px', borderRadius: 14, background: ui.phoneIncomingBubbleColor || '#2a2f3a', display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                                {[0, 1, 2].map(i => <span key={i} style={{ width: 6, height: 6, borderRadius: '9999px', background: ui.phoneTypingColor || ui.phoneBubbleTextColor || '#fff', animation: `vn-phone-typing 1s ${i * 0.2}s infinite` }} />)}
-                            </div>
-                        </div>
-                    );
-                })()}
-                {/* Reply options (in-phone) */}
-                {effectiveReplies.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                        {effectiveReplies.filter(o => !o.conditions?.length || evaluateConditions(o.conditions, variables)).map(o => (
-                            <button key={o.id} onClick={() => { playTap(); onReply(o); }} style={{ alignSelf: 'flex-end', maxWidth: '82%', padding: '6px 12px', borderRadius: 14, border: 'none', cursor: 'pointer', ...bodyFont, background: ui.phoneOutgoingBubbleColor || '#2f6bff', color: ui.phoneBubbleTextColor || '#fff' }}>
-                                {interpolateVariables(o.text, variables, project)}
-                            </button>
-                        ))}
-                    </div>
-                )}
-                </>
-                )}
+                {app.render(ctx)}
             </div>
             {/* Contacts roster as a free, author-placed region (overrides the in-flow list). */}
             {isContacts && contactsRegion && (
                 <div style={{ position: 'absolute', left: `${contactsRegion.x}%`, top: `${contactsRegion.y}%`, width: `${contactsRegion.width}%`, height: `${contactsRegion.height}%`, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, padding: '4px 6px', zIndex: 2 }}>
-                    {contactsRoster}
+                    {renderContactsRoster(ctx)}
                 </div>
             )}
             {/* App buttons appear ONLY on the home screen (not over chat / history / other apps).
@@ -5371,20 +5618,20 @@ const PhonePanel: React.FC<{
             {isHome && ui.phoneButtonLayout === 'free' && buttons.map(b => {
                 const customIcon = b.iconImage ? assetResolver(b.iconImage.id, 'image') : null;
                 return (
-                    <button key={b.id} onClick={() => { playTap(); b.action && onAction(b.action); }} title={b.label || ''}
+                    <button key={b.id} onClick={() => fireAppButton(ctx, b)} title={b.label || ''}
                         style={{ position: 'absolute', left: `${b.x ?? 8}%`, top: `${b.y ?? 12}%`, width: `${b.width ?? 14}%`, height: `${b.height ?? 14}%`, containerType: 'size', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1cqmin', background: 'transparent', border: 'none', cursor: 'pointer', color: ui.phoneButtonIconColor || '#cbd5e1', zIndex: 5 } as React.CSSProperties}>
                         {customIcon ? <img src={customIcon} alt="" style={{ width: '82cqmin', height: '82cqmin', objectFit: 'contain' }} /> : <span style={{ fontSize: '74cqmin', lineHeight: 1 }}>{(b.builtinIcon && PHONE_GLYPHS[b.builtinIcon]) || '●'}</span>}
                         {b.label && <span style={{ whiteSpace: 'nowrap', fontSize: '18cqmin', lineHeight: 1 }}>{b.label}</span>}
                     </button>
                 );
             })}
-            {/* Bottom button bar (default layout) — home screen only */}
-            {isHome && ui.phoneButtonLayout !== 'free' && buttons.length > 0 && (
+            {/* Bottom button bar (default layout) — home screen only ('grid' renders in the app body) */}
+            {isHome && ui.phoneButtonLayout !== 'free' && ui.phoneButtonLayout !== 'grid' && buttons.length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', gap: 4, padding: '6px 4px', backgroundColor: ui.phoneButtonBarColor || 'rgba(0,0,0,0.35)', flexShrink: 0 }}>
                     {buttons.map(b => {
                         const customIcon = b.iconImage ? assetResolver(b.iconImage.id, 'image') : null;
                         return (
-                            <button key={b.id} onClick={() => { playTap(); b.action && onAction(b.action); }} title={b.label || ''} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '4px 2px', background: 'transparent', border: 'none', cursor: 'pointer', color: ui.phoneButtonIconColor || '#cbd5e1', fontSize: '0.7em' }}>
+                            <button key={b.id} onClick={() => fireAppButton(ctx, b)} title={b.label || ''} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '4px 2px', background: 'transparent', border: 'none', cursor: 'pointer', color: ui.phoneButtonIconColor || '#cbd5e1', fontSize: '0.7em' }}>
                                 {customIcon ? <img src={customIcon} alt="" style={{ width: '1.6em', height: '1.6em', objectFit: 'contain' }} /> : <PhoneGlyph name={b.builtinIcon} />}
                                 {b.label && <span style={{ whiteSpace: 'nowrap' }}>{b.label}</span>}
                             </button>
@@ -5394,8 +5641,9 @@ const PhonePanel: React.FC<{
             )}
             </div>
             {/* Home button on the casing chin: from inside an app it returns to the home screen; from
-                the home screen it closes the phone (like a real phone's home/back button). */}
-            {showHome && (
+                the home screen it closes the phone (like a real phone's home/back button). Hidden
+                during a live call — End Call is the only exit (calls are exclusive). */}
+            {showHome && !phone.activeCall && (
                 <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: bezel * 0.6 }}>
                     <button onClick={() => { playTap(); onAction({ type: isHome ? UIActionType.HidePhone : UIActionType.ShowPhone } as VNUIAction); }} aria-label="Home" title="Home" style={{ width: '1.5em', height: '1.5em', borderRadius: '9999px', border: `2px solid ${ui.phoneHomeButtonColor || 'rgba(255,255,255,0.28)'}`, background: 'transparent', cursor: 'pointer', flexShrink: 0 }} />
                 </div>
@@ -5405,7 +5653,11 @@ const PhonePanel: React.FC<{
 };
 
 // --- Main Player Component ---
-const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; autoStartMusic?: boolean; isStandalone?: boolean }> = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false }) => {
+const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; autoStartMusic?: boolean; isStandalone?: boolean;
+    /** "Play from here" (editor test play): skip the title screen and start a fresh game at this
+     *  scene + command index (the scene's visual setup fast-forwards to compose the stage). */
+    startAt?: { sceneId: VNID; index: number } | null;
+}> = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false, startAt = null }) => {
     const { project } = useProject();
     const toast = useToast();
     // Stable notify bridge for scripts (game.notify) and surfaced script errors.
@@ -5428,7 +5680,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }, [project.ui.titleScreenId, project.uiScreens]);
 
     const titleScreenId = getValidTitleScreenId();
-    const [screenStack, setScreenStack] = useState<VNID[]>(titleScreenId ? [titleScreenId] : []);
+    // "Play from here" skips the title menu entirely — the mount effect below starts the game.
+    const [screenStack, setScreenStack] = useState<VNID[]>(startAt ? [] : (titleScreenId ? [titleScreenId] : []));
     // hudStack holds screens shown as in-game overlays while in 'playing' mode
     const [hudStack, setHudStack] = useState<VNID[]>([]);
     // Runtime Show/Hide-Element overrides: elementId -> visible. Absent = use the element's
@@ -5741,6 +5994,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // preserved variables stand and nothing blocks), so "Reload to line" lands on the edited line with
     // the stage set up. Cleared once reached.
     const fastForwardTargetRef = useRef<number | null>(null);
+    // Skip-backward replay window: the position the player rewound FROM. While catching back up
+    // to it (same scene, earlier index), previously answered Choices/TextInputs auto-replay from
+    // savedInputs instead of re-prompting. OUTSIDE this window the replay must never fire —
+    // an authored Jump To Label back to a choice re-presents it (else it silently re-picks the
+    // old option in an endless loop).
+    const backwardReplayRef = useRef<{ sceneId: VNID; index: number } | null>(null);
+    // Seconds for the CSS transition the day/night color grade uses when the time changes (set by the
+    // Set Time of Day command; auto-advance leaves a small default so its 250ms steps blend smoothly).
+    const dnTransitionRef = useRef<number>(0.4);
     /** Register/replace a timer. Shared by the Start Timer command AND the Start Timer button action. */
     const startTimer = (cfg: { timerId?: string; variableId?: VNID; mode?: 'countdown' | 'stopwatch'; duration?: number; from?: number; interval?: number; loop?: boolean; onComplete?: VNUIAction[] }): string => {
         const key = (cfg.timerId || '').trim() || 'default';
@@ -5757,6 +6019,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const key = (timerId || '').trim() || 'default';
         timersRef.current.delete(key);
         if (blockingTimerRef.current?.key === key) { const r = blockingTimerRef.current.resume; blockingTimerRef.current = null; try { r(); } catch { /* no-op */ } }
+    };
+    /** Set/advance the day/night clock (shared by the Set Time of Day command + button action). Writes
+     *  the managed time variable (wrapped 0–24) and sets the grade's CSS transition duration. */
+    const applyTimeOfDay = (mode: 'set' | 'advance', amount: number | undefined, transitionDuration?: number) => {
+        const tv = project.dayNightCycle?.timeVariableId;
+        if (!tv) return;
+        dnTransitionRef.current = Math.max(0, transitionDuration ?? 0);
+        updatePlayerState(p => {
+            if (!p) return p;
+            const cur = Number(p.variables[tv] ?? 0);
+            let next = mode === 'set' ? (amount ?? 0) : cur + (amount ?? 0);
+            next = Math.round(((((next % 24) + 24) % 24)) * 1000) / 1000;
+            return { ...p, variables: { ...p.variables, [tv]: next } };
+        });
     };
     // Phone dynamic events: the active incoming-call command (for accept/decline actions), its
     // ringtone audio + timeout id, and pending follow-up/typing timers (cleared on teardown).
@@ -5785,7 +6061,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const activeFireworksRef = useRef<{ colors: string[]; intensity: number; bursts: number; duration: number; burstHeight: number; affectsDialogue: boolean; sfxId: VNID | null; sfxVolume?: number; sfxPerBurst: boolean; key: number } | null>(null);
     const [fireworksTrigger, setFireworksTrigger] = useState(0);
     // Flashlight (persistent mouse-following dark overlay). `on` is the live toggle state.
-    const [flashlight, setFlashlight] = useState<{ radius: number; softness: number; darkness: number; color: string; toggleKey?: string; affectsDialogue: boolean; darkWhenOff: boolean; on: boolean } | null>(null);
+    const [flashlight, setFlashlight] = useState<{ radius: number; softness: number; darkness: number; radiusVariableId?: VNID | null; darknessVariableId?: VNID | null; color: string; toggleKey?: string; affectsDialogue: boolean; darkWhenOff: boolean; on: boolean } | null>(null);
     const flashlightOverlayRef = useRef<HTMLDivElement | null>(null);
 
     // Flashlight: let the player toggle it on/off with the author-chosen key.
@@ -5812,12 +6088,69 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const rect = el.getBoundingClientRect();
             const mx = e.clientX - rect.left;
             const my = e.clientY - rect.top;
-            const radiusPx = (flashlight.radius / 100) * Math.min(rect.width, rect.height);
-            el.style.background = flashlightBg(mx, my, radiusPx, flashlight.softness, hexToRgba(flashlight.color, flashlight.darkness * 100));
+            // Radius/darkness may FOLLOW number variables (e.g. a shrinking beam as a battery
+            // drains) — resolved from the live variables on every move.
+            const fVars = playerStateRef.current?.variables;
+            const fRadius = resolveVarNumber(fVars, (flashlight as any).radiusVariableId, flashlight.radius, { min: 1, max: 100 });
+            const fDarkness = resolveVarNumber(fVars, (flashlight as any).darknessVariableId, flashlight.darkness, { min: 0, max: 1 });
+            const radiusPx = (fRadius / 100) * Math.min(rect.width, rect.height);
+            el.style.background = flashlightBg(mx, my, radiusPx, flashlight.softness, hexToRgba(flashlight.color, fDarkness * 100));
         };
         window.addEventListener('mousemove', onMove);
         return () => window.removeEventListener('mousemove', onMove);
     }, [flashlight?.on, flashlight?.radius, flashlight?.softness, flashlight?.darkness, flashlight?.color]);
+
+    // Spotlights — a MAP of independent stage-light beams keyed by id (multiple positionable beams).
+    // Each has a source point + aim angle; it can swivel toward the mouse and be toggled by a hotkey.
+    const [spotlights, setSpotlights] = useState<Record<string, SpotlightState>>({});
+    const spotlightRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+
+    // A player can toggle any beam whose author-chosen key they press (ignored while typing in a field).
+    const spotToggleKeys = (Object.values(spotlights) as SpotlightState[]).map(s => s.toggleKey || '').join(',');
+    useEffect(() => {
+        if (!(Object.values(spotlights) as SpotlightState[]).some(s => s.toggleKey)) return;
+        const onKey = (e: KeyboardEvent) => {
+            const tgt = e.target as HTMLElement | null;
+            if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return;
+            const k = e.key.toLowerCase();
+            setSpotlights(prev => {
+                let changed = false; const next: Record<string, SpotlightState> = {};
+                for (const id in prev) {
+                    const s = prev[id];
+                    if (s.toggleKey && s.toggleKey.toLowerCase() === k) { next[id] = { ...s, on: !s.on }; changed = true; }
+                    else next[id] = s;
+                }
+                if (changed) e.preventDefault();
+                return changed ? next : prev;
+            });
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [spotToggleKeys]);
+
+    // Swivel each following beam to AIM toward the cursor (rotates each beam element directly, no re-render).
+    const spotFollowSig = (Object.entries(spotlights) as [string, SpotlightState][]).map(([id, s]) => `${id}:${s.on && s.followMouse ? 1 : 0}:${s.sourceX},${s.sourceY},${s.aimAngle},${s.swivelMax}`).join('|');
+    useEffect(() => {
+        if (!(Object.values(spotlights) as SpotlightState[]).some(s => s.on && s.followMouse)) return;
+        const onMove = (e: MouseEvent) => {
+            for (const id in spotlights) {
+                const s = spotlights[id];
+                if (!s.on || !s.followMouse) continue;
+                const el = spotlightRefs.current.get(id);
+                if (!el) continue;
+                const rect = el.getBoundingClientRect();
+                const spx = (s.sourceX / 100) * rect.width, spy = (s.sourceY / 100) * rect.height;
+                const vx = (e.clientX - rect.left) - spx, vy = (e.clientY - rect.top) - spy;
+                // Angle from straight-down toward the cursor (0=down, +=right), clamped around the base aim.
+                let A = Math.atan2(vx, vy) * 180 / Math.PI;
+                A = Math.max(s.aimAngle - s.swivelMax, Math.min(s.aimAngle + s.swivelMax, A));
+                el.style.transform = `rotate(${-A}deg)`;
+            }
+        };
+        window.addEventListener('mousemove', onMove);
+        return () => window.removeEventListener('mousemove', onMove);
+    }, [spotFollowSig]);
+
     const [activeCreditRoll, setActiveCreditRoll] = useState<CreditRollCommand | null>(null);
 
     const assetResolver = useCallback((assetId: VNID | null, type: 'audio' | 'video' | 'image'): string | null => {
@@ -6142,6 +6475,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 selectedItemId: playerState.selectedItemId,
                 selectedElementId: playerState.selectedElementId,
                 pickedUpItems: playerState.pickedUpItems,
+                uiPaletteOverride: playerState.uiPaletteOverride ?? undefined,
                 phone: playerState.uiState.phone ?? undefined,
             }
             };
@@ -6197,6 +6531,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // spuriously restocking (the next effect run treats each list as a first observation).
             restockPrevConditionRef.current = {};
             restockPrevWatchRef.current = {};
+            // Saves from before the Messages inbox lack threadLastRead — seed it from the current
+            // per-thread counts so history doesn't flood the inbox with unread pills. Never touch
+            // a save that already carries the field.
+            const savedPhone = saveData.playerStateData.phone;
+            const seededThreadLastRead = (savedPhone && savedPhone.threadLastRead === undefined)
+                ? (savedPhone.messages || []).reduce((acc: Record<string, number>, m: PhoneMessage) => {
+                    const k = phoneThreadKey(m); acc[k] = (acc[k] || 0) + 1; return acc;
+                }, {})
+                : savedPhone?.threadLastRead;
             updatePlayerState({
                 mode: 'playing',
                 currentSceneId: saveData.playerStateData.currentSceneId,
@@ -6209,19 +6552,33 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 selectedItemId: saveData.playerStateData.selectedItemId,
                 selectedElementId: saveData.playerStateData.selectedElementId,
                 pickedUpItems: saveData.playerStateData.pickedUpItems,
+                uiPaletteOverride: saveData.playerStateData.uiPaletteOverride ?? null, // palette→UI restyle survives save/load
                 history: [],
                 savedInputs: {},
-                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: saveData.playerStateData.phone ? { ...saveData.playerStateData.phone, outgoingCall: null } : null },
+                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: savedPhone ? { ...savedPhone, threadLastRead: seededThreadLastRead, typing: null, outgoingCall: null, activeCall: savedPhone.activeCall?.phase === 'active' ? savedPhone.activeCall : null } : null },
                 musicState: saveData.playerStateData.musicState,
             });
             setScreenStack([]);
             setHudStack([]);
             setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
-            timersRef.current.clear(); blockingTimerRef.current = null; fastForwardTargetRef.current = null; // stop any running background timers / hot-reload fast-forward from a prior session
+            timersRef.current.clear(); blockingTimerRef.current = null; fastForwardTargetRef.current = null; backwardReplayRef.current = null; // stop any running background timers / hot-reload fast-forward / rewind-replay window from a prior session
             setIsJustLoaded(true);
             // Re-arm a call that was ringing when the game was saved (ringtone + timeout restart).
             const savedCall = saveData.playerStateData.phone?.incomingCall;
             if (savedCall?.phase === 'ringing' && savedCall.cmd) rearmIncomingCall(savedCall.cmd);
+            // Resume a scripted call that was mid-transcript at save: re-arm the next-line timer
+            // (voice for the already-landed line intentionally doesn't replay). Calls saved while
+            // still DIALING were dropped above, like the legacy outgoingCall. When the call was
+            // paused on replies, nothing to re-arm — the tap resumes it.
+            const savedActive = saveData.playerStateData.phone?.activeCall;
+            if (savedActive?.phase === 'active' && !savedActive.pendingReplies?.length) {
+                pushPhoneTimer(playNextCallLine, 900);
+            }
+            // Resume a scripted TEXT conversation mid-sequence (same contract as activeCall:
+            // landed lines are already in messages; paused-on-replies waits for the tap).
+            if (savedPhone?.activeTextConvo && !savedPhone.pendingReplies?.length) {
+                pushPhoneTimer(playNextTextLine, 900);
+            }
             // Plugin hook: a save has just been loaded (state applied).
             try { pluginManager.invokeHook('onLoadAfterSave', saveData); } catch { /* isolated */ }
         };
@@ -6231,7 +6588,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
 
     // --- State Initialization ---
-    const startNewGame = useCallback(() => {
+    // startOverride ("Play from here", editor test play): start the fresh game at this scene +
+    // command instead of project.startSceneId. All initialization (menuVariables, persistent
+    // vars, economy reset) is identical; the scene's non-blocking visual setup fast-forwards so
+    // the stage is composed when the chosen line runs.
+    const startNewGame = useCallback((startOverride?: { sceneId: VNID; index: number }) => {
         stopAndResetMusic();
         // Tear down any in-flight phone event (ringing call / queued follow-ups) for the fresh start.
         clearPhoneTimers(); stopRingtone(); activeCallCmdRef.current = null;
@@ -6269,11 +6630,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
         // Note: We can't use navigateToScene here because it's defined after startNewGame
         // We'll check start scene conditions inline
-        let startSceneId = project.startSceneId;
+        const hasOverride = !!(startOverride && project.scenes[startOverride.sceneId]);
+        let startSceneId = hasOverride ? startOverride!.sceneId : project.startSceneId;
         const startScene = project.scenes[startSceneId];
-        
-        // Check if start scene has conditions that fail
-        if (startScene && startScene.conditions && startScene.conditions.length > 0) {
+
+        // Check if start scene has conditions that fail (skipped for "Play from here" — the
+        // author explicitly chose the scene).
+        if (!hasOverride && startScene && startScene.conditions && startScene.conditions.length > 0) {
             const conditionsMet = combineConditions(startScene.conditions, condition => {
                 const varValue = initialVariables[condition.variableId];
                 if (varValue === undefined) return false;
@@ -6321,7 +6684,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         setScreenStack([]);
         setHudStack([]);
         setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
-        timersRef.current.clear(); blockingTimerRef.current = null; fastForwardTargetRef.current = null; // stop any running background timers / hot-reload fast-forward from a prior session
+        timersRef.current.clear(); blockingTimerRef.current = null; fastForwardTargetRef.current = null; backwardReplayRef.current = null; // stop any running background timers / hot-reload fast-forward / rewind-replay window from a prior session
+        // "Play from here": fast-forward the scene's visual setup up to the chosen command
+        // (same FF_VISUAL_TYPES machinery as the hot-reload's "Reload to line"). MUST be set
+        // AFTER the teardown line above, which nulls the ref.
+        if (hasOverride) {
+            const cmds = project.scenes[startSceneId]?.commands || [];
+            const idx = Math.max(0, Math.min(startOverride!.index, Math.max(0, cmds.length - 1)));
+            fastForwardTargetRef.current = idx > 0 ? idx : null;
+        }
     }, [project, stopAndResetMusic, menuVariables]);
 
     // Start a new game with a fade: title fades to black (≈400ms), the scene loads behind the
@@ -6334,6 +6705,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             window.setTimeout(() => setGameStartFade('none'), 450);
         }, 400);
     }, [startNewGame]);
+
+    // "Play from here" (editor): start straight into the story at the requested scene/command —
+    // no title screen, just a quick fade-in over the composed stage. Run-once per mount.
+    const startAtConsumedRef = useRef(false);
+    useEffect(() => {
+        if (!startAt || startAtConsumedRef.current) return;
+        startAtConsumedRef.current = true;
+        startNewGame(startAt);
+        setGameStartFade('fromBlack');
+        window.setTimeout(() => setGameStartFade('none'), 450);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [startAt]);
 
     // ─── Hot reload (editor tooling) ───────────────────────────────────────────
     // The popped-out Test Play window dispatches a `flourish:hotReload` DOM event (detail:
@@ -6847,16 +7230,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     // Ambient Noise Management
     useEffect(() => {
-        // Only manage ambient audio when NOT actively playing the game
-        const isInActiveGameplay = playerState?.mode === 'playing' && screenStack.length === 0;
-        if (isInActiveGameplay) {
-            return;
-        }
-
+        // Manage the per-SCREEN ambient noise for whichever screen is on top — a menu/pause/title
+        // screen (screenStack) OR a screen shown mid-game via ShowScreen (hudStack, e.g. a full screen
+        // opened from a scene). With no screen shown, or a screen with no ambient set, fade any out.
         const audio = ambientNoiseAudioRef.current;
-        const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
-        
-        if (!activeScreen) {
+        const activeScreenId = screenStack.length > 0
+            ? screenStack[screenStack.length - 1]
+            : (hudStack.length > 0 ? hudStack[hudStack.length - 1] : null);
+        const activeScreen = activeScreenId ? project.uiScreens[activeScreenId] : null;
+
+        if (!activeScreen || !activeScreen.ambientNoise) {
             if (audio && !audio.paused) {
                 fadeAudio(audio, 0, 0.5, () => audio.pause());
             }
@@ -6918,7 +7301,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             menuAmbientUrlRef.current = newAudioUrl;
         }
 
-    }, [screenStack, playerState?.mode, project.uiScreens, assetResolver, settings.ambientVolume, fadeAudio]);
+    }, [screenStack, hudStack, playerState?.mode, project.uiScreens, assetResolver, settings.ambientVolume, fadeAudio]);
     
     useEffect(() => {
         if (!ambientNoiseAudioRef.current) return;
@@ -7416,6 +7799,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     if (!parallelWarnedRef.current.has(key)) {
                         parallelWarnedRef.current.add(key);
                         console.warn(`[Parallel CE "${ce.name}"] command "${cmd.type}" skipped (not background-safe).`);
+                        // Surface it (test-play) so a "Show Character / Dialogue / etc. in a Parallel event
+                        // does nothing" is never a SILENT failure — point the author at the fix.
+                        notify(`"${cmd.type}" won't run in the Parallel event "${ce.name}". Parallel events only run background commands (variables, audio, scripts). Use a "Called" or "Auto" event for on-screen commands.`, 'warning');
                     }
                     continue;
                 }
@@ -7913,13 +8299,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     case 'RestockCollection': result = handleRestockCollectionCommand(cmd, hctx); break;
                     case 'BuyItem': result = handleBuyItemCommand(cmd, hctx); break;
                     case 'SellItem': result = handleSellItemCommand(cmd, hctx); break;
-                    case 'PlaceLights': result = { advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters }) }; break;
-                    case 'ClearLights': result = { advance: true, stagePatch: () => ({ lights: [] }) }; break;
+                    case 'PlaceLights': result = { advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null }) }; break;
+                    case 'ClearLights': result = { advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null }) }; break;
                     case 'CreditRoll': { setActiveCreditRoll(cmd); result = handleCreditRoll(cmd, hctx); break; }
                     // Screen effects are INLINE in the main loop (component refs/state), so we replicate
                     // the exact same effect here (identical refs/render path) rather than touch the loop.
                     case 'ShakeScreen': {
-                        activeShakeRef.current = { intensity: cmd.intensity, duration: cmd.duration };
+                        activeShakeRef.current = { intensity: resolveVarNumber(playerStateRef.current?.variables, cmd.intensityVariableId, cmd.intensity, { min: 1, max: 10 }), duration: cmd.duration };
                         setShakeTrigger(prev => prev + 1);
                         if (cmd.duration > 0) {
                             const tid = window.setTimeout(() => {
@@ -7932,20 +8318,24 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         return;
                     }
                     case 'FlashScreen': {
-                        activeFlashRef.current = { color: cmd.color, duration: cmd.duration, key: Date.now() };
+                        activeFlashRef.current = { color: cmd.color, duration: resolveVarNumber(playerStateRef.current?.variables, cmd.durationVariableId, cmd.duration, { min: 0.05, max: 30 }), key: Date.now() };
                         setFlashTrigger(prev => prev + 1);
                         return;
                     }
                     case 'TintScreen': {
-                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, transitionDuration: cmd.duration } } } : p);
+                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, tintOpacity: cmd.opacity ?? 100, tintOpacityVariableId: cmd.opacityVariableId ?? null, transitionDuration: cmd.duration } } } : p);
                         return;
                     }
                     case 'PanZoomScreen': {
-                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: cmd.zoom, panX: cmd.panX, panY: cmd.panY, transitionDuration: cmd.duration } } } : p);
+                        const pzVars = playerStateRef.current?.variables;
+                        const pzZoom = resolveVarNumber(pzVars, cmd.zoomVariableId, cmd.zoom, { min: 0.1, max: 5 });
+                        const pzX = resolveVarNumber(pzVars, cmd.panXVariableId, cmd.panX, { min: -100, max: 100 });
+                        const pzY = resolveVarNumber(pzVars, cmd.panYVariableId, cmd.panY, { min: -100, max: 100 });
+                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: pzZoom, panX: pzX, panY: pzY, transitionDuration: cmd.duration } } } : p);
                         return;
                     }
                     case 'ResetScreenEffects': {
-                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] } } } : p);
+                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: 'transparent', tintOpacity: 100, tintOpacityVariableId: null, zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] } } } : p);
                         return;
                     }
                     // More inline-effect commands (refs/component state) — replicate the main loop's exact
@@ -7954,6 +8344,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         if (cmd.enabled) {
                             setFlashlight({
                                 radius: cmd.radius ?? 22, softness: cmd.softness ?? 0.6, darkness: cmd.darkness ?? 0.85,
+                                radiusVariableId: cmd.radiusVariableId ?? null, darknessVariableId: cmd.darknessVariableId ?? null,
                                 color: cmd.color || '#000000', toggleKey: cmd.toggleKey, affectsDialogue: cmd.affectsDialogue !== false,
                                 darkWhenOff: cmd.darkWhenOff === true, on: true,
                             });
@@ -7961,9 +8352,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         } else { setFlashlight(null); }
                         return;
                     }
+                    case 'Spotlight': {
+                        const sid = cmd.spotlightId || 'main';
+                        if (cmd.enabled) {
+                            setSpotlights(prev => ({ ...prev, [sid]: makeSpotlightState(cmd) }));
+                            if (cmd.sfxId) playSound(cmd.sfxId);
+                        } else { setSpotlights(prev => { const n = { ...prev }; delete n[sid]; return n; }); }
+                        return;
+                    }
                     case 'Lightning': {
                         activeLightningRef.current = {
-                            color: cmd.color || '#EAF2FF', intensity: cmd.intensity ?? 0.9, duration: cmd.duration ?? 0.7,
+                            color: cmd.color || '#EAF2FF', intensity: resolveVarNumber(playerStateRef.current?.variables, cmd.intensityVariableId, cmd.intensity ?? 0.9, { min: 0, max: 1 }), duration: cmd.duration ?? 0.7,
                             flashes: cmd.flashes ?? 2, affectsDialogue: cmd.affectsDialogue !== false, key: Date.now(),
                         };
                         setLightningTrigger(prev => prev + 1);
@@ -7975,8 +8374,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     }
                     case 'Fireworks': {
                         activeFireworksRef.current = {
-                            colors: (cmd.colors && cmd.colors.length) ? cmd.colors : [], intensity: cmd.intensity ?? 1,
-                            bursts: Math.max(1, cmd.bursts ?? 3), duration: cmd.duration ?? 2.5, burstHeight: cmd.burstHeight ?? 0.7,
+                            colors: (cmd.colors && cmd.colors.length) ? cmd.colors : [], intensity: resolveVarNumber(playerStateRef.current?.variables, cmd.intensityVariableId, cmd.intensity ?? 1, { min: 0, max: 1 }),
+                            bursts: Math.round(resolveVarNumber(playerStateRef.current?.variables, cmd.burstsVariableId, Math.max(1, cmd.bursts ?? 3), { min: 1, max: 20 })), duration: cmd.duration ?? 2.5,
+                            burstHeight: resolveVarNumber(playerStateRef.current?.variables, cmd.burstHeightVariableId, cmd.burstHeight ?? 0.7, { min: 0, max: 1 }),
                             affectsDialogue: cmd.affectsDialogue !== false, sfxId: cmd.sfxId ?? null, sfxVolume: cmd.sfxVolume,
                             sfxPerBurst: !!cmd.sfxPerBurst, key: Date.now(),
                         };
@@ -7988,7 +8388,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         return;
                     }
                     case 'SetScreenOverlayEffect': {
-                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: cmd.effectType, intensity: cmd.intensity, variant: cmd.variant, color: cmd.color, params: cmd.params }) } } } : p);
+                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: cmd.effectType, intensity: cmd.intensity, intensityVariableId: cmd.intensityVariableId ?? null, variant: cmd.variant, color: cmd.color, params: cmd.params }) } } } : p);
                         const overlayDur = cmd.duration ?? 0;
                         if (overlayDur > 0) {
                             const effType = cmd.effectType;
@@ -8174,6 +8574,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         activeLightningRef.current = null;
                         activeFireworksRef.current = null;
                         setFlashlight(null);
+                        setSpotlights({});
                         activeShakeRef.current = null;
                         scheduler.reset();
                         variableStoreRef.current = null;
@@ -8201,17 +8602,24 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // --- Auto-replay saved inputs from backward skip ---
             // When the player goes backward and then advances forward again, previously-
             // entered choices and text inputs are replayed automatically instead of
-            // re-prompting the player.
+            // re-prompting the player. STRICTLY gated to the rewind catch-up window:
+            // reaching an answered Choice through story flow (e.g. an authored Jump To Label
+            // loop back to the choice) must RE-PRESENT it, not silently re-pick the old option.
+            const hw = backwardReplayRef.current;
+            if (hw && (playerState.currentSceneId !== hw.sceneId || playerState.currentIndex >= hw.index)) {
+                backwardReplayRef.current = null; // caught up (or navigated away) — window over
+            }
+            const replayingBackward = backwardReplayRef.current != null;
             const savedInputKey = `${playerState.currentSceneId}:${playerState.currentIndex}`;
             const savedInput = playerState.savedInputs[savedInputKey];
 
-            if (savedInput && command.type === CommandType.Choice && savedInput.type === 'choice') {
+            if (replayingBackward && savedInput && command.type === CommandType.Choice && savedInput.type === 'choice') {
                 runtimeDebugLog('[BACKWARD REPLAY] Auto-replaying saved choice:', savedInput.choice.text);
                 handleChoiceSelect(savedInput.choice);
                 return;
             }
 
-            if (savedInput && command.type === CommandType.TextInput && savedInput.type === 'textInput') {
+            if (replayingBackward && savedInput && command.type === CommandType.TextInput && savedInput.type === 'textInput') {
                 runtimeDebugLog('[BACKWARD REPLAY] Auto-replaying saved text input:', savedInput.value);
                 const cmd = command as TextInputCommand;
                 updatePlayerState(p => {
@@ -8471,9 +8879,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
                     // Wait until a live condition becomes true, then advance. Polled every 150ms against
                     // the current variables (uses the standard and/or conditions logic). No duration.
+                    // Merge the dirty UI-variable buffer so a scene HotSpot / HUD click that flips a
+                    // variable via executeUIAction (which parks the value in uiVariables until a merge)
+                    // releases the wait — the rest of the live engine reads the same merged view.
                     if (cmd.waitForCondition) {
                         const conditionMet = (): boolean =>
-                            evaluateConditions(cmd.waitConditions, playerStateRef.current?.variables ?? {});
+                            evaluateConditions(cmd.waitConditions, mergeDirtyUiVariables(playerStateRef.current?.variables ?? {}));
                         if (conditionMet()) {
                             advance();
                         } else {
@@ -8496,7 +8907,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             const item = project.items?.[itemId];
                             if (!item) return true; // unknown item → satisfied, so we never deadlock on a stale id
                             const need = Math.max(1, Number(cmd.targetItemCounts?.[itemId] ?? 1) || 1);
-                            const c = Number((playerStateRef.current?.variables ?? {})[item.countVariableId] ?? 0);
+                            // Merge dirty UI vars so a HotSpot / HUD pickup (executeUIAction) counts here too.
+                            const c = Number(mergeDirtyUiVariables(playerStateRef.current?.variables ?? {})[item.countVariableId] ?? 0);
                             return c >= need;
                         };
                         const conditionMet = (): boolean =>
@@ -8607,9 +9019,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.ShakeScreen: {
                     const cmd = command as ShakeScreenCommand;
-                    
+
                     // Set shake in ref and force a render so the CSS class is applied
-                    activeShakeRef.current = { intensity: cmd.intensity, duration: cmd.duration };
+                    // (intensity may follow a number variable — read when the command runs)
+                    activeShakeRef.current = { intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity, { min: 1, max: 10 }), duration: cmd.duration };
                     setShakeTrigger(prev => prev + 1);
                     
                     // Duration 0 = persistent (shake runs until manually cleared / scene change)
@@ -8627,24 +9040,24 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.TintScreen: {
                     const cmd = command as TintScreenCommand;
-                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, transitionDuration: cmd.duration }}} : null);
+                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, tintOpacity: cmd.opacity ?? 100, tintOpacityVariableId: cmd.opacityVariableId ?? null, transitionDuration: cmd.duration }}} : null);
                     break;
                 }
                 case CommandType.PanZoomScreen: {
                      const cmd = command as PanZoomScreenCommand;
-                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: cmd.zoom, panX: cmd.panX, panY: cmd.panY, transitionDuration: cmd.duration }}} : null);
+                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: resolveVarNumber(p.variables, cmd.zoomVariableId, cmd.zoom, { min: 0.1, max: 5 }), panX: resolveVarNumber(p.variables, cmd.panXVariableId, cmd.panX, { min: -100, max: 100 }), panY: resolveVarNumber(p.variables, cmd.panYVariableId, cmd.panY, { min: -100, max: 100 }), transitionDuration: cmd.duration }}} : null);
                     break;
                 }
                 case CommandType.ResetScreenEffects: {
                     const cmd = command as ResetScreenEffectsCommand;
-                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] }}} : null);
+                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: 'transparent', tintOpacity: 100, tintOpacityVariableId: null, zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] }}} : null);
                     break;
                 }
                 case CommandType.FlashScreen: {
                     const cmd = command as FlashScreenCommand;
 
                     // Set flash in ref with unique key and trigger re-render
-                    activeFlashRef.current = { color: cmd.color, duration: cmd.duration, key: Date.now() };
+                    activeFlashRef.current = { color: cmd.color, duration: resolveVarNumber(playerState.variables, cmd.durationVariableId, cmd.duration, { min: 0.05, max: 30 }), key: Date.now() };
                     setFlashTrigger(prev => prev + 1);
 
                     // Let the normal advance() function handle index progression
@@ -8654,7 +9067,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const cmd = command as LightningCommand;
                     activeLightningRef.current = {
                         color: cmd.color || '#EAF2FF',
-                        intensity: cmd.intensity ?? 0.9,
+                        intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity ?? 0.9, { min: 0, max: 1 }),
                         duration: cmd.duration ?? 0.7,
                         flashes: cmd.flashes ?? 2,
                         affectsDialogue: cmd.affectsDialogue !== false,
@@ -8674,10 +9087,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const cmd = command as FireworksCommand;
                     activeFireworksRef.current = {
                         colors: (cmd.colors && cmd.colors.length) ? cmd.colors : [],
-                        intensity: cmd.intensity ?? 1,
-                        bursts: Math.max(1, cmd.bursts ?? 3),
+                        intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity ?? 1, { min: 0, max: 1 }),
+                        bursts: Math.round(resolveVarNumber(playerState.variables, cmd.burstsVariableId, Math.max(1, cmd.bursts ?? 3), { min: 1, max: 20 })),
                         duration: cmd.duration ?? 2.5,
-                        burstHeight: cmd.burstHeight ?? 0.7,
+                        burstHeight: resolveVarNumber(playerState.variables, cmd.burstHeightVariableId, cmd.burstHeight ?? 0.7, { min: 0, max: 1 }),
                         affectsDialogue: cmd.affectsDialogue !== false,
                         sfxId: cmd.sfxId ?? null,
                         sfxVolume: cmd.sfxVolume,
@@ -8697,11 +9110,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.PlaceLights: {
                     const cmd = command as PlaceLightsCommand;
-                    applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters }) });
+                    applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null }) });
                     break;
                 }
                 case CommandType.ClearLights: {
-                    applyResult({ advance: true, stagePatch: () => ({ lights: [] }) });
+                    applyResult({ advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null }) });
                     break;
                 }
                 case CommandType.ShowPhone: { applyResult(handleShowPhone(command as ShowPhoneCommand, commandContext)); break; }
@@ -8725,6 +9138,58 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     startIncomingCall(cmd);
                     break;
                 }
+                case CommandType.PhoneNotify: {
+                    // Non-blocking: banner/badge/list, story keeps playing.
+                    startPhoneNotify(command as PhoneNotifyCommand);
+                    break;
+                }
+                case CommandType.ShowMap: {
+                    // Full-screen travel map: pauses the scene (like a Choice) until the player taps
+                    // an unlocked location or cancels. TRANSIENT overlay — a save while it's open
+                    // re-presents the map on load (the paused command re-runs).
+                    const cmd = command as ShowMapCommand;
+                    if (!project.maps?.[cmd.mapId]) {
+                        runtimeDebugWarn(`[ShowMap] Map ${cmd.mapId} not found — skipping.`);
+                        break; // advance normally
+                    }
+                    instantAdvance = false;
+                    updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true, mapOverlay: { mapId: cmd.mapId, allowCancel: cmd.allowCancel, fromCommand: true } } } : null);
+                    break;
+                }
+                case CommandType.ShowMiniGame: {
+                    // Full-screen mini game: pauses the scene (like a Choice) until an exit fires
+                    // (win / skip / fail — each runs its authored actions). TRANSIENT overlay — a
+                    // save while it's open re-presents the game on load (the paused command re-runs).
+                    const cmd = command as ShowMiniGameCommand;
+                    const game = project.miniGames?.[cmd.gameId];
+                    if (!game || !game.stages?.length) {
+                        runtimeDebugWarn(`[ShowMiniGame] Mini game ${cmd.gameId} ${game ? 'has no stages' : 'not found'} — skipping.`);
+                        break; // advance normally
+                    }
+                    instantAdvance = false;
+                    updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true, miniGameOverlay: { gameId: cmd.gameId, fromCommand: true } } } : null);
+                    break;
+                }
+                case CommandType.StartPhoneCall: {
+                    // Player-dialed scripted call: dialing beat → voiced in-call transcript. Blocking
+                    // (default) pauses the scene until the call ends.
+                    const cmd = command as StartPhoneCallCommand;
+                    const contact = (project.ui.phoneContacts || []).find(c => c.characterId === cmd.contactId);
+                    // Own lines win; else the contact's gated conversation list; else the legacy slot.
+                    const contactPick = !cmd.conversation?.lines?.length && contact
+                        ? pickConversation(contact.callConversations, contact.callConversation, playerStateRef.current?.variables || {}, playerStateRef.current?.uiState.phone?.playedConversations || [])
+                        : null;
+                    const conversation = cmd.conversation?.lines?.length ? cmd.conversation : contactPick?.conversation;
+                    if (!conversation?.lines?.length) {
+                        runtimeDebugWarn('[StartPhoneCall] No conversation on the command or the contact — skipping.');
+                        break; // instantAdvance stays true → scene continues
+                    }
+                    if (contactPick?.entry?.once) markConversationPlayed(contactPick.entry.id);
+                    const blocking = cmd.blocking !== false;
+                    if (blocking) instantAdvance = false;
+                    startOutgoingTranscriptCall({ contactId: cmd.contactId, portrait: cmd.portrait ?? contact?.avatar, conversation, dialingMs: cmd.dialingMs, blocking });
+                    break;
+                }
                 case CommandType.Flashlight: {
                     const cmd = command as FlashlightCommand;
                     if (cmd.enabled) {
@@ -8732,6 +9197,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             radius: cmd.radius ?? 22,
                             softness: cmd.softness ?? 0.6,
                             darkness: cmd.darkness ?? 0.85,
+                            radiusVariableId: cmd.radiusVariableId ?? null,
+                            darknessVariableId: cmd.darknessVariableId ?? null,
                             color: cmd.color || '#000000',
                             toggleKey: cmd.toggleKey,
                             affectsDialogue: cmd.affectsDialogue !== false,
@@ -8741,6 +9208,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         if (cmd.sfxId) playSound(cmd.sfxId);
                     } else {
                         setFlashlight(null);
+                    }
+                    break;
+                }
+                case CommandType.Spotlight: {
+                    const cmd = command as SpotlightCommand;
+                    const sid = cmd.spotlightId || 'main';
+                    if (cmd.enabled) {
+                        setSpotlights(prev => ({ ...prev, [sid]: makeSpotlightState(cmd) }));
+                        if (cmd.sfxId) playSound(cmd.sfxId);
+                    } else {
+                        setSpotlights(prev => { const n = { ...prev }; delete n[sid]; return n; });
                     }
                     break;
                 }
@@ -8755,6 +9233,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, {
                                     type: cmd.effectType,
                                     intensity: cmd.intensity,
+                                    intensityVariableId: cmd.intensityVariableId ?? null,
                                     variant: cmd.variant,
                                     color: (cmd as any).color,
                                     params: (cmd as any).params,
@@ -8810,6 +9289,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     } else {
                         // Otherwise push onto the normal screen stack (menus/title/pause)
                         setScreenStack(s => [...s, cmd.screenId]);
+                    }
+                    break;
+                }
+                case CommandType.HideScreen: {
+                    const cmd = command as any;
+                    if (cmd.all) {
+                        setHudStack([]);
+                        setScreenStack([]);
+                    } else if (cmd.screenId) {
+                        setHudStack(s => s.filter(id => id !== cmd.screenId));
+                        setScreenStack(s => s.filter(id => id !== cmd.screenId));
+                    } else if (hudStack.length > 0) {
+                        setHudStack(s => s.slice(0, -1));
+                    } else if (screenStack.length > 0) {
+                        setScreenStack(s => s.slice(0, -1));
                     }
                     break;
                 }
@@ -8959,6 +9453,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 case CommandType.StopTimer: {
                     stopTimer((command as StopTimerCommand).timerId);
                     break;
+                }
+                case CommandType.SetTimeOfDay: {
+                    const cmd = command as SetTimeOfDayCommand;
+                    applyTimeOfDay(cmd.mode, cmd.mode === 'set' ? cmd.hour : cmd.hours, cmd.transitionDuration);
+                    break; // non-blocking: instantAdvance stays true
                 }
                 default: {
                     // Custom command registered by a plugin (type = "pluginId.command").
@@ -9344,6 +9843,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
      *  - Properly handles cross-scene navigation, restoring the target scene's state.
      */
     const handleSkipBackward = useCallback(() => {
+        // Arm the replay window: remember where the player rewound FROM, so answered prompts
+        // auto-replay only while catching back up to this point (mirrors the targetIdx guard
+        // below — only when a rewind will actually happen). Repeated rewinds keep the furthest mark.
+        const cur = playerStateRef.current;
+        if (cur && cur.history.some(h => h.type === 'dialogue')) {
+            const hw = backwardReplayRef.current;
+            if (!(hw && hw.sceneId === cur.currentSceneId && hw.index > cur.currentIndex)) {
+                backwardReplayRef.current = { sceneId: cur.currentSceneId, index: cur.currentIndex };
+            }
+        }
         updatePlayerState(p => {
             if (!p || p.history.length === 0) return p;
 
@@ -9506,7 +10015,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
              const advanceOnReturn = closeBehavior === 'advance'
                  || (closeBehavior === 'default' && !wasPaused && !closingScreen?.hudNonBlocking);
              const finishReturn = () => {
-                 updatePlayerState(p => p ? { ...p, mode: 'playing' } : null);
+                 // Persist any values the player set on the closing screen (a name field, appearance
+                 // pickers, etc.) — otherwise dirty UI-screen variables are discarded on close.
+                 // flushSync is REQUIRED: the merge must run while the dirty set is still populated.
+                 // A deferred merge followed by the synchronous clear() below commits NOTHING
+                 // (mergeDirtyUiVariables early-returns on an empty set) — that silently dropped
+                 // dress-up outfit picks before a Show Character command.
+                 flushSync(() => {
+                     updatePlayerState(p => p ? { ...p, mode: 'playing', variables: mergeDirtyUiVariables(p.variables) } : null);
+                 });
+                 uiDirtyVariableIdsRef.current.clear();
                  setScreenStack([]);
                  setHudStack([]);
                  // Resume music if it was paused while the menu was open
@@ -9573,6 +10091,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const isClosing = hudStack.includes(targetId);
                 setHudStack(s => s.includes(targetId) ? s.filter(id => id !== targetId) : [...s, targetId]);
                 if (isClosing) {
+                    // Persist any values the player set on the closing overlay (name, appearance, etc.)
+                    // before honoring the close behavior — same as JumpToScene / ReturnToPreviousScreen.
+                    // flushSync is REQUIRED: a deferred merge + the synchronous clear() below committed
+                    // NOTHING (mergeDirtyUiVariables early-returns on an empty dirty set), which dropped
+                    // dress-up outfits closed via a plain ToggleScreen "Done" button.
+                    flushSync(() => {
+                        updatePlayerState(p => p ? { ...p, variables: mergeDirtyUiVariables(p.variables) } : null);
+                    });
+                    uiDirtyVariableIdsRef.current.clear();
                     // Closing an overlay via toggle: honor its on-close behavior (default = nothing).
                     const cs = project.uiScreens[targetId];
                     const b = cs?.onCloseBehavior || 'default';
@@ -9944,18 +10471,47 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Open straight to the chat view (the scene command additionally appends a message).
             updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: true, view: 'chat', notification: null, unread: false } } } : null);
         } else if (action.type === UIActionType.ShowPhoneHistory) {
-            // Open the phone to the recents / call-log view.
-            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: true, view: 'history', notification: null, unread: false } } } : null);
+            // Open the phone to the recents / call-log view (marks notifications read).
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: true, view: 'history', notification: null, unread: false, notifications: (p.uiState.phone?.notifications || []).map(e => e.read ? e : { ...e, read: true }) } } } : null);
         } else if (action.type === UIActionType.ShowPhoneContacts) {
             // Open the phone to the Contacts app (roster with per-contact Call / Message).
             updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: true, view: 'contacts', activeContactId: null, notification: null, unread: false } } } : null);
+        } else if (action.type === UIActionType.OpenPhoneApp) {
+            // Generic app deep-link: open the phone (if closed) straight to a registry app.
+            // Unknown/disabled ids fall back to 'home' at render (resolvePhoneApp).
+            const appId = ((action as OpenPhoneAppAction).appId || 'home') as PhoneAppId;
+            if (project.ui.phoneOpenSoundId && !playerState?.uiState.phone?.open) playSound(project.ui.phoneOpenSoundId, undefined, false);
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: true, view: appId, ...(appId === 'contacts' ? { activeContactId: null } : {}), ...(appId === 'history' ? { notifications: (p.uiState.phone?.notifications || []).map(e => e.read ? e : { ...e, read: true }) } : {}), notification: null, unread: false } } } : null);
+        } else if (action.type === UIActionType.ShowMap) {
+            // Button-driven travel map (no paused command — closing just closes).
+            const mapId = (action as ShowMapAction).mapId;
+            if (project.maps?.[mapId]) {
+                updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, mapOverlay: { mapId, allowCancel: true, fromCommand: false } } } : null);
+            } else {
+                runtimeDebugWarn(`[ShowMap action] Map ${mapId} not found`);
+            }
+        } else if (action.type === UIActionType.ShowMiniGame) {
+            // Button-driven mini game (no paused command — its exits run actions, then just close).
+            const gameId = (action as ShowMiniGameAction).gameId;
+            if (project.miniGames?.[gameId]?.stages?.length) {
+                updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, miniGameOverlay: { gameId, fromCommand: false } } } : null);
+            } else {
+                runtimeDebugWarn(`[ShowMiniGame action] Mini game ${gameId} not found or has no stages`);
+            }
+        } else if (action.type === UIActionType.ClearUiPalette) {
+            // Revert the palette→UI restyle a coloring mini game applied.
+            updatePlayerState(p => p ? { ...p, uiPaletteOverride: null } : null);
         } else if (action.type === UIActionType.HidePhone) {
             if (project.ui.phoneCloseSoundId && playerState?.uiState.phone?.open) playSound(project.ui.phoneCloseSoundId, undefined, false);
             updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: false, waiting: false, pendingChoices: undefined, notification: null } } } : null);
             // Optional: closing the phone advances the story one beat (so reading + closing continues
             // without an extra click). Opt-in via phoneOnCloseBehavior; default leaves the scene as-is.
+            // A LOCKED timed dialogue line is exempt — only its timer may advance it.
             if (project.ui.phoneOnCloseBehavior === 'advance' && playerState?.mode === 'playing') {
-                updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+                const d0 = playerStateRef.current?.uiState.dialogue;
+                if (!(d0?.timeLimitLocked && (d0.timeLimit ?? 0) > 0)) {
+                    updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+                }
             }
         } else if (action.type === UIActionType.HidePhoneText) {
             updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), messages: [], waiting: false, pendingChoices: undefined, pendingReplies: undefined, typing: null } } } : null);
@@ -9993,6 +10549,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 activeLightningRef.current = null;
                 activeFireworksRef.current = null;
                 setFlashlight(null);
+                setSpotlights({});
                 activeShakeRef.current = null;
 
                 // Reset scheduler and variable cache before executing the new scene
@@ -10289,6 +10846,34 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 runtimeDebugLog('[PlaySound] action triggered:', soundAction.audioId, 'volume:', soundAction.volume, 'loop:', soundAction.loop);
                 playSound(soundAction.audioId, soundAction.volume, soundAction.loop);
             }
+        } else if (action.type === UIActionType.PlayMusic) {
+            // Route through the exact same handler as the Play Music COMMAND so behaviour (fade, single
+            // music channel, loop, musicState bookkeeping / save-restore) is identical.
+            const a = action as { audioId?: VNID; loop?: boolean; fadeDuration?: number; volume?: number };
+            if (a.audioId) {
+                const cmd = { type: CommandType.PlayMusic, audioId: a.audioId, loop: a.loop ?? true, fadeDuration: a.fadeDuration ?? 1, volume: a.volume } as PlayMusicCommand;
+                const r = handlePlayMusic(cmd, { project, playerState: playerStateRef.current, assetResolver, musicAudioRef, fadeAudio, settings, setPlayerState: updatePlayerState } as any);
+                if (r.updates?.musicState) updatePlayerState(p => p ? { ...p, musicState: { ...p.musicState, ...r.updates!.musicState } } : p);
+            }
+        } else if (action.type === UIActionType.StopMusic) {
+            const a = action as { fadeDuration?: number };
+            const cmd = { type: CommandType.StopMusic, fadeDuration: a.fadeDuration ?? 1 } as StopMusicCommand;
+            const r = handleStopMusic(cmd, { musicAudioRef, fadeAudio, playerState: playerStateRef.current } as any);
+            if (r.updates?.musicState) updatePlayerState(p => p ? { ...p, musicState: { ...p.musicState, ...r.updates!.musicState } } : p);
+        } else if (action.type === UIActionType.ShowSpotlight) {
+            const a = action as any;
+            const sid = a.spotlightId || 'main';
+            setSpotlights(prev => ({ ...prev, [sid]: makeSpotlightState(a) }));
+            if (a.sfxId) playSound(a.sfxId);
+        } else if (action.type === UIActionType.HideSpotlight) {
+            const sid = (action as any).spotlightId || 'main';
+            setSpotlights(prev => { const n = { ...prev }; delete n[sid]; return n; });
+        } else if (action.type === UIActionType.ShowFlashlight) {
+            const a = action as any;
+            setFlashlight({ radius: a.radius ?? 22, softness: a.softness ?? 0.6, darkness: a.darkness ?? 0.85, radiusVariableId: null, darknessVariableId: null, color: a.color || '#000000', toggleKey: a.toggleKey, affectsDialogue: a.affectsDialogue !== false, darkWhenOff: false, on: true });
+            if (a.sfxId) playSound(a.sfxId);
+        } else if (action.type === UIActionType.HideFlashlight) {
+            setFlashlight(f => f ? { ...f, on: false } : f);
         } else if (action.type === UIActionType.CycleLayerAsset) {
             runtimeDebugLog('CycleLayerAsset handler triggered, playerState exists:', !!playerState);
             
@@ -10462,6 +11047,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             startTimer(action as any); // button-started timers never pause the story (no blockEngine)
         } else if (action.type === UIActionType.StopTimer) {
             stopTimer((action as any).timerId);
+        } else if (action.type === UIActionType.SetTimeOfDay) {
+            const a = action as any;
+            applyTimeOfDay(a.mode, a.mode === 'set' ? a.hour : a.hours, a.transitionDuration);
         } else if (action.type === UIActionType.OpenURL) {
             const openUrlAction = action as OpenURLAction;
             if (openUrlAction.url) {
@@ -10693,7 +11281,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         updatePlayerState(p => {
             if (!p) return null;
             const ph = p.uiState.phone || { open: false, messages: [] };
-            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: open ?? ph.open, view: 'chat', messages: [...ph.messages, m], typing: null } } };
+            // Player-side messages with no thread tag stick to the open thread (character messages
+            // already thread by sender) — keeps the Messages inbox grouping intact.
+            const msg = (m.senderId === 'player' && !m.contactId && ph.activeContactId && ph.activeContactId !== '__misc__')
+                ? { ...m, contactId: ph.activeContactId } : m;
+            const nextMessages = [...ph.messages, msg];
+            // If the player is looking at this thread as it arrives, it counts as read (otherwise
+            // the inbox would show an unread pill for a message they just watched land).
+            const key = phoneThreadKey(msg);
+            const watching = (open ?? ph.open) && (ph.activeContactId === key || (ph.activeContactId === '__misc__' && key === ''));
+            const threadLastRead = watching ? { ...(ph.threadLastRead || {}), [key]: countPhoneThread(nextMessages, key) } : ph.threadLastRead;
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: open ?? ph.open, view: 'chat', messages: nextMessages, cameraRoll: collectToCameraRoll(ph.cameraRoll, msg), threadLastRead, typing: null } } };
         });
     };
 
@@ -10707,7 +11305,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             pushPhoneTimer(() => updatePlayerState(p => (p && p.uiState.phone) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, open: true, typing: { senderId: f.senderId } } } } : p), delay);
             delay += typeMs;
             pushPhoneTimer(() => {
-                appendPhoneMessage({ id: `fu-${Date.now()}-${idx}`, senderId: f.senderId, text: f.text, ...(f.portrait ? { portrait: f.portrait } : {}) }, true);
+                appendPhoneMessage({ id: `fu-${Date.now()}-${idx}`, senderId: f.senderId, text: f.text, ...(f.portrait ? { portrait: f.portrait } : {}), ...(f.image ? { image: f.image } : {}) }, true);
                 if (f.soundId) playSound(f.soundId, undefined, false);
                 if (idx === followUps.length - 1) pushPhoneTimer(onDone, 60);
             }, delay);
@@ -10731,19 +11329,138 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const acts = (reply.actions || []) as VNUIAction[];
         acts.forEach(a => handleUIAction(a));
         const navigates = phoneNavigates(acts);
-        const resume = () => { if (wasWaiting && !navigates) updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null); };
+        const resume = () => {
+            if (wasWaiting && !navigates) updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null);
+            // A scripted text conversation paused on this reply continues with its next line.
+            // (wasWaiting is false in that flow — the command-advance path above is untouched.)
+            if (!navigates && playerStateRef.current?.uiState.phone?.activeTextConvo) pushPhoneTimer(playNextTextLine, 300);
+        };
         const followUps = reply.followUps || [];
         if (followUps.length && !navigates) playPhoneFollowUps(followUps, resume); else resume();
     };
 
-    // Contacts app: open a contact's chat thread.
-    const handleContactMessage = (contactId: VNID) => {
-        updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: true, view: 'chat', activeContactId: contactId, notification: null, unread: false } } } : null);
+    // ── Gated conversation lists (calls + texts) ───────────────────────────────
+    // A contact can hold MANY conversations; the FIRST entry whose conditions pass (and isn't a
+    // played-out `once`) wins. The legacy single callConversation stays the always-eligible
+    // fallback so old projects behave identically.
+    const pickConversation = (
+        entries: PhoneConversationEntry[] | undefined,
+        legacy: PhoneCallConversation | undefined,
+        variables: Record<VNID, string | number | boolean>,
+        played: VNID[],
+    ): { entry?: PhoneConversationEntry; conversation: PhoneCallConversation } | null => {
+        for (const e of entries || []) {
+            if (!e.conversation?.lines?.length) continue;
+            if (e.once && played.includes(e.id)) continue;
+            if (e.conditions?.length && !evaluateConditions(e.conditions, variables)) continue;
+            return { entry: e, conversation: e.conversation };
+        }
+        if (legacy?.lines?.length) return { conversation: legacy };
+        return null;
     };
 
-    // Contacts app: start an OUTGOING call → "Calling…" screen, then run the contact's callAction (if any).
+    // `once` entries are marked when the conversation STARTS (deterministic: abandoning a call
+    // mid-way still counts as played).
+    const markConversationPlayed = (id: VNID) => updatePlayerState(p => (p && p.uiState.phone && !(p.uiState.phone.playedConversations || []).includes(id))
+        ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, playedConversations: [...(p.uiState.phone.playedConversations || []), id] } } }
+        : p);
+
+    // ── Scripted TEXT conversation playback (the chat-thread twin of the call machine) ──
+    // Lines land as ordinary messages (typing dots → bubble; photos collect into the Gallery),
+    // condition-failing lines skip live, replies pause via pendingReplies (handlePhoneReply
+    // resumes us), and endActions run when the lines run out. voiceAudioId/waitForVoice are
+    // call-only and ignored here. All timers via pushPhoneTimer (cleared on load/new game).
+    const playNextTextLine = () => {
+        const p0 = playerStateRef.current;
+        const at = p0?.uiState.phone?.activeTextConvo;
+        if (!p0 || !at) return;
+        const lines = at.conversation.lines || [];
+        let idx = at.lineIndex;
+        while (idx < lines.length) {
+            const cand = lines[idx];
+            if (!cand.conditions?.length || evaluateConditions(cand.conditions, p0.variables)) break;
+            idx++;
+        }
+        if (idx >= lines.length) {
+            const endActions = at.conversation.endActions || [];
+            updatePlayerState(p => (p && p.uiState.phone) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, activeTextConvo: null, typing: null } } } : p);
+            endActions.forEach(a => handleUIAction(a));
+            return;
+        }
+        const line = lines[idx];
+        const landAndContinue = () => {
+            appendPhoneMessage({ id: `tc-${Date.now()}-${idx}`, senderId: line.speakerId, text: line.text, ...(line.portrait ? { portrait: line.portrait } : {}), ...(line.image ? { image: line.image } : {}), contactId: at.contactId }, true);
+            if (line.soundId) playSound(line.soundId, undefined, false);
+            const hasReplies = !!line.replies?.length;
+            // Bump PAST this line before pausing on replies — a save on the pause must not replay it.
+            updatePlayerState(p => (p && p.uiState.phone) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, activeTextConvo: p.uiState.phone.activeTextConvo ? { ...p.uiState.phone.activeTextConvo, lineIndex: idx + 1 } : null, ...(hasReplies ? { pendingReplies: line.replies } : {}) } } } : p);
+            if (!hasReplies) pushPhoneTimer(playNextTextLine, 250);
+        };
+        const typeMs = Math.max(0, line.delayMs ?? 900);
+        if (line.speakerId !== 'player' && typeMs > 0) {
+            // Sender shows "…" while "typing"; player-side lines land without dots.
+            updatePlayerState(p => (p && p.uiState.phone) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, typing: { senderId: line.speakerId } } } } : p);
+            pushPhoneTimer(landAndContinue, typeMs);
+        } else if (typeMs > 0) {
+            pushPhoneTimer(landAndContinue, typeMs);
+        } else {
+            landAndContinue();
+        }
+    };
+
+    const startTextConversation = (contactId: VNID, pick: { entry?: PhoneConversationEntry; conversation: PhoneCallConversation }) => {
+        if (pick.entry?.once) markConversationPlayed(pick.entry.id);
+        updatePlayerState(p => (p && p.uiState.phone) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, activeTextConvo: { contactId, conversation: pick.conversation, lineIndex: 0, entryId: pick.entry?.id } } } } : p);
+        pushPhoneTimer(playNextTextLine, 400);
+    };
+
+    // Messages/Contacts app: open a thread (marks it read for the inbox pill), or null → back to
+    // the threads inbox. '' = the legacy unfiled bucket (viewed via the '__misc__' sentinel).
+    const handleOpenThread = (contactId: VNID | null) => {
+        updatePlayerState(p => {
+            if (!p) return null;
+            const ph = p.uiState.phone || { open: false, messages: [] };
+            if (contactId === null) return { ...p, uiState: { ...p.uiState, phone: { ...ph, view: 'chat', activeContactId: null } } };
+            const key = contactId === '__misc__' ? '' : contactId;
+            const active = contactId === '' ? '__misc__' : contactId;
+            return {
+                ...p, uiState: {
+                    ...p.uiState, phone: {
+                        ...ph, open: true, view: 'chat', activeContactId: active, notification: null, unread: false,
+                        threadLastRead: { ...(ph.threadLastRead || {}), [key]: countPhoneThread(ph.messages, key) },
+                    },
+                },
+            };
+        });
+        // Opening a real contact's thread may kick off a scripted text conversation (the first
+        // gated entry that passes) — but never over one already playing or a pending prompt.
+        if (contactId && contactId !== '__misc__') {
+            const ph = playerStateRef.current?.uiState.phone;
+            if (!ph?.activeTextConvo && !ph?.pendingReplies?.length && !ph?.pendingChoices?.length) {
+                const contact = (project.ui.phoneContacts || []).find(c => c.characterId === contactId);
+                const pick = contact ? pickConversation(contact.textConversations, undefined, playerStateRef.current?.variables || {}, ph?.playedConversations || []) : null;
+                if (pick) startTextConversation(contactId, pick);
+            }
+        }
+    };
+
+    // Contacts app: open a contact's chat thread.
+    const handleContactMessage = (contactId: VNID) => handleOpenThread(contactId);
+
+    // Contacts app: start an OUTGOING call. The contact's gated conversation LIST picks the
+    // in-call transcript by conditions (legacy single callConversation = fallback); a contact
+    // with neither gets the legacy "Calling…" + callAction path.
     const handleContactCall = (contactId: VNID) => {
         clearPhoneTimers();
+        const contactWithConvo = (project.ui.phoneContacts || []).find(c => c.characterId === contactId);
+        const pick = contactWithConvo
+            ? pickConversation(contactWithConvo.callConversations, contactWithConvo.callConversation, playerStateRef.current?.variables || {}, playerStateRef.current?.uiState.phone?.playedConversations || [])
+            : null;
+        if (pick) {
+            if (pick.entry?.once) markConversationPlayed(pick.entry.id);
+            startOutgoingTranscriptCall({ contactId, portrait: contactWithConvo!.avatar, conversation: pick.conversation, blocking: false });
+            return;
+        }
         updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), outgoingCall: { contactId } } } } : null);
         const contact = (project.ui.phoneContacts || []).find(c => c.characterId === contactId);
         if (contact?.callAction) {
@@ -10760,29 +11477,211 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: p.uiState.phone ? { ...p.uiState.phone, outgoingCall: null } : p.uiState.phone } } : null);
     };
 
+    // ── Scripted in-call transcript (activeCall) ────────────────────────────────
+    // The voiced call conversation played on the phone's 'call' app: dialing → active (lines land
+    // like chat bubbles, voiced via playVoice, paused by replies) → ended beat → log + endActions.
+
+    const patchActiveCall = (fn: (ac: NonNullable<NonNullable<PlayerState['uiState']['phone']>['activeCall']>) => Partial<NonNullable<NonNullable<PlayerState['uiState']['phone']>['activeCall']>> | null) => {
+        updatePlayerState(p => {
+            const ac = p?.uiState.phone?.activeCall;
+            if (!p || !ac) return p;
+            const patch = fn(ac);
+            return { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone!, activeCall: patch === null ? null : { ...ac, ...patch } } } };
+        });
+    };
+
+    /** Land one call line: transcript bubble + optional sfx + voice; schedule what follows. */
+    const landCallLine = (line: { speakerId: VNID | 'player'; text: string; portrait?: PhonePortraitSource; voiceAudioId?: VNID | null; waitForVoice?: boolean; soundId?: VNID | null; image?: { type: 'image' | 'video'; id: VNID } | null }, then: () => void, pacingMs: number) => {
+        patchActiveCall(ac => ({ transcript: [...ac.transcript, { id: `cl-${Date.now()}-${ac.transcript.length}`, senderId: line.speakerId, text: line.text, ...(line.portrait ? { portrait: line.portrait } : {}), ...(line.image ? { image: line.image } : {}) }] }));
+        if (line.soundId) playSound(line.soundId, undefined, false);
+        // Voice: per-line clip → speaker's default voice (same fallback rule as Dialogue).
+        const speaker = line.speakerId === 'player' ? null : project.characters[line.speakerId];
+        const voiceId = line.voiceAudioId ?? speaker?.defaultVoiceId ?? null;
+        const audio = voiceId ? (playVoice ? playVoice(voiceId, settings.voiceVolume ?? 1) : null) : null;
+        if (line.waitForVoice && audio) {
+            // Pace to the clip: next beat when the voice finishes (small breath after).
+            audio.onended = () => pushPhoneTimer(then, 350);
+            // Safety: if playback errors/blocks, fall back to the timed beat.
+            audio.onerror = () => pushPhoneTimer(then, pacingMs);
+        } else {
+            pushPhoneTimer(then, pacingMs);
+        }
+    };
+
+    /** Play the next thing in the call: queued reply follow-ups first, then the next line whose
+     *  conditions pass; replies pause playback; exhausted lines end the call (autoEnd). */
+    const playNextCallLine = () => {
+        const p = playerStateRef.current;
+        const ac = p?.uiState.phone?.activeCall;
+        if (!p || !ac || ac.phase !== 'active') return;
+        // 1) Reply-injected follow-ups play before the conversation resumes.
+        const queue = ac.queue || [];
+        if (queue.length > 0) {
+            const [f, ...rest] = queue;
+            patchActiveCall(() => ({ queue: rest }));
+            landCallLine({ speakerId: f.senderId, text: f.text, portrait: f.portrait, voiceAudioId: f.voiceAudioId, waitForVoice: !!f.voiceAudioId, soundId: f.soundId }, playNextCallLine, Math.max(250, f.delayMs ?? 900));
+            return;
+        }
+        const lines = ac.conversation?.lines || [];
+        // 2) Find the next line whose conditions pass (against LIVE variables).
+        let idx = ac.lineIndex;
+        while (idx < lines.length) {
+            const candidate = lines[idx];
+            if (!candidate.conditions?.length || evaluateConditions(candidate.conditions, p.variables)) break;
+            idx++;
+        }
+        if (idx >= lines.length) {
+            // 3) Out of lines: end (default) or hold the line until the player hangs up.
+            if (ac.conversation?.autoEnd !== false) endActiveCall('completed');
+            return;
+        }
+        const line = lines[idx];
+        patchActiveCall(() => ({ lineIndex: idx + 1 }));
+        landCallLine(line, () => {
+            const cur = playerStateRef.current?.uiState.phone?.activeCall;
+            if (!cur || cur.phase !== 'active') return;
+            if (line.replies?.length) {
+                patchActiveCall(() => ({ pendingReplies: line.replies }));
+            } else {
+                playNextCallLine();
+            }
+        }, Math.max(250, line.delayMs ?? 900));
+    };
+
+    /** Enter the 'active' phase and start the transcript (used on accept and after dialing). */
+    const beginActiveCall = (opts: { contactId: VNID | 'player'; direction: 'incoming' | 'outgoing'; portrait?: PhonePortraitSource; conversation: PhoneCallConversation; blocking?: boolean }) => {
+        updatePlayerState(p => {
+            if (!p) return null;
+            const ph = p.uiState.phone || { open: false, messages: [] };
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: 'call', outgoingCall: null, notification: null, activeCall: { contactId: opts.contactId, direction: opts.direction, portrait: opts.portrait, phase: 'active', conversation: opts.conversation, lineIndex: 0, transcript: [], elapsedMs: 0, blocking: opts.blocking } } } };
+        });
+        pushPhoneTimer(playNextCallLine, 500);
+    };
+
+    /** The player tapped a reply inside the call: echo it, run actions, queue voiced follow-ups,
+     *  hang up when the reply says so, else resume the lines. */
+    const handleCallReply = (reply: PhoneReply) => {
+        const ac = playerStateRef.current?.uiState.phone?.activeCall;
+        if (!ac) return;
+        patchActiveCall(cur => ({
+            transcript: [...cur.transcript, { id: `cr-${Date.now()}`, senderId: 'player' as const, text: reply.text }],
+            pendingReplies: undefined,
+            queue: [...(cur.queue || []), ...(reply.followUps || [])],
+        }));
+        (reply.actions || []).forEach(a => handleUIAction(a));
+        if (reply.endsCall && !(reply.followUps || []).length) { endActiveCall('completed'); return; }
+        if (reply.endsCall) {
+            // Play the follow-ups, then hang up: swap the conversation for an empty tail so the
+            // queue drains and autoEnd closes the call.
+            patchActiveCall(cur => ({ conversation: { ...(cur.conversation || { lines: [] }), lines: [], autoEnd: true }, lineIndex: 0 }));
+        }
+        pushPhoneTimer(playNextCallLine, 300);
+    };
+
+    /** End the call (hang-up button, endsCall reply, or lines exhausted): stop the voice, show a
+     *  brief "Call ended · m:ss" beat, write the call log (with duration), run endActions, then
+     *  clear — advancing the paused scene when the call was blocking. */
+    const endActiveCall = (_reason: 'completed' | 'hangup') => {
+        const ac = playerStateRef.current?.uiState.phone?.activeCall;
+        if (!ac || ac.phase === 'ended') return;
+        stopVoice?.();
+        const durationMs = ac.elapsedMs;
+        patchActiveCall(() => ({ phase: 'ended', pendingReplies: undefined, queue: [] }));
+        pushPhoneTimer(() => {
+            const cur = playerStateRef.current?.uiState.phone?.activeCall;
+            const conv = cur?.conversation;
+            const blocking = cur?.blocking;
+            updatePlayerState(p => {
+                if (!p) return null;
+                const ph = p.uiState.phone || { open: false, messages: [] };
+                const log = ph.callLog || [];
+                const entry: PhoneCallLogEntry = { id: `call-${Date.now()}`, callerId: ac.contactId, status: 'accepted', portrait: ac.portrait, order: log.length, direction: ac.direction, durationMs };
+                return { ...p, uiState: { ...p.uiState, phone: { ...ph, activeCall: null, view: 'home', callLog: [...log, entry] } } };
+            });
+            const acts = (conv?.endActions || []) as VNUIAction[];
+            acts.forEach(a => handleUIAction(a));
+            if (blocking && !phoneNavigates(acts)) {
+                updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null);
+            }
+        }, 1200);
+    };
+
+    /** Player-dialed scripted call (StartPhoneCall command / Contacts Call with a conversation). */
+    const startOutgoingTranscriptCall = (opts: { contactId: VNID; portrait?: PhonePortraitSource; conversation: PhoneCallConversation; dialingMs?: number; blocking?: boolean }) => {
+        clearPhoneTimers();
+        updatePlayerState(p => {
+            if (!p) return null;
+            const ph = p.uiState.phone || { open: false, messages: [] };
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: 'call', outgoingCall: null, activeCall: { contactId: opts.contactId, direction: 'outgoing', portrait: opts.portrait, phase: 'dialing', conversation: opts.conversation, lineIndex: 0, transcript: [], elapsedMs: 0, blocking: opts.blocking } } } };
+        });
+        pushPhoneTimer(() => {
+            const cur = playerStateRef.current?.uiState.phone?.activeCall;
+            if (!cur || cur.phase !== 'dialing') return; // hung up while dialing
+            patchActiveCall(() => ({ phase: 'active' }));
+            pushPhoneTimer(playNextCallLine, 400);
+        }, Math.max(200, opts.dialingMs ?? 1200));
+    };
+
+    // Live call timer: while a call is active and the game is playing, tick elapsedMs into STATE
+    // once a second — the display reads state and a save is never more than ~1s stale.
+    useEffect(() => {
+        const active = playerState?.uiState.phone?.activeCall?.phase === 'active' && playerState?.mode === 'playing';
+        if (!active) return;
+        const id = window.setInterval(() => patchActiveCall(ac => (ac.phase === 'active' ? { elapsedMs: ac.elapsedMs + 1000 } : {})), 1000);
+        return () => window.clearInterval(id);
+    }, [playerState?.uiState.phone?.activeCall?.phase, playerState?.mode]);
+
+    /** Append a row to the phone's notification list (top of Recents). */
+    const notifEntry = (ph: NonNullable<PlayerState['uiState']['phone']>, e: Omit<PhoneNotificationEntry, 'id' | 'order'>): PhoneNotificationEntry[] => {
+        const list = ph.notifications || [];
+        return [...list, { ...e, id: `nt-${Date.now()}-${list.length}`, order: list.length }];
+    };
+
+    // Generic phone notification (news alert, quest ping…): banner + badge + list entry.
+    const startPhoneNotify = (cmd: PhoneNotifyCommand) => {
+        const ding = cmd.soundId ?? project.ui.phoneNotifSoundId ?? null;
+        const silent = cmd.presentation === 'silent';
+        updatePlayerState(p => {
+            if (!p) return null;
+            const ph = p.uiState.phone || { open: false, messages: [] };
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph,
+                notifications: notifEntry(ph, { title: cmd.title, text: cmd.text, icon: cmd.icon, iconImage: cmd.iconImage, tapActions: cmd.tapActions }),
+                ...(silent ? {} : { notification: { text: cmd.text, title: cmd.title, icon: cmd.icon, iconImage: cmd.iconImage, tapActions: cmd.tapActions, visible: true } }),
+                unread: cmd.showBadge !== false ? true : ph.unread,
+            } } };
+        });
+        if (ding && !silent) playSound(ding, undefined, false);
+        const autoMs = project.ui.phoneNotifAutoMs ?? 6000;
+        if (!silent && autoMs > 0) pushPhoneTimer(() => updatePlayerState(p => (p && p.uiState.phone?.notification) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, notification: { ...p.uiState.phone.notification, visible: false } } } } : p), autoMs);
+    };
+
     // A text "arrives". 'notify' = non-blocking banner + ding + badge (tap to read); 'open' = open
     // the phone straight to the message (pauses only if it carries replies).
     const startIncomingText = (cmd: PhoneIncomingTextCommand) => {
         const presentation = cmd.presentation || 'notify';
         const replies = cmd.replies || [];
         const hasReplies = replies.length > 0;
-        const msg: PhoneMessage = { id: `it-${Date.now()}`, senderId: cmd.senderId, text: cmd.text, ...(cmd.portrait ? { portrait: cmd.portrait } : {}), ...(cmd.senderId !== 'player' ? { contactId: cmd.senderId } : {}) };
+        const msg: PhoneMessage = { id: `it-${Date.now()}`, senderId: cmd.senderId, text: cmd.text, ...(cmd.portrait ? { portrait: cmd.portrait } : {}), ...(cmd.image ? { image: cmd.image } : {}), ...(cmd.senderId !== 'player' ? { contactId: cmd.senderId } : {}) };
         const ding = cmd.soundId ?? project.ui.phoneNotifSoundId ?? null;
         if (presentation === 'notify') {
             updatePlayerState(p => {
                 if (!p) return null;
                 const ph = p.uiState.phone || { open: false, messages: [] };
-                return { ...p, uiState: { ...p.uiState, phone: { ...ph, messages: [...ph.messages, msg], notification: { senderId: cmd.senderId, text: cmd.text, portrait: cmd.portrait, visible: true }, unread: cmd.showBadge !== false ? true : ph.unread, waiting: false, pendingReplies: hasReplies ? replies : ph.pendingReplies } } };
+                return { ...p, uiState: { ...p.uiState, phone: { ...ph, messages: [...ph.messages, msg], cameraRoll: collectToCameraRoll(ph.cameraRoll, msg), notification: { senderId: cmd.senderId, text: cmd.text || (cmd.image ? '📷 Photo' : ''), portrait: cmd.portrait, visible: true }, notifications: notifEntry(ph, { text: cmd.text || (cmd.image ? '📷 Photo' : ''), senderId: cmd.senderId, portrait: cmd.portrait }), unread: cmd.showBadge !== false ? true : ph.unread, waiting: false, pendingReplies: hasReplies ? replies : ph.pendingReplies } } };
             });
             if (ding) playSound(ding, undefined, false);
             const autoMs = project.ui.phoneNotifAutoMs ?? 6000;
             if (autoMs > 0) pushPhoneTimer(() => updatePlayerState(p => (p && p.uiState.phone?.notification) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, notification: { ...p.uiState.phone.notification, visible: false } } } } : p), autoMs);
         } else {
+            // 'open' focuses the SENDER'S thread (not the mixed stream) and counts it as read.
+            const threadFocus = cmd.senderId !== 'player' ? cmd.senderId : undefined;
             const landMessage = () => {
                 updatePlayerState(p => {
                     if (!p) return null;
                     const ph = p.uiState.phone || { open: false, messages: [] };
-                    return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: 'chat', messages: [...ph.messages, msg], waiting: hasReplies, pendingReplies: hasReplies ? replies : undefined, notification: null, typing: null } } };
+                    const nextMessages = [...ph.messages, msg];
+                    const key = phoneThreadKey(msg);
+                    return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: 'chat', ...(threadFocus ? { activeContactId: threadFocus } : {}), messages: nextMessages, cameraRoll: collectToCameraRoll(ph.cameraRoll, msg), threadLastRead: { ...(ph.threadLastRead || {}), [key]: countPhoneThread(nextMessages, key) }, waiting: hasReplies, pendingReplies: hasReplies ? replies : undefined, notification: null, typing: null } } };
                 });
                 if (ding) playSound(ding, undefined, false);
             };
@@ -10792,7 +11691,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 updatePlayerState(p => {
                     if (!p) return null;
                     const ph = p.uiState.phone || { open: false, messages: [] };
-                    return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: 'chat', notification: null, typing: { senderId: cmd.senderId } } } };
+                    return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: 'chat', ...(threadFocus ? { activeContactId: threadFocus } : {}), notification: null, typing: { senderId: cmd.senderId } } } };
                 });
                 pushPhoneTimer(landMessage, typingMs);
             } else {
@@ -10849,16 +11748,32 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         if (!cmd) return;
         stopRingtone();
         activeCallCmdRef.current = null;
+        // Accepting a call that carries a scripted CONVERSATION starts the in-call transcript
+        // instead of resolving immediately: the log entry (with duration) is written when the call
+        // ends, and — for modal calls — the scene advances at call end, not here.
+        const hasConversation = outcome === 'accepted' && !!cmd.conversation?.lines?.length;
         updatePlayerState(p => {
             if (!p) return null;
             const ph = p.uiState.phone || { open: false, messages: [] };
             const log = ph.callLog || [];
-            const entry: PhoneCallLogEntry = { id: `call-${Date.now()}`, callerId: cmd.callerId, status: outcome, portrait: cmd.portrait, order: log.length };
-            return { ...p, uiState: { ...p.uiState, phone: { ...ph, incomingCall: null, callLog: [...log, entry], unread: outcome === 'missed' && cmd.showBadge !== false ? true : ph.unread } } };
+            const entry: PhoneCallLogEntry = { id: `call-${Date.now()}`, callerId: cmd.callerId, status: outcome, portrait: cmd.portrait, order: log.length, direction: 'incoming' };
+            const missed = outcome === 'missed';
+            const callerName = cmd.callerId === 'player' ? '' : (project.characters[cmd.callerId as VNID]?.name || '');
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph, incomingCall: null, ...(hasConversation ? {} : { callLog: [...log, entry] }),
+                // A missed call now leaves a trace: a banner + a notification-list row.
+                ...(missed ? {
+                    notification: { senderId: cmd.callerId, title: 'Missed call', text: callerName || 'Unknown caller', portrait: cmd.portrait, icon: 'call', visible: true },
+                    notifications: notifEntry(ph, { title: 'Missed call', text: callerName || 'Unknown caller', senderId: cmd.callerId, portrait: cmd.portrait, icon: 'call' }),
+                } : {}),
+                unread: missed && cmd.showBadge !== false ? true : ph.unread } } };
         });
         const acts = ((outcome === 'accepted' ? cmd.acceptActions : outcome === 'declined' ? cmd.declineActions : (cmd.onTimeout === 'runActions' ? cmd.timeoutActions : [])) || []) as VNUIAction[];
         acts.forEach(a => handleUIAction(a));
         const navigates = phoneNavigates(acts);
+        if (hasConversation) {
+            beginActiveCall({ contactId: cmd.callerId, direction: 'incoming', portrait: cmd.portrait, conversation: cmd.conversation!, blocking: (cmd.mode || 'modal') === 'modal' && !navigates });
+            return;
+        }
         if ((cmd.mode || 'modal') === 'modal' && !navigates) updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null);
     };
 
@@ -11083,14 +11998,48 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         }
     }, [playerState?.currentSceneId]);
 
+    // Day/night auto-advance: tick the time variable while playing (a 250ms master interval, like the
+    // story timer). Off unless the cycle + auto-advance are enabled. The grade follows via CSS transition.
+    useEffect(() => {
+        const dn = project.dayNightCycle;
+        const aa = dn?.autoAdvance;
+        const timeVarId = dn?.timeVariableId;
+        if (!dn?.enabled || !aa?.enabled || !timeVarId || !(aa.secondsPerHour > 0)) return;
+        const TICK_MS = 250;
+        const hoursPerTick = (TICK_MS / 1000) / aa.secondsPerHour;
+        const id = window.setInterval(() => {
+            updatePlayerState(p => {
+                if (!p || p.mode !== 'playing') return p;
+                const cur = Number(p.variables[timeVarId] ?? 0);
+                const next = Math.round(((((cur + hoursPerTick) % 24) + 24) % 24) * 1000) / 1000;
+                return { ...p, variables: { ...p.variables, [timeVarId]: next } };
+            });
+        }, TICK_MS);
+        return () => window.clearInterval(id);
+    }, [project.dayNightCycle, updatePlayerState]);
+
+    // Scene-entry day/night override: a 'fixed' scene pins the global time variable to its hour on entry
+    // (so the grade, conditions, and time displays all reflect it). 'off'/'cycle' need no action here.
+    useEffect(() => {
+        const sceneId = playerState?.currentSceneId;
+        const dn = project.dayNightCycle;
+        const sdn = sceneId ? project.scenes[sceneId]?.dayNight : undefined;
+        if (dn?.enabled && dn.timeVariableId && sdn?.mode === 'fixed' && typeof sdn.fixedHour === 'number') {
+            const tv = dn.timeVariableId, fh = sdn.fixedHour;
+            updatePlayerState(p => (p && Number(p.variables[tv] ?? -1) !== fh) ? { ...p, variables: { ...p.variables, [tv]: fh } } : p);
+        }
+    }, [playerState?.currentSceneId, project.dayNightCycle, project.scenes, updatePlayerState]);
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (!playerState) return;
             
-            // Spacebar or Enter to advance dialogue
+            // Spacebar or Enter to advance dialogue (inert on locked timed lines — only the
+            // per-line timer advances those).
             if ((e.key === ' ' || e.key === 'Enter') && playerState.mode === 'playing' && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput) {
                 e.preventDefault();
-                handleDialogueAdvance();
+                const d = playerState.uiState.dialogue;
+                if (!(d.timeLimitLocked && (d.timeLimit ?? 0) > 0)) handleDialogueAdvance();
                 return;
             }
             
@@ -11138,8 +12087,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: opening, ...(opening ? { view: 'home' as const, notification: null, unread: false } : { waiting: false, pendingChoices: undefined, notification: null }) } } };
                         });
                         // Closing via the hotkey honors phoneOnCloseBehavior (mirror the Hide Phone action).
+                        // A LOCKED timed dialogue line is exempt — only its timer may advance it.
                         if (!opening && project.ui.phoneOnCloseBehavior === 'advance' && playerStateRef.current?.mode === 'playing') {
-                            updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+                            const d0 = playerStateRef.current?.uiState.dialogue;
+                            if (!(d0?.timeLimitLocked && (d0.timeLimit ?? 0) > 0)) {
+                                updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+                            }
                         }
                         return;
                     }
@@ -11194,6 +12147,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     useEffect(() => {
         if (!settings.autoAdvance || !playerState || playerState.mode !== 'playing' || scenePaused) return;
         if (!playerState.uiState.dialogue || playerState.uiState.choices || playerState.uiState.textInput) return;
+        // A per-line time limit OWNS the advancing (DialogueBox's own countdown) — Auto mode
+        // stepping in too would double-advance and skip a line.
+        if ((playerState.uiState.dialogue.timeLimit ?? 0) > 0) return;
 
         const voice = currentVoiceRef.current;
         if (voice && !voice.ended) {
@@ -11232,6 +12188,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return;
         }
         
+        // A LOCKED timed line cancels skip mode (like choices) — it advances only by its timer.
+        // Unlocked timed lines skip normally.
+        if (playerState.uiState.dialogue?.timeLimitLocked && (playerState.uiState.dialogue.timeLimit ?? 0) > 0) {
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
+            return;
+        }
+
         // If dialogue is showing, auto-advance it quickly
         if (playerState.uiState.dialogue) {
             const timer = setTimeout(() => {
@@ -11300,11 +12263,32 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const tweenedPanY = screenTween?.y ?? state.screen.panY;
         const panZoomStyle: React.CSSProperties = { transform: `scale(${tweenedZoom}) translate(${tweenedPanX}%, ${tweenedPanY}%)`, transition: screenTween ? 'none' : `transform ${state.screen.transitionDuration}s ease-in-out`, width: '100%', height: '100%' };
         const shakeIntensityStyle = (activeShakeRef.current ? { '--shake-intensity-x': `${intensityPx}px`, '--shake-intensity-y': `${intensityPx * 0.7}px`, } : {}) as React.CSSProperties;
-        const tintStyle: React.CSSProperties = { backgroundColor: state.screen.tint, transition: `background-color ${state.screen.transitionDuration}s ease-in-out`, };
+        // Tint coverage rides a separate CSS opacity channel (not baked into the color string) so
+        // it works for 'transparent'/rgba/named colors and animates with the same duration.
+        // Tint opacity may FOLLOW a number variable (0-100) — resolved from live variables every
+        // render, so Set Variable / HUD sliders fade the tint in real time while it's on screen.
+        const tintStyle: React.CSSProperties = { backgroundColor: state.screen.tint, opacity: resolveVarNumber(liveVars, state.screen.tintOpacityVariableId, state.screen.tintOpacity ?? 100, { min: 0, max: 100 }) / 100, transition: `background-color ${state.screen.transitionDuration}s ease-in-out, opacity ${state.screen.transitionDuration}s ease-in-out`, };
+
+        // ─── Day/night color grade ─── //
+        const dnc = project.dayNightCycle;
+        const sceneDN = project.scenes[playerState.currentSceneId]?.dayNight;
+        const dnActive = !!(dnc?.enabled && dnc.phases?.length && sceneDN?.mode !== 'off');
+        const dnHour = sceneDN?.mode === 'fixed'
+            ? (sceneDN.fixedHour ?? 12)
+            : (dnc?.timeVariableId ? Number(liveVars?.[dnc.timeVariableId] ?? 0) : 0);
+        const dnGrade = dnActive ? computeGrade(dnHour, dnc!.phases) : null;
+        const dnBg = dnGrade ? gradeToBackgroundStyle(dnGrade.background) : null;
+        const dnCharFilter = dnGrade ? gradeToCharacterFilter(dnGrade.sprites) : '';
+        const dnSpriteTint = dnGrade ? gradeToSpriteTint(dnGrade.sprites) : null;
+        const dnTrans = dnTransitionRef.current;
+        const dnBgFilterStyle: React.CSSProperties = dnBg ? { filter: dnBg.filter, transition: `filter ${dnTrans}s ease-in-out` } : {};
 
         const handleStageClick = () => {
-            // Only advance if dialogue is showing and not waiting for choice or text input
-            if (playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput && !playerState.uiState.showHistory) {
+            // Only advance if dialogue is showing and not waiting for choice or text input.
+            // Locked timed lines advance only by their own timer.
+            const d = playerState.uiState.dialogue;
+            if (d && !playerState.uiState.choices && !playerState.uiState.textInput && !playerState.uiState.showHistory) {
+                if (d.timeLimitLocked && (d.timeLimit ?? 0) > 0) return;
                 handleDialogueAdvance();
             }
         };
@@ -11356,7 +12340,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             // overlays (rendered just below at z0, later in DOM) always sit above it
                             // — multi-plane LAYERING is done via stacked backgrounds (below), which
                             // keeps fades working regardless of any stack layers.
-                            return <div className="absolute inset-0 overflow-hidden" style={{ zIndex: 0 }}>{inner}</div>;
+                            return <div className="absolute inset-0 overflow-hidden" style={{ zIndex: 0, ...dnBgFilterStyle }}>{inner}</div>;
                         })()}
                         {/* render background transition visuals here so characters render above them */}
                         {playerState?.uiState.transitionElement}
@@ -11384,8 +12368,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     default: return `dissolve-in ${dur}s forwards`; // fade / cross-fade / dissolve
                                 }
                             })();
-                            return <div key={plane.commandId} className="absolute inset-0 overflow-hidden" style={{ zIndex: plane.layer ?? 0, backgroundColor: plane.color, animation: anim }}>{planeInner}</div>;
+                            return <div key={plane.commandId} className="absolute inset-0 overflow-hidden" style={{ zIndex: plane.layer ?? 0, backgroundColor: plane.color, animation: anim, ...dnBgFilterStyle }}>{planeInner}</div>;
                         })}
+                        {/* Day/night BACKGROUND grade tint — above the background/planes/movie, below characters. */}
+                        {dnBg && dnBg.overlayColor !== 'transparent' && (
+                            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 3, backgroundColor: dnBg.overlayColor, transition: `background-color ${dnTrans}s ease-in-out` }} />
+                        )}
                         {/* Movie overlays (behind characters, above background) */}
                         {state.movieOverlays && state.movieOverlays.length > 0 && state.movieOverlays.map((movie, idx) => {
                             if (!movie.url) return null;
@@ -11482,13 +12470,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             const charTween = TweenManager.getCurrentValues(char.charId, 'character');
                             const hasTweenPosition = charTween && (charTween.x !== undefined || charTween.y !== undefined);
                             if (hasTweenPosition) {
+                                const isCustomBase = typeof char.position === 'object';
                                 const basePos = typeof char.position === 'object'
                                     ? char.position
                                     : { x: arrangedX ?? (char.position === 'left' ? 25 : char.position === 'right' ? 75 : char.position === 'center' ? 50 : char.position === 'off-left' ? -25 : 125), y: 10 };
                                 positionStyle = {
                                     left: `${charTween.x ?? basePos.x}%`,
                                     top: `${charTween.y ?? basePos.y}%`,
-                                    transform: 'translate(-50%, 0)',
+                                    // Match the character's OWN anchor convention so the tween lines up with where
+                                    // the sprite rests before and after the move: custom {x,y} coords are LEFT-EDGE
+                                    // anchored (same as the static custom render), presets are CENTER anchored.
+                                    // Mismatching these (always centering) caused a half-width shift when the move
+                                    // started and a half-width jump to the final spot when it ended.
+                                    transform: isCustomBase ? 'translate(0, 0)' : 'translate(-50%, 0)',
                                 };
                             }
                             
@@ -11659,6 +12653,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 }
                             }
 
+                            // Day/night SPRITE grade — append to this character's filter (ghosts excluded).
+                            if (dnCharFilter && !char.charId.startsWith('__ghost')) combinedFilter += ` ${dnCharFilter}`;
                             // Build the filter/flicker style for the innermost content wrapper
                             const contentEffectStyle: React.CSSProperties & Record<string, any> = {};
                             if (combinedFilter) contentEffectStyle.filter = combinedFilter.trim();
@@ -11669,7 +12665,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     : flickerAnimation;
                             }
                             Object.assign(contentEffectStyle, filterVars);
-                            const hasContentEffect = combinedFilter || combinedFilterAnimation || flickerAnimation;
+                            // Isolate so the day/night tint overlay's multiply blends only with the sprite.
+                            if (dnSpriteTint && !char.isVideo) contentEffectStyle.isolation = 'isolate';
+                            const hasContentEffect = combinedFilter || combinedFilterAnimation || flickerAnimation || (!!dnSpriteTint && !char.isVideo);
                             
                             // Build nested wrappers: position div > transform effect divs > filter/content div > sprites
                             const spriteContent = (
@@ -11691,15 +12689,28 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         ))
                                     ) : (
                                         char.imageUrls.map((url, index) => (
-                                            <img 
-                                                key={index} 
-                                                src={url} 
-                                                alt="" 
-                                                className="absolute top-0 left-0 w-full h-full object-contain" 
+                                            <img
+                                                key={index}
+                                                src={url}
+                                                alt=""
+                                                className="absolute top-0 left-0 w-full h-full object-contain"
                                                 style={{ zIndex: index }}
                                             />
                                         ))
                                     )}
+                                    {/* Day/night SPRITE tint — a true color overlay masked to each layer's
+                                        pixels (multiply), so the sprite shows the real tint and keeps its shading. */}
+                                    {dnSpriteTint && !char.isVideo && char.imageUrls.map((url, index) => (
+                                        <div key={`dn-tint-${index}`} aria-hidden style={{
+                                            position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: index,
+                                            backgroundColor: dnSpriteTint.color, opacity: dnSpriteTint.opacity, mixBlendMode: 'multiply', pointerEvents: 'none',
+                                            WebkitMaskImage: `url("${url}")`, maskImage: `url("${url}")`,
+                                            WebkitMaskSize: 'contain', maskSize: 'contain',
+                                            WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+                                            WebkitMaskPosition: 'center', maskPosition: 'center',
+                                            transition: `opacity ${dnTrans}s ease-in-out, background-color ${dnTrans}s ease-in-out`,
+                                        }} />
+                                    ))}
                                 </>
                             );
 
@@ -11744,17 +12755,36 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             const charFlipY = (char as any).flipY ?? false;
                             const charRotation = charTween?.rotation ?? (char as any).rotation ?? 0;
 
-                            // Build transform: combine position, rotation, scale, and flips
-                            let transformStr = positionStyle.transform || '';
-                            if (charRotation) {
-                                transformStr = `${transformStr} rotate(${charRotation}deg)`.trim();
-                            }
+                            // The sprite's orientation (rotation + scale/flip), built separately from position
+                            // so we can choose WHERE to apply it.
+                            let orientTransform = '';
+                            if (charRotation) orientTransform = `rotate(${charRotation}deg)`;
                             if (charScale !== 1 || charInverted || charFlipY) {
                                 const scaleX = (charInverted ? -1 : 1) * charScale;
                                 const scaleY = (charFlipY ? -1 : 1) * charScale;
-                                transformStr = `${transformStr} scale(${scaleX}, ${scaleY})`.trim();
+                                orientTransform = `${orientTransform} scale(${scaleX}, ${scaleY})`.trim();
+                            }
+                            orientTransform = orientTransform.trim();
+
+                            // A SLIDE transition animates the OUTER element's `transform` (translate3d) with
+                            // fill-mode:forwards, which clobbers a static scale/rotation/flip set on that SAME
+                            // element — the reason orientation was silently dropped during slides. ONLY in that
+                            // case do we move orientation onto an INNER wrapper so it composes with the slide
+                            // instead of colliding. Every OTHER transition (fade/dissolve/instant/iris/wipe) keeps
+                            // orientation on the outer element exactly as before — byte-for-byte unchanged.
+                            const slideOnInner = char.transition?.type === 'slide' && !!orientTransform;
+                            let transformStr = positionStyle.transform || '';
+                            if (!slideOnInner && orientTransform) {
+                                transformStr = `${transformStr} ${orientTransform}`.trim();
                             }
                             transformStr = (transformStr + parallaxTransform(char.parallaxDepth)).trim();
+                            if (slideOnInner) {
+                                wrappedContent = (
+                                    <div className="w-full h-full relative" style={{ transform: orientTransform, transformOrigin: 'center bottom' }}>
+                                        {wrappedContent}
+                                    </div>
+                                );
+                            }
 
                             return (
                                 <div
@@ -11784,10 +12814,23 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             const pEffects = state.particleEffects;
                             const hasParticles = pEffects && Object.keys(pEffects).length > 0;
                             if (hasParticles) {
-                                console.log('[LivePreview] Rendering ParticleSystem:', Object.keys(pEffects), 'stageSize:', stageSize.width, 'x', stageSize.height);
+                                // LIVE variable bindings: resolve bound emitter knobs (density/wind/
+                                // gravity/opacity) into the config each render — the emitter sync picks
+                                // up the new config, so the effect reacts while running.
+                                const resolvedEffects = Object.fromEntries((Object.entries(pEffects) as [string, any][]).map(([tag, entry]) => {
+                                    const vb = entry.varBindings;
+                                    if (!vb) return [tag, entry];
+                                    return [tag, { ...entry, config: {
+                                        ...entry.config,
+                                        emitRate: resolveVarNumber(liveVars, vb.emitRate, entry.config.emitRate, { min: 0, max: 500 }),
+                                        wind: resolveVarNumber(liveVars, vb.wind, entry.config.wind, { min: -500, max: 500 }),
+                                        gravity: resolveVarNumber(liveVars, vb.gravity, entry.config.gravity, { min: -500, max: 500 }),
+                                        opacity: resolveVarNumber(liveVars, vb.opacity, entry.config.opacity ?? 1, { min: 0, max: 1 }),
+                                    } }];
+                                }));
                                 return (
                                     <ParticleSystem
-                                        effects={pEffects}
+                                        effects={resolvedEffects as any}
                                         width={stageSize.width}
                                         height={stageSize.height}
                                     />
@@ -11795,12 +12838,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             }
                             return null;
                         })()}
-                        {/* Placed twinkling lights (PlaceLights) — behind characters by default, or in front if set. */}
-                        {state.lights && state.lights.length > 0 && (
-                            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: state.lightsAbove ? 40 : 4 }}>
-                                <LightsLayer lights={state.lights} stageW={stageSize.width} stageH={stageSize.height} />
-                            </div>
-                        )}
+                        {/* Placed twinkling lights (PlaceLights) — behind characters by default, or in front if set.
+                            A bound brightness variable MULTIPLIES every light's brightness live (1 = as authored). */}
+                        {state.lights && state.lights.length > 0 && (() => {
+                            const lb = (state as any).lightsBrightnessVariableId
+                                ? resolveVarNumber(liveVars, (state as any).lightsBrightnessVariableId, 1, { min: 0, max: 2 })
+                                : 1;
+                            const lights = lb === 1 ? state.lights : state.lights.map((l: VNLight) => ({ ...l, brightness: (l.brightness ?? 1) * lb }));
+                            return (
+                                <div className="absolute inset-0 pointer-events-none" style={{ zIndex: state.lightsAbove ? 40 : 4 }}>
+                                    <LightsLayer lights={lights} stageW={stageSize.width} stageH={stageSize.height} />
+                                </div>
+                            );
+                        })()}
                         {state.textOverlays.filter((o: TextOverlay) => !o.live || !o.conditions || evaluateConditions(o.conditions, liveVars)).map((overlay: TextOverlay) => {
                             // Live text re-interpolates its {variable} tokens against current
                             // variables each render, so values shown in the text update live.
@@ -12606,11 +13656,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             </div>
                         );
                     })()}
-                    <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} reactiveState={pickReactiveTextboxState(project.ui.dialogueReactiveStates, playerState.variables, evaluateConditions)} />
+                    <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} reactiveState={pickReactiveTextboxState(project.ui.dialogueReactiveStates, playerState.variables, evaluateConditions)}
+                        timerPaused={scenePaused || !!uiState.choices || !!uiState.textInput || !!uiState.showHistory} uiPalette={playerState.uiPaletteOverride} voiceRef={currentVoiceRef} />
                 </>
             )}
             {uiState.choices && <ChoiceMenu choices={uiState.choices} projectUI={project.ui} onSelect={handleChoiceSelect} variables={playerState.variables} project={project} layout={uiState.choiceLayout}
-                timeLimit={uiState.choiceTimeLimit} showTimer={uiState.choiceShowTimer}
+                timeLimit={uiState.choiceTimeLimit} showTimer={uiState.choiceShowTimer} uiPalette={playerState.uiPaletteOverride}
                 onTimeout={() => {
                     // Reuse the normal selection pipeline (records history, runs actions, clears + advances).
                     const opts = uiState.choices || [];
@@ -12669,21 +13720,76 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     />
                 </div>
             )}
+            {/* Scene light FX (flashlight/spotlight) belong to the scene — hide them when a MODAL screen
+                covers the view: a menu (screenStack) or a blocking ShowScreen'd screen (hudStack). A
+                non-blocking HUD (hudNonBlocking, e.g. an HP bar) does NOT hide them. */}
+            {!(screenStack.length > 0 || hudStack.some(id => !project.uiScreens[id]?.hudNonBlocking)) && <>
             {/* Flashlight — dark overlay with a soft hole that follows the cursor (updated imperatively).
                 z above the dialogue box (20) so it dims too, unless "don't affect dialogue box".
                 When toggled OFF with `darkWhenOff`, render SOLID darkness (no light hole) for dark rooms. */}
-            {flashlight && (flashlight.on || flashlight.darkWhenOff) && (
-                <div
-                    ref={flashlightOverlayRef}
-                    className="absolute inset-0 pointer-events-none"
-                    style={{
-                        zIndex: flashlight.affectsDialogue ? 45 : 15,
-                        background: flashlight.on
-                            ? flashlightBg((typeof window !== 'undefined' ? window.innerWidth : 1280) / 2, (typeof window !== 'undefined' ? window.innerHeight : 720) / 2, (flashlight.radius / 100) * (typeof window !== 'undefined' ? Math.min(window.innerWidth, window.innerHeight) : 720), flashlight.softness, hexToRgba(flashlight.color, flashlight.darkness * 100))
-                            : hexToRgba(flashlight.color, flashlight.darkness * 100),
-                    }}
-                />
-            )}
+            {flashlight && (flashlight.on || flashlight.darkWhenOff) && (() => {
+                // Radius/darkness may follow number variables (live) — same resolution as onMove.
+                const fVars = playerState?.variables;
+                const fRadius = resolveVarNumber(fVars, (flashlight as any).radiusVariableId, flashlight.radius, { min: 1, max: 100 });
+                const fDarkness = resolveVarNumber(fVars, (flashlight as any).darknessVariableId, flashlight.darkness, { min: 0, max: 1 });
+                return (
+                    <div
+                        ref={flashlightOverlayRef}
+                        className="absolute inset-0 pointer-events-none"
+                        style={{
+                            zIndex: flashlight.affectsDialogue ? 45 : 15,
+                            background: flashlight.on
+                                ? flashlightBg((typeof window !== 'undefined' ? window.innerWidth : 1280) / 2, (typeof window !== 'undefined' ? window.innerHeight : 720) / 2, (fRadius / 100) * (typeof window !== 'undefined' ? Math.min(window.innerWidth, window.innerHeight) : 720), flashlight.softness, hexToRgba(flashlight.color, fDarkness * 100))
+                                : hexToRgba(flashlight.color, fDarkness * 100),
+                        }}
+                    />
+                );
+            })()}
+            {/* Spotlights — one shared darkness + one beam per active spotlight. Each beam is a light cone
+                clipped from its source point, aimed by rotating around that source; `screen` blend + a blur
+                feather it (no boxy edges). COMPOSE: if a flashlight is also active it already provides the
+                darkness, so we skip ours and just add the beams — flashlight hole AND beams all reveal. */}
+            {(() => {
+                const active = (Object.entries(spotlights) as [string, SpotlightState][]).filter(([, s]) => s.on);
+                if (!active.length) return null;
+                const flashActive = !!(flashlight && (flashlight.on || flashlight.darkWhenOff));
+                const maxIntensity = Math.max(...active.map(([, s]) => Math.max(0, Math.min(1, s.intensity))));
+                const affectsDialogue = active.some(([, s]) => s.affectsDialogue);
+                const vpMin = typeof window !== 'undefined' ? Math.min(window.innerWidth, window.innerHeight) : 720;
+                return (
+                    <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: affectsDialogue ? 45 : 15 }}>
+                        {!flashActive && <div className="absolute inset-0" style={{ background: hexToRgba('#000000', maxIntensity * 100) }} />}
+                        {active.map(([id, s]) => {
+                            const half = Math.max(2, Math.min(100, s.beamWidth)) / 2;
+                            const len = Math.max(5, Math.min(200, s.height));
+                            const srcHalf = Math.max(0, Math.min(60, s.sourceWidth)) / 2;
+                            const inner = Math.round(Math.max(0, Math.min(1, 1 - s.falloff)) * 100);
+                            const blurPx = Math.round((0.015 + Math.max(0, Math.min(1, s.falloff)) * 0.05) * vpMin);
+                            const sx = s.sourceX, sy = s.sourceY;
+                            return (
+                                <div key={id}
+                                    ref={el => { spotlightRefs.current.set(id, el); }}
+                                    className="absolute inset-0"
+                                    style={{
+                                        mixBlendMode: 'screen',
+                                        transformOrigin: `${sx}% ${sy}%`,
+                                        transform: `rotate(${-s.aimAngle}deg)`,
+                                        transition: s.followMouse ? 'none' : 'transform 0.15s ease-out',
+                                        filter: `blur(${blurPx}px)`,
+                                        willChange: 'transform',
+                                    }}
+                                >
+                                    <div className="absolute inset-0" style={{
+                                        clipPath: `polygon(${sx - srcHalf}% ${sy}%, ${sx + srcHalf}% ${sy}%, ${sx + half}% ${sy + len}%, ${sx - half}% ${sy + len}%)`,
+                                        background: `radial-gradient(120% ${len}% at ${sx}% ${sy}%, ${hexToRgba(s.color, 95)} 0%, ${hexToRgba(s.color, 55)} ${inner}%, ${hexToRgba(s.color, 0)} 100%)`,
+                                    }} />
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            })()}
+            </>}
         </>
     };
 
@@ -12705,7 +13811,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         ...((playerState?.mode === 'playing' ? playerState?.stageState.screen.overlayEffects : []) ?? []),
         ...(activeHudScreen?.effects ?? []),
         ...(activeMenuScreen?.effects ?? []),
-    ]);
+    ]).map(e => e.intensityVariableId
+        // LIVE binding: intensity follows a number variable (0-1) while the effect is active —
+        // resolved every render from the current variables (rain thickens as the storm rises).
+        ? { ...e, intensity: resolveVarNumber(mergeDirtyUiVariables(playerState?.variables || {}), e.intensityVariableId, e.intensity, { min: 0, max: 1 }) }
+        : e);
 
     // Fog/haze/smoke render BEHIND character sprites by default (atmospheric depth) unless the
     // author ticked "in front of characters". Every other effect (rain, snow, …) stays in the
@@ -12801,8 +13911,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }, []);
 
     if (!titleScreenId) {
+        // z-[9000]: editor canvas layers reach z-100+ and punched through the old z-50
+        // (the In-Game UI stage frame was visible over test play); modals stay above at z-[10000].
         return (
-            <div className="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center text-white p-8 text-center">
+            <div className="fixed inset-0 bg-black z-[9000] flex flex-col items-center justify-center text-white p-8 text-center">
                 <h2 className="text-2xl text-red-500 font-bold mb-4">Playback Error</h2>
                 <p className="max-w-md">Could not start the game because no valid Title Screen is set. Please ensure a Title Screen exists and is configured in the Project Settings.</p>
                 <button onClick={handleClose} className="mt-8 bg-[var(--bg-tertiary)] hover:bg-[var(--accent-purple)] px-6 py-2 rounded-lg font-bold">
@@ -12813,7 +13925,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }
 
     return (
-        <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black z-[9000] flex items-center justify-center">
             <style>{`
                 @keyframes elementTransitionfade {
                     from { opacity: 0; }
@@ -13277,13 +14389,106 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     onContactMessage={handleContactMessage}
                     onContactCall={handleContactCall}
                     playTap={() => { if (project.ui.phoneTapSoundId) playSound(project.ui.phoneTapSoundId, undefined, false); }}
+                    onOpenApp={(id) => handleUIAction({ type: UIActionType.OpenPhoneApp, appId: id } as VNUIAction)}
+                    onCallReply={handleCallReply}
+                    onEndCall={() => endActiveCall('hangup')}
+                    onSetWallpaper={(id) => updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), wallpaperId: id } } } : null)}
+                    onOpenThread={handleOpenThread}
                 />
             )}
-            {/* Incoming-text notification banner (non-blocking; tap to open the phone to the message) */}
+            {/* Full-screen travel map (Show Map command / Show Map action). Tapping an unlocked
+                location runs its actions then travels; cancel (when allowed) just closes —
+                advancing the scene only when a paused command opened it. */}
+            {playerState?.mode === 'playing' && playerState.uiState.mapOverlay && (() => {
+                const mo = playerState.uiState.mapOverlay!;
+                const map = project.maps?.[mo.mapId];
+                if (!map) return null;
+                return (
+                    <div className="absolute inset-0 z-[45]" style={{ animation: 'fade-in 0.25s ease-out' }}>
+                        <MapSurface map={map} project={project} variables={screenVariables} assetResolver={assetResolver} evaluateConditions={evaluateConditions}
+                            onLocationTap={(loc) => {
+                                const acts = (loc.actions || []) as VNUIAction[];
+                                // Clear the overlay first so actions/jump land on a clean stage.
+                                updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, mapOverlay: null, isWaitingForInput: false } } : null);
+                                acts.forEach(a => handleUIAction(a));
+                                if (loc.targetSceneId) {
+                                    handleUIAction({ type: UIActionType.JumpToScene, targetSceneId: loc.targetSceneId } as VNUIAction);
+                                } else if (mo.fromCommand && !phoneNavigates(acts)) {
+                                    updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+                                }
+                            }} />
+                        {!!mo.allowCancel && (
+                            <button onClick={() => updatePlayerState(p => p ? { ...p, ...(mo.fromCommand ? { currentIndex: p.currentIndex + 1 } : {}), uiState: { ...p.uiState, mapOverlay: null, isWaitingForInput: false } } : null)}
+                                aria-label="Close map" className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 text-white text-lg flex items-center justify-center" style={{ zIndex: 5 }}>✕</button>
+                        )}
+                    </div>
+                );
+            })()}
+            {/* Full-screen mini game (Show Mini Game command / action). The frame owns the stage
+                sequencer + timer + Skip; whichever exit fires (win/skip/fail) runs its authored
+                actions, then a paused command advances. No ✕ — Skip is the authored cancel. */}
+            {playerState?.mode === 'playing' && playerState.uiState.miniGameOverlay && (() => {
+                const mg = playerState.uiState.miniGameOverlay!;
+                const game = project.miniGames?.[mg.gameId];
+                if (!game) return null;
+                return (
+                    <div className="absolute inset-0 z-[46]" style={{ animation: 'fade-in 0.25s ease-out' }}>
+                        <MiniGameFrame game={game} project={project} variables={screenVariables} assetResolver={assetResolver}
+                            playSound={(id) => { if (id) playSound(id, undefined, false); }}
+                            onResolve={(kind, slotColors, score) => {
+                                const baseActs = ((kind === 'win' ? game.winActions : kind === 'skip' ? game.skipActions : game.failActions) || []) as VNUIAction[];
+                                // Performance outcome tier: on WIN, the highest tier whose minAccuracy
+                                // ≤ accuracy runs its actions AFTER winActions ("do well → this scene").
+                                let tierActs: VNUIAction[] = [];
+                                if (kind === 'win' && score && game.score?.tiers?.length) {
+                                    const match = [...game.score.tiers]
+                                        .filter(t => score.accuracy >= (t.minAccuracy ?? 0))
+                                        .sort((a, b) => (b.minAccuracy ?? 0) - (a.minAccuracy ?? 0))[0];
+                                    if (match) tierActs = (match.actions || []) as VNUIAction[];
+                                }
+                                const acts = [...baseActs, ...tierActs];
+                                // Palette→UI: colors the player left in named slots restyle the
+                                // in-game UI (persists in saves) and export to same-named string
+                                // variables — BEFORE the win actions so they can react to them.
+                                const slots = kind === 'win' ? (slotColors || {}) : {};
+                                const slotNames = Object.keys(slots);
+                                const uiPatch: Record<string, string> = {};
+                                (game.paletteToUi || []).forEach(m => { if (m.slot && slots[m.slot]) uiPatch[m.target] = slots[m.slot]; });
+                                // Clear the overlay first so actions/jumps land on a clean stage.
+                                updatePlayerState(p => p ? {
+                                    ...p,
+                                    ...(Object.keys(uiPatch).length ? { uiPaletteOverride: { ...(p.uiPaletteOverride || {}), ...uiPatch } } : {}),
+                                    uiState: { ...p.uiState, miniGameOverlay: null, isWaitingForInput: false },
+                                } : null);
+                                slotNames.forEach(slot => {
+                                    const def = Object.values(project.variables).find((v: any) => v.name?.toLowerCase() === slot.toLowerCase()) as any;
+                                    if (def) handleUIAction({ type: UIActionType.SetVariable, variableId: def.id, operator: 'set', value: slots[slot] } as VNUIAction);
+                                });
+                                // Score → variables (hits / misses / accuracy) — before the actions so
+                                // tier/win actions and later conditions can read them.
+                                if (score && game.score) {
+                                    const setNum = (vid: VNID | null | undefined, val: number) => {
+                                        if (vid && project.variables[vid]) handleUIAction({ type: UIActionType.SetVariable, variableId: vid, operator: 'set', value: val } as VNUIAction);
+                                    };
+                                    setNum(game.score.hitsVariableId, score.hits);
+                                    setNum(game.score.missesVariableId, score.misses);
+                                    setNum(game.score.accuracyVariableId, score.accuracy);
+                                }
+                                acts.forEach(a => handleUIAction(a));
+                                if (mg.fromCommand && !phoneNavigates(acts)) {
+                                    updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+                                }
+                            }} />
+                    </div>
+                );
+            })()}
+            {/* Notification banner (incoming texts / missed calls / Phone Notification command).
+                Tap runs the notification's own actions when set, else opens the phone. */}
             {playerState?.mode === 'playing' && playerState.uiState.phone?.notification?.visible && !playerState.uiState.phone.open && (() => {
                 const n = playerState.uiState.phone.notification!;
-                const nchar = n.senderId === 'player' ? null : project.characters[n.senderId];
+                const nchar = !n.senderId || n.senderId === 'player' ? null : project.characters[n.senderId];
                 const nurls = resolvePhonePortrait(n.portrait, nchar, assetResolver);
+                const nIconImg = n.iconImage ? assetResolver(n.iconImage.id, 'image') : null;
                 // Free position (phoneNotifX/Y) overrides the top/bottom preset when set.
                 const freePos = project.ui.phoneNotifX != null || project.ui.phoneNotifY != null;
                 const atTop = (project.ui.phoneNotifPosition || 'top') === 'top';
@@ -13291,14 +14496,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     ? { left: `${project.ui.phoneNotifX ?? 50}%`, top: `${project.ui.phoneNotifY ?? 2}%` }
                     : { left: '50%', transform: 'translateX(-50%)', ...(atTop ? { top: '2%' } : { bottom: '2%' }) };
                 return (
-                    <div onClick={() => updatePlayerState(p => (p && p.uiState.phone) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, open: true, view: 'chat', notification: null, unread: false } } } : p)}
+                    <div onClick={() => {
+                        const taps = (n.tapActions || []) as VNUIAction[];
+                        updatePlayerState(p => (p && p.uiState.phone) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, ...(taps.length ? {} : { open: true, view: 'chat' }), notification: null, unread: false } } } : p);
+                        taps.forEach(a => handleUIAction(a));
+                    }}
                         style={{ position: 'absolute', ...posStyle, zIndex: 65, cursor: 'pointer', minWidth: '40%', maxWidth: '72%', display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', borderRadius: 14, background: project.ui.phoneNotifColor || 'rgba(18,20,26,0.96)', color: project.ui.phoneNotifTextColor || '#fff', boxShadow: '0 8px 30px rgba(0,0,0,0.5)', animation: 'fade-in 0.25s ease-out', ...(project.ui.phoneNotifFont ? fontSettingsToStyle(project.ui.phoneNotifFont) : {}) }}>
-                        <PhonePortrait urls={nurls} size="2.4em" />
+                        {nurls.length > 0 ? <PhonePortrait urls={nurls} size="2.4em" />
+                            : nIconImg ? <img src={nIconImg} alt="" style={{ width: '2.4em', height: '2.4em', objectFit: 'contain', flexShrink: 0 }} />
+                            : n.icon ? <span style={{ fontSize: '1.6em', flexShrink: 0 }}>{PHONE_GLYPHS[n.icon] || '🔔'}</span> : null}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                            {nchar?.name && <div style={{ fontWeight: 700, fontSize: '0.85em' }}>{nchar.name}</div>}
+                            {(n.title || nchar?.name) && <div style={{ fontWeight: 700, fontSize: '0.85em' }}>{n.title || nchar?.name}</div>}
                             <div style={{ fontSize: '0.85em', opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{interpolateVariables(n.text, screenVariables, project)}</div>
                         </div>
-                        <span style={{ fontSize: '1.2em' }}>💬</span>
+                        <span style={{ fontSize: '1.2em' }}>{n.title ? '🔔' : '💬'}</span>
                     </div>
                 );
             })()}
@@ -13373,7 +14584,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             {playerState?.mode === 'playing' && playerState.uiState.phone?.unread && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
                 const bx = project.ui.phoneBadgeX ?? 95;
                 const by = project.ui.phoneBadgeY ?? 4;
-                const badge = renderPhoneBadge(project.ui);
+                const unreadCount = (playerState.uiState.phone.notifications || []).filter(e => !e.read).length;
+                const badge = renderPhoneBadge(project.ui, unreadCount);
                 return (
                     <div onClick={() => updatePlayerState(p => (p && p.uiState.phone) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, open: true, view: 'chat', notification: null, unread: false } } } : p)}
                         title="New message" style={{ position: 'absolute', left: `${bx}%`, top: `${by}%`, zIndex: 66, cursor: 'pointer' }}>

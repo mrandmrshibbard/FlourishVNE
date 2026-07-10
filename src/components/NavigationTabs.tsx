@@ -1,9 +1,9 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScenesIcon, CharactersIcon, UIScreensIcon, AssetsIcon, VariablesIcon, SettingsIcon, CommonEventsIcon, ArchiveBoxIcon } from './icons';
+import { ScenesIcon, CharactersIcon, UIScreensIcon, AssetsIcon, VariablesIcon, SettingsIcon, CommonEventsIcon, ArchiveBoxIcon, GamepadIcon } from './icons';
 import { isMultiWindowSupported, openManagerWindow, isManagerWindow, focusManagerWindow, type ManagerWindowType } from '../utils/windowManager';
 
-export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'commonEvents' | 'systems' | 'settings';
+export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'commonEvents' | 'systems' | 'miniGames' | 'settings';
 
 interface NavigationTabsProps {
     activeTab: NavigationTab;
@@ -15,6 +15,7 @@ interface NavigationTabsProps {
     variableCount: number;
     commonEventCount: number;
     systemItemCount: number;
+    miniGameCount: number;
 }
 
 // Rainbow colors for each tab
@@ -26,6 +27,7 @@ const tabColors: Record<NavigationTab, { base: string; glow: string; pastel: str
     variables: { base: 'var(--accent-cyan)', glow: 'var(--shadow-glow-cyan)', pastel: 'var(--pastel-cyan)' },
     commonEvents: { base: '#f59e0b', glow: '0 0 20px rgba(245, 158, 11, 0.35)', pastel: '#fbbf24' },
     systems: { base: 'var(--accent-lavender)', glow: '0 0 20px rgba(167, 139, 250, 0.35)', pastel: 'var(--pastel-lavender)' },
+    miniGames: { base: '#34d399', glow: '0 0 20px rgba(52, 211, 153, 0.35)', pastel: '#6ee7b7' },
     settings: { base: 'var(--accent-sky)', glow: '0 0 20px rgba(102, 179, 255, 0.35)', pastel: 'var(--pastel-sky)' },
 };
 
@@ -38,7 +40,8 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     assetCount,
     variableCount,
     commonEventCount,
-    systemItemCount
+    systemItemCount,
+    miniGameCount
 }) => {
     const isChildWindow = isManagerWindow();
     const { t } = useTranslation('nav');
@@ -122,6 +125,13 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                 description: 'Opt-in gameplay systems like Inventory, and the item registry'
             },
             {
+                id: 'miniGames',
+                label: 'Mini Games',
+                icon: <GamepadIcon className="w-4 h-4" />,
+                count: miniGameCount,
+                description: 'Build playable mini games shown by the Show Mini Game command'
+            },
+            {
                 id: 'settings',
                 label: 'Settings',
                 icon: <SettingsIcon className="w-4 h-4" />,
@@ -139,7 +149,8 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
         assetCount,
         variableCount,
         commonEventCount,
-        systemItemCount
+        systemItemCount,
+        miniGameCount
     ]);
 
     const handleOpenInWindow = (tabId: NavigationTab, event: React.MouseEvent) => {
@@ -148,7 +159,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     };
 
     const handleRightClick = (tabId: NavigationTab, event: React.MouseEvent) => {
-        if (!isChildWindow && isMultiWindowSupported() && tabId !== 'settings' && tabId !== 'systems') {
+        if (!isChildWindow && isMultiWindowSupported() && tabId !== 'settings' && tabId !== 'systems' && tabId !== 'miniGames') {
             event.preventDefault();
             event.stopPropagation();
             focusManagerWindow(tabId as ManagerWindowType);
@@ -156,7 +167,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     };
 
     const focusableTabs = React.useMemo(
-        () => tabs.filter(tab => tab.id !== 'settings' && tab.id !== 'systems'),
+        () => tabs.filter(tab => tab.id !== 'settings' && tab.id !== 'systems' && tab.id !== 'miniGames'),
         [tabs]
     );
 
@@ -384,7 +395,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                         </button>
                     
                         {/* Pop-out Window Button - Only show in main window */}
-                        {!isChildWindow && isMultiWindowSupported() && tab.id !== 'settings' && tab.id !== 'systems' && (
+                        {!isChildWindow && isMultiWindowSupported() && tab.id !== 'settings' && tab.id !== 'systems' && tab.id !== 'miniGames' && (
                             <button
                                 onClick={(e) => handleOpenInWindow(tab.id, e)}
                                 className="absolute -top-2 -right-2 w-6 h-6 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"

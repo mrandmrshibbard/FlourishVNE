@@ -20,6 +20,7 @@ import {
     CommonEventsIcon, BoltIcon, GripVerticalIcon
 } from './icons';
 import { getCommandColor, COMMAND_CATEGORIES } from './CommandPalette';
+import { createCommand } from '../utils/commandFactory';
 import { CommandGroupAccordion } from './inspector/CommandGroupFields';
 import { useCommandDefaults, useChoiceActionNormalization } from './PropertiesInspector';
 
@@ -223,82 +224,30 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
         const commandType = e.dataTransfer.getData('application/vn-command-type') as CommandType;
         if (!commandType) return;
 
-        const newCommand: any = {
-            id: `cmd-${generateId()}`,
-            type: commandType,
-        };
+        // Build the command with the SAME canonical factory the scene editor uses, so EVERY command
+        // type gets proper defaults (and its inspector populates) — not just a hand-picked few.
+        const withId = (built: Omit<VNCommand, 'id'> | null) => built ? ({ id: `cmd-${generateId()}`, ...built } as VNCommand) : null;
 
-        // Set default values based on command type
-        switch (commandType) {
-            case CommandType.Dialogue:
-                newCommand.characterId = null;
-                newCommand.text = '';
-                break;
-            case CommandType.Wait:
-                newCommand.duration = 1;
-                break;
-            case CommandType.SetVariable:
-                newCommand.variableId = '';
-                newCommand.operator = 'set';
-                newCommand.value = '';
-                break;
-            case CommandType.Jump:
-                newCommand.targetSceneId = '';
-                break;
-            case CommandType.Label:
-                newCommand.labelId = '';
-                break;
-            case CommandType.JumpToLabel:
-                newCommand.labelId = '';
-                break;
-            case CommandType.SetBackground:
-                newCommand.backgroundId = '';
-                newCommand.transition = 'fade';
-                newCommand.duration = 0.5;
-                break;
-            case CommandType.ShowCharacter:
-                newCommand.characterId = '';
-                newCommand.expressionId = '';
-                newCommand.position = 'center';
-                newCommand.transition = 'fade';
-                newCommand.duration = 0.3;
-                break;
-            case CommandType.HideCharacter:
-                newCommand.characterId = '';
-                newCommand.transition = 'fade';
-                newCommand.duration = 0.3;
-                break;
-            case CommandType.SetCharacterLayer:
-                newCommand.characterId = '';
-                newCommand.layers = [];
-                break;
-            case CommandType.PlayMusic:
-                newCommand.audioId = '';
-                newCommand.loop = true;
-                newCommand.volume = 1;
-                break;
-            case CommandType.StopMusic:
-                newCommand.fadeDuration = 1;
-                break;
-            case CommandType.PlaySoundEffect:
-                newCommand.audioId = '';
-                newCommand.volume = 1;
-                break;
-            case CommandType.StopSoundEffect:
-                break;
-            case CommandType.CallCommonEvent:
-                newCommand.commonEventId = '';
-                newCommand.arguments = {};
-                break;
-            default:
-                break;
+        // A Branch is a paired Start+End (markers paired by branchId). Insert BOTH so it's usable,
+        // mirroring the scene editor — otherwise a lone BranchStart would never close.
+        if (commandType === CommandType.BranchStart) {
+            const branchId = `branch-${generateId()}`;
+            const start = withId(createCommand(CommandType.BranchStart, project, { branchId }));
+            const end = withId(createCommand(CommandType.BranchEnd, project, { branchId }));
+            if (start && end) {
+                dispatch({ type: 'ADD_COMMON_EVENT_COMMAND', payload: { commonEventId: selectedEventId, command: start, index } });
+                dispatch({ type: 'ADD_COMMON_EVENT_COMMAND', payload: { commonEventId: selectedEventId, command: end, index: index === undefined ? undefined : index + 1 } });
+            }
+            return;
         }
 
+        const newCommand = withId(createCommand(commandType, project));
+        if (!newCommand) return;
         dispatch({
             type: 'ADD_COMMON_EVENT_COMMAND',
             payload: { commonEventId: selectedEventId, command: newCommand, index }
         });
-    }, [dispatch, selectedEventId]);
+    }, [dispatch, selectedEventId, project]);
 
     const handleDeleteCommand = useCallback((index: number) => {
         if (!selectedEventId) return;
@@ -676,37 +625,37 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                         )}
                                     </div>
 
-                                    {/* Quick-add buttons */}
-                                    <div className="flex flex-wrap gap-1">
-                                        {[
-                                            CommandType.Dialogue,
-                                            CommandType.Wait,
-                                            CommandType.SetVariable,
-                                            CommandType.ShowCharacter,
-                                            CommandType.HideCharacter,
-                                            CommandType.SetBackground,
-                                            CommandType.PlayMusic,
-                                            CommandType.PlaySoundEffect,
-                                            CommandType.Jump,
-                                            CommandType.CallCommonEvent,
-                                        ].map(cmdType => (
-                                            <button
-                                                key={cmdType}
-                                                onClick={() => {
-                                                    const fakeDropEvent = {
-                                                        preventDefault: () => {},
-                                                        dataTransfer: {
-                                                            getData: () => cmdType,
-                                                        },
-                                                    } as any;
-                                                    handleCommandDrop(fakeDropEvent);
-                                                }}
-                                                className={`px-2 py-0.5 rounded text-[10px] border ${getCommandColor(cmdType)} hover:opacity-80 transition-opacity`}
-                                                title={t('addCommandTitle', { name: formatCommandName(cmdType) })}
-                                            >
-                                                + {formatCommandName(cmdType)}
-                                            </button>
-                                        ))}
+                                    {/* Add-command palette — the FULL categorized command set (same as the
+                                        scene editor), so every command type can be used in a Common Event.
+                                        BranchEnd is a paired marker (inserted automatically with Branch). */}
+                                    <div className="space-y-1.5">
+                                        {Object.entries(COMMAND_CATEGORIES).map(([catName, cat]) => {
+                                            const cmds = (cat.commands as readonly CommandType[]).filter(ct => ct !== CommandType.BranchEnd);
+                                            if (cmds.length === 0) return null;
+                                            return (
+                                                <div key={catName}>
+                                                    <p className="text-[9px] uppercase tracking-wide mb-0.5" style={{ color: 'var(--text-muted)' }}>{catName}</p>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {cmds.map(cmdType => (
+                                                            <button
+                                                                key={cmdType}
+                                                                onClick={() => {
+                                                                    const fakeDropEvent = {
+                                                                        preventDefault: () => {},
+                                                                        dataTransfer: { getData: () => cmdType },
+                                                                    } as any;
+                                                                    handleCommandDrop(fakeDropEvent);
+                                                                }}
+                                                                className={`px-2 py-0.5 rounded text-[10px] border ${getCommandColor(cmdType)} hover:opacity-80 transition-opacity`}
+                                                                title={t('addCommandTitle', { name: formatCommandName(cmdType) })}
+                                                            >
+                                                                + {formatCommandName(cmdType)}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
 
                                     {/* Selected command's property editor (reuses the scene inspector's

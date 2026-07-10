@@ -32,9 +32,16 @@ export const buildOrientationTransform = (o?: { rotation?: number; flipX?: boole
  * tightly wrap the text.  Use `extractTextGradientStyle(settings)` to get
  * those props and apply them to a child `<span>` around the text content.
  */
-export const fontSettingsToStyle = (settings: VNFontSettings): React.CSSProperties => {
+export const fontSettingsToStyle = (settings: VNFontSettings | undefined | null): React.CSSProperties => {
     /** Wrap a px value so it responds to the --font-scale CSS variable. */
     const px = (n: number) => `calc(var(--font-scale, 1) * ${n}px)`;
+
+    // A missing font block must never crash a render (elements from imports/plugins/
+    // generators may omit optional fonts the editor UI would have seeded). Inherit-ish
+    // defaults keep the element visible so the author can style it in the inspector.
+    if (!settings) {
+        return { fontSize: px(16), color: '#ffffff', textAlign: 'left' };
+    }
 
     const style: React.CSSProperties = {
         fontFamily: settings.family,
@@ -71,8 +78,8 @@ export const fontSettingsToStyle = (settings: VNFontSettings): React.CSSProperti
  * text-shadow renders on top of transparent text. The drop-shadow filter applies
  * the shadow behind the content properly.
  */
-export const extractTextGradientStyle = (settings: VNFontSettings): React.CSSProperties | null => {
-    if (!settings.textGradient?.enabled || settings.textGradient.colors.length < 2) return null;
+export const extractTextGradientStyle = (settings: VNFontSettings | undefined | null): React.CSSProperties | null => {
+    if (!settings || !settings.textGradient?.enabled || settings.textGradient.colors.length < 2) return null;
     const grad = settings.textGradient;
     const style: React.CSSProperties = {
         background: grad.type === 'radial'

@@ -1,0 +1,95 @@
+{
+  "characters": [
+    {
+      "id": "char-5q3wdt9",
+      "name": "Sandra Rivers",
+      "defaultSprite": "expr-khdfb37",
+      "sprites": [
+        {
+          "id": "expr-khdfb37",
+          "layers": [
+            "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-kmzbb6e_mai_mom_surprised.png"
+          ]
+        },
+        {
+          "id": "expr-9q7xnc0",
+          "layers": [
+            "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-zxxnucm_kai_mom_grin.png"
+          ]
+        },
+        {
+          "id": "expr-4zzsfqr",
+          "layers": [
+            "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-phh886o_kai_mom_worried.png"
+          ]
+        },
+        {
+          "id": "expr-wgbinkd",
+          "layers": [
+            "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-6wqri2n_corectedkia_mom_content2.png"
+          ]
+        }
+      ],
+      "nameColor": "#FFFFFF",
+      "layers": [
+        {
+          "id": "layer-s6ykcau",
+          "name": "Layer 1",
+          "assets": [
+            {
+              "id": "asset-kmzbb6e",
+              "name": "mai_mom_surprised",
+              "image": "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-kmzbb6e_mai_mom_surprised.png"
+            },
+            {
+              "id": "asset-zxxnucm",
+              "name": "kai_mom_grin",
+              "image": "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-zxxnucm_kai_mom_grin.png"
+            },
+            {
+              "id": "asset-bq9yh4c",
+              "name": "kai_mom_worried2",
+              "image": "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-bq9yh4c_kai_mom_worried2.png"
+            },
+            {
+              "id": "asset-6wqri2n",
+              "name": "corectedkia_mom_content2",
+              "image": "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-6wqri2n_corectedkia_mom_content2.png"
+            },
+            {
+              "id": "asset-phh886o",
+              "name": "kai_mom_worried",
+              "image": "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-phh886o_kai_mom_worried.png"
+            }
+          ]
+        }
+      ],
+      "expressions": [
+        {
+          "id": "expr-khdfb37",
+          "config": {
+            "layer-s6ykcau": "asset-kmzbb6e"
+          }
+        },
+        {
+          "id": "expr-9q7xnc0",
+          "config": {
+            "layer-s6ykcau": "asset-zxxnucm"
+          }
+        },
+        {
+          "id": "expr-4zzsfqr",
+          "config": {
+            "layer-s6ykcau": "asset-phh886o"
+          }
+        },
+        {
+          "id": "expr-wgbinkd",
+          "config": {
+            "layer-s6ykcau": "asset-6wqri2n"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,14 @@
 # Compare & Merge — Collaborative Authoring Plan
 
-Status: **PLAN ONLY (not started)** · Created 2026-06-18
+Status: **BUILT & SHIPPED — Phases 1–3 complete** (verified 2026-07-08) · Created 2026-06-18
+
+> Reachable in-editor via **Header → Tools menu → "🤝 Compare & Merge"**. Implemented in
+> `src/utils/projectDiff.ts` (per-entity diff), `src/utils/projectMerge.ts` (additive import +
+> take-theirs replace, with dependency-closure resolution) and
+> `src/components/collab/CompareMergeModal.tsx` (the full UI). Import mutates the open project via a
+> single undoable `SET_PROJECT`. **Still open (optional): Phase 4** — sub-entity / command-level
+> merge, name-based matching for independent projects, a Project-Hub entry point, an auto-backup
+> prompt before merge, and i18n localization of the modal strings.
 
 ## Goal
 Let two (or more) people build one visual novel **together, asynchronously** — "you make the

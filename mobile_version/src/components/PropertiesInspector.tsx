@@ -33,7 +33,7 @@ import { VNVariable } from '../features/variables/types';
 import { VNCharacter, VNCharacterExpression } from '../features/character/types';
 import { VNBackground, VNAudio, VNVideo, VNImage } from '../features/assets/types';
 import Panel from './ui/Panel';
-import { FormField, Select, TextInput, TextArea, ColorInput } from './ui/Form';
+import { FormField, Select, TextInput, TextArea, ColorInput, RangeInput } from './ui/Form';
 import { TrashIcon, XMarkIcon, PlusIcon, ChevronUpIcon, ChevronDownIcon, LightBulbIcon, BoltIcon, StarIcon } from './icons';
 import AssetSelector from './ui/AssetSelector';
 import ActionEditor from './menu-editor/ActionEditor';
@@ -42,7 +42,7 @@ import ConditionsEditor from './ui/ConditionsEditor';
 import SceneConfigEditor from './SceneConfigEditor';
 import VariablePropertiesEditor from './VariablePropertiesEditor';
 import { OrientationFields, TransitionFields, PositionInputs, CharacterVisualEffectsEditor } from './inspector/fields';
-import { CommandGroupAccordion } from './inspector/CommandGroupFields';
+import { CommandGroupAccordion, PLAYER_CHARACTER_OPTION, PLAYER_CHARACTER_LABEL, withPlayerCharacterOption, characterSelectValue } from './inspector/CommandGroupFields';
 import { isCommandGrouped } from './inspector/inspectorGroups';
 import { ChoiceLayoutSelect, ChoiceOptionAppearance } from './inspector/ChoiceAppearanceFields';
 import { SetVariablePreview } from './inspector/SetVariablePreview';
@@ -374,6 +374,7 @@ const PropertiesInspector: React.FC<{
                 const cmd = command as DialogueCommand;
                 const characterOptions = [
                     { value: '', label: t('shared.narrator') },
+                    { value: PLAYER_CHARACTER_OPTION, label: PLAYER_CHARACTER_LABEL },
                     ...Object.values(project.characters).map((c: VNCharacter) => ({ value: c.id, label: c.name }))
                 ];
                 const audioOptions = [
@@ -396,11 +397,14 @@ const PropertiesInspector: React.FC<{
                     <FormField label={t('shared.character')}>
                         <SearchableSelect
                             options={characterOptions}
-                            value={cmd.characterId || ''}
-                            onChange={(value) => updateCommand({ characterId: value || null })}
+                            value={characterSelectValue(cmd)}
+                            onChange={(value) => value === PLAYER_CHARACTER_OPTION
+                                ? updateCommand({ characterSource: 'player' } as any)
+                                : updateCommand({ characterSource: 'fixed', characterId: value || null } as any)}
                             placeholder={t('shared.selectCharacter')}
                         />
                     </FormField>
+                    {cmd.characterSource === 'player' && <p className="text-[11px] text-[var(--text-muted)] -mt-1">Speaks as the player-created character; the name box uses the player's chosen name.</p>}
                     <FormField label={t('dialogue.text')}>
                         <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value })} />
                     </FormField>
@@ -431,11 +435,11 @@ const PropertiesInspector: React.FC<{
                     </FormField>
                     {currentTextEffect !== 'none' && <>
                         <FormField label={t('dialogue.effectSpeed')}>
-                            <input type="range" min="0.1" max="5" step="0.1" value={cmd.textEffect?.speed ?? 1} onChange={e => updateCommand({ textEffect: { ...(cmd.textEffect || { type: currentTextEffect as any }), speed: parseFloat(e.target.value) } })} className="w-full" />
+                            <RangeInput  min="0.1" max="5" step="0.1" value={cmd.textEffect?.speed ?? 1} onChange={e => updateCommand({ textEffect: { ...(cmd.textEffect || { type: currentTextEffect as any }), speed: parseFloat(e.target.value) } })} className="w-full" />
                             <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{(cmd.textEffect?.speed ?? 1).toFixed(1)}x</span>
                         </FormField>
                         <FormField label={t('dialogue.effectIntensity')}>
-                            <input type="range" min="0.1" max="3" step="0.1" value={cmd.textEffect?.intensity ?? 1} onChange={e => updateCommand({ textEffect: { ...(cmd.textEffect || { type: currentTextEffect as any }), intensity: parseFloat(e.target.value) } })} className="w-full" />
+                            <RangeInput  min="0.1" max="3" step="0.1" value={cmd.textEffect?.intensity ?? 1} onChange={e => updateCommand({ textEffect: { ...(cmd.textEffect || { type: currentTextEffect as any }), intensity: parseFloat(e.target.value) } })} className="w-full" />
                             <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{(cmd.textEffect?.intensity ?? 1).toFixed(1)}x</span>
                         </FormField>
                     </>}
@@ -512,33 +516,36 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.ShowCharacter: {
                  const cmd = command as ShowCharacterCommand;
+                 const isPlayerChar = cmd.characterSource === 'player';
                  const character = project.characters[cmd.characterId];
                  const isSlideTransition = cmd.transition === 'slide';
-                 const characterOptions = Object.values(project.characters).map((c: VNCharacter) => ({ value: c.id, label: c.name }));
-                 const expressionOptions = character 
+                 const characterOptions = withPlayerCharacterOption(Object.values(project.characters).map((c: VNCharacter) => ({ value: c.id, label: c.name })));
+                 const expressionOptions = character
                     ? Object.values(character.expressions).map((expr: VNCharacterExpression) => ({ value: expr.id, label: expr.name }))
                     : [];
                  return <>
                     <FormField label={t('shared.character')}>
                         <SearchableSelect
                             options={characterOptions}
-                            value={cmd.characterId}
+                            value={characterSelectValue(cmd)}
                             onChange={(value) => {
+                                if (value === PLAYER_CHARACTER_OPTION) { updateCommand({ characterSource: 'player' } as any); return; }
                                 const newChar = project.characters[value];
                                 const firstExprId = newChar ? Object.keys(newChar.expressions)[0] : '';
-                                updateCommand({ characterId: value, expressionId: firstExprId || '' });
+                                updateCommand({ characterSource: 'fixed', characterId: value, expressionId: firstExprId || '' } as any);
                             }}
                             placeholder={Object.keys(project.characters).length === 0 ? t('shared.noCharacters') : t('shared.selectCharacter')}
                         />
                     </FormField>
-                    <FormField label={t('shared.expression')}>
+                    {isPlayerChar && <p className="text-[11px] text-[var(--text-muted)] -mt-1">Shows the character the player created (set one up in <strong>Systems → Character Creator</strong>). Until a player character exists, a default character is shown here so you can preview. Expression falls back automatically.</p>}
+                    {!isPlayerChar && <FormField label={t('shared.expression')}>
                         <SearchableSelect
                             options={expressionOptions}
                             value={cmd.expressionId}
                             onChange={(value) => updateCommand({ expressionId: value })}
                             placeholder={(!character || Object.keys(character.expressions).length === 0) ? t('shared.noExpressions') : t('shared.selectExpression')}
                         />
-                    </FormField>
+                    </FormField>}
                     
                     <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
                         <input type="checkbox" checked={!!cmd.keepPosition} onChange={(e) => updateCommand({ keepPosition: e.target.checked || undefined } as any)} className="cursor-pointer" />
@@ -576,8 +583,8 @@ const PropertiesInspector: React.FC<{
                     {/* Scale control */}
                     <FormField label={t('shared.scale')}>
                         <div className="flex items-center gap-2">
-                            <input 
-                                type="range" min="0.1" max="3" step="0.05"
+                            <RangeInput 
+                                 min="0.1" max="3" step="0.05"
                                 value={cmd.scale ?? 1}
                                 onChange={e => updateCommand({ scale: parseFloat(e.target.value) })}
                                 className="flex-1"
@@ -615,13 +622,15 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.HideCharacter: {
                  const cmd = command as HideCharacterCommand;
-                 const characterOptions = Object.values(project.characters).map((c: VNCharacter) => ({ value: c.id, label: c.name }));
+                 const characterOptions = withPlayerCharacterOption(Object.values(project.characters).map((c: VNCharacter) => ({ value: c.id, label: c.name })));
                  return <>
                     <FormField label={t('shared.character')}>
                         <SearchableSelect
                             options={characterOptions}
-                            value={cmd.characterId}
-                            onChange={(value) => updateCommand({ characterId: value })}
+                            value={characterSelectValue(cmd)}
+                            onChange={(value) => value === PLAYER_CHARACTER_OPTION
+                                ? updateCommand({ characterSource: 'player' } as any)
+                                : updateCommand({ characterSource: 'fixed', characterId: value } as any)}
                             placeholder={Object.keys(project.characters).length === 0 ? t('shared.noCharacters') : t('shared.selectCharacter')}
                         />
                     </FormField>
@@ -721,7 +730,7 @@ const PropertiesInspector: React.FC<{
                         {Object.values(project.audio).map((a: VNAudio) => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </Select></FormField>
                     <FormField label={`Volume: ${Math.round((cmd.volume ?? 1) * 100)}%`}>
-                        <input type="range" min="0" max="100" value={Math.round((cmd.volume ?? 1) * 100)} onChange={e => updateCommand({ volume: parseInt(e.target.value) / 100 })} className="w-full accent-[var(--accent-lavender)]" />
+                        <RangeInput  min="0" max="100" value={Math.round((cmd.volume ?? 1) * 100)} onChange={e => updateCommand({ volume: parseInt(e.target.value) / 100 })} className="w-full accent-[var(--accent-lavender)]" />
                     </FormField>
                     <FormField label={t('audio.fadeDurationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.fadeDuration} onChange={e => updateCommand({ fadeDuration: parseFloat(e.target.value) || 0 })}/></FormField>
                     <div className="flex items-center gap-1"><input type="checkbox" checked={cmd.loop} onChange={e => updateCommand({ loop: e.target.checked })} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)] focus:ring-[var(--accent-lavender)]" /> <label>{t('audio.loop')}</label></div>
@@ -739,7 +748,7 @@ const PropertiesInspector: React.FC<{
                         {Object.values(project.audio).map((a: VNAudio) => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </Select></FormField>
                     <FormField label={`Volume: ${Math.round((cmd.volume ?? 1) * 100)}%`}>
-                        <input type="range" min="0" max="100" value={Math.round((cmd.volume ?? 1) * 100)} onChange={e => updateCommand({ volume: parseInt(e.target.value) / 100 })} className="w-full accent-[var(--accent-lavender)]" />
+                        <RangeInput  min="0" max="100" value={Math.round((cmd.volume ?? 1) * 100)} onChange={e => updateCommand({ volume: parseInt(e.target.value) / 100 })} className="w-full accent-[var(--accent-lavender)]" />
                     </FormField>
                     <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
                         <input type="checkbox" checked={!!cmd.loop} onChange={e => updateCommand({ loop: e.target.checked })} className="cursor-pointer" />
@@ -846,7 +855,7 @@ const PropertiesInspector: React.FC<{
                         </>
                     )}
                     <FormField label={t('movie.opacity', { value: Math.round((cmd.opacity ?? 1) * 100) })}>
-                        <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
+                        <RangeInput  min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
                     </FormField>
                     {isOverlay && (
                         <p className="text-xs text-[var(--text-secondary)] mt-2">
@@ -1041,7 +1050,7 @@ const PropertiesInspector: React.FC<{
                 const isShakePersistent = cmd.duration === 0;
                 return <>
                     <FormField label={t('screen.intensity', { value: cmd.intensity })}>
-                        <input type="range" min="1" max="10" value={cmd.intensity} onChange={e => updateCommand({ intensity: parseInt(e.target.value, 10) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
+                        <RangeInput  min="1" max="10" value={cmd.intensity} onChange={e => updateCommand({ intensity: parseInt(e.target.value, 10) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
                     </FormField>
                     <FormField label={t('screen.duration')}>
                         <label className="flex items-center gap-2 mb-2">
@@ -1070,13 +1079,13 @@ const PropertiesInspector: React.FC<{
                 const cmd = command as PanZoomScreenCommand;
                 return <>
                     <FormField label={t('screen.zoom', { value: cmd.zoom })}>
-                        <input type="range" min="0.1" max="5" step="0.1" value={cmd.zoom} onChange={e => updateCommand({ zoom: parseFloat(e.target.value) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
+                        <RangeInput  min="0.1" max="5" step="0.1" value={cmd.zoom} onChange={e => updateCommand({ zoom: parseFloat(e.target.value) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
                     </FormField>
                      <FormField label={t('screen.panX', { value: cmd.panX })}>
-                        <input type="range" min="-100" max="100" value={cmd.panX} onChange={e => updateCommand({ panX: parseInt(e.target.value, 10) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
+                        <RangeInput  min="-100" max="100" value={cmd.panX} onChange={e => updateCommand({ panX: parseInt(e.target.value, 10) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
                     </FormField>
                      <FormField label={t('screen.panY', { value: cmd.panY })}>
-                        <input type="range" min="-100" max="100" value={cmd.panY} onChange={e => updateCommand({ panY: parseInt(e.target.value, 10) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
+                        <RangeInput  min="-100" max="100" value={cmd.panY} onChange={e => updateCommand({ panY: parseInt(e.target.value, 10) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
                     </FormField>
                     <FormField label={t('shared.durationSec')}>
                         <TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })}/>
@@ -1137,7 +1146,7 @@ const PropertiesInspector: React.FC<{
                     </FormField>
 
                     <FormField label={t('screen.intensityPct', { value: Math.round(intensity * 100) })}>
-                        <input type="range" min="0" max="1" step="0.01" value={intensity} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
+                        <RangeInput  min="0" max="1" step="0.01" value={intensity} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
                     </FormField>
 
                     {supportsColor && (
@@ -1360,7 +1369,7 @@ const PropertiesInspector: React.FC<{
                     </div>
                     <OrientationFields rotation={cmd.rotation} flipX={cmd.flipX} flipY={cmd.flipY} onChange={p => updateCommand(p)} />
                     <FormField label={t('image.opacity', { value: cmd.opacity })}>
-                        <input type="range" min="0" max="1" step="0.01" value={cmd.opacity} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} />
+                        <RangeInput  min="0" max="1" step="0.01" value={cmd.opacity} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} />
                     </FormField>
                     <hr className="border-[var(--border-subtle)] my-2" />
                     <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('shared.animation')}</h4>
@@ -1459,7 +1468,7 @@ const PropertiesInspector: React.FC<{
                     <FormField label={t('button.borderRadius')}><TextInput type="number" value={cmd.borderRadius} onChange={e => updateCommand({ borderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
 
                     <FormField label={t('movie.opacity', { value: Math.round((cmd.opacity ?? 1) * 100) })}>
-                        <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
+                        <RangeInput  min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
                     </FormField>
 
                     <hr className="border-[var(--border-subtle)] my-2" />
@@ -1748,7 +1757,7 @@ const PropertiesInspector: React.FC<{
                     </FormField>
                     <hr className="border-[var(--border-subtle)] my-2" />
                     <FormField label={t('credit.scrollSpeed')}>
-                        <input type="range" min="10" max="200" step="5" value={cmd.scrollSpeed || 60} onChange={e => updateCommand({ scrollSpeed: parseInt(e.target.value) || 60 })} className="w-full" />
+                        <RangeInput  min="10" max="200" step="5" value={cmd.scrollSpeed || 60} onChange={e => updateCommand({ scrollSpeed: parseInt(e.target.value) || 60 })} className="w-full" />
                         <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('credit.pxPerSec', { value: cmd.scrollSpeed || 60, label: (cmd.scrollSpeed || 60) <= 40 ? t('credit.speedSlow') : (cmd.scrollSpeed || 60) <= 80 ? t('credit.speedNormal') : (cmd.scrollSpeed || 60) <= 130 ? t('credit.speedFast') : t('credit.speedVeryFast') })}</span>
                     </FormField>
                     <FormField label={t('credit.maxDuration')}>
@@ -1874,7 +1883,7 @@ const PropertiesInspector: React.FC<{
                                                 </>
                                             )}
                                             <FormField label={t('credit.opacity', { value: Math.round((bg.opacity ?? 1) * 100) })}>
-                                                <input type="range" min="0" max="1" step="0.01" value={bg.opacity ?? 1} onChange={e => updateBg(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
+                                                <RangeInput  min="0" max="1" step="0.01" value={bg.opacity ?? 1} onChange={e => updateBg(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
                                             </FormField>
                                         </div>
                                     ))}
@@ -1969,7 +1978,7 @@ const PropertiesInspector: React.FC<{
                                                 </>
                                             )}
                                             <FormField label={t('credit.opacity', { value: Math.round((item.opacity ?? 1) * 100) })}>
-                                                <input type="range" min="0" max="1" step="0.01" value={item.opacity ?? 1} onChange={e => updateMedia(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
+                                                <RangeInput  min="0" max="1" step="0.01" value={item.opacity ?? 1} onChange={e => updateMedia(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
                                             </FormField>
                                             <div className="grid grid-cols-2 gap-1 mt-1.5">
                                                 <FormField label={t('credit.showAt')}><TextInput type="number" min="0" step="0.5" value={item.showAt} onChange={e => updateMedia(i, { showAt: parseFloat(e.target.value) || 0 })} /></FormField>
@@ -2094,7 +2103,7 @@ const PropertiesInspector: React.FC<{
                     </FormField>
                     {/* Key controls shown for ALL modes (preset + custom) */}
                     <FormField label={t('particles.density')}>
-                        <input type="range" min="1" max="200" value={cmd.config?.emitRate || 20} onChange={e => updateCommand({ config: { ...cmd.config, emitRate: parseInt(e.target.value) || 20 } })} className="w-full" />
+                        <RangeInput  min="1" max="200" value={cmd.config?.emitRate || 20} onChange={e => updateCommand({ config: { ...cmd.config, emitRate: parseInt(e.target.value) || 20 } })} className="w-full" />
                         <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.densityHint', { value: cmd.config?.emitRate || 20 })}</span>
                     </FormField>
                     <FormField label={t('particles.speed')}>
@@ -2180,11 +2189,11 @@ const PropertiesInspector: React.FC<{
                                 className="w-full rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
                         </FormField>
                         <FormField label={t('particles.gravity')}>
-                            <input type="range" min="-100" max="100" value={cmd.config?.gravity || 0} onChange={e => updateCommand({ config: { ...cmd.config, gravity: parseFloat(e.target.value) } })} className="w-full" />
+                            <RangeInput  min="-100" max="100" value={cmd.config?.gravity || 0} onChange={e => updateCommand({ config: { ...cmd.config, gravity: parseFloat(e.target.value) } })} className="w-full" />
                             <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.gravityHint', { value: cmd.config?.gravity || 0 })}</span>
                         </FormField>
                         <FormField label={t('particles.wind')}>
-                            <input type="range" min="-50" max="50" value={cmd.config?.wind || 0} onChange={e => updateCommand({ config: { ...cmd.config, wind: parseFloat(e.target.value) } })} className="w-full" />
+                            <RangeInput  min="-50" max="50" value={cmd.config?.wind || 0} onChange={e => updateCommand({ config: { ...cmd.config, wind: parseFloat(e.target.value) } })} className="w-full" />
                             <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{cmd.config?.wind || 0}</span>
                         </FormField>
                         <FormField label={t('particles.colors')}>
@@ -2380,7 +2389,7 @@ const PropertiesInspector: React.FC<{
                     )}
                     {showOpacity && (
                         <FormField label={cmd.opacity !== undefined ? t('tween.opacity', { value: Math.round(cmd.opacity * 100) + '%' }) : t('tween.opacityNone')}>
-                            <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
+                            <RangeInput  min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
                         </FormField>
                     )}
                     {showRotation && (
@@ -2389,7 +2398,7 @@ const PropertiesInspector: React.FC<{
                     {showScale && (
                         <FormField label={t('tween.scale')}>
                             <div className="flex items-center gap-2">
-                                <input type="range" min="0.1" max="3" step="0.05" value={cmd.scale ?? 1} onChange={e => updateCommand({ scale: parseFloat(e.target.value) })} className="flex-1" />
+                                <RangeInput  min="0.1" max="3" step="0.05" value={cmd.scale ?? 1} onChange={e => updateCommand({ scale: parseFloat(e.target.value) })} className="flex-1" />
                                 <TextInput type="number" min="0.1" max="5" step="0.05" value={cmd.scale ?? ''} onChange={e => updateCommand({ scale: e.target.value ? parseFloat(e.target.value) : undefined })} style={{ width: '60px' }} />
                             </div>
                         </FormField>
@@ -2439,7 +2448,7 @@ const PropertiesInspector: React.FC<{
 
     return <Panel title={t('footer.titleNamed', { name: t(`commands:names.${command.type}`, { defaultValue: command.type.replace(/([A-Z])/g, ' $1').trim() }) })} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
         <div className="flex flex-col h-full">
-            <div className="flex-grow overflow-y-auto pr-1">
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1">
                 {(() => {
                     // Plugin-provided custom command: render a generic editor from its parameter schema.
                     const customDef = pluginManager.getCommand(command.type as string);

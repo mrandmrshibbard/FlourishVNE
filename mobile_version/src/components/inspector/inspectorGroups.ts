@@ -109,6 +109,10 @@ export function getCommandGroups(command: VNCommand | null | undefined): Inspect
         case CommandType.HidePhoneText:
         case CommandType.PhoneIncomingText:
         case CommandType.PhoneIncomingCall:
+        case CommandType.StartPhoneCall:
+        case CommandType.ShowMap:
+        case CommandType.ShowMiniGame:
+        case CommandType.PhoneNotify:
             return order(['content', 'conditions']);
         case CommandType.CreditRoll:
             // entries; bg/text colours; slideshow + foreground media; playback (speed/duration/skip/onComplete).
@@ -126,6 +130,8 @@ export function getCommandGroups(command: VNCommand | null | undefined): Inspect
             // timer id + variable + mode/duration/interval/loop + on-complete actions.
             return order(['content', 'conditions']);
         case CommandType.StopTimer:
+            return order(['content', 'conditions']);
+        case CommandType.SetTimeOfDay:
             return order(['content', 'conditions']);
         case CommandType.SetBackground:
             return order(['content', 'animation', 'conditions']);
@@ -148,11 +154,13 @@ export function getCommandGroups(command: VNCommand | null | undefined): Inspect
         case CommandType.FlashScreen:
         case CommandType.Lightning:
         case CommandType.Flashlight:
+        case CommandType.Spotlight:
         case CommandType.Fireworks:
         case CommandType.PlaceLights:
         case CommandType.ClearLights:
         case CommandType.SetScreenOverlayEffect:
         case CommandType.ShowScreen:
+        case CommandType.HideScreen:
         case CommandType.Label:
         case CommandType.JumpToLabel:
         case CommandType.Group:

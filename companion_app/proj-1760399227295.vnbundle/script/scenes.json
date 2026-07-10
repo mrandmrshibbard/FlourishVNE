@@ -1,0 +1,447 @@
+{
+  "scenes": [
+    {
+      "id": "scene-start",
+      "name": "sparrow_bay",
+      "commands": [
+        {
+          "id": "kve9wqt",
+          "type": "setBackground",
+          "image": "assets/backgrounds/back-a6ljrt7__s-1824911215_5_.png",
+          "transition": {
+            "type": "dissolve",
+            "durationMs": 500
+          }
+        },
+        {
+          "id": "bv3t743",
+          "type": "playMusic",
+          "audio": "assets/audio/audi-n3neivq_whispers_of_warmth_ext_v2.mp3",
+          "loop": true,
+          "fadeMs": 1000
+        },
+        {
+          "id": "6pyc5kk",
+          "type": "say",
+          "text": "Sparrow Bay Lane... you've lived here your whole life."
+        },
+        {
+          "id": "8towphd",
+          "type": "setBackground",
+          "image": "assets/backgrounds/back-lw0mvuf_closeupstreet.png",
+          "transition": {
+            "type": "dissolve",
+            "durationMs": 500
+          }
+        },
+        {
+          "id": "lc6ruov",
+          "type": "say",
+          "text": "School just let out for summer and the neighborhood was already bustling with tourists and beach-goers."
+        },
+        {
+          "id": "cmd-9qovnvn",
+          "type": "say",
+          "text": "You always made friends easily with the kids who vacationed here."
+        },
+        {
+          "id": "enlrccb",
+          "type": "setBackground",
+          "image": "assets/backgrounds/back-5ywq260__s-1824911215_upscale.png",
+          "transition": {
+            "type": "dissolve",
+            "durationMs": 1000
+          }
+        },
+        {
+          "id": "o7re9ia",
+          "type": "say",
+          "text": "Every year, you'd meet and make so many friends. But once summer was over... so was that friendship."
+        },
+        {
+          "id": "w9hfc74",
+          "type": "setBackground",
+          "image": "assets/backgrounds/back-y6dbj96_kai_s_house_-_far_away.png",
+          "transition": {
+            "type": "dissolve",
+            "durationMs": 1000
+          }
+        },
+        {
+          "id": "me2nfd3",
+          "type": "say",
+          "text": "You round the corner to your block and see the usually abandoned beach house at the end of the street is lit up on the inside."
+        },
+        {
+          "id": "v3wyaj6",
+          "type": "say",
+          "text": "A woman stands outside, looking around frantically. You decide to take a closer look and as you approach, the woman sees you and grins from ear to ear."
+        },
+        {
+          "id": "6itb1kd",
+          "type": "jump",
+          "scene": "scene-2rrq784"
+        }
+      ]
+    },
+    {
+      "id": "scene-2rrq784",
+      "name": "kais_mom",
+      "commands": [
+        {
+          "id": "cmd-j144908",
+          "type": "spawnParticles",
+          "tag": "particles_1",
+          "duration": 0,
+          "config": {
+            "shape": "square",
+            "colors": [
+              "#FF3366",
+              "#33CCFF",
+              "#FFCC00",
+              "#66FF66",
+              "#CC66FF",
+              "#FF6633"
+            ],
+            "emitRate": 40,
+            "lifetime": 4,
+            "speedMin": 30,
+            "speedMax": 100,
+            "sizeMin": 4,
+            "sizeMax": 10,
+            "gravity": 30,
+            "wind": 5,
+            "directionMin": 45,
+            "directionMax": 135,
+            "emitterX": 50,
+            "emitterY": 0,
+            "emitterWidth": 100,
+            "emitterHeight": 5,
+            "fadeOut": false,
+            "shrink": false,
+            "rotationSpeed": 180,
+            "opacity": 0.9,
+            "blendMode": "source-over"
+          }
+        },
+        {
+          "id": "idm373s",
+          "type": "setBackground",
+          "image": "assets/backgrounds/back-32uztir_kai_s_porch.png",
+          "transition": {
+            "type": "dissolve",
+            "durationMs": 1000
+          }
+        },
+        {
+          "id": "8bsvdu4",
+          "type": "playMusic",
+          "audio": "assets/audio/audi-hvy3knf_beach_breeze_melody_ext_v2.mp3",
+          "loop": true,
+          "fadeMs": 1000
+        },
+        {
+          "id": "lvkqukm",
+          "type": "showCharacter",
+          "character": "char-5q3wdt9",
+          "sprite": "expr-khdfb37",
+          "position": {
+            "x": 0.5,
+            "y": 1
+          },
+          "transition": {
+            "type": "fade",
+            "durationMs": 500
+          },
+          "scale": 1,
+          "hidePreviousTransition": "fade"
+        },
+        {
+          "id": "rreim1k",
+          "type": "playSound",
+          "audio": "assets/audio/audi-ieh16hz_sandrahuh.wav"
+        },
+        {
+          "id": "cmd-89ez947",
+          "type": "wait",
+          "ms": 2000
+        },
+        {
+          "id": "xxduvto",
+          "type": "showCharacter",
+          "character": "char-5q3wdt9",
+          "sprite": "expr-9q7xnc0",
+          "position": {
+            "x": 0.5,
+            "y": 1
+          },
+          "transition": {
+            "type": "fade",
+            "durationMs": 500
+          }
+        },
+        {
+          "id": "sxdsjr5",
+          "type": "playSound",
+          "audio": "assets/audio/audi-i4r89zz_sandrahi.wav"
+        },
+        {
+          "id": "oiygamn",
+          "type": "say",
+          "text": "Hi! Hey, I need your help real quick!"
+        },
+        {
+          "id": "cmd-ty6ofah",
+          "type": "choice",
+          "options": [
+            {
+              "text": "You don't move, but listen to what she has to say. \"My dad's told me not to talk to strangers.\"",
+              "actions": [
+                {
+                  "action": "setVar",
+                  "var": "var-9pz4vfh",
+                  "op": "add",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "text": "You start to turn and walk away, not wanting to chance it.",
+              "actions": [
+                {
+                  "action": "setVar",
+                  "var": "var-9pz4vfh",
+                  "op": "subtract",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "cmd-0jtih2a",
+          "type": "branch",
+          "branches": [
+            {
+              "commands": [
+                {
+                  "id": "cmd-5o3b3hz",
+                  "if": [
+                    {
+                      "var": "var-9pz4vfh",
+                      "op": ">=",
+                      "value": "50"
+                    }
+                  ],
+                  "type": "showCharacter",
+                  "character": "char-5q3wdt9",
+                  "sprite": "expr-wgbinkd",
+                  "position": {
+                    "x": 0.5,
+                    "y": 1
+                  },
+                  "transition": {
+                    "type": "fade",
+                    "durationMs": 1000
+                  }
+                },
+                {
+                  "id": "cmd-77bb5y7",
+                  "if": [
+                    {
+                      "var": "var-9pz4vfh",
+                      "op": ">=",
+                      "value": "50"
+                    }
+                  ],
+                  "type": "say",
+                  "text": "That is very good advice! Hey... could you please keep an eye out for my son? His name is Kai and he has purple hair, like mine. ",
+                  "speaker": "char-5q3wdt9"
+                },
+                {
+                  "id": "cmd-tu2cpd7",
+                  "if": [
+                    {
+                      "var": "var-9pz4vfh",
+                      "op": ">=",
+                      "value": "50"
+                    }
+                  ],
+                  "type": "playSound",
+                  "audio": "assets/audio/audi-1t0652n_kai_mom_giggle.wav"
+                },
+                {
+                  "id": "cmd-z3l9ql7",
+                  "type": "showCharacter",
+                  "character": "char-5q3wdt9",
+                  "sprite": "expr-4zzsfqr",
+                  "position": {
+                    "x": 0.5,
+                    "y": 1
+                  },
+                  "transition": {
+                    "type": "fade",
+                    "durationMs": 1000
+                  }
+                },
+                {
+                  "id": "cmd-z7oehmz",
+                  "type": "say",
+                  "text": "You haven't seen a little boy with purple hair around, have you?",
+                  "speaker": "char-5q3wdt9"
+                },
+                {
+                  "id": "cmd-jpimfmf",
+                  "type": "say",
+                  "text": "My son Kai ran off to explore the neighborhood earlier. But it's getting dark and I'm starting to get worried.",
+                  "speaker": "char-5q3wdt9"
+                },
+                {
+                  "id": "cmd-96ody8h",
+                  "type": "say",
+                  "text": "He's been having a real hard time moving out here. He really could use some friends."
+                },
+                {
+                  "id": "cmd-p4r3191",
+                  "type": "showCharacter",
+                  "character": "char-5q3wdt9",
+                  "sprite": "expr-9q7xnc0",
+                  "position": {
+                    "x": 0.5,
+                    "y": 1
+                  },
+                  "transition": {
+                    "type": "fade",
+                    "durationMs": 1000
+                  }
+                },
+                {
+                  "id": "cmd-5fcn15x",
+                  "type": "say",
+                  "text": "Hey! Think you could be friends with him? Please?! I'll... I'll even through in $10 dollars!",
+                  "speaker": "char-5q3wdt9"
+                }
+              ],
+              "if": [
+                {
+                  "var": "var-9pz4vfh",
+                  "op": "==",
+                  "value": ""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "cmd-3bv9bqz",
+          "type": "branch",
+          "branches": [
+            {
+              "commands": [
+                {
+                  "id": "cmd-7m8zp1z",
+                  "if": [
+                    {
+                      "var": "var-9pz4vfh",
+                      "op": "<=",
+                      "value": "45"
+                    }
+                  ],
+                  "type": "showCharacter",
+                  "character": "char-5q3wdt9",
+                  "sprite": "expr-4zzsfqr",
+                  "position": {
+                    "x": 0.5,
+                    "y": 1
+                  },
+                  "transition": {
+                    "type": "fade",
+                    "durationMs": 1000
+                  }
+                },
+                {
+                  "id": "cmd-exizjyo",
+                  "if": [
+                    {
+                      "var": "var-9pz4vfh",
+                      "op": "<=",
+                      "value": "45"
+                    }
+                  ],
+                  "type": "playSound",
+                  "audio": "assets/audio/audi-dkqnin1_kai_mom_sigh.wav"
+                },
+                {
+                  "id": "cmd-fkwezfi",
+                  "if": [
+                    {
+                      "var": "var-9pz4vfh",
+                      "op": "<=",
+                      "value": "45"
+                    }
+                  ],
+                  "type": "say",
+                  "text": "Oh, please wait! I'm just looking for my son, Kai. He's about your age with purple hair and eyes. ",
+                  "speaker": "char-5q3wdt9"
+                },
+                {
+                  "id": "cmd-8toqmn9",
+                  "type": "say",
+                  "text": "He ran off earlier to explore. But it's getting dark and he really needs to come home.",
+                  "speaker": "char-5q3wdt9"
+                },
+                {
+                  "id": "cmd-uqw6b1z",
+                  "type": "say",
+                  "text": "Moving away from home has been real tough on Kai. It'd be nice if he could make some friends."
+                },
+                {
+                  "id": "cmd-hn15e94",
+                  "type": "showCharacter",
+                  "character": "char-5q3wdt9",
+                  "sprite": "expr-9q7xnc0",
+                  "position": {
+                    "x": 0.5,
+                    "y": 1
+                  },
+                  "transition": {
+                    "type": "fade",
+                    "durationMs": 1000
+                  }
+                },
+                {
+                  "id": "cmd-5xx9f7n",
+                  "type": "say",
+                  "text": "Hey! Think you could be friends with him? Please?! I'll... I'll even through in $10 dollars!",
+                  "speaker": "char-5q3wdt9"
+                }
+              ],
+              "if": [
+                {
+                  "var": "var-9pz4vfh",
+                  "op": "==",
+                  "value": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "cmd-ywmsdz0",
+          "type": "choice",
+          "options": [
+            {
+              "text": "Option 1"
+            },
+            {
+              "text": "New Option"
+            },
+            {
+              "text": "New Option"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

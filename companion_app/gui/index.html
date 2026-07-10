@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+<title>Flourish → Godot</title>
+<style>
+  :root {
+    --bg: #12141c; --panel: #1b1e2a; --panel-2: #232739; --line: #313650;
+    --text: #eef1f8; --dim: #9aa2bd; --accent: #6ea8ff; --accent-2: #4a7fe0;
+    --good: #57d38c; --warn: #ffca6b; --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(1200px 600px at 50% -10%, #1c2740 0%, var(--bg) 55%);
+    color: var(--text); font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+    padding: 28px 30px 24px; -webkit-user-select: none; user-select: none;
+  }
+  h1 { font-size: 22px; margin: 0 0 2px; letter-spacing: .2px; }
+  h1 .arrow { color: var(--accent); }
+  .sub { color: var(--dim); margin: 0 0 22px; font-size: 14px; }
+
+  .drop {
+    border: 2px dashed var(--line); border-radius: var(--radius);
+    background: var(--panel); padding: 26px 22px; text-align: center; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--panel-2); }
+  .drop .big { font-size: 16px; font-weight: 600; }
+  .drop .hint { color: var(--dim); font-size: 13px; margin-top: 6px; }
+  .drop.has-file { border-style: solid; border-color: var(--accent-2); text-align: left; }
+  .filerow { display: flex; align-items: center; gap: 12px; }
+  .filerow .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .filerow .ic { font-size: 22px; }
+
+  .row { display: flex; gap: 12px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+  .outbtn {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 14px; cursor: pointer; font-size: 13px;
+  }
+  .outbtn:hover { border-color: var(--accent); }
+  .outpath { color: var(--dim); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+
+  .go {
+    margin-top: 20px; width: 100%; padding: 15px; border: 0; border-radius: 12px;
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: #08122a; font-size: 17px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 6px 20px -8px var(--accent-2); transition: filter .15s, transform .05s;
+  }
+  .go:hover:not(:disabled) { filter: brightness(1.06); }
+  .go:active:not(:disabled) { transform: translateY(1px); }
+  .go:disabled { opacity: .5; cursor: default; box-shadow: none; }
+
+  .card { margin-top: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; display: none; }
+  .card.show { display: block; }
+  .card h2 { margin: 0 0 4px; font-size: 18px; }
+  .card h2.ok { color: var(--good); }
+  .card h2.err { color: #ff6b6b; }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; color: var(--dim); font-size: 13px; margin: 8px 0 4px; }
+  .stats b { color: var(--text); }
+  .steps { color: var(--dim); font-size: 13px; margin: 8px 0; min-height: 20px; }
+  .steps .done { color: var(--good); }
+
+  .section-title { font-size: 12px; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); margin: 14px 0 6px; }
+  ol.next { margin: 0; padding-left: 20px; }
+  ol.next li { margin: 3px 0; }
+  .warns { list-style: none; margin: 6px 0 0; padding: 0; }
+  .warns li { background: var(--panel-2); border-left: 3px solid var(--warn); border-radius: 6px; padding: 7px 10px; margin: 5px 0; font-size: 13px; color: #e6dcc4; }
+  #errs li { border-left-color: #ff6b6b; color: #f3caca; }
+  .caps { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .cap { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 12px; color: var(--dim); }
+  .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .actions button { background: var(--accent-2); color: #fff; border: 0; border-radius: 10px; padding: 10px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .actions button.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+  .actions button:hover { filter: brightness(1.08); }
+
+  .note { margin-top: 22px; color: var(--dim); font-size: 12px; line-height: 1.55; border-top: 1px solid var(--line); padding-top: 14px; }
+  .note b { color: var(--text); }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: sp .7s linear infinite; vertical-align: -2px; margin-right: 7px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <h1>Flourish <span class="arrow">→</span> Godot</h1>
+  <p class="sub">Turn your visual novel into a Godot project you can play on your PC — one click.</p>
+
+  <div id="drop" class="drop">
+    <div id="dropEmpty">
+      <div class="big">Drop your <b>.flourish</b> game here</div>
+      <div class="hint">or click to choose it</div>
+    </div>
+    <div id="dropFilled" class="filerow" style="display:none">
+      <span class="ic">🎮</span>
+      <span class="name" id="fileName"></span>
+    </div>
+  </div>
+
+  <div class="row">
+    <button class="outbtn" id="chooseOut">Choose output folder…</button>
+    <span class="outpath" id="outPath">Saves next to your .flourish file</span>
+  </div>
+
+  <button class="go" id="go" disabled>Make my Godot game</button>
+
+  <div class="card" id="card">
+    <h2 id="cardTitle"></h2>
+    <div class="stats" id="stats"></div>
+    <div class="steps" id="steps"></div>
+    <div id="errWrap" style="display:none"><div class="section-title" style="color:#ff8080">Problems found</div><ul class="warns" id="errs" style="list-style:none;margin:6px 0 0;padding:0"></ul></div>
+    <div id="capsWrap" style="display:none"><div class="section-title">Uses these extras</div><div class="caps" id="caps"></div></div>
+    <div id="warnsWrap" style="display:none"><div class="section-title">Heads-up — not fully carried over</div><ul class="warns" id="warns"></ul></div>
+    <div id="nextWrap" style="display:none">
+      <div class="section-title">Play it now</div>
+      <ol class="next">
+        <li>Install <b>Godot 4.3</b> (it's free) if you don't have it.</li>
+        <li>Open the <b>project.godot</b> file in the game folder.</li>
+        <li>Press <b>Play</b> ▶ to run your game.</li>
+      </ol>
+      <div class="actions">
+        <button id="openFolder">Open the game folder</button>
+        <button class="ghost" id="showProject">Show project.godot</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    This makes a <b>stock Godot project</b> you can play right now. To ship on Xbox / PlayStation / Switch,
+    you bring your own platform-holder approval and your own W4&nbsp;Consoles license — this tool does not
+    build, sign, or bundle any console software. See <b>OPEN_ME_FIRST.md</b> in the game folder.
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

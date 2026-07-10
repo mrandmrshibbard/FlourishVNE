@@ -16,15 +16,17 @@ const MENU_ACTION_TYPES: UIActionType[] = [
     UIActionType.None, UIActionType.StartNewGame, UIActionType.ContinueGame, UIActionType.GoToScreen,
     UIActionType.LoadGame, UIActionType.SaveGame, UIActionType.DeleteSave, UIActionType.ReturnToGame, UIActionType.ReturnToPreviousScreen,
     UIActionType.QuitToTitle, UIActionType.ExitGame, UIActionType.JumpToScene, UIActionType.JumpToLabel,
-    UIActionType.SetVariable, UIActionType.ResetVariable, UIActionType.PlaySound, UIActionType.CycleLayerAsset, UIActionType.ToggleScreen, UIActionType.OpenURL,
+    UIActionType.SetVariable, UIActionType.ResetVariable, UIActionType.PlaySound, UIActionType.PlayMusic, UIActionType.StopMusic, UIActionType.CycleLayerAsset, UIActionType.ToggleScreen, UIActionType.OpenURL,
     UIActionType.ShowElement, UIActionType.HideElement,
     UIActionType.CallCommonEvent,
     UIActionType.GiveItem, UIActionType.UseItem, UIActionType.DestroyItem, UIActionType.UseSelectedItem, UIActionType.RestockCollection,
     UIActionType.BuyItem, UIActionType.SellItem, UIActionType.BuySelectedItem, UIActionType.SellSelectedItem,
     UIActionType.ShowLog, UIActionType.ToggleAutoAdvance, UIActionType.ToggleSkip, UIActionType.SkipBackward,
     UIActionType.OpenPauseMenu,
-    UIActionType.StartTimer, UIActionType.StopTimer,
-    UIActionType.ShowPhone, UIActionType.HidePhone, UIActionType.ShowPhoneText, UIActionType.HidePhoneText, UIActionType.ShowPhoneHistory, UIActionType.ShowPhoneContacts,
+    UIActionType.StartTimer, UIActionType.StopTimer, UIActionType.SetTimeOfDay,
+    UIActionType.ShowSpotlight, UIActionType.HideSpotlight, UIActionType.ShowFlashlight, UIActionType.HideFlashlight,
+    UIActionType.ShowPhone, UIActionType.HidePhone, UIActionType.ShowPhoneText, UIActionType.HidePhoneText, UIActionType.ShowPhoneHistory, UIActionType.ShowPhoneContacts, UIActionType.OpenPhoneApp, UIActionType.ShowMap, UIActionType.ShowMiniGame,
+    UIActionType.ClearUiPalette,
 ];
 
 const ActionEditor: React.FC<{

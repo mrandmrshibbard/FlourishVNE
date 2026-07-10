@@ -79,6 +79,26 @@ const ActionFields: React.FC<{
                 <option value="">{t('actionsList.selectScreen', 'Select a screen…')}</option>
                 {Object.values(project.uiScreens).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </>)));
+        case UIActionType.OpenPhoneApp:
+            // Registry app ids kept as literals so this editor file doesn't import the engine module.
+            return group('sky', field(t('actionEditor.phoneApp', 'Phone app'), sel(a.appId || 'chat', v => set({ appId: v }), <>
+                <option value="chat">{t('actionEditor.phoneAppChat', 'Messages')}</option>
+                <option value="contacts">{t('actionEditor.phoneAppContacts', 'Contacts')}</option>
+                <option value="history">{t('actionEditor.phoneAppHistory', 'Recents')}</option>
+                <option value="gallery">{t('actionEditor.phoneAppGallery', 'Gallery')}</option>
+                <option value="map">{t('actionEditor.phoneAppMap', 'Map')}</option>
+                <option value="settings">{t('actionEditor.phoneAppSettings', 'Settings')}</option>
+            </>)));
+        case UIActionType.ShowMap:
+            return group('sky', field(t('actionEditor.whichMap', 'Map'), sel(a.mapId || '', v => set({ mapId: v }), <>
+                <option value="">{t('actionEditor.selectMap', 'Select a map…')}</option>
+                {Object.values((project as any).maps || {}).map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </>)));
+        case UIActionType.ShowMiniGame:
+            return group('sky', field(t('actionEditor.whichMiniGame', 'Mini game'), sel(a.gameId || '', v => set({ gameId: v }), <>
+                <option value="">{t('actionEditor.selectMiniGame', 'Select a mini game…')}</option>
+                {Object.values((project as any).miniGames || {}).map((g: any) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </>)));
         case UIActionType.ShowElement:
         case UIActionType.HideElement: {
             const verb = action.type === UIActionType.ShowElement ? t('actionEditor.elementToShow', 'Element to show') : t('actionEditor.elementToHide', 'Element to hide');
@@ -113,7 +133,12 @@ const ActionFields: React.FC<{
                 const nv = project.variables[v];
                 let op = a.operator;
                 if (nv?.type !== 'number' && (op === 'add' || op === 'subtract' || op === 'random')) op = 'set';
-                set({ variableId: v, operator: op });
+                // Keep `value` concrete & type-appropriate so a boolean Set never saves an empty value
+                // (the engine reads an empty boolean Set as its default, not a real Yes/No choice).
+                let value = a.value;
+                if (nv?.type === 'boolean' && typeof value !== 'boolean') value = true;
+                else if (nv?.type !== 'boolean' && typeof value === 'boolean') value = '';
+                set({ variableId: v, operator: op, value });
             }, <>
                 <option value="">{t('actionsList.selectVariable', 'Select a variable…')}</option>
                 {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
@@ -129,7 +154,7 @@ const ActionFields: React.FC<{
                     <input type="number" value={a.randomMin ?? 0} placeholder={t('actionsList.min', 'Min')} onChange={e => set({ randomMin: Number(e.target.value) })} className={inputCls} />
                     <input type="number" value={a.randomMax ?? 100} placeholder={t('actionsList.max', 'Max')} onChange={e => set({ randomMax: Number(e.target.value) })} className={inputCls} />
                 </div>
-            ) : variable?.type === 'boolean' ? sel(String(a.value ?? ''), v => set({ value: v === 'true' }), <>
+            ) : variable?.type === 'boolean' ? sel(a.value === false ? 'false' : 'true', v => set({ value: v === 'true' }), <>
                 <option value="true">{resolveBoolLabels(variable, t('actionsList.true', 'Yes'), t('actionsList.false', 'No')).yes}</option>
                 <option value="false">{resolveBoolLabels(variable, t('actionsList.true', 'Yes'), t('actionsList.false', 'No')).no}</option>
             </>) : (
@@ -173,6 +198,42 @@ const ActionFields: React.FC<{
                     <input type="checkbox" checked={a.loop ?? false} onChange={e => set({ loop: e.target.checked })} />
                     {t('actionsList.loop', 'Loop')}
                 </label>
+            </>);
+        case UIActionType.PlayMusic:
+            return group('purple', <>
+                {field(t('actionEditor.music', 'Music'), sel(a.audioId || '', v => set({ audioId: v }), <>
+                    <option value="">{t('actionsList.selectAudio', 'Select audio…')}</option>
+                    {Object.values(project.audio).map((au: any) => <option key={au.id} value={au.id}>{au.name}</option>)}
+                </>))}
+                <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-[var(--text-secondary)]">{t('actionsList.volume', 'Volume')}</span>
+                    <RangeInput min={0} max={1} step={0.01} value={a.volume ?? 1} onChange={e => set({ volume: parseFloat(e.target.value) })} className="flex-1 accent-[var(--accent-lavender)]" />
+                </div>
+                {field(t('actionsList.fadeSeconds', 'Fade (seconds)'), txt(String(a.fadeDuration ?? 1), v => set({ fadeDuration: Math.max(0, parseFloat(v) || 0) }), { type: 'number', min: 0 }))}
+                <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+                    <input type="checkbox" checked={a.loop ?? true} onChange={e => set({ loop: e.target.checked })} />
+                    {t('actionsList.loop', 'Loop')}
+                </label>
+            </>);
+        case UIActionType.StopMusic:
+            return group('purple', <>
+                {field(t('actionsList.fadeSeconds', 'Fade (seconds)'), txt(String(a.fadeDuration ?? 1), v => set({ fadeDuration: Math.max(0, parseFloat(v) || 0) }), { type: 'number', min: 0 }))}
+            </>);
+        case UIActionType.ShowFlashlight:
+            return group('amber', <>
+                {field(t('actionsList.radius', 'Radius %'), <RangeInput min={8} max={60} value={a.radius ?? 22} onChange={e => set({ radius: parseInt(e.target.value, 10) })} className="flex-1 accent-[var(--accent-lavender)]" />)}
+                {field(t('actionsList.darkness', 'Darkness'), <RangeInput min={0.2} max={1} step={0.05} value={a.darkness ?? 0.85} onChange={e => set({ darkness: parseFloat(e.target.value) })} className="flex-1 accent-[var(--accent-lavender)]" />)}
+                {field(t('actionsList.color', 'Color'), txt(a.color ?? '#000000', v => set({ color: v })))}
+                {field(t('actionsList.toggleKey', 'Toggle key'), txt(a.toggleKey ?? '', v => set({ toggleKey: v || undefined }), { placeholder: 'f' }))}
+            </>);
+        case UIActionType.ShowSpotlight:
+            return group('amber', <>
+                {field(t('actionsList.beamWidth', 'Beam width %'), <RangeInput min={5} max={100} value={a.beamWidth ?? 45} onChange={e => set({ beamWidth: parseInt(e.target.value, 10) })} className="flex-1 accent-[var(--accent-lavender)]" />)}
+                {field(t('actionsList.sourceWidth', 'Source width %'), <RangeInput min={0} max={60} value={a.sourceWidth ?? 8} onChange={e => set({ sourceWidth: parseInt(e.target.value, 10) })} className="flex-1 accent-[var(--accent-lavender)]" />)}
+                {field(t('actionsList.darkness', 'Darkness'), <RangeInput min={0.2} max={1} step={0.05} value={a.intensity ?? 0.85} onChange={e => set({ intensity: parseFloat(e.target.value) })} className="flex-1 accent-[var(--accent-lavender)]" />)}
+                {field(t('actionsList.color', 'Beam color'), txt(a.color ?? '#fff3d6', v => set({ color: v })))}
+                <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]"><input type="checkbox" checked={a.followMouse !== false} onChange={e => set({ followMouse: e.target.checked })} />{t('actionsList.swivel', 'Swivel toward the mouse')}</label>
+                {field(t('actionsList.toggleKey', 'Toggle key'), txt(a.toggleKey ?? '', v => set({ toggleKey: v || undefined }), { placeholder: 'f' }))}
             </>);
         case UIActionType.CycleLayerAsset: {
             const character = a.characterId ? project.characters[a.characterId] : undefined;
@@ -329,6 +390,19 @@ const ActionFields: React.FC<{
         }
         case UIActionType.StopTimer:
             return group('purple', field(t('actionEditor.timerIdStop', 'Timer to stop (blank = default)'), txt(a.timerId || '', v => set({ timerId: v }), { placeholder: 'default' })));
+        case UIActionType.SetTimeOfDay: {
+            const mode = a.mode === 'advance' ? 'advance' : 'set';
+            return group('purple', <>
+                {field(t('actionEditor.todMode', 'Action'), sel(mode, v => set({ mode: v }), <>
+                    <option value="set">{t('actionEditor.todSet', 'Set time to…')}</option>
+                    <option value="advance">{t('actionEditor.todAdvance', 'Advance by…')}</option>
+                </>))}
+                {mode === 'set'
+                    ? field(t('actionEditor.todHour', 'Hour (0–24)'), txt(String(a.hour ?? 12), v => set({ hour: parseFloat(v) || 0 }), { type: 'number', min: 0 }))
+                    : field(t('actionEditor.todHours', 'Advance by (hours)'), txt(String(a.hours ?? 1), v => set({ hours: parseFloat(v) || 0 }), { type: 'number' }))}
+                {field(t('actionEditor.todTransition', 'Transition (seconds)'), txt(String(a.transitionDuration ?? 2), v => set({ transitionDuration: parseFloat(v) || 0 }), { type: 'number', min: 0 }))}
+            </>);
+        }
         default:
             return null;
     }
