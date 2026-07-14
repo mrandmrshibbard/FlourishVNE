@@ -118,6 +118,16 @@ export interface VNMapLocation {
     lockedLabel?: string;
 }
 
+/**
+ * Story Flow Map layout. Editor-only; the engine never reads it.
+ * Keys are `${kind}:${id}` (see `nodeKey()` in src/utils/storyGraph.ts) so scenes, screens, common
+ * events, mini-games and maps can all be positioned from ONE place — a single additive-optional
+ * field means no migration, and "Tidy up" is a single undoable dispatch.
+ */
+export interface VNFlowMapLayout {
+    nodes?: Record<string, { x: number; y: number; color?: string }>;
+}
+
 /** An author-designed travel map: a backdrop + touchable locations. */
 export interface VNMapConfig {
     id: VNID;
@@ -163,6 +173,9 @@ export interface VNProject {
     };
     /** CG Gallery configuration for unlockable art gallery */
     cgGallery?: CGGalleryConfig;
+    /** Story Flow Map layout (hand-placed node positions). EDITOR-ONLY — the game engine never reads
+     *  it. Additive-optional: absent = every node auto-laid-out. */
+    flowMap?: VNFlowMapLayout;
     /** Travel maps (Show Map command + the phone's Map app). Additive-optional. */
     maps?: Record<VNID, VNMapConfig>;
     /** Mini games (Show Mini Game command/action + the Mini Games tab). Additive-optional. */

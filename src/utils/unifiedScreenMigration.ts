@@ -193,6 +193,9 @@ function migrateHotSpot(spot: VNHotSpot): UIHotSpotElement {
  *       predate the interactive flag).
  */
 export function migrateScreenToUnified(screen: VNUIScreen): VNUIScreen {
+    // A null/garbage screen entry (hand-edited JSON) is not this migration's problem to fix — but
+    // it must not be its excuse to throw and take the whole project down with it.
+    if (!screen || typeof screen !== 'object') return screen;
     const legacy = screen as any;
 
     let result: VNUIScreen = screen;

@@ -1,14 +1,17 @@
 /**
- * Plain-English preview of a Set Variable command (e.g. "Increase Affection by 1"),
- * shown under the Set Variable editor so non-technical authors can read what the
- * command does. Presentation-only — derives its text from the command + variable
- * definition and never writes anything. Used by BOTH the flat Choice/SetVariable
- * editor in PropertiesInspector and the grouped editor in CommandGroupFields.
+ * Plain-English preview of a Set Variable command ("Increase Affection by 1"), shown under the
+ * Set Variable editor so non-technical authors can read what the command does.
+ *
+ * The sentence itself is built by utils/variableLanguage.ts — the SAME renderer the command list, the
+ * collapsed group badges and the action cards use. This component is now only the translator hookup
+ * plus the styling. Do not re-implement the phrasing here: the whole point of the shared module is
+ * that there is no second copy to drift out of step (there used to be five).
  */
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useProject } from '../../contexts/ProjectContext';
 import { VNVariable, VNSetVariableOperator } from '../../features/variables/types';
-import { resolveBoolLabels } from '../../features/variables/booleanLabels';
+import { describeSetVariable, Translate } from '../../utils/variableLanguage';
 
 export const SetVariablePreview: React.FC<{
     variable: VNVariable | undefined;
@@ -18,24 +21,14 @@ export const SetVariablePreview: React.FC<{
     randomMax?: number;
 }> = ({ variable, operator, value, randomMin, randomMax }) => {
     const { t } = useTranslation('properties');
+    const { project } = useProject();
     if (!variable) return null;
-    const name = variable.name;
 
-    let text: string;
-    if (variable.type === 'boolean') {
-        const on = value === true || String(value).toLowerCase() === 'true';
-        const { yes, no } = resolveBoolLabels(variable, t('vars.true'), t('vars.false'));
-        text = t(on ? 'vars.preview.boolOn' : 'vars.preview.boolOff', { name, value: on ? yes : no });
-    } else if (variable.type === 'number') {
-        switch (operator) {
-            case 'add':      text = t('vars.preview.add', { name, value: String(value) }); break;
-            case 'subtract': text = t('vars.preview.subtract', { name, value: String(value) }); break;
-            case 'random':   text = t('vars.preview.random', { name, min: String(randomMin ?? 0), max: String(randomMax ?? 100) }); break;
-            default:         text = t('vars.preview.setNum', { name, value: String(value) });
-        }
-    } else {
-        text = t('vars.preview.setStr', { name, value: String(value) });
-    }
+    const text = describeSetVariable(
+        project,
+        { variableId: variable.id, operator, value, randomMin, randomMax },
+        t as unknown as Translate,
+    );
 
     return <p className="text-[10px] text-sky-300/70 italic mt-1 px-1">{text}</p>;
 };

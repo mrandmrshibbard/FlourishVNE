@@ -33,7 +33,9 @@
     "prompt": "Foram encontrados projetos salvos automaticamente de uma sessão anterior. Deseja restaurar um?",
     "savedAt": "Salvo {{time}}",
     "startFresh": "Começar do Zero",
-    "discardAll": "Descartar Tudo"
+    "discardAll": "Descartar Tudo",
+    "checkpoint": "cópia anterior",
+    "discardConfirm": "Apagar TODAS as cópias de segurança, de todos os projetos? Se o ficheiro de um projeto estiver em falta ou danificado, estas cópias são a única forma de o recuperar. Isto não pode ser desfeito."
   },
   "time": {
     "justNow": "Agora mesmo",
@@ -61,6 +63,8 @@
     "projectRecovered": "Projeto recuperado!",
     "couldNotLoadSaved": "Não foi possível carregar o projeto salvo.",
     "recoverFailed": "Falha ao recuperar o projeto.",
-    "autoSavesCleared": "Salvamentos automáticos apagados."
+    "autoSavesCleared": "Salvamentos automáticos apagados.",
+    "repaired": "Este ficheiro de projeto estava danificado (um guardar foi interrompido), mas foi tudo recuperado. Guarde-o novamente agora para o deixar completo.",
+    "repairedPartial": "Este ficheiro de projeto estava danificado (um guardar foi interrompido). A sua história foi recuperada, mas {{count}} ficheiro(s) de media perderam-se e terão de ser importados de novo. Guarde-o novamente agora para o deixar completo."
   }
 }

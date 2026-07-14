@@ -43,6 +43,7 @@ export function migrateProjectRemoveLegacyCommands(project: VNProject): VNProjec
     if (scenes) {
         const next: typeof scenes = {} as any;
         for (const [id, scene] of Object.entries(scenes)) {
+            if (!scene || typeof scene !== 'object') { next[id as keyof typeof scenes] = scene as any; continue; }
             const stripped = stripCommands((scene as any).commands);
             if (stripped !== (scene as any).commands) {
                 changed = true;

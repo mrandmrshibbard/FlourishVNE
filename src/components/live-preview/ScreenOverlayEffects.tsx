@@ -293,6 +293,30 @@ export function runFireworksSim(
   return () => { stopped = true; cancelAnimationFrame(raf); };
 }
 
+// --- Dead-pixel tile for the character glitch ---
+// A small SVG of THRESHOLDED noise: most of the tile is transparent, a scattering of hard opaque
+// cells survive — dead pixels. Discrete alpha steps (no anti-aliasing) + `image-rendering: pixelated`
+// at render time keep them square and crunchy. Deterministic per (colour, seed): the same character
+// shows the same constellation every frame, which reads as "stuck pixels", not TV static.
+export const deadPixelTile = (color: string, seed: number): string => {
+    const hex = color.replace('#', '');
+    const full = hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex.padEnd(6, '0');
+    const r = (parseInt(full.slice(0, 2), 16) / 255).toFixed(3);
+    const g = (parseInt(full.slice(2, 4), 16) / 255).toFixed(3);
+    const b = (parseInt(full.slice(4, 6), 16) / 255).toFixed(3);
+    const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">` +
+        `<filter id="d" x="0" y="0" width="100%" height="100%">` +
+        // Low frequency, so the surviving pixels CLUSTER instead of scattering evenly.
+        `<feTurbulence type="fractalNoise" baseFrequency="0.35" numOctaves="1" seed="${seed}"/>` +
+        // Keep only the brightest ~1/8 of the noise, as hard-edged alpha.
+        `<feComponentTransfer><feFuncA type="discrete" tableValues="0 0 0 0 0 0 0 1"/></feComponentTransfer>` +
+        // Paint every surviving pixel in the glitch colour.
+        `<feColorMatrix type="matrix" values="0 0 0 0 ${r}  0 0 0 0 ${g}  0 0 0 0 ${b}  0 0 0 1 0"/>` +
+        `</filter><rect width="64" height="64" filter="url(#d)"/></svg>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+};
+
 export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
   effects,
   width,
@@ -307,6 +331,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
   const scanlines = getEffect(normalized, 'crtScanlines');
   const chroma = getEffect(normalized, 'chromaticGlitch');
+  const glitch = getEffect(normalized, 'glitch');
   const sunbeams = getEffect(normalized, 'sunbeams');
   const shimmer = getEffect(normalized, 'shimmer');
   const rain = getEffect(normalized, 'rain');
@@ -823,6 +848,25 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
   const cgSpread = 2 + ep(chroma?.params, 'chromaticSpread') * 8;       // 2..10 px offset
   const cgSpeed = 0.3 + (1 - ep(chroma?.params, 'speed')) * 1.4;         // 0.3..1.7 s (inverted)
 
+  // ── Glitch (FNF-style corruption) params ───────────────────────────────────────────────────────
+  // The look: horizontal SLICES of the actual picture tear sideways in bursts, with colour-channel
+  // fringing and discoloured bands (green by default, any colour). Three layers make it:
+  //  1. An SVG displacement filter applied via `backdrop-filter: url(#…)` — this is what actually
+  //     tears the REAL pixels underneath (a plain overlay can only draw on top; it can't move what's
+  //     below). Band shape comes from thresholded turbulence; burstiness is SMIL-animated on the
+  //     displacement scale, so it costs nothing while "calm" and needs no JS per frame.
+  //  2. Channel-split fringing (R vs GB offset + screen blend) inside the same filter.
+  //  3. A coloured band overlay (the discolouration) — a stepped gradient flickering in the author's
+  //     chosen colour.
+  const glitchOpacity = clamp01(glitch?.intensity ?? 0);
+  const glColor = glitch?.color || '#33ff66';
+  const glBlockiness = ep(glitch?.params, 'blockiness');                 // 0..1
+  // Band height: fine tearing (~3px) → fat blocks (~60px). Frequency is per-pixel.
+  const glBandFreq = 0.012 + Math.pow(1 - glBlockiness, 2) * 0.3;
+  const glScale = 8 + glitchOpacity * 72;                                // max sideways tear, px
+  const glAberration = 1 + ep(glitch?.params, 'chromaticSpread') * 10;   // channel offset, px
+  const glDur = Math.max(0.4, 2.2 - ep(glitch?.params, 'speed') * 1.8);  // burst cycle, s
+
   // Resolve blend modes for canvas effects
   const sunbeamsBlend = (sunbeams?.params?.blendMode || 'screen') as React.CSSProperties['mixBlendMode'];
   const shimmerBlend = (shimmer?.params?.blendMode || 'overlay') as React.CSSProperties['mixBlendMode'];
@@ -851,6 +895,59 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
             backgroundImage: `radial-gradient(ellipse at 20% 50%, rgba(255,0,0,0.15) 0%, transparent ${cgSpread * 4}%), radial-gradient(ellipse at 80% 50%, rgba(0,255,255,0.12) 0%, transparent ${cgSpread * 4}%), repeating-linear-gradient(0deg, transparent 0px, transparent ${cgSpread}px, rgba(255,255,255,0.03) ${cgSpread}px, rgba(255,255,255,0.03) ${cgSpread + 1}px)`,
           }}
         />
+      )}
+
+      {/* Glitch decorations. The actual pixel TEAR is not here: an overlay can only draw on top,
+          and Chromium ignores SVG reference filters in backdrop-filter — so the displacement filter
+          is applied by LivePreview directly to the game container (see StageGlitchFilterDef). This
+          layer contributes the corruption DRESSING: coloured slices, dead-pixel debris, and a hard
+          horizontal jitter, all flickering in steps. */}
+      {glitchOpacity > 0 && (
+        <>
+          {/* Dead-pixel debris: sparse clustered squares in each colour, different constellation and
+              flicker phase per colour. */}
+          {(glitch?.params?.colors?.length ? glitch.params.colors : [glColor]).map((c, ci, all) => (
+            <div
+              key={`glitch-debris-${ci}`}
+              className="vnfx-glitch-bands"
+              style={{
+                backgroundImage: deadPixelTile(c, 29 + ci * 41),
+                backgroundSize: `${Math.round(44 + glBlockiness * 40)}px ${Math.round(44 + glBlockiness * 40)}px`,
+                imageRendering: 'pixelated' as const,
+                opacity: undefined,
+                animationDuration: `${(glDur * 0.7).toFixed(2)}s`,
+                animationDelay: `${((glDur * 0.7 / all.length) * ci).toFixed(2)}s`,
+              }}
+            />
+          ))}
+          <div
+            className="vnfx-glitch-bands"
+            style={{
+              animationDuration: `${glDur.toFixed(2)}s`,
+              // Discoloured slices, ALTERNATING through the author's colour list (a single colour is
+              // just a list of one). Intensity lives in each band's ALPHA (via color-mix), NOT the
+              // element opacity — the flicker keyframes animate opacity, and a CSS animation
+              // overrides an inline opacity, which would have eaten the intensity.
+              backgroundImage: (() => {
+                const colors = (glitch?.params?.colors?.length ? glitch.params.colors : [glColor]);
+                const alpha = Math.round(55 * glitchOpacity);
+                const bandStart = Math.round(26 + glBlockiness * 60);
+                const bandEnd = Math.round(30 + glBlockiness * 78);
+                const cycle = Math.round(90 + glBlockiness * 140);
+                // One stop-run per colour, stacked end to end; the whole thing then repeats.
+                const stops: string[] = [];
+                colors.forEach((c, i) => {
+                    const base = i * cycle;
+                    const band = `color-mix(in srgb, ${c} ${alpha}%, transparent)`;
+                    stops.push(`transparent ${base}px`, `transparent ${base + bandStart}px`,
+                        `${band} ${base + bandStart}px`, `${band} ${base + bandEnd}px`,
+                        `transparent ${base + bandEnd}px`, `transparent ${base + cycle}px`);
+                });
+                return `repeating-linear-gradient(0deg, ${stops.join(', ')})`;
+              })(),
+            }}
+          />
+        </>
       )}
 
       {/* Sunbeams - canvas-based with configurable blend mode */}

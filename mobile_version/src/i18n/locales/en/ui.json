@@ -120,6 +120,7 @@
     "variable": "Variable",
     "operator": "Operator",
     "value": "Value",
+    "step": "Step",
     "true": "Yes",
     "false": "No",
     "and": "AND",
@@ -135,7 +136,10 @@
       "contains": "contains",
       "startsWith": "starts with",
       "isOn": "is {{value}}",
-      "isOff": "is {{value}}"
+      "isOff": "is {{value}}",
+      "inBand": "is",
+      "atLeastBand": "is — or better",
+      "belowBand": "is below"
     }
   },
   "inspectorGroups": {
@@ -501,7 +505,15 @@
     "charPreviewIntro": "Displays a live preview of the character, updating automatically as the player makes customization choices.",
     "connectLayersHint": "Connect each layer to the variable set by its Asset Cycler. The preview will update live as the player cycles through options.",
     "wizardTip": "💡 Tip: Use the Character Customization Wizard to auto-configure these mappings.",
-    "noLayersYet": "This character has no layers yet. Add layers in the Characters tab to enable customization."
+    "noLayersYet": "This character has no layers yet. Add layers in the Characters tab to enable customization.",
+    "delayHint": "Give each element a different delay to stagger them — first one in, then the next…",
+    "transFadeToo": "Also fade in while moving",
+    "transFadeHint": "Off = the element arrives fully visible and just slides into place.",
+    "transDistance": "Slide distance (%)",
+    "transDistanceAuto": "automatic",
+    "transDistanceHint": "How far away it starts, relative to its own size. 100% = one full element-width away.",
+    "transOnReveal": "Play again when shown by an action",
+    "transOnRevealHint": "When a Show Element action reveals this, replay the entrance instead of just fading in."
   },
   "cgWizard": {
     "title": "CG Gallery Wizard",
@@ -817,7 +829,8 @@
       "fog": "Fog",
       "haze": "Haze",
       "smoke": "Smoke",
-      "fireworks": "Fireworks"
+      "fireworks": "Fireworks",
+      "glitch": "Glitch (corruption)"
     },
     "params": {
       "crtScanlines": {
@@ -857,8 +870,15 @@
       },
       "fireworks": {
         "speed": "Launch Speed"
+      },
+      "glitch": {
+        "blockiness": "Slice Size",
+        "chromaticSpread": "Colour Fringing",
+        "speed": "Burst Speed"
       }
-    }
+    },
+    "glitchColors": "Glitch colours",
+    "addColor": "+ Colour"
   },
   "actionEditor": {
     "actionType": "Action Type",

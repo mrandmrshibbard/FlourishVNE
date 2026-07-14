@@ -23,5 +23,10 @@
   "exitWithoutSaving": "Exit Without Saving",
   "exportError": "Export Error",
   "exportingProject": "Exporting Project...",
-  "packagingFiles": "Packaging your project files"
+  "packagingFiles": "Packaging your project files",
+  "toast": {
+    "savedMissingAssets": "Saved — but {{count}} media file(s) could not be found on disk and are NOT inside the saved file. The project will still open, but that art/audio is missing. Check your images and sounds."
+  },
+  "saveAs": "Save As…",
+  "saveAsTip": "Choose where to save this project (and keep saving there)"
 }

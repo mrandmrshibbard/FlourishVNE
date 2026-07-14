@@ -210,6 +210,7 @@ export const CharacterVisualEffectsEditor: React.FC<{
                         <option value="silhouette">{t('character.effects.silhouette')}</option>
                         <option value="breathing">{t('character.effects.breathing')}</option>
                         <option value="flicker">{t('character.effects.flicker')}</option>
+                        <option value="glitch">{t('character.effects.glitch', 'Glitch (corruption)')}</option>
                     </Select>
                     <button onClick={() => removeEffect(idx)} className="p-1 rounded hover:bg-[var(--bg-tertiary)]" title={t('character.removeEffect')}>
                         <svg className="w-3.5 h-3.5" style={{ color: 'var(--accent-coral)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -231,6 +232,34 @@ export const CharacterVisualEffectsEditor: React.FC<{
                         <ColorInput value={eff.color || '#FFFFFF'} onChange={v => updateEffect(idx, { color: v })} />
                     </div>
                 )}
+                {eff.type === 'glitch' && (
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>{t('character.rimSize', 'Line size')}</span>
+                        <RangeInput min="0.2" max="3" step="0.1" value={eff.rimSize ?? 1} onChange={e => updateEffect(idx, { rimSize: parseFloat(e.target.value) })} className="flex-1" />
+                        <span className="text-xs w-8 text-right" style={{ color: 'var(--text-secondary)' }}>{(eff.rimSize ?? 1).toFixed(1)}x</span>
+                    </div>
+                )}
+                {eff.type === 'glitch' && (() => {
+                    // Multi-colour rim: the ghost outlines flash through these in turn.
+                    const colors: string[] = eff.colors?.length ? eff.colors : [eff.color || '#33FF66'];
+                    const setColors = (next: string[]) => updateEffect(idx, { colors: next, color: next[0] });
+                    return (
+                        <div className="flex items-start gap-2">
+                            <span className="text-xs w-12 shrink-0 mt-1.5" style={{ color: 'var(--text-secondary)' }}>{t('character.colors', 'Colours')}</span>
+                            <div className="flex flex-wrap gap-1.5 items-center">
+                                {colors.map((c, ci) => (
+                                    <div key={ci} className="relative">
+                                        <ColorInput value={c} onChange={v => setColors(colors.map((x, i) => i === ci ? v : x))} />
+                                        {colors.length > 1 && (
+                                            <button onClick={() => setColors(colors.filter((_, i) => i !== ci))} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] leading-none flex items-center justify-center" title={t('character.removeColor', 'Remove colour')}>×</button>
+                                        )}
+                                    </div>
+                                ))}
+                                <button onClick={() => setColors([...colors, '#ff4d9d'])} className="text-xs px-2 py-1 rounded-md border border-dashed" style={{ borderColor: 'var(--accent-lavender)', color: 'var(--accent-lavender)' }}>{t('character.addColor', '+ Colour')}</button>
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
         ))}
         <button onClick={addEffect} className="w-full text-xs py-1.5 rounded-lg border border-dashed hover:border-solid transition-colors"

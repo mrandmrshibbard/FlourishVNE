@@ -281,13 +281,19 @@ export const RangeInput: React.FC<any> = ({ value, onChange, ...rest }) => {
 };
 
 // FIX: Combine passed className with default styles, and set a default for the rows prop.
-export const TextArea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement>> = ({ className, rows = 4, ...props }) => (
-    <textarea 
-        {...props} 
-        className={`${inputBaseStyles} resize-none leading-relaxed ${className || ''}`} 
-        rows={rows}
-    />
+// forwardRef so callers can reach the real <textarea> — the "{ }" insert-a-variable button needs the
+// CARET position, otherwise it can only append to the end of the line.
+export const TextArea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
+    ({ className, rows = 4, ...props }, ref) => (
+        <textarea
+            {...props}
+            ref={ref}
+            className={`${inputBaseStyles} resize-none leading-relaxed ${className || ''}`}
+            rows={rows}
+        />
+    )
 );
+TextArea.displayName = 'TextArea';
 
 // FIX: Combine passed className with default styles.
 export const Select: React.FC<React.SelectHTMLAttributes<HTMLSelectElement>> = ({ className, ...props }) => (

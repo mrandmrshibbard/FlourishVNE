@@ -8,6 +8,7 @@ import Panel from './ui/Panel';
 import { FormField, Select, TextInput } from './ui/Form';
 import { TrashIcon } from './icons';
 import BooleanLabelEditor from './BooleanLabelEditor';
+import BandEditor from './variables/BandEditor';
 
 const VariablePropertiesEditor: React.FC<{
     selectedVariableId: VNID;
@@ -102,6 +103,11 @@ const VariablePropertiesEditor: React.FC<{
                             </div>
                             <p className="text-[10px] text-[var(--text-muted)] mt-1">{t('varProps.clampHint')}</p>
                         </FormField>
+                    )}
+                    {/* Named ranges — kept in step with the Variables tab's editor (they are two
+                        divergent views of the same variable, so a feature in one must exist in both). */}
+                    {variable.type === 'number' && (
+                        <BandEditor variable={variable} onChange={updateVariable} />
                     )}
                     <div className="text-xs text-[var(--text-secondary)] mt-2">
                         <p><strong>{t('varProps.typeLabel')}</strong> {variable.type}</p>

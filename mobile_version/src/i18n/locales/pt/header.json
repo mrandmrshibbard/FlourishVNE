@@ -23,5 +23,10 @@
   "exitWithoutSaving": "Sair Sem Salvar",
   "exportError": "Erro de Exportação",
   "exportingProject": "Exportando Projeto...",
-  "packagingFiles": "Empacotando os arquivos do projeto"
+  "packagingFiles": "Empacotando os arquivos do projeto",
+  "toast": {
+    "savedMissingAssets": "Guardado — mas {{count}} ficheiro(s) de media não foram encontrados no disco e NÃO estão dentro do ficheiro guardado. O projeto continua a abrir, mas essa arte/áudio está em falta. Verifique as suas imagens e sons."
+  },
+  "saveAs": "Guardar como…",
+  "saveAsTip": "Escolha onde guardar este projeto (e continuar a guardar aí)"
 }

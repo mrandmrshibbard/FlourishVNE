@@ -121,7 +121,11 @@ export const createInitialProject = (): VNProject => {
     const { screens, specialIds } = createDefaultUIScreens();
 
     return {
-        id: `proj-${Date.now()}`,
+        // Timestamp + randomness, NOT timestamp alone. A bare `proj-${Date.now()}` id is identical
+        // for every recipient of a distributed template .flourish (ids travel inside the file!), and
+        // same-id projects share an asset folder, a recents slot and an autosave slot — importing two
+        // template-derived projects onto one machine made them silently clobber each other.
+        id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         title: 'New Visual Novel',
         startSceneId: initialSceneId,
         scenes: { [initialSceneId]: initialScene },

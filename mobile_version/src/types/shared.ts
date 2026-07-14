@@ -19,7 +19,23 @@ export interface VNParallaxSettings {
 }
 
 // Moved from scene/types.ts
-export type VNConditionOperator = '==' | '!=' | '>' | '<' | '>=' | '<=' | 'is true' | 'is false' | 'contains' | 'startsWith';
+/**
+ * The three band operators (`inBand`, `atLeastBand`, `belowBand`) are the only ones whose `value` is
+ * not a literal — it is a BAND ID (see features/variables/bands.ts).
+ *
+ * WHY THEY ARE SYMBOLIC. It is tempting to compile "Affection is Friend or better" down to the
+ * ordinary condition `>= 21` and add no operators at all. That rots: the day the author moves the
+ * Friend band to start at 25, every such condition still says 21 — silently wrong, and no longer
+ * even displayable as a band. Referring to the band BY IDENTITY means renaming or re-numbering a
+ * band updates every condition that mentions it, for free.
+ *
+ * The cost is that evaluating one needs the variable's DEFINITION, not just its value — hence
+ * `setVariableDefinitions` in live-preview/systems/conditionEvaluator.ts. Every evaluator must
+ * handle these three; miss one and the condition silently reads false in that surface.
+ */
+export type VNConditionOperator =
+    | '==' | '!=' | '>' | '<' | '>=' | '<=' | 'is true' | 'is false' | 'contains' | 'startsWith'
+    | 'inBand' | 'atLeastBand' | 'belowBand';
 
 export interface VNCondition {
     variableId: VNID;

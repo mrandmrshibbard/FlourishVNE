@@ -19,6 +19,7 @@ import UIElementInspector from './menu-editor/UIElementInspector';
 import { HotSpotProperties, InteractiveElementProperties } from './interactive-elements/InteractiveElementInspectors';
 import { isHotSpotElement, isInteractiveElement } from '../utils/interactiveElements';
 import { VNUIElement } from '../features/ui/types';
+import { UsageLocation } from '../utils/variableUsage';
 const AssetManager = React.lazy(() => import('./AssetManager'));
 const VariableManager = React.lazy(() => import('./VariableManager'));
 const SettingsManager = React.lazy(() => import('./SettingsManager'));
@@ -83,6 +84,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const [uiEditorMode, setUiEditorMode] = useState<'screens' | 'ingame'>('screens');
     // One-shot deep link into the Systems tab (set by "Manage in Systems" links in the UI editor).
     const [systemsSelection, setSystemsSelection] = useState<{ system: 'items' | 'inventory' | 'stats'; id?: VNID } | null>(null);
+    /** One-shot deep link into the Common Events tab (from the variable X-ray). Consumed on arrival. */
+    const [commonEventSelection, setCommonEventSelection] = useState<VNID | null>(null);
 
     // Broadcast the editor "context" (active scene/tab + current selection) so popped-out PANEL
     // windows — currently the Properties Inspector — follow whatever editor the user is ACTIVELY
@@ -284,6 +287,44 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const handleOpenCharacter = (charId: VNID) => {
         setActiveTab('characters');
         handleSetActiveCharacter(charId);
+    };
+
+    /**
+     * "Take me to where this variable is used" — the Variables tab's X-ray panel.
+     *
+     * ORDER MATTERS: handleSetActiveScene / handleSetActiveMenuScreen both CLEAR the sub-selection, so
+     * the command index / element id must be set AFTER them, not before.
+     */
+    const handleJumpToUsage = (loc: UsageLocation) => {
+        switch (loc.area) {
+            case 'scene':
+                if (!loc.sceneId) return;
+                setActiveTab('scenes');
+                handleSetActiveScene(loc.sceneId);
+                if (loc.commandIndex !== undefined) setSelectedCommandIndex(loc.commandIndex);
+                break;
+            case 'screen':
+                if (!loc.screenId) return;
+                handleOpenScreenInUIEditor(loc.screenId, loc.elementId);
+                break;
+            case 'commonEvent':
+                // The Common Events manager owns its own selection, so this is a one-shot deep link
+                // consumed on the other side — the same pattern as systemsSelection.
+                setCommonEventSelection(loc.commonEventId ?? null);
+                setActiveTab('commonEvents');
+                break;
+            case 'systems':
+            case 'map':
+                // Maps are edited from inside the Systems tab (a modal), so this lands the author in
+                // the right place, one click short of the exact spot.
+                handleOpenInSystems({ system: loc.statId ? 'stats' : 'items', id: loc.statId ?? loc.itemId });
+                break;
+            case 'miniGame':
+                setActiveTab('miniGames');
+                break;
+            default:
+                break;
+        }
     };
 
     const renderInspector = () => (
@@ -648,7 +689,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                     ) : activeTab === 'variables' ? (
                         <ErrorBoundary panelName="Variable Manager">
                             <Suspense fallback={<div className="text-slate-300 p-4">{t('visualNovelEditor.loadingVariables')}</div>}>
-                                <VariableManager project={project} />
+                                <VariableManager project={project} onJumpToUsage={handleJumpToUsage} />
                             </Suspense>
                         </ErrorBoundary>
                     ) : activeTab === 'settings' ? (
@@ -660,7 +701,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                     ) : activeTab === 'commonEvents' ? (
                         <ErrorBoundary panelName="Common Events">
                             <Suspense fallback={<div className="text-slate-300 p-4">{t('visualNovelEditor.loadingCommonEvents')}</div>}>
-                                <CommonEventsManager project={project} />
+                                <CommonEventsManager project={project} initialSelection={commonEventSelection} onSelectionConsumed={() => setCommonEventSelection(null)} />
                             </Suspense>
                         </ErrorBoundary>
                     ) : activeTab === 'systems' ? (

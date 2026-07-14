@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ProjectProvider } from './contexts/ProjectContext';
 import { UIScreenThemeProvider } from './contexts/UIScreenThemeContext';
-import { ToastProvider } from './contexts/ToastContext';
+import { ToastProvider, useToast } from './contexts/ToastContext';
+import { useTranslation } from 'react-i18next';
 import VisualNovelEditor from './components/VisualNovelEditor';
 import InspectorWindow from './components/InspectorWindow';
 import CanvasWindow from './components/CanvasWindow';
@@ -14,7 +15,7 @@ import AutoUpdateBanner from './components/AutoUpdateBanner';
 import { VNProject } from './types/project';
 import { NavigationTab } from './components/NavigationTabs';
 import { toggleBackgroundMusic, getCurrentSongName, isBgmPlaying } from './utils/hubAudio';
-import { importProject } from './utils/projectPackager';
+import { importProject, lastImportRepair } from './utils/projectPackager';
 
 // Detect a popped-out manager/child window *synchronously* at module load.
 // Electron loads these with ?manager=<type> (see electron/main.cjs). Marking it
@@ -46,6 +47,45 @@ function editorDebugLog(...args: unknown[]): void {
     // eslint-disable-next-line no-console
     console.log(...args);
 }
+
+
+/**
+ * Surfaces the outcome of a file-association open ("double-clicked a .flourish").
+ *
+ * That handler lives ABOVE the ToastProvider, so it cannot toast — and it used to swallow every
+ * failure into console.error. A user double-clicked their (possibly damaged) project and NOTHING
+ * visibly happened: the one moment they most needed to hear "this file is damaged", the app said
+ * nothing at all. The handler now dispatches a window event; this listener, mounted inside the
+ * providers, turns it into a visible toast.
+ */
+const OPEN_FILE_RESULT_EVENT = 'flourish:openFileResult';
+const FileOpenNotifier: React.FC = () => {
+    const toast = useToast();
+    const { t } = useTranslation('hub');
+    React.useEffect(() => {
+        const onResult = (e: Event) => {
+            const d = (e as CustomEvent).detail as { kind: string; message?: string; lost?: number };
+            if (d.kind === 'error') {
+                toast.error(t('toast.openFailed', { error: d.message || 'Unknown error' }), { duration: 10000 });
+            } else if (d.kind === 'repaired') {
+                toast.warning(
+                    (d.lost ?? 0) > 0
+                        ? t('toast.repairedPartial', 'This project file was damaged (a save was interrupted). Your story was recovered, but {{count}} media file(s) were lost and will need re-importing. Save it again now to make it whole.', { count: d.lost })
+                        : t('toast.repaired', 'This project file was damaged (a save was interrupted), but everything was recovered. Save it again now to make it whole.'),
+                    { duration: 12000 },
+                );
+            }
+        };
+        window.addEventListener(OPEN_FILE_RESULT_EVENT, onResult);
+        return () => window.removeEventListener(OPEN_FILE_RESULT_EVENT, onResult);
+    }, [toast, t]);
+    return null;
+};
+
+const announceOpenFileResult = (detail: { kind: string; message?: string; lost?: number }) => {
+    // Defer one tick so a listener mounted by the SAME state update (entering the editor) hears it.
+    setTimeout(() => window.dispatchEvent(new CustomEvent(OPEN_FILE_RESULT_EVENT, { detail })), 250);
+};
 
 const App = () => {
     const [activeProject, setActiveProject] = useState<VNProject | null>(null);
@@ -160,6 +200,7 @@ const App = () => {
                 const result = await api.readProjectFile(filePath);
                 if (!result.success) {
                     console.error('Failed to read file:', result.error);
+                    announceOpenFileResult({ kind: 'error', message: result.error });
                     return;
                 }
                 const { project } = await importProject(result.data);
@@ -167,8 +208,15 @@ const App = () => {
                 stopHubMusic(); // entering the editor — silence the hub chiptune
                 saveRecentProject(project, filePath);
                 setActiveProject(project);
+                // If the archive had to be REPAIRED to open, the author must hear about it — a
+                // partially-recovered project silently opened would launder its damage into every
+                // future save (autosave persists it within ~1.2s).
+                if (lastImportRepair) {
+                    announceOpenFileResult({ kind: 'repaired', lost: lastImportRepair.lost.length });
+                }
             } catch (err) {
                 console.error('Failed to open project file:', err);
+                announceOpenFileResult({ kind: 'error', message: err instanceof Error ? err.message : String(err) });
             }
         });
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -235,6 +283,7 @@ const App = () => {
     if (!activeProject) {
         return (
             <ToastProvider>
+                <FileOpenNotifier />
                 <AutoUpdateBanner />
                 <ProjectHub onProjectSelect={handleProjectSelect} />
                 {!isManagerWindow() && (
@@ -251,6 +300,7 @@ const App = () => {
 
     return (
         <ToastProvider>
+            <FileOpenNotifier />
             <AutoUpdateBanner />
             <ProjectProvider key={activeProject.id} initialProject={activeProject}>
                 <UIScreenThemeProvider>

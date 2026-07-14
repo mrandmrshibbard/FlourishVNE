@@ -15,6 +15,7 @@ export function migrateInventorySlotButton(project: VNProject): VNProject {
     let anyChanged = false;
     const newScreens: Record<VNID, any> = {};
     for (const [sid, screen] of Object.entries(project.uiScreens)) {
+        if (!screen || typeof screen !== 'object') { newScreens[sid as VNID] = screen; continue; }
         const elements = (screen as any).elements as Record<VNID, any> | undefined;
         if (!elements) { newScreens[sid as VNID] = screen; continue; }
         let screenChanged = false;

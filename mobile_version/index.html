@@ -196,6 +196,20 @@
       .transition-slide { animation-name: slide; }
 
       /* Character Visual Effects */
+
+      /* Character glitch: bursty positional snaps. steps(1) on purpose — a glitch TELEPORTS, it
+         never glides. Distance rides --char-glitch-px (set from the effect's intensity). */
+      @keyframes vnCharGlitchJitter {
+        0%   { transform: translate3d(0, 0, 0); }
+        37%  { transform: translate3d(0, 0, 0); }
+        40%  { transform: translate3d(calc(var(--char-glitch-px, 4px) * -1), 1px, 0) skewX(-1.5deg); }
+        45%  { transform: translate3d(var(--char-glitch-px, 4px), -1px, 0) skewX(1deg); }
+        50%  { transform: translate3d(0, 0, 0) skewX(0deg); }
+        71%  { transform: translate3d(0, 0, 0); }
+        74%  { transform: translate3d(calc(var(--char-glitch-px, 4px) * 0.7), 2px, 0); }
+        79%  { transform: translate3d(0, 0, 0); }
+        100% { transform: translate3d(0, 0, 0); }
+      }
       @keyframes vnCharShake {
           0%, 100% { transform: translate(0, 0); }
           10% { transform: translate(calc(-1 * var(--char-shake-px, 2px)), calc(-1 * var(--char-shake-px, 2px))); }

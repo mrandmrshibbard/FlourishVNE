@@ -11,6 +11,28 @@ export type VNSetVariableOperator = 'set' | 'add' | 'subtract' | 'random';
  */
 export type VNVariableScope = 'local' | 'global' | 'persistent';
 
+/**
+ * A named range of a NUMBER variable — "0–20 is Stranger, 21–50 is Friend".
+ *
+ * This is boolean labels, but for numbers: the author names the numbers once, and every surface
+ * (conditions, {text}, the live tracker, meters) can speak in words instead of arithmetic. A band
+ * owns everything from its `min` up to (but not including) the next band's `min`.
+ */
+export interface VNVariableBand {
+    id: VNID;
+    /** What the author calls this range, e.g. "Friend". Story content — never translated. */
+    name: string;
+    /** Inclusive lower bound. Bands are always sorted by this. */
+    min: number;
+    /** Optional colour, so a meter can warm up as it fills. A CSS var or hex. */
+    color?: string;
+    /** Optional emoji shown beside the name. */
+    icon?: string;
+}
+
+/** How a banded number variable presents itself to the PLAYER in {text} and to the author in trackers. */
+export type VNVariableShowAs = 'number' | 'band' | 'both';
+
 export interface VNVariable {
     id: VNID;
     name: string;
@@ -34,4 +56,16 @@ export interface VNVariable {
      *  stock count) and is hidden from the Variables manager to keep that list calm. It still works
      *  everywhere by id (conditions, {name} interpolation, SetVariable). Additive-optional. */
     isInternal?: boolean;
+
+    // ── Meaning (all additive-optional; an old project simply has none of it) ─────────────────────
+    /** Emoji shown wherever this variable appears, so it's recognised by shape, not by reading. */
+    icon?: string;
+    /** Colour chip, likewise. A CSS var or hex. */
+    color?: string;
+    /** Plain-language "what this means in your story" — the thing a name alone can never carry. */
+    description?: string;
+    /** NUMBER only. Named ranges, sorted ascending by `min`. See VNVariableBand. */
+    bands?: VNVariableBand[];
+    /** NUMBER + bands only. How the value reads in {text} and trackers. Unset → 'number' (unchanged). */
+    showAs?: VNVariableShowAs;
 }

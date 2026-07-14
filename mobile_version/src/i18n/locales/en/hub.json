@@ -38,7 +38,9 @@
     "prompt": "Auto-saved projects were found from a previous session. Would you like to restore one?",
     "savedAt": "Saved {{time}}",
     "startFresh": "Start Fresh",
-    "discardAll": "Discard All"
+    "discardAll": "Discard All",
+    "checkpoint": "earlier copy",
+    "discardConfirm": "Delete ALL backup copies, for every project? If a project’s file is missing or damaged, these backups are the only way to get it back. This cannot be undone."
   },
   "time": {
     "justNow": "Just now",
@@ -66,6 +68,8 @@
     "projectRecovered": "Project recovered!",
     "couldNotLoadSaved": "Could not load saved project.",
     "recoverFailed": "Failed to recover project.",
-    "autoSavesCleared": "Auto-saves cleared."
+    "autoSavesCleared": "Auto-saves cleared.",
+    "repaired": "This project file was damaged (a save was interrupted), but everything was recovered. Save it again now to make it whole.",
+    "repairedPartial": "This project file was damaged (a save was interrupted). Your story was recovered, but {{count}} media file(s) were lost and will need re-importing. Save it again now to make it whole."
   }
 }

@@ -180,9 +180,33 @@ public class MainActivity extends Activity {
                 return new String(readAll(new FileInputStream(f)), "UTF-8");
             } catch (Throwable t) { return null; }
         }
+        /**
+         * Atomic + HONEST. The old version truncated the target in place (a kill mid-write corrupted
+         * the player's saves) and swallowed every failure into a void return — so the game engine
+         * believed a failed save succeeded and told the player it was saved. Returns true only when
+         * the bytes are safely renamed into place; the JS wrapper turns false into a rejection.
+         */
         @JavascriptInterface
-        public synchronized void setItem(String key, String value) {
-            try { FileOutputStream out = new FileOutputStream(fileFor(key)); out.write(value.getBytes("UTF-8")); out.close(); } catch (Throwable t) {}
+        public synchronized boolean setItem(String key, String value) {
+            File tmp = null;
+            try {
+                File target = fileFor(key);
+                tmp = new File(dir, target.getName() + ".part");
+                FileOutputStream out = new FileOutputStream(tmp);
+                try {
+                    out.write(value.getBytes("UTF-8"));
+                    out.getFD().sync();
+                } finally { out.close(); }
+                if (!tmp.renameTo(target)) {
+                    if (!(target.delete() && tmp.renameTo(target))) return false;
+                }
+                tmp = null;
+                return true;
+            } catch (Throwable t) {
+                return false;
+            } finally {
+                if (tmp != null) { try { tmp.delete(); } catch (Throwable ignored) {} }
+            }
         }
         @JavascriptInterface
         public synchronized void removeItem(String key) {
@@ -245,16 +269,40 @@ public class MainActivity extends Activity {
             } catch (Throwable t) { return null; }
         }
 
-        /** Write base64 .flourish bytes; returns the (possibly sanitized) stored name. */
+        /**
+         * Write base64 .flourish bytes; returns the (possibly sanitized) stored name.
+         *
+         * ATOMIC on purpose: `new FileOutputStream(file)` truncates the existing project to zero
+         * bytes BEFORE the new ones are written — so a process kill, a full disk, or an OOM inside
+         * Base64.decode mid-way used to leave the user a stump where their only copy was. Write to
+         * a sidecar, fsync, and rename into place; the real file is always either the old good copy
+         * or the new good copy, never a half one.
+         */
         @JavascriptInterface
         public synchronized String write(String name, String base64) {
+            File tmp = null;
             try {
                 String stored = safeName(name);
                 byte[] data = Base64.decode(base64, Base64.DEFAULT);
-                FileOutputStream out = new FileOutputStream(new File(act.projectsDir(), stored));
-                out.write(data); out.close();
+                File target = new File(act.projectsDir(), stored);
+                tmp = new File(act.projectsDir(), stored + ".part");
+                FileOutputStream out = new FileOutputStream(tmp);
+                try {
+                    out.write(data);
+                    out.getFD().sync();     // on the flash before we swap — a rename of unwritten data helps nobody
+                } finally { out.close(); }
+                if (!tmp.renameTo(target)) {
+                    // Same-directory rename should always work; if the OS refuses, delete-then-rename
+                    // (Android's File.renameTo won't replace on some filesystems).
+                    if (!(target.delete() && tmp.renameTo(target))) return null;
+                }
+                tmp = null;
                 return stored;
-            } catch (Throwable t) { return null; }
+            } catch (Throwable t) {
+                return null;
+            } finally {
+                if (tmp != null) { try { tmp.delete(); } catch (Throwable ignored) {} }
+            }
         }
 
         @JavascriptInterface

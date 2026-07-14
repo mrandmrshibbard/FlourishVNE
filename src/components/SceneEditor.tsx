@@ -12,6 +12,7 @@ import Panel from './ui/Panel';
 import { PlusIcon, GripVerticalIcon, ChevronDownIcon, AdjustmentsIcon, FolderIcon, PlayIcon } from './icons';
 import { createCommand } from '../utils/commandFactory';
 import { describeConditions } from '../utils/conditionLogic';
+import { describeSetVariable, describeTextInput } from '../utils/variableLanguage';
 import { getCommandColor } from './CommandPalette';
 import { 
     groupCommandsIntoStacks,
@@ -98,11 +99,11 @@ const CommandItem: React.FC<{
             case CommandType.StopMovie:
                 return `Stop Movie`;
             case CommandType.SetVariable:
-                 const varName = project.variables[command.variableId]?.name || 'Unknown Variable';
-                 return `Set ${varName} ${command.operator} ${command.value}`;
+                 // One shared renderer — the same sentence the inspector shows. This row used to read
+                 // "Set Affection add 1", which is the operator token, not English.
+                 return describeSetVariable(project, command as any);
             case CommandType.TextInput:
-                const inputVarName = project.variables[command.variableId]?.name || 'Unknown Variable';
-                return `Text Input: "${command.prompt}" → ${inputVarName}`;
+                return describeTextInput(project, command as any);
             case CommandType.Jump:
                 const sceneName = project.scenes[command.targetSceneId]?.name || 'Unknown Scene';
                 const conditionText = command.conditions && command.conditions.length > 0 ? `IF [...]` : '';
@@ -457,6 +458,31 @@ const SceneEditor: React.FC<{
     // uses pointer events instead — the wheel + edge auto-scroll work while dragging,
     // and a "make room" gap shows exactly where the command will land.
     const commandListRef = useRef<HTMLDivElement | null>(null);
+
+    /**
+     * Reveal the selected command.
+     *
+     * There was NO scroll-to-command anywhere in the editor: something could select step 47 and the
+     * list would sit there showing step 1, so a "take me there" jump (from the variable X-ray, or the
+     * Story Flow Map) looked like it had done nothing at all. The `data-command-id` hook was already
+     * on every row; nothing had ever used it.
+     *
+     * Only scrolls when the row is actually off-screen, so clicking around the list never yanks it.
+     */
+    useEffect(() => {
+        if (selectedCommandIndex === null) return;
+        const list = commandListRef.current;
+        const cmd = activeScene?.commands?.[selectedCommandIndex];
+        if (!list || !cmd) return;
+        const row = list.querySelector(`[data-command-id="${cmd.id}"]`) as HTMLElement | null;
+        if (!row) return;
+        const listBox = list.getBoundingClientRect();
+        const rowBox = row.getBoundingClientRect();
+        if (rowBox.top < listBox.top || rowBox.bottom > listBox.bottom) {
+            row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+    }, [selectedCommandIndex, activeScene?.id]);
+
     const pointerDrag = useRef<null | {
         id: string;
         startX: number;

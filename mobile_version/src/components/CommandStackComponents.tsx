@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VNCommand } from '../features/scene/types';
 import { VNProject } from '../types/project';
+import { summarizeSetVariable } from '../utils/variableLanguage';
 import { 
     canRunAsync, 
     hasUnpredictableAsyncBehavior, 
@@ -59,8 +60,9 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
             case 'PlaySoundEffect':
                 return `♫ ${project.audio[command.audioId]?.name || 'N/A'}`;
             case 'SetVariable':
-                const varName = project.variables[command.variableId]?.name || 'Var';
-                return `Set ${varName}`;
+                // Was just "Set Affection" — no operator, no value, so the chip told you nothing about
+                // what it actually did. The shared compact form does: "Affection +1".
+                return summarizeSetVariable(project, command as any);
             case 'ShakeScreen':
                 return `Shake`;
             case 'TintScreen':

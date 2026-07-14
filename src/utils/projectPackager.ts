@@ -1,3 +1,5 @@
+import { repairFlourishArchive } from './zipRepair';
+import { getAutoSaveMetadata } from './storage';
 // Declare global variables from CDN scripts
 declare var JSZip: any;
 declare var saveAs: any;
@@ -144,7 +146,7 @@ const sanitizeFilename = (name: string, fallback: string): string => {
     return name.replace(/[^a-z0-9_.\-]/gi, '_').replace(/_{2,}/g, '_').toLowerCase();
 };
 
-export const exportProject = async (project: VNProject, options?: { overwritePath?: string }): Promise<{ saved: boolean; filePath?: string }> => {
+export const exportProject = async (project: VNProject, options?: { overwritePath?: string }): Promise<{ saved: boolean; filePath?: string; missingAssets?: string[] }> => {
     if (!project) {
         throw new Error('A valid project object must be provided for export.');
     }
@@ -159,6 +161,19 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
     const projectClone = (typeof structuredClone === 'function'
         ? structuredClone(project)
         : JSON.parse(JSON.stringify(project))) as VNProject;
+
+    // ── RESERVE project.json AS THE FIRST ENTRY IN THE ARCHIVE ───────────────────────────────────
+    // The archive is written to disk in the order entries were ADDED, and project.json used to be
+    // added LAST — after every background, sprite and audio file. So a .flourish that got cut short
+    // lost the one thing that actually matters: the story. The art is replaceable; the script is not.
+    //
+    // We can't serialize it yet (the asset pass below rewrites its media URLs into archive-relative
+    // paths), so we claim the slot now and fill it in at the end. Re-adding an existing key overwrites
+    // its CONTENT without moving its POSITION, so it stays first. (Pinned by a test — the whole
+    // resilience win rests on that behaviour.)
+    zip.file('project.json', '');
+    zip.file('manifest.json', '');
+
     const assetFolder = zip.folder('assets');
     if (!assetFolder) throw new Error("Could not create assets folder in zip");
 
@@ -917,10 +932,16 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
             if (!rel) return val;
             if (!added.has(rel)) {
                 added.add(rel);
+                let ok = false;
                 try {
                     const res = await electronAPIForAssets.readProjectAsset(project.id, rel);
-                    if (res?.success) zip.file(rel, new Uint8Array(res.data));
+                    if (res?.success) { zip.file(rel, new Uint8Array(res.data)); ok = true; }
                 } catch (e) { console.warn('export: missing managed asset', rel, e); }
+                // A file we couldn't read but whose ref we rewrite anyway is a DANGLING REF in the
+                // exported archive — the .flourish claims an asset it doesn't contain, and every
+                // copy made from it inherits the hole. Recording it lets the caller TELL the author
+                // (manifest.fetchFailures also carries it inside the archive for later diagnosis).
+                if (!ok) addFailure(rel);
             }
             return rel; // rewrite the field to a portable relative path for the bundled project.json
         };
@@ -941,6 +962,7 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
     }
 
     // --- 3. SAVE PROJECT.JSON AND GENERATE ZIP ---
+    // Fills the slots reserved at the top — these stay FIRST in the archive. See the note there.
     zip.file('project.json', JSON.stringify(projectClone, null, 2));
     zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 
@@ -973,7 +995,7 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
             });
             const end = await electronAPI.exportStreamEnd();
             if (!end?.success) throw new Error(end?.error || 'Could not finalize the file.');
-            return { saved: true, filePath: end.filePath || start.filePath };
+            return { saved: true, filePath: end.filePath || start.filePath, missingAssets: manifest.fetchFailures.length ? [...manifest.fetchFailures] : undefined };
         } catch (err) {
             try { await electronAPI.exportStreamAbort(); } catch { /* best-effort cleanup */ }
             throw err;
@@ -994,16 +1016,82 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
             throw new Error(result?.error || 'Failed to save project export.');
         }
 
-        return { saved: true, filePath: result.filePath };
+        return { saved: true, filePath: result.filePath, missingAssets: manifest.fetchFailures.length ? [...manifest.fetchFailures] : undefined };
     }
 
     const blob = new Blob([archiveData], { type: 'application/octet-stream' });
     saveAs(blob, filename);
-    return { saved: true };
+    return { saved: true, missingAssets: manifest.fetchFailures.length ? [...manifest.fetchFailures] : undefined };
 };
 
+/**
+ * What a repaired import salvaged, if the file had to be repaired at all. Set on the LAST import;
+ * the UI reads it to tell the author what came back and what didn't.
+ */
+export let lastImportRepair: { recovered: string[]; lost: string[] } | null = null;
+
+/** Bytes, whatever we were handed. */
+async function toBytes(file: File | Blob | ArrayBuffer | Uint8Array): Promise<Uint8Array> {
+    if (file instanceof Uint8Array) return file;
+    if (file instanceof ArrayBuffer) return new Uint8Array(file);
+    return new Uint8Array(await (file as Blob).arrayBuffer());
+}
+
+
+/**
+ * An imported project whose id ALREADY EXISTS on this machine — but with a different title — is a
+ * DIFFERENT project wearing the same name tag. It happens constantly with distributed templates:
+ * ids are minted at creation and travel inside the .flourish, so every derivative of one template
+ * carries the identical id. Same-id projects share an asset folder, a recents slot and an autosave
+ * slot; letting the import proceed under that id silently overwrites the existing project's assets
+ * with the imported ones (and vice versa on next save).
+ *
+ * So: detected collision with a different title → mint a fresh id BEFORE asset hydration.
+ * hydrateAsset reads project.id at call time, so everything extracts into the new project's own
+ * folder and every rewritten ref points there — a clean separation, no shared anything.
+ * Same id AND same title = the user re-opening their own project → keep the id (that continuity is
+ * what makes quick-save, recents and the autosave lifeline line up).
+ * Worst case of a false positive (user renamed their own project elsewhere) is a harmless
+ * duplicate; worst case of a false negative used to be silent cross-project destruction.
+ */
+export async function renamespaceOnCollision(project: VNProject): Promise<void> {
+    const incomingTitle = (project.title || '').trim();
+    let collision = false;
+    try {
+        const recents = JSON.parse(localStorage.getItem('flourish:recentProjects') || '[]') as Array<{ id: string; title?: string }>;
+        const hit = recents.find(r => r.id === project.id);
+        if (hit && (hit.title || '').trim() !== incomingTitle) collision = true;
+    } catch { /* recents unreadable — fall through to the autosave check */ }
+    if (!collision) {
+        try {
+            const metas = await getAutoSaveMetadata();
+            const hit = metas.find(m => m.projectId === project.id && !m.isCheckpoint);
+            if (hit && (hit.title || '').trim() !== incomingTitle) collision = true;
+        } catch { /* IDB unavailable — nothing to collide with */ }
+    }
+    if (!collision) return;
+    const oldId = project.id;
+    project.id = `proj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` as VNID;
+    console.warn(`Imported project id "${oldId}" already belongs to a different local project — re-namespaced to "${project.id}" so neither can overwrite the other.`);
+}
+
 export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array, onProgress?: (p: MigrationProgress) => void): Promise<{ project: VNProject; manifest?: ExportManifest }> => {
-    const zip = await JSZip.loadAsync(file);
+    lastImportRepair = null;
+
+    let zip: any;
+    try {
+        zip = await JSZip.loadAsync(file);
+    } catch (err) {
+        // The archive is unreadable — almost always "can't find end of central directory", meaning it
+        // was cut short by an interrupted save (see the note in electron/main.cjs). Everything that DID
+        // reach the disk is still there, so read it forwards and rebuild it rather than telling the
+        // author their work is gone.
+        const repaired = await repairFlourishArchive(await toBytes(file));
+        if (!repaired) throw err;                       // nothing salvageable — surface the real error
+        lastImportRepair = { recovered: repaired.recovered, lost: repaired.lost };
+        zip = await JSZip.loadAsync(repaired.archive);
+    }
+
     const projectFile = zip.file('project.json');
 
     if (!projectFile) {
@@ -1057,6 +1145,9 @@ export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array
             parsedManifest = undefined;
         }
     }
+
+    // Guard against same-id-different-project collisions BEFORE any asset is written to disk.
+    await renamespaceOnCollision(project);
 
     // --- DATA HYDRATION: Ensure project structure is up-to-date ---
     if (!project.images) project.images = {};

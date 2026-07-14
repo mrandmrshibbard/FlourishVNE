@@ -21,6 +21,8 @@ import {
     GameSetting, GameToggleSetting, UISlotRect, UIAppearanceState,
 } from '../../features/ui/types';
 import { VNVariable } from '../../features/variables/types';
+import { hasBands, sortedBands } from '../../features/variables/bands';
+import VariablePicker from '../variables/VariablePicker';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../../features/character/types';
 import { FormField, TextInput, Select, ColorInput, RangeInput } from '../ui/Form';
 import { pluginManager } from '../../features/plugins/PluginManagerService';
@@ -226,7 +228,33 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
             </div>
             <FormField label={t('elementInspector.delayMs')}>
                 <TextInput type="number" value={element.transitionDelay || 0} onChange={e => updateElement({ transitionDelay: parseInt(e.target.value) || 0 })} />
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('elementInspector.delayHint', 'Give each element a different delay to stagger them — first one in, then the next…')}</p>
             </FormField>
+            {(element.transitionIn || 'fade') !== 'none' && (element.transitionIn || 'fade') !== 'fade' && (
+                <>
+                    <FormField label={t('elementInspector.transFadeToo', 'Also fade in while moving')}>
+                        <input type="checkbox" checked={element.transitionFade !== false}
+                            onChange={e => updateElement({ transitionFade: e.target.checked ? undefined : false })} />
+                        <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('elementInspector.transFadeHint', 'Off = the element arrives fully visible and just slides into place.')}</p>
+                    </FormField>
+                    {(element.transitionIn || '').startsWith('slide') && (
+                        <FormField label={t('elementInspector.transDistance', 'Slide distance (%)')}>
+                            <TextInput type="number" min="5" max="400"
+                                value={element.transitionDistance ?? ''}
+                                placeholder={t('elementInspector.transDistanceAuto', 'automatic')}
+                                onChange={e => updateElement({ transitionDistance: e.target.value === '' ? undefined : (parseInt(e.target.value) || undefined) })} />
+                            <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('elementInspector.transDistanceHint', 'How far away it starts, relative to its own size. 100% = one full element-width away.')}</p>
+                        </FormField>
+                    )}
+                </>
+            )}
+            {(element.transitionIn || 'fade') !== 'none' && (
+                <FormField label={t('elementInspector.transOnReveal', 'Play again when shown by an action')}>
+                    <input type="checkbox" checked={!!element.transitionOnReveal}
+                        onChange={e => updateElement({ transitionOnReveal: e.target.checked || undefined })} />
+                    <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('elementInspector.transOnRevealHint', 'When a Show Element action reveals this, replay the entrance instead of just fading in.')}</p>
+                </FormField>
+            )}
         </>
     );
     const renderConditionsFields = () => (
@@ -1286,14 +1314,24 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                 // If the bound variable backs a stat, surface that stat's color as a one-click suggestion.
                 const allStats = Object.values(project.stats || {}) as import('../../features/stats/types').VNStat[];
                 const boundStat = el.variableId ? allStats.find(s => Object.values(s.variableIds || {}).includes(el.variableId!)) : undefined;
+                // Band-driven options are only offered once the variable HAS names to show — otherwise
+                // they'd be dead controls that silently do nothing.
+                const meterHasBands = hasBands(boundVar);
+                const meterBandExample = meterHasBands
+                    ? `"${sortedBands(boundVar)[0]?.name || 'Friend'}" (the step's name)`
+                    : '';
                 return {
                     content: <>
                         <FormField label="Variable to display">
-                            <Select value={el.variableId || ''} onChange={e => updateElement({ variableId: e.target.value || undefined })}>
-                                {numberVariables.length === 0 && <option value="">No number variables yet</option>}
-                                {numberVariables.length > 0 && !el.variableId && <option value="">Select a variable…</option>}
-                                {numberVariables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                            </Select>
+                            {/* Number-only: a meter on a Yes/No or a piece of text is meaningless. If none
+                                exists yet, the picker creates one from the name you type — no trip to the
+                                Variables tab and back. */}
+                            <VariablePicker
+                                value={el.variableId || ''}
+                                onChange={id => updateElement({ variableId: id || undefined })}
+                                allowedTypes={['number']}
+                                placeholder="Choose a number to show…"
+                            />
                         </FormField>
                         <p className="text-[9px] text-slate-500 -mt-1">Stats (Systems tab) appear here by name — e.g. "Alice — Affection". The bar tracks the value live.</p>
                         <div className="grid grid-cols-2 gap-2">
@@ -1366,11 +1404,18 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         <FormField label="Show value"><input type="checkbox" checked={el.showValue !== false} onChange={e => updateElement({ showValue: e.target.checked })} /></FormField>
                         {el.showValue !== false && (
                             <FormField label="Value style">
-                                <Select value={el.valueFormat || 'valueMax'} onChange={e => updateElement({ valueFormat: e.target.value as 'value' | 'valueMax' | 'percent' })}>
+                                <Select value={el.valueFormat || 'valueMax'} onChange={e => updateElement({ valueFormat: e.target.value as 'value' | 'valueMax' | 'percent' | 'band' })}>
                                     <option value="valueMax">47/100</option>
                                     <option value="value">47</option>
                                     <option value="percent">47%</option>
+                                    {/* Only offered once the variable actually has names to show. */}
+                                    {meterHasBands && <option value="band">{meterBandExample}</option>}
                                 </Select>
+                            </FormField>
+                        )}
+                        {meterHasBands && (
+                            <FormField label="Colour the bar by its step" hint="The bar takes the colour of whichever named step the value is in — so it warms up as it fills.">
+                                <input type="checkbox" checked={!!el.fillFromBand} onChange={e => updateElement({ fillFromBand: e.target.checked })} />
                             </FormField>
                         )}
                     </>,

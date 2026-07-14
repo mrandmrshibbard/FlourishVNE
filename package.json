@@ -1,7 +1,7 @@
 {
   "name": "flourish-visual-novel-engine",
   "private": true,
-  "version": "3.6.5",
+  "version": "3.7.4",
   "description": "Flourish Visual Novel Engine",
   "author": "Memento_Morii",
   "type": "module",
@@ -29,6 +29,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "ag-psd": "^31.0.2",
     "electron-updater": "^6.6.2",
     "i18next": "^26.3.0",
     "jszip": "^3.10.1",
@@ -43,6 +44,7 @@
     "@vitejs/plugin-react": "^5.0.0",
     "electron": "^28.3.3",
     "electron-builder": "^24.13.3",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^28.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",

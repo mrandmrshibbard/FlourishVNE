@@ -4,6 +4,7 @@ import { VNID } from './index';
 export type VNKnownScreenOverlayEffectType =
   | 'crtScanlines'
   | 'chromaticGlitch'
+  | 'glitch'
   | 'sunbeams'
   | 'shimmer'
   | 'rain'
@@ -19,7 +20,7 @@ export type VNScreenOverlayEffectType = VNKnownScreenOverlayEffectType | (string
 
 /** The set of built-in effect type names (used to separate built-ins from plugin effects). */
 export const BUILTIN_OVERLAY_EFFECT_TYPES: readonly VNKnownScreenOverlayEffectType[] = [
-  'crtScanlines', 'chromaticGlitch', 'sunbeams', 'shimmer', 'rain', 'snowAsh', 'fog', 'haze', 'smoke', 'fireworks',
+  'crtScanlines', 'chromaticGlitch', 'glitch', 'sunbeams', 'shimmer', 'rain', 'snowAsh', 'fog', 'haze', 'smoke', 'fireworks',
 ];
 
 export type VNSnowAshVariant = 'snow' | 'ash';
@@ -56,9 +57,14 @@ export interface VNEffectParams {
   // --- CRT Scanlines ---
   /** Gap between scan-line stripes (0 = tight, 1 = wide). Default ≈ 0.5 */
   lineSpacing?: number;
-  // --- Chromatic Glitch ---
+  // --- Chromatic Glitch + Glitch ---
   /** Colour-channel offset amount (0 = subtle, 1 = extreme). Default ≈ 0.5 */
   chromaticSpread?: number;
+  // --- Glitch (the FNF-style corruption: displaced pixel bands + discolour bursts) ---
+  /** How chunky the displaced bands are (0 = fine tearing, 1 = big fat blocks). Default ≈ 0.5 */
+  blockiness?: number;
+  /** Discolour band colours, alternated through the stripes. Unset → [effect.color ?? green]. */
+  colors?: string[];
   // --- Fog / Haze / Smoke ---
   /** Render this atmospheric layer IN FRONT OF character sprites (foreground). Default (false) =
    *  behind characters, so they stand within the fog. Only meaningful for fog/haze/smoke. */

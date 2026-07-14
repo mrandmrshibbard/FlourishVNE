@@ -3,6 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { VNCondition, VNConditionOperator } from '../../types/shared';
 import { VNVariable, VNVariableType } from '../../features/variables/types';
 import { resolveBoolLabels } from '../../features/variables/booleanLabels';
+import { hasBands, sortedBands, describeBand } from '../../features/variables/bands';
+import { describeConditions } from '../../utils/conditionLogic';
+import VariablePicker from '../variables/VariablePicker';
 import { CollapsibleSection } from './CollapsibleSection';
 import { VNProject } from '../../types/project';
 import { FormField, Select, TextInput } from './Form';
@@ -17,11 +20,26 @@ const getOperatorsForType = (type: VNVariableType | undefined): VNConditionOpera
     }
 };
 
+/**
+ * A number variable that has NAMED BANDS gets a different, friendlier operator set: the author talks
+ * about the names they invented ("is a Friend", "is Friend or better") instead of doing arithmetic.
+ * The raw numeric operators stay available underneath — see the "use exact numbers" escape hatch —
+ * because a band is a convenience, never a cage.
+ */
+const BAND_OPERATORS: VNConditionOperator[] = ['inBand', 'atLeastBand', 'belowBand'];
+const isBandOp = (op: VNConditionOperator) => BAND_OPERATORS.includes(op);
+
+const operatorsFor = (variable: VNVariable | undefined): VNConditionOperator[] =>
+    hasBands(variable)
+        ? [...BAND_OPERATORS, ...getOperatorsForType('number')]
+        : getOperatorsForType(variable?.type);
+
 // Plain-English label key (under `conditions.op.*`) for each operator, so users read
 // "is at least 5" instead of ">= 5". The stored operator value is unchanged.
 const OP_LABEL_KEY: Record<VNConditionOperator, string> = {
     '==': 'eq', '!=': 'neq', '>': 'gt', '<': 'lt', '>=': 'gte', '<=': 'lte',
     'contains': 'contains', 'startsWith': 'startsWith', 'is true': 'isOn', 'is false': 'isOff',
+    'inBand': 'inBand', 'atLeastBand': 'atLeastBand', 'belowBand': 'belowBand',
 };
 
 const ConditionsEditor: React.FC<{
@@ -38,11 +56,12 @@ const ConditionsEditor: React.FC<{
     hint?: string;
 }> = ({ conditions, project, onChange, isRequired, collapsible, title, hint }) => {
     const { t } = useTranslation('ui');
-    const hasVariables = Object.keys(project.variables).length > 0;
 
     const handleAddCondition = () => {
-        const firstVarId = Object.keys(project.variables)[0];
-        if (!firstVarId) return;
+        // An empty variableId is FINE now: the row's VariablePicker can create the variable in place.
+        // This used to bail out entirely when the project had no variables, which left a brand-new
+        // author staring at "No variables defined to create conditions." with nothing to click.
+        const firstVarId = Object.keys(project.variables)[0] ?? '';
         const newCondition: VNCondition = {
             variableId: firstVarId,
             operator: '==',
@@ -53,18 +72,30 @@ const ConditionsEditor: React.FC<{
 
     const handleUpdateCondition = (index: number, updates: Partial<VNCondition>) => {
         const newConditions = [...(conditions || [])];
+        const prevOperator = newConditions[index].operator;
         newConditions[index] = { ...newConditions[index], ...updates };
 
         if (updates.operator) {
             const variable = project.variables[newConditions[index].variableId];
-            const allowedOperators = getOperatorsForType(variable?.type);
+            const allowedOperators = operatorsFor(variable);
             if (!allowedOperators.includes(updates.operator)) {
                 newConditions[index].operator = allowedOperators[0];
+            }
+            // A band operator's `value` is a BAND ID; every other operator's is a literal. Crossing
+            // that line makes the carried-over value nonsense — "Affection is 41" with 41 read as a
+            // band id is a condition that can never be true. So reset the value when the KIND of
+            // value changes.
+            const nowBand = isBandOp(newConditions[index].operator);
+            if (isBandOp(prevOperator) !== nowBand) {
+                newConditions[index].value = nowBand ? (sortedBands(variable)[0]?.id ?? '') : '';
             }
         }
         if (updates.variableId) {
             const variable = project.variables[updates.variableId];
-            newConditions[index].operator = getOperatorsForType(variable?.type)[0];
+            const ops = operatorsFor(variable);
+            newConditions[index].operator = ops[0];
+            // Same reasoning: the old value belonged to the OLD variable's world.
+            newConditions[index].value = isBandOp(ops[0]) ? (sortedBands(variable)[0]?.id ?? '') : '';
         }
 
         onChange(newConditions);
@@ -114,10 +145,6 @@ const ConditionsEditor: React.FC<{
         );
     }
 
-    if (!hasVariables) {
-        return <p className="text-xs text-[var(--text-muted)]">{t('conditions.noVariables')}</p>;
-    }
-
     if (!conditions && !isRequired) {
         return <button onClick={handleAddCondition} className="text-sky-400 hover:text-sky-300 text-xs">{t('conditions.addCondition')}</button>;
     }
@@ -126,7 +153,9 @@ const ConditionsEditor: React.FC<{
         <div className="space-y-2">
             {(conditions || []).map((condition, index) => {
                 const variable = project.variables[condition.variableId];
-                const operators = getOperatorsForType(variable?.type);
+                const operators = operatorsFor(variable);
+                const bands = sortedBands(variable);
+                const usingBand = isBandOp(condition.operator);
                 const isBool = variable?.type === 'boolean';
                 // For booleans, normalize a stale '=='/'!=' operator to is true/is false for display
                 // and never show the separate value dropdown (the operator already says it).
@@ -159,9 +188,10 @@ const ConditionsEditor: React.FC<{
                         <div className="flex gap-1 items-start">
                             <div className="flex-grow space-y-1">
                                 <FormField label={t('conditions.variable')}>
-                                    <Select value={condition.variableId} onChange={e => handleUpdateCondition(index, { variableId: e.target.value })}>
-                                        {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                                    </Select>
+                                    <VariablePicker
+                                        value={condition.variableId}
+                                        onChange={id => handleUpdateCondition(index, { variableId: id })}
+                                    />
                                 </FormField>
                                 <div className="grid grid-cols-2 gap-1">
                                     <FormField label={t('conditions.operator')}>
@@ -170,8 +200,15 @@ const ConditionsEditor: React.FC<{
                                         </Select>
                                     </FormField>
                                     {!valueIsHidden && (
-                                        <FormField label={t('conditions.value')}>
-                                            {variable?.type === 'boolean' ? (
+                                        <FormField label={usingBand ? t('conditions.step', 'Step') : t('conditions.value')}>
+                                            {usingBand ? (
+                                                // The whole point: the author picks the WORD they invented, not a number.
+                                                <Select value={String(condition.value ?? '')} onChange={e => handleUpdateCondition(index, { value: e.target.value })}>
+                                                    {bands.map(b => (
+                                                        <option key={b.id} value={b.id}>{describeBand(variable, b, t('bands.andUpShort', 'and up'))}</option>
+                                                    ))}
+                                                </Select>
+                                            ) : variable?.type === 'boolean' ? (
                                                 <Select value={String(condition.value)} onChange={e => handleUpdateCondition(index, { value: e.target.value === 'true' })}>
                                                     <option value="true">{yes}</option>
                                                     <option value="false">{no}</option>
@@ -186,8 +223,11 @@ const ConditionsEditor: React.FC<{
                             <button onClick={() => handleRemoveCondition(index)} className="text-red-400 hover:text-red-300 mt-1 p-1"><XMarkIcon className="w-4 h-4" /></button>
                         </div>
                         {variable && (
+                            // The plain-English echo, now produced by the SAME renderer the command list and
+                            // branch strip use — so the sentence an author reads here is the sentence they see
+                            // everywhere else.
                             <p className="text-[10px] text-sky-300/70 italic mt-1 px-1">
-                                {variable.name} {opText(displayOperator)}{valueIsHidden ? '' : ` ${String(condition.value ?? '')}`}
+                                {describeConditions([{ ...condition, operator: displayOperator, connector: undefined }], project.variables)}
                             </p>
                         )}
                     </div>

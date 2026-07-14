@@ -2,6 +2,7 @@ import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNVariable } from '../features/variables/types';
 import { resolveBoolLabels } from '../features/variables/booleanLabels';
+import { formatBandedValue } from '../features/variables/bands';
 
 /**
  * Variable Interpolation System
@@ -76,6 +77,12 @@ const formatValue = (
         const truthy = value === true || String(value).toLowerCase() === 'true';
         const { yes, no } = resolveBoolLabels(variable, 'Yes', 'No');
         return truthy ? yes : no;
+    }
+    // A number with named bands can print the WORD the author gave it ("Friend") instead of the
+    // number — but only if they asked for it. `showAs` is unset on every existing variable, so this
+    // changes nothing until someone opts in.
+    if (variable.type === 'number' && variable.showAs && variable.showAs !== 'number') {
+        return formatBandedValue(variable, value);
     }
     const stringValue = String(value);
     // If the value looks like an asset ID, try to get the asset name

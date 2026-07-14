@@ -34,6 +34,70 @@
     "true": "Yes",
     "false": "No"
   },
+  "xray": {
+    "title": "Where this is used",
+    "count": "{{count}} places",
+    "nowhere": "nowhere yet",
+    "rowCount": "Used in {{count}} places",
+    "rowNone": "Nothing uses this yet",
+    "jump": "Take me there",
+    "noJump": "This one can’t be opened directly",
+    "up": "goes up in {{n}}",
+    "down": "goes down in {{n}}",
+    "changed": "changed in {{n}}",
+    "checked": "checked in {{n}}",
+    "shown": "shown in {{n}}",
+    "orphan": "Nothing in your story uses this yet. It will just sit at its starting value.",
+    "neverChanged": "Nothing ever changes this, so it stays at its starting value for the whole game. Did you mean to change it somewhere?",
+    "neverUsed": "Nothing ever checks or shows this, so changing it can’t affect anything the player sees."
+  },
+  "picker": {
+    "placeholder": "Choose a variable…",
+    "search": "Search, or type a new name…",
+    "none": "No variables yet.",
+    "nameTaken": "A variable called that already exists.",
+    "createAs": "Make “{{name}}” a new…",
+    "type": {
+      "boolean": "Yes / No",
+      "number": "Number",
+      "string": "Text"
+    },
+    "typeHint": {
+      "boolean": "Something that either happened or didn’t",
+      "number": "Something you count or measure",
+      "string": "Words — a name, a route, a colour"
+    }
+  },
+  "token": {
+    "insert": "Put a variable into this text — it will show the value while the game runs",
+    "pick": "Which variable?"
+  },
+  "meaning": {
+    "iconTitle": "An emoji, so you can spot this variable at a glance",
+    "colorTitle": "A colour, used wherever this variable appears",
+    "descPlaceholder": "What this means in your story — e.g. “How much Yuki likes you”"
+  },
+  "bands": {
+    "label": "Give the numbers names",
+    "hint": "Name the ranges once — then you can write “when Yuki is a Friend” instead of “when Affection is 41 or more”.",
+    "startBlank": "Start blank",
+    "presetHint": "Pick one to start — you can rename, recolour and re-number every step afterwards.",
+    "namePlaceholder": "Friend",
+    "iconTitle": "An emoji for this step (optional)",
+    "colorTitle": "Colour for this step",
+    "from": "from",
+    "andUp": "{{from}} and up",
+    "andUpShort": "and up",
+    "add": "Add another step",
+    "remove": "Remove this step",
+    "rowSummary_one": "{{count}} named step",
+    "rowSummary_other": "{{count}} named steps",
+    "showAsLabel": "When this appears in your story text",
+    "showAsNumber": "Show the number — “34”",
+    "showAsBand": "Show the name — “Friend”",
+    "showAsBoth": "Show both — “Friend (34)”",
+    "showAsHint": "This is what {{token}} prints in dialogue and choices."
+  },
   "boolLabels": {
     "label": "Value labels",
     "defaultPreset": "Yes / No (default)",

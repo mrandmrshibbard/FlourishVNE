@@ -3,11 +3,11 @@ import { useTranslation, Trans } from 'react-i18next';
 import { VNProject } from '../types/project';
 import { createInitialProject } from '../constants';
 import { PlusIcon, UploadIcon, SparkleIcon, ClockIcon, TrashIcon } from './icons';
-import { importProject } from '../utils/projectPackager';
+import { importProject, lastImportRepair } from '../utils/projectPackager';
 import { ChangelogModal } from './ChangelogModal';
 import { useToast } from '../contexts/ToastContext';
 import LoadingOverlay from './ui/LoadingOverlay';
-import { getAutoSaveMetadata, loadProjectFromIDB, deleteAutoSave } from '../utils/storage';
+import { getAutoSaveMetadata, loadProjectFromIDB, loadProjectByKey, deleteAutoSave } from '../utils/storage';
 import { useTheme } from '../contexts/ThemeContext';
 import HolidayDecorations from './HolidayDecorations';
 import { IS_MOBILE } from '../utils/platform';
@@ -97,6 +97,24 @@ function removeRecentProject(projectId: string): RecentProject[] {
     }
 }
 
+
+/**
+ * Tell the author the truth about what just opened. A .flourish cut short by an interrupted save is
+ * rebuilt from its surviving bytes rather than declared lost — but silently opening a project with
+ * half its artwork missing would be its own kind of data loss, so say so.
+ */
+function reportRepair(toast: any, t: any, successKey = 'toast.projectLoaded'): void {
+    const repair = lastImportRepair;
+    if (!repair) { toast.success(t(successKey)); return; }
+    const lost = repair.lost.length;
+    toast.warning(
+        lost > 0
+            ? t('toast.repairedPartial', 'This project file was damaged (a save was interrupted). Your story was recovered, but {{count}} media file(s) were lost and will need re-importing. Save it again now to make it whole.', { count: lost })
+            : t('toast.repaired', 'This project file was damaged (a save was interrupted), but everything was recovered. Save it again now to make it whole.'),
+        { duration: 12000 },
+    );
+}
+
 export const ProjectHub: React.FC<{
     onProjectSelect: (project: VNProject) => void;
 }> = ({ onProjectSelect }) => {
@@ -110,7 +128,7 @@ export const ProjectHub: React.FC<{
     const [importProgress, setImportProgress] = useState<{ done: number; total: number; label: string } | null>(null);
     const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
     const [savedProjectFiles, setSavedProjectFiles] = useState<SavedProjectFile[]>([]);
-    const [recoveryProjects, setRecoveryProjects] = useState<Array<{id: string; title: string; savedAt: number}>>([]);
+    const [recoveryProjects, setRecoveryProjects] = useState<Array<{id: string; key: string; title: string; savedAt: number; isCheckpoint?: boolean}>>([]);
     const [showRecovery, setShowRecovery] = useState(false);
     const toast = useToast();
     const { t } = useTranslation('hub');
@@ -133,11 +151,10 @@ export const ProjectHub: React.FC<{
 
         getAutoSaveMetadata().then(metas => {
             if (metas.length > 0) {
-                setRecoveryProjects(metas.map(m => ({
-                    id: m.projectId,
-                    title: m.title,
-                    savedAt: m.savedAt
-                })));
+                // Newest first; a checkpoint is an OLDER copy kept on purpose (see storage.ts).
+                setRecoveryProjects([...metas]
+                    .sort((a, b) => b.savedAt - a.savedAt)
+                    .map(m => ({ id: m.projectId, key: m.key, title: m.title, savedAt: m.savedAt, isCheckpoint: m.isCheckpoint })));
                 setShowRecovery(true);
             }
         }).catch(() => {});
@@ -380,7 +397,7 @@ export const ProjectHub: React.FC<{
                 api.setHubActive(false);
             }
             saveRecentProject(project, filePath);
-            toast.success(t('toast.projectLoaded'));
+            reportRepair(toast, t);
             onProjectSelect(project);
         } catch (error) {
             console.error('Error opening project from path:', error);
@@ -415,7 +432,7 @@ export const ProjectHub: React.FC<{
                 api.setHubActive(false);
             }
             saveRecentProject(project, result.filePath);
-            toast.success(t('toast.projectLoaded'));
+            reportRepair(toast, t);
             onProjectSelect(project);
         } catch (error) {
             console.error('Error opening project:', error);
@@ -454,7 +471,7 @@ export const ProjectHub: React.FC<{
             }
             // Save to recent projects
             saveRecentProject(project);
-            toast.success(t('toast.importSuccess'));
+            reportRepair(toast, t, 'toast.importSuccess');
             onProjectSelect(project);
         } catch (error) {
             console.error("Error importing project file:", error);
@@ -626,10 +643,11 @@ export const ProjectHub: React.FC<{
                                     key={rp.id}
                                     onClick={async () => {
                                         try {
-                                            const project = await loadProjectFromIDB(rp.id as any);
+                                            const project = await loadProjectByKey(rp.key);
                                             if (project) {
                                                 saveRecentProject(project);
                                                 toast.success(t('toast.projectRecovered'));
+                                                setShowRecovery(false);   // only on SUCCESS
                                                 onProjectSelect(project);
                                             } else {
                                                 toast.error(t('toast.couldNotLoadSaved'));
@@ -637,11 +655,17 @@ export const ProjectHub: React.FC<{
                                         } catch {
                                             toast.error(t('toast.recoverFailed'));
                                         }
-                                        setShowRecovery(false);
                                     }}
                                     className="w-full text-left p-3 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--accent-cyan)]/20 transition-colors border border-transparent hover:border-[var(--accent-cyan)]/30"
                                 >
-                                    <div className="font-medium text-[var(--text-primary)]">{rp.title}</div>
+                                    <div className="font-medium text-[var(--text-primary)]">
+                                        {rp.title}
+                                        {rp.isCheckpoint && (
+                                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--accent-cyan)]/15 text-[var(--accent-cyan)] align-middle">
+                                                {t('recovery.checkpoint', 'earlier copy')}
+                                            </span>
+                                        )}
+                                    </div>
                                     <div className="text-xs text-[var(--text-muted)] mt-1">
                                         {t('recovery.savedAt', { time: formatTimeAgo(rp.savedAt) })}
                                     </div>
@@ -657,6 +681,9 @@ export const ProjectHub: React.FC<{
                             </button>
                             <button
                                 onClick={async () => {
+                                    const ok = window.confirm(t('recovery.discardConfirm',
+                                        'Delete ALL backup copies, for every project? If a project’s file is missing or damaged, these backups are the only way to get it back. This cannot be undone.'));
+                                    if (!ok) return;
                                     for (const rp of recoveryProjects) {
                                         await deleteAutoSave(rp.id as any).catch(() => {});
                                     }

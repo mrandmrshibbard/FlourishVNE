@@ -24,17 +24,11 @@
     "setVariable": "Definir variável",
     "resetVariable": "Redefinir variável",
     "playSound": "Tocar som",
-
     "playMusic": "Play Music",
-
     "stopMusic": "Stop Music",
-
     "showSpotlight": "Show Spotlight",
-
     "hideSpotlight": "Hide Spotlight",
-
     "showFlashlight": "Show Flashlight",
-
     "hideFlashlight": "Hide Flashlight",
     "cycleLayerAsset": "Alternar recurso de camada",
     "toggleScreen": "Alternar tela",
@@ -487,7 +481,15 @@
     "charPreviewIntro": "Exibe uma prévia ao vivo do personagem, atualizando automaticamente conforme o jogador faz escolhas de personalização.",
     "connectLayersHint": "Conecte cada camada à variável definida pelo seu Alternador de Recursos. A prévia será atualizada ao vivo conforme o jogador alterna entre as opções.",
     "wizardTip": "💡 Dica: use o Assistente de Personalização de Personagem para configurar esses mapeamentos automaticamente.",
-    "noLayersYet": "Este personagem ainda não tem camadas. Adicione camadas na aba Personagens para habilitar a personalização."
+    "noLayersYet": "Este personagem ainda não tem camadas. Adicione camadas na aba Personagens para habilitar a personalização.",
+    "delayHint": "Dê a cada elemento um atraso diferente para os escalonar — entra o primeiro, depois o seguinte…",
+    "transFadeToo": "Também desvanecer ao entrar",
+    "transFadeHint": "Desligado = o elemento chega totalmente visível e apenas desliza para o lugar.",
+    "transDistance": "Distância do deslize (%)",
+    "transDistanceAuto": "automático",
+    "transDistanceHint": "A que distância começa, relativa ao seu próprio tamanho. 100% = uma largura completa do elemento.",
+    "transOnReveal": "Repetir ao ser mostrado por uma ação",
+    "transOnRevealHint": "Quando uma ação Mostrar Elemento o revela, repete a entrada em vez de apenas desvanecer."
   },
   "cgWizard": {
     "title": "Assistente de galeria de CG",
@@ -790,7 +792,8 @@
       "fog": "Névoa",
       "haze": "Bruma",
       "smoke": "Fumaça",
-      "fireworks": "Fogos de artifício"
+      "fireworks": "Fogos de artifício",
+      "glitch": "Glitch (corrupção)"
     },
     "params": {
       "crtScanlines": {
@@ -830,8 +833,15 @@
       },
       "fireworks": {
         "speed": "Velocidade de lançamento"
+      },
+      "glitch": {
+        "blockiness": "Tamanho das fatias",
+        "chromaticSpread": "Franjas de cor",
+        "speed": "Velocidade das rajadas"
       }
-    }
+    },
+    "glitchColors": "Cores do glitch",
+    "addColor": "+ Cor"
   },
   "actionEditor": {
     "actionType": "Tipo de ação",

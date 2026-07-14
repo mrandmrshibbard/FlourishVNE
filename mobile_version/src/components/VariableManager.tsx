@@ -7,187 +7,41 @@ import { VNVariable, VNVariableScope } from '../features/variables/types';
 import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { useProject } from '../contexts/ProjectContext';
 import BooleanLabelEditor from './BooleanLabelEditor';
+import BandEditor from './variables/BandEditor';
+import VariableMeaningFields from './variables/VariableMeaningFields';
+import VariableXray from './variables/VariableXray';
 import { PlusIcon, TrashIcon, Cog6ToothIcon, PencilIcon } from './icons';
-import { CommandType, VNCommand, SetVariableCommand, TextInputCommand, ChoiceCommand } from '../features/scene/types';
-import { VNUIScreen, VNUIElement } from '../features/ui/types';
-import { VNCondition, UIActionType, SetVariableAction, CycleLayerAssetAction } from '../types/shared';
+import { buildVariableUsageIndex, UsageLocation, VariableUsage } from '../utils/variableUsage';
 import ConfirmationModal from './ui/ConfirmationModal';
-
-interface VariableUsage {
-    location: string;
-    type: 'command' | 'condition' | 'ui-action' | 'text-reference';
-    detail: string;
-}
-
-// Find all usages of a variable in the project
-function findVariableUsages(project: VNProject, variableId: string, variableName: string): VariableUsage[] {
-    const usages: VariableUsage[] = [];
-    
-    // Check all scenes for commands using this variable
-    for (const sceneId in project.scenes) {
-        const scene = project.scenes[sceneId];
-        const commands = scene.commands || [];
-        if (!Array.isArray(commands)) continue;
-        
-        commands.forEach((cmd, index) => {
-            // SetVariable command
-            if (cmd.type === CommandType.SetVariable && (cmd as SetVariableCommand).variableId === variableId) {
-                usages.push({
-                    location: i18n.t('variables:usage.scene', { name: scene.name }),
-                    type: 'command',
-                    detail: i18n.t('variables:usage.cmdSetVariable', { n: index + 1 })
-                });
-            }
-
-            // TextInput command
-            if (cmd.type === CommandType.TextInput && (cmd as TextInputCommand).variableId === variableId) {
-                usages.push({
-                    location: i18n.t('variables:usage.scene', { name: scene.name }),
-                    type: 'command',
-                    detail: i18n.t('variables:usage.cmdTextInput', { n: index + 1 })
-                });
-            }
-
-            // Check conditions on any command
-            if (cmd.conditions?.some((c: VNCondition) => c.variableId === variableId)) {
-                usages.push({
-                    location: i18n.t('variables:usage.scene', { name: scene.name }),
-                    type: 'condition',
-                    detail: i18n.t('variables:usage.cmdCondition', { n: index + 1 })
-                });
-            }
-            
-            // Check Choice options for conditions and actions
-            if (cmd.type === CommandType.Choice) {
-                const choiceCmd = cmd as ChoiceCommand;
-                const options = choiceCmd.options || [];
-                if (Array.isArray(options)) {
-                    options.forEach((opt, optIndex) => {
-                        if (opt.conditions?.some((c: VNCondition) => c.variableId === variableId)) {
-                            usages.push({
-                                location: i18n.t('variables:usage.scene', { name: scene.name }),
-                                type: 'condition',
-                                detail: i18n.t('variables:usage.optCondition', { n: index + 1, opt: optIndex + 1 })
-                            });
-                        }
-                        const actions = opt.actions || [];
-                        if (Array.isArray(actions)) {
-                            actions.forEach(action => {
-                                if (action.type === UIActionType.SetVariable && (action as SetVariableAction).variableId === variableId) {
-                                    usages.push({
-                                        location: i18n.t('variables:usage.scene', { name: scene.name }),
-                                        type: 'ui-action',
-                                        detail: i18n.t('variables:usage.optSetsVariable', { n: index + 1, opt: optIndex + 1 })
-                                    });
-                                }
-                            });
-                        }
-                    });
-                }
-            }
-            
-            // Check Dialogue text for variable references like {variableName} or {variableId}
-            if (cmd.type === CommandType.Dialogue) {
-                const text = (cmd as any).text || '';
-                if (text.includes(`{${variableName}}`) || text.includes(`{${variableId}}`)) {
-                    usages.push({
-                        location: i18n.t('variables:usage.scene', { name: scene.name }),
-                        type: 'text-reference',
-                        detail: i18n.t('variables:usage.cmdDialogueRef', { n: index + 1 })
-                    });
-                }
-            }
-        });
-    }
-    
-    // Check UI screens for variable usages
-    for (const screenId in project.uiScreens) {
-        const screen = project.uiScreens[screenId];
-        const elements = screen.elements || [];
-        if (Array.isArray(elements)) {
-            checkUIElementsForVariableUsage(elements, variableId, variableName, i18n.t('variables:usage.uiScreen', { name: screen.name }), usages);
-        }
-    }
-    
-    return usages;
-}
-
-function checkUIElementsForVariableUsage(
-    elements: VNUIElement[], 
-    variableId: string, 
-    variableName: string,
-    locationPrefix: string, 
-    usages: VariableUsage[]
-): void {
-    if (!Array.isArray(elements)) return;
-    
-    elements.forEach(element => {
-        // Check element conditions
-        if (element.conditions?.some((c: VNCondition) => c.variableId === variableId)) {
-            usages.push({
-                location: locationPrefix,
-                type: 'condition',
-                detail: i18n.t('variables:usage.elCondition', { name: element.name || element.type })
-            });
-        }
-        
-        // Check element actions (for buttons)
-        const actions = element.actions || [];
-        if (Array.isArray(actions)) {
-            actions.forEach(action => {
-                if (action.type === UIActionType.SetVariable && (action as SetVariableAction).variableId === variableId) {
-                    usages.push({
-                        location: locationPrefix,
-                        type: 'ui-action',
-                        detail: i18n.t('variables:usage.elSetsVariable', { name: element.name || element.type })
-                    });
-                }
-                if (action.type === UIActionType.CycleLayerAsset && (action as CycleLayerAssetAction).variableId === variableId) {
-                    usages.push({
-                        location: locationPrefix,
-                        type: 'ui-action',
-                        detail: i18n.t('variables:usage.elCyclesLayer', { name: element.name || element.type })
-                    });
-                }
-            });
-        }
-        
-        // Check text content for variable references.
-        // NOTE: `content`/`children` are not fields on any current VNUIElement (element text lives in
-        // `.text`), so these checks are effectively no-ops today — preserved as-is to avoid a
-        // behavior change. (Latent bug: text-reference detection on elements doesn't actually fire.)
-        const anyEl = element as any;
-        if (anyEl.content && (anyEl.content.includes(`{${variableName}}`) || anyEl.content.includes(`{${variableId}}`))) {
-            usages.push({
-                location: locationPrefix,
-                type: 'text-reference',
-                detail: i18n.t('variables:usage.elTextRef', { name: element.name || element.type })
-            });
-        }
-
-        // Recursively check children
-        if (anyEl.children && Array.isArray(anyEl.children)) {
-            checkUIElementsForVariableUsage(anyEl.children, variableId, variableName, locationPrefix, usages);
-        }
-    });
-}
 
 interface VariableManagerProps {
     project: VNProject;
     selectedVariableId?: string | null;
     setSelectedVariableId?: (id: string | null) => void;
+    /** Take the author to a place a variable is used (see VisualNovelEditor's jump handler). */
+    onJumpToUsage?: (location: UsageLocation) => void;
 }
 
 const VariableManager: React.FC<VariableManagerProps> = ({
     project,
     selectedVariableId: controlledSelectedId,
-    setSelectedVariableId: setControlledSelectedId
+    setSelectedVariableId: setControlledSelectedId,
+    onJumpToUsage,
 }) => {
     const { dispatch } = useProject();
     const { t } = useTranslation(['variables', 'common']);
     const [internalSelectedVariableId, setInternalSelectedVariableId] = useState<string | null>(null);
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState<{ variableId: string; usages: VariableUsage[] } | null>(null);
+
+    // ONE walk of the project, shared by the row badges and the delete confirmation.
+    const usageIndex = useMemo(
+        () => buildVariableUsageIndex(project),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [project.scenes, project.uiScreens, project.commonEvents, project.maps, project.miniGames,
+         project.items, (project as any).itemCollections, (project as any).stats, (project as any).scripts,
+         (project as any).cgGallery, (project as any).ui, project.variables],
+    );
 
     const isControlledSelection = controlledSelectedId !== undefined && typeof setControlledSelectedId === 'function';
     const selectedVariableId = isControlledSelection ? controlledSelectedId ?? null : internalSelectedVariableId;
@@ -213,25 +67,16 @@ const VariableManager: React.FC<VariableManagerProps> = ({
     };
 
     const handleRequestDelete = (variableId: string) => {
-        console.log('[VariableManager] handleRequestDelete called for:', variableId);
-        const variable = project.variables[variableId];
-        if (!variable) {
-            console.log('[VariableManager] Variable not found!');
-            return;
-        }
-        
-        const usages = findVariableUsages(project, variableId, variable.name);
-        console.log('[VariableManager] Found usages:', usages.length);
-        
-        // Always show confirmation dialog
-        console.log('[VariableManager] Setting deleteConfirm state');
-        setDeleteConfirm({ variableId, usages });
+        if (!project.variables[variableId]) return;
+        // The REAL usage count. The old findVariableUsages guarded its UI branch with
+        // `Array.isArray(screen.elements)` — but elements is a Record, so it never walked a single UI
+        // screen, and this dialog cheerfully told authors a variable their whole UI depended on was
+        // used nowhere.
+        setDeleteConfirm({ variableId, usages: usageIndex.byVariable.get(variableId as any) ?? [] });
     };
 
     const handleDeleteVariable = (variableId: string) => {
-        console.log('[VariableManager] Deleting variable:', variableId);
         dispatch({ type: 'DELETE_VARIABLE', payload: { variableId } });
-        console.log('[VariableManager] Dispatch sent');
         if (selectedVariableId === variableId) {
             setSelectedVariableId(null);
         }
@@ -259,18 +104,23 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                    {variablesArray.map(variable => (
-                        <VariableItem
-                            key={variable.id}
-                            variable={variable}
-                            isSelected={selectedVariableId === variable.id}
-                            isRenaming={renamingId === variable.id}
-                            onSelect={() => setSelectedVariableId(variable.id)}
-                            onStartRenaming={() => setRenamingId(variable.id)}
-                            onCommitRename={(name) => handleRenameVariable(variable.id, name)}
-                            onDelete={() => handleRequestDelete(variable.id)}
-                        />
-                    ))}
+                    {variablesArray.map(variable => {
+                        const health = usageIndex.health.get(variable.id as any);
+                        return (
+                            <VariableItem
+                                key={variable.id}
+                                variable={variable}
+                                usageCount={(usageIndex.byVariable.get(variable.id as any) ?? []).length}
+                                hasProblem={!!health && (health.orphan || health.neverChanged || health.neverUsed || health.impossible.length > 0)}
+                                isSelected={selectedVariableId === variable.id}
+                                isRenaming={renamingId === variable.id}
+                                onSelect={() => setSelectedVariableId(variable.id)}
+                                onStartRenaming={() => setRenamingId(variable.id)}
+                                onCommitRename={(name) => handleRenameVariable(variable.id, name)}
+                                onDelete={() => handleRequestDelete(variable.id)}
+                            />
+                        );
+                    })}
                 </div>
 
                 <div className="p-2 border-t border-[var(--border-subtle)]">
@@ -291,6 +141,7 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                         variableId={selectedVariableId}
                         project={project}
                         onUpdate={(updates) => handleUpdateVariable(selectedVariableId, updates)}
+                        onJumpToUsage={onJumpToUsage}
                     />
                 ) : (
                     <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
@@ -323,15 +174,15 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                                     {deleteConfirm.usages.slice(0, 10).map((usage, i) => (
                                         <li key={i} className="flex items-start gap-2 text-[var(--text-secondary)]">
                                             <span className="flex-shrink-0 text-xs font-mono">
-                                                {usage.type === 'command' && '→'}
-                                                {usage.type === 'condition' && '?'}
-                                                {usage.type === 'ui-action' && '○'}
-                                                {usage.type === 'text-reference' && '«»'}
+                                                {usage.kind === 'set' && '✎'}
+                                                {usage.kind === 'ask' && '⌨'}
+                                                {usage.kind === 'check' && '?'}
+                                                {usage.kind === 'show' && '👁'}
                                             </span>
                                             <span>
-                                                <strong>{usage.location}</strong>
+                                                <strong>{usage.where}</strong>
                                                 <br />
-                                                <span className="text-xs opacity-75">{usage.detail}</span>
+                                                <span className="text-xs opacity-75">{usage.what}</span>
                                             </span>
                                         </li>
                                     ))}
@@ -356,6 +207,10 @@ const VariableManager: React.FC<VariableManagerProps> = ({
 
 interface VariableItemProps {
     variable: VNVariable;
+    /** How many places in the whole project touch this. */
+    usageCount: number;
+    /** Never changed / never read / an impossible check — anything worth a second look. */
+    hasProblem: boolean;
     isSelected: boolean;
     isRenaming: boolean;
     onSelect: () => void;
@@ -366,6 +221,8 @@ interface VariableItemProps {
 
 const VariableItem: React.FC<VariableItemProps> = ({
     variable,
+    usageCount,
+    hasProblem,
     isSelected,
     isRenaming,
     onSelect,
@@ -385,6 +242,7 @@ const VariableItem: React.FC<VariableItemProps> = ({
         }
     };
 
+    const bandCount = variable.bands?.length ?? 0;
     const scope: VNVariableScope = variable.scope || 'global';
     const scopeColors: Record<VNVariableScope, { bg: string; border: string; text: string; label: string }> = {
         local: { bg: 'bg-emerald-600/20', border: 'border-emerald-500/50', text: 'text-emerald-400', label: 'Local' },
@@ -403,8 +261,15 @@ const VariableItem: React.FC<VariableItemProps> = ({
                     : 'hover:bg-[var(--bg-secondary)]'
             }`}
         >
-            <div className={`w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 text-sm border ${sc.bg} ${sc.border}`}>
-                {getTypeIcon(variable.type)}
+            {/* The author's own icon/colour if they gave one — recognised by shape, not read. */}
+            <div
+                className={`w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 text-sm border ${variable.icon || variable.color ? '' : `${sc.bg} ${sc.border}`}`}
+                style={variable.icon || variable.color ? {
+                    background: `color-mix(in srgb, ${variable.color ?? 'var(--accent-sky)'} 22%, transparent)`,
+                    border: `1px solid color-mix(in srgb, ${variable.color ?? 'var(--accent-sky)'} 50%, transparent)`,
+                } : undefined}
+            >
+                {variable.icon || getTypeIcon(variable.type)}
             </div>
 
             <div className="flex-grow truncate">
@@ -415,11 +280,36 @@ const VariableItem: React.FC<VariableItemProps> = ({
                         className="w-full bg-[var(--bg-primary)] text-white p-1 rounded text-sm outline-none ring-1 ring-sky-500"
                     />
                 ) : (
-                    <span className="text-sm">{variable.name}</span>
+                    <>
+                        <span className="text-sm">{variable.name}</span>
+                        {/* Bands are the headline fact about a variable once it has them. */}
+                        {bandCount > 0 && (
+                            <span className="ml-2 text-[10px] text-[var(--text-muted)]">
+                                {t('bands.rowSummary', '{{count}} named steps', { count: bandCount })}
+                            </span>
+                        )}
+                        {variable.description && (
+                            <span className="block text-[10px] text-[var(--text-muted)] truncate">{variable.description}</span>
+                        )}
+                    </>
                 )}
             </div>
 
             <div className="flex items-center gap-1 flex-shrink-0">
+                {/* How much of the story leans on this — the single most useful thing to know at a glance. */}
+                <span
+                    className="text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1"
+                    style={{
+                        background: 'var(--bg-tertiary)',
+                        color: hasProblem ? 'var(--accent-yellow)' : 'var(--text-muted)',
+                    }}
+                    title={usageCount === 0
+                        ? t('xray.rowNone', 'Nothing uses this yet')
+                        : t('xray.rowCount', 'Used in {{count}} places', { count: usageCount })}
+                >
+                    {hasProblem && <span>⚠</span>}
+                    {usageCount}
+                </span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${sc.bg} ${sc.text} border ${sc.border}`}>
                     {t(`scopes.${scope}`)}
                 </span>
@@ -455,9 +345,10 @@ interface VariableInspectorProps {
     variableId: string;
     project: VNProject;
     onUpdate: (updates: Partial<VNVariable>) => void;
+    onJumpToUsage?: (location: UsageLocation) => void;
 }
 
-const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, project, onUpdate }) => {
+const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, project, onUpdate, onJumpToUsage }) => {
     const { t } = useTranslation('variables');
     const variable = project.variables?.[variableId];
 
@@ -498,7 +389,13 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
 
     return (
         <div className="flex-1 p-4 overflow-y-auto">
-            <h3 className="text-xl font-bold text-white mb-4">{variable.name}</h3>
+            <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
+                {variable.icon && <span>{variable.icon}</span>}
+                <span>{variable.name}</span>
+            </h3>
+            <div className="mb-4">
+                <VariableMeaningFields variable={variable} onChange={onUpdate} />
+            </div>
 
             <div className="space-y-4">
                 <div>
@@ -583,6 +480,14 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
                     <BooleanLabelEditor trueLabel={variable.trueLabel} falseLabel={variable.falseLabel}
                         onChange={updates => onUpdate(updates)} />
                 )}
+
+                {/* Named ranges — "boolean labels, but for numbers". */}
+                {variable.type === 'number' && (
+                    <BandEditor variable={variable} onChange={onUpdate} />
+                )}
+
+                {/* Where this is used — the answer to "what is this thing even doing any more?" */}
+                <VariableXray project={project} variableId={variable.id} onJump={onJumpToUsage} />
 
                 <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-[var(--border-subtle)]">
                     <div>

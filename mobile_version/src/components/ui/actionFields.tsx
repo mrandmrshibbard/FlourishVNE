@@ -7,6 +7,7 @@ import { VNVariable, VNSetVariableOperator } from '../../features/variables/type
 import { VNScene } from '../../features/scene/types';
 import { VNUIScreen } from '../../features/ui/types';
 import { resolveBoolLabels } from '../../features/variables/booleanLabels';
+import VariablePicker from '../variables/VariablePicker';
 import { FormField, Select, TextInput, RangeInput } from './Form';
 import type { ActionTargetableElement } from './UIActionsListEditor';
 
@@ -129,20 +130,19 @@ const ActionFields: React.FC<{
         case UIActionType.SetVariable: {
             const variable = a.variableId ? project.variables[a.variableId] : null;
             const isNum = variable?.type === 'number';
-            const varSelect = sel(a.variableId || '', v => {
-                const nv = project.variables[v];
-                let op = a.operator;
-                if (nv?.type !== 'number' && (op === 'add' || op === 'subtract' || op === 'random')) op = 'set';
-                // Keep `value` concrete & type-appropriate so a boolean Set never saves an empty value
-                // (the engine reads an empty boolean Set as its default, not a real Yes/No choice).
-                let value = a.value;
-                if (nv?.type === 'boolean' && typeof value !== 'boolean') value = true;
-                else if (nv?.type !== 'boolean' && typeof value === 'boolean') value = '';
-                set({ variableId: v, operator: op, value });
-            }, <>
-                <option value="">{t('actionsList.selectVariable', 'Select a variable…')}</option>
-                {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
-            </>);
+            const varSelect = (
+                <VariablePicker value={a.variableId || ''} onChange={v => {
+                    const nv = project.variables[v];
+                    let op = a.operator;
+                    if (nv?.type !== 'number' && (op === 'add' || op === 'subtract' || op === 'random')) op = 'set';
+                    // Keep `value` concrete & type-appropriate so a boolean Set never saves an empty value
+                    // (the engine reads an empty boolean Set as its default, not a real Yes/No choice).
+                    let value = a.value;
+                    if (nv?.type === 'boolean' && typeof value !== 'boolean') value = true;
+                    else if (nv?.type !== 'boolean' && typeof value === 'boolean') value = '';
+                    set({ variableId: v, operator: op, value });
+                }} />
+            );
             const opSelect = sel(a.operator || 'set', v => set({ operator: v as VNSetVariableOperator }), <>
                 <option value="set">{t('actionsList.setTo', 'Set to')}</option>
                 {isNum && <option value="add">{t('actionsList.addOp', 'Add')}</option>}

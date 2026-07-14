@@ -286,6 +286,21 @@
     "search": "Type to search...",
     "noMatches": "No matches found"
   },
+  "emoji": {
+    "pick": "Pick an emoji",
+    "search": "Search — “angry”, “key”, “money”…",
+    "none": "None",
+    "noMatch": "Nothing matches. You can paste your own below.",
+    "custom": "…or type / paste any emoji",
+    "group": {
+      "feelings": "Feelings",
+      "love": "Love & bonds",
+      "status": "Status & stats",
+      "things": "Things",
+      "world": "World",
+      "marks": "Marks"
+    }
+  },
   "transitionPreview": {
     "old": "Old",
     "new": "New",

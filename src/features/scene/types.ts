@@ -235,7 +235,7 @@ export interface SetBackgroundCommand extends BaseCommand {
 /**
  * Per-character visual effect types
  */
-export type VNCharacterVisualEffectType = 'none' | 'shake' | 'bounce' | 'float' | 'pulse' | 'glow' | 'tint' | 'silhouette' | 'breathing' | 'flicker';
+export type VNCharacterVisualEffectType = 'none' | 'shake' | 'bounce' | 'float' | 'pulse' | 'glow' | 'tint' | 'silhouette' | 'breathing' | 'flicker' | 'glitch';
 
 export interface VNCharacterVisualEffect {
     /** The visual effect to apply to the character on stage */
@@ -244,8 +244,14 @@ export interface VNCharacterVisualEffect {
     speed?: number;
     /** Effect intensity/amplitude (0.1-3, default 1) */
     intensity?: number;
-    /** Optional color for tint/glow/silhouette effects */
+    /** Optional color for tint/glow/silhouette effects (and glitch's first colour, for back-compat) */
     color?: string;
+    /** glitch only: the rim/ghost colours, flashed in turn. Unset → [color ?? green]. */
+    colors?: string[];
+    /** glitch only: thickness of the coloured rim around the sprite (0.2–3, default 1).
+     *  Deliberately independent of `intensity` — how VIOLENT the tearing is and how THICK the
+     *  outline is are different creative decisions. */
+    rimSize?: number;
 }
 
 export interface ShowCharacterCommand extends BaseCommand {

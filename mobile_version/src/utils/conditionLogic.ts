@@ -1,35 +1,64 @@
 import { VNCondition, VNConditionOperator } from '../types/shared';
+import { VNVariable } from '../features/variables/types';
+import { bandById } from '../features/variables/bands';
+import { resolveBoolLabels } from '../features/variables/booleanLabels';
 
+// Plain English, matching the ConditionsEditor's own labels word for word. These two used to
+// disagree — the same condition read "Affection is at least 50" in the editor and "Affection ≥ 50"
+// in the branch strip — which taught authors that the friendly wording was decorative.
 const OP_TEXT: Record<VNConditionOperator, string> = {
     '==': 'is',
     '!=': 'is not',
-    '>': '>',
-    '<': '<',
-    '>=': '≥',
-    '<=': '≤',
+    '>': 'is more than',
+    '<': 'is less than',
+    '>=': 'is at least',
+    '<=': 'is at most',
     'is true': 'is on',
     'is false': 'is off',
     'contains': 'contains',
     'startsWith': 'starts with',
+    'inBand': 'is',
+    'atLeastBand': 'is at least',
+    'belowBand': 'is below',
 };
 
 /**
  * Render a condition list as a short, plain-language phrase for non-coders, e.g.
- * "Affection ≥ 50" or "HasKey is on and Gold > 0". Empty/undefined → '' (always true).
- * Pass `project.variables` (or any id→{name} map) so variable ids become readable names.
+ * "Affection is at least 50" or "Front Door is Locked and Gold is more than 0".
+ * Empty/undefined → '' (always true).
+ *
+ * Band-aware: a `>= 21` on a variable whose "Friend" band starts at 21 reads
+ * "Affection is Friend or better" — the author sees the words they named, not the number they
+ * happen to compile to.
  */
 export function describeConditions(
     conditions: VNCondition[] | undefined,
-    variables: Record<string, { name?: string } | undefined>
+    variables: Record<string, VNVariable | undefined>
 ): string {
     if (!conditions || conditions.length === 0) return '';
     return conditions.map((c, i) => {
-        const name = variables[c.variableId]?.name || 'a variable';
-        const body = (c.operator === 'is true' || c.operator === 'is false')
-            ? `${name} ${OP_TEXT[c.operator]}`
-            : `${name} ${OP_TEXT[c.operator]} ${c.value ?? ''}`.trim();
+        const v = variables[c.variableId];
+        const name = v?.name || 'a variable';
+        const body = describeOne(v, c, name);
         return i === 0 ? body : `${c.connector ?? 'and'} ${body}`;
     }).join(' ');
+}
+
+function describeOne(v: VNVariable | undefined, c: VNCondition, name: string): string {
+    if (c.operator === 'is true' || c.operator === 'is false') {
+        const { yes, no } = resolveBoolLabels(v, 'on', 'off');
+        return `${name} is ${c.operator === 'is true' ? yes : no}`;
+    }
+    if (c.operator === 'inBand' || c.operator === 'atLeastBand' || c.operator === 'belowBand') {
+        const band = bandById(v, c.value);
+        // A deleted band leaves the condition pointing at nothing — say so plainly rather than
+        // printing a raw id at the author.
+        if (!band) return `${name} — a range that no longer exists`;
+        if (c.operator === 'inBand') return `${name} is ${band.name}`;
+        if (c.operator === 'atLeastBand') return `${name} is ${band.name} or better`;
+        return `${name} is below ${band.name}`;
+    }
+    return `${name} ${OP_TEXT[c.operator]} ${c.value ?? ''}`.trim();
 }
 
 /**

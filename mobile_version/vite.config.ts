@@ -36,6 +36,11 @@ export default defineConfig(({ mode }) => {
               // Monaco is huge and self-contained — keep it in its own chunk.
               if (id.includes('monaco-editor')) return 'monaco';
 
+              // ag-psd (the .psd sprite importer) is ~250KB and only loaded when an artist actually
+              // imports a Photoshop file — it's a dynamic import(), so give it its own chunk instead
+              // of welding it into the startup bundle.
+              if (id.includes('ag-psd')) return 'psd';
+
               // Everything else (React, react-dom, react-i18next, i18next, etc.)
               // goes in a single vendor chunk. Do NOT split React into a separate
               // chunk: `react-i18next` (matches "react") would land with React while

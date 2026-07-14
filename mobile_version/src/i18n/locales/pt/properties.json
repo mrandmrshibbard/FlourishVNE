@@ -318,7 +318,8 @@
       "sunbeams": "Raios de Sol Ondulantes",
       "shimmer": "Brilho Ondulante",
       "rain": "Chuva",
-      "snowAsh": "Neve / Cinzas"
+      "snowAsh": "Neve / Cinzas",
+      "glitch": "Glitch (corrupção)"
     },
     "color": "Cor",
     "mode": "Modo",
@@ -328,7 +329,13 @@
     "autoRemoveHint": "O efeito se removerá automaticamente após esta quantidade de segundos.",
     "uiScreen": "Tela de UI",
     "noUIScreens": "Nenhuma Tela de UI definida",
-    "labelId": "ID do Marcador"
+    "labelId": "ID do Marcador",
+    "glitchBlockiness": "Tamanho das fatias",
+    "glitchBlockinessHint": "Esquerda = rasgos finos, direita = blocos grandes.",
+    "glitchAberration": "Franjas de cor",
+    "glitchSpeed": "Velocidade das rajadas",
+    "glitchColors": "Cores do glitch",
+    "glitchColorsHint": "As fatias corrompidas alternam entre estas cores."
   },
   "positions": {
     "left": "Esquerda",
@@ -397,8 +404,13 @@
       "tint": "Tonalidade",
       "silhouette": "Silhueta",
       "breathing": "Respiração",
-      "flicker": "Cintilar"
-    }
+      "flicker": "Cintilar",
+      "glitch": "Glitch (corrupção)"
+    },
+    "colors": "Cores",
+    "addColor": "+ Cor",
+    "removeColor": "Remover cor",
+    "rimSize": "Espessura das linhas"
   },
   "button": {
     "buttonText": "Texto do Botão",

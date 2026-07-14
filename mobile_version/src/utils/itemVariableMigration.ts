@@ -61,7 +61,13 @@ export function migrateItemCountVariableBounds(project: VNProject): VNProject {
         if (item?.countVariableId) ensureNumberVar(item.countVariableId, item.name || 'Item', false);
     }
     for (const collection of Object.values(project.itemCollections || {})) {
-        for (const entry of collection?.entries || []) {
+        // entries is TYPED as an array, but the schema is inconsistent about array-vs-Record in
+        // real saved files (cgGallery.entries taught us that the hard way). for…of over a Record
+        // throws — and a throw here used to mean the project could never be opened again.
+        const entryList = (Array.isArray(collection?.entries)
+            ? collection.entries
+            : Object.values(collection?.entries || {})) as typeof collection.entries;
+        for (const entry of entryList) {
             // Owned-tracking entries share the item's public count var (already handled above);
             // independent stock entries get their own hidden (internal) stock variable.
             if (entry?.countVariableId) {
@@ -111,7 +117,7 @@ export function migrateStatVariables(project: VNProject): VNProject {
             if (target !== 'global' && !char) {
                 if (variables[varId]) delete variables[varId];
                 delete variableIds[target];
-                if (characterIds) characterIds = characterIds.filter(id => id !== target);
+                if (Array.isArray(characterIds)) characterIds = characterIds.filter(id => id !== target);
                 statChanged = true;
                 continue;
             }
@@ -132,7 +138,7 @@ export function migrateStatVariables(project: VNProject): VNProject {
         }
 
         // Also prune characterIds entries that never got a variable but reference dead characters.
-        if (stat.appliesTo === 'characters' && characterIds) {
+        if (stat.appliesTo === 'characters' && Array.isArray(characterIds)) {
             const alive = characterIds.filter(id => !!project.characters?.[id]);
             if (alive.length !== characterIds.length) { characterIds = alive; statChanged = true; }
         }

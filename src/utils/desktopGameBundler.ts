@@ -334,7 +334,12 @@ app.on('activate', () => {
 ipcMain.handle('electron-save', async (event, key, value) => {
   try {
     const filePath = path.join(saveDir, \`\${key}.json\`);
-    fs.writeFileSync(filePath, JSON.stringify(value));
+    // Atomic: these are the PLAYER'S save games. A power cut mid-write must not corrupt the slot
+    // file — write a sidecar, then rename it into place.
+    const tmpPath = filePath + '.part';
+    fs.writeFileSync(tmpPath, JSON.stringify(value));
+    try { fs.renameSync(tmpPath, filePath); }
+    catch (e) { try { fs.rmSync(tmpPath, { force: true }); } catch {} throw e; }
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };

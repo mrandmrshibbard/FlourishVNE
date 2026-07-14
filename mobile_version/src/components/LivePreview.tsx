@@ -8,6 +8,8 @@ import { combineConditions } from '../utils/conditionLogic';
 import { deriveHotSpotsFromScreen, deriveInteractiveElementsFromScreen } from '../utils/interactiveElements';
 import { XMarkIcon, FilmIcon, VariablesIcon } from './icons';
 import { resolveBoolLabels } from '../features/variables/booleanLabels';
+import { compareBand, isBandOperator, formatBandedValue, resolveBand, hasBands } from '../features/variables/bands';
+import { setVariableDefinitions } from './live-preview/systems/conditionEvaluator';
 import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform } from '../utils/styleUtils';
 import TrimmedVideo from './ui/TrimmedVideo';
 import { resolveVideoTrim } from '../utils/videoTrim';
@@ -48,7 +50,7 @@ import {
 import { VNCondition } from '../types/shared';
 import { VNCharacter, VNCharacterLayer } from '../features/character/types';
 import { VNVariable, VNSetVariableOperator, VNVariableScope } from '../features/variables/types';
-import { ScreenOverlayEffects, runFireworksSim } from './live-preview/ScreenOverlayEffects';
+import { ScreenOverlayEffects, runFireworksSim, deadPixelTile } from './live-preview/ScreenOverlayEffects';
 import { ParticleSystem } from './live-preview/ParticleSystem';
 import { registerDropTarget, hitTestDropTarget } from './live-preview/dropTargetRegistry';
 import { AnimatedDialogueText, useRainbowTick } from './live-preview/AnimatedDialogueText';
@@ -287,6 +289,8 @@ import { computeBuy, computeSell, tradePrice } from '../features/items/trade';
 import { CommandScheduler } from './live-preview/runtime/commandScheduler';
 import { RuntimeVariableStore } from './live-preview/runtime/runtimeVariableStore';
 import { RuntimeDiagnostics } from './live-preview/runtime/runtimeDiagnostics';
+import { CoverageRecorder } from '../utils/routeCoverage';
+import { SlotStorage, readAllSaves, writeSlot, deleteSlot } from './live-preview/runtime/saveSlotStore';
 import { executeScript, ScriptRuntimeContext } from '../features/scripting/ScriptExecutor';
 import { pluginManager } from '../features/plugins/PluginManagerService';
 import { MAX_CALL_DEPTH, coerceParam } from './live-preview/command-handlers/commonEventHandler';
@@ -2126,8 +2130,10 @@ const SaveSlotGridComponent: React.FC<{
     style: React.CSSProperties;
     isSaveMode: boolean;
     gameSaves: Record<number, GameStateSave>;
+    /** Storage writes have failed: saves are memory-only and vanish on quit. The player MUST see this. */
+    storageBroken?: boolean;
     onAction: (action: VNUIAction) => void;
-}> = ({ element, style, isSaveMode, gameSaves, onAction }) => {
+}> = ({ element, style, isSaveMode, gameSaves, storageBroken, onAction }) => {
     const [currentPage, setCurrentPage] = useState(0);
     const el = element;
     const totalSlots = el.slotCount;
@@ -2158,6 +2164,28 @@ const SaveSlotGridComponent: React.FC<{
 
     const prevLabel = el.prevButtonText ?? '◀ Prev';
     const nextLabel = el.nextButtonText ?? 'Next ▶';
+
+    // The warning that was a "could show a user notification here" comment for years. When storage
+    // is broken (usually: the device is out of space), saves still work for THIS session but
+    // evaporate on quit — pretending otherwise on this very screen is how players lose nights of
+    // progress. Plain language, no jargon, shown on both Save and Load modes.
+    const storageWarningBanner = storageBroken ? (
+        <div style={{
+            gridColumn: '1 / -1',
+            background: 'rgba(220, 38, 38, 0.15)',
+            border: '1px solid rgba(248, 113, 113, 0.6)',
+            borderRadius: 8,
+            padding: '8px 12px',
+            marginBottom: 8,
+            color: '#fca5a5',
+            fontSize: 13,
+            fontFamily: baseFont.fontFamily,
+            textAlign: 'center' as const,
+        }}>
+            ⚠ Saving to this device isn't working (it may be out of space). Your saves will only last
+            until you close the game. Free up space, then save again.
+        </div>
+    ) : null;
 
     // Shared slot-card markup — identical between the classic grid and free placement,
     // so a freely-positioned slot looks and behaves exactly like a grid slot.
@@ -2260,6 +2288,11 @@ const SaveSlotGridComponent: React.FC<{
         const rects = el.slotRects;
         return (
             <div style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: style.zIndex, opacity: style.opacity as number | undefined, pointerEvents: 'none' }}>
+                {storageBroken && (
+                    <div style={{ position: 'absolute', top: '2%', left: '10%', width: '80%', pointerEvents: 'none' }}>
+                        {storageWarningBanner}
+                    </div>
+                )}
                 {Array.from({ length: totalSlots }, (_, i) => {
                     const rect = rects[i];
                     if (!rect) return null;
@@ -2278,6 +2311,7 @@ const SaveSlotGridComponent: React.FC<{
 
     return (
         <div style={style} className="flex flex-col h-full">
+            {storageWarningBanner}
             {/* 2×2 grid – each slot is a card with screenshot on top, info below */}
             <div className="grid grid-cols-2 gap-[3%] flex-1 min-h-0 p-[2%]">
                 {pageSlots.map(renderSlot)}
@@ -3260,15 +3294,63 @@ const InventoryGridElement: React.FC<{
     );
 };
 
+// --- The stage glitch displacement filter ---
+// One fixed-id SVG filter for the whole game view. Applied as `filter: url(#vnfx-stage-glitch)` on
+// the letterboxed game container while a 'glitch' overlay effect is active — that is what actually
+// TEARS the picture. (It cannot be done from the overlay layer: an overlay draws on top, and
+// Chromium ignores SVG reference filters in backdrop-filter.) Burst timing is SMIL — no JS/frame.
+const StageGlitchFilterDef: React.FC<{ effect: VNScreenOverlayEffect }> = ({ effect }) => {
+    const intensity = Math.max(0, Math.min(1, effect.intensity ?? 0.5));
+    const blockiness = effect.params?.blockiness ?? 0.5;
+    const speed = effect.params?.speed ?? 0.5;
+    const aberration = 1 + (effect.params?.chromaticSpread ?? 0.5) * 10;
+    const bandFreq = 0.012 + Math.pow(1 - blockiness, 2) * 0.3;
+    const scale = 10 + intensity * 90;
+    const dur = Math.max(0.4, 2.2 - speed * 1.8);
+    return (
+        <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+            <defs>
+                <filter id="vnfx-stage-glitch" x="-10%" y="-10%" width="120%" height="120%">
+                    <feTurbulence type="fractalNoise" baseFrequency={`0.002 ${bandFreq.toFixed(4)}`} numOctaves="1" seed="7" result="noise">
+                        <animate attributeName="seed" values="7;23;51;89;7" dur={`${(dur * 4).toFixed(2)}s`} calcMode="discrete" repeatCount="indefinite" />
+                    </feTurbulence>
+                    <feComponentTransfer in="noise" result="bands">
+                        <feFuncR type="discrete" tableValues="0 0 0.4 0.5 0.6 1 1" />
+                        <feFuncG type="discrete" tableValues="0.5" />
+                        <feFuncB type="discrete" tableValues="0.5" />
+                    </feComponentTransfer>
+                    <feDisplacementMap in="SourceGraphic" in2="bands" xChannelSelector="R" yChannelSelector="G" scale="0" result="torn">
+                        <animate
+                            attributeName="scale"
+                            values={`0;0;${scale.toFixed(0)};${(scale * 0.3).toFixed(0)};0;0;${(scale * 0.65).toFixed(0)};0;0`}
+                            keyTimes="0;0.38;0.42;0.47;0.52;0.72;0.75;0.8;1"
+                            dur={`${dur.toFixed(2)}s`}
+                            calcMode="discrete"
+                            repeatCount="indefinite"
+                        />
+                    </feDisplacementMap>
+                    <feColorMatrix in="torn" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="redCh" />
+                    <feOffset in="redCh" dx={aberration.toFixed(1)} dy="0" result="redOff" />
+                    <feColorMatrix in="torn" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0" result="cyanCh" />
+                    <feOffset in="cyanCh" dx={(-aberration / 2).toFixed(1)} dy="0" result="cyanOff" />
+                    <feBlend in="redOff" in2="cyanOff" mode="screen" />
+                </filter>
+            </defs>
+        </svg>
+    );
+};
+
 // --- Helper for Element Transitions ---
 const getTransitionStyle = (
     transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'scale',
     duration?: number,
-    delay?: number
+    delay?: number,
+    fade?: boolean,
+    distance?: number,
 ): React.CSSProperties => {
     const durationMs = duration || 300;
     const delayMs = delay || 0;
-    
+
     if (!transitionIn || transitionIn === 'none') return {};
 
     // NB: do NOT transition `transform`. Parallax updates the element's transform every
@@ -3276,10 +3358,21 @@ const getTransitionStyle = (
     // rAF easing (janky "slow then speeds up" drift). Only fade opacity/filter.
     const transitionProp = `opacity ${durationMs}ms ease-out ${delayMs}ms, filter ${durationMs}ms ease-out ${delayMs}ms`;
 
-    return {
+    // fade === false → the *NoFade keyframes: the element arrives whole and just MOVES into place.
+    // ('fade' itself is nothing but a fade, so the flag can't apply there.)
+    const noFade = fade === false && transitionIn !== 'fade';
+
+    const style: React.CSSProperties & Record<string, string> = {
         transition: transitionProp,
-        animation: `elementTransition${transitionIn} ${durationMs}ms ease-out ${delayMs}ms`,
+        // `backwards` is load-bearing: with a stagger delay, the default fill (none) shows the
+        // element at its FINAL state during the delay, then snaps it to the `from` pose when the
+        // delay expires — "starts where it should end, jumps away, then slides in". `backwards`
+        // holds the `from` pose through the delay. (Deliberately NOT `forwards`: after the
+        // animation the inline transform — real anchor + parallax — must take over.)
+        animation: `elementTransition${transitionIn}${noFade ? 'NoFade' : ''} ${durationMs}ms ease-out ${delayMs}ms backwards`,
     };
+    if (typeof distance === 'number' && distance > 0) style['--vn-el-dist'] = `${distance}%`;
+    return style;
 };
 
 // --- Hot Zone Text Input (commits on Enter / confirm button) ---
@@ -3814,7 +3907,9 @@ const UIScreenRenderer: React.FC<{
     onSelectItem?: (itemId: VNID | null, elementId: VNID) => void;
     /** Runtime Show/Hide-Element overrides (elementId -> visible). Absent entry = use startHidden. */
     elementVisibility?: Record<VNID, boolean>;
-}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, elementVisibility }) => {
+    /** Save-storage writes are failing (device full) — the save screen must say so. */
+    saveStorageBroken?: boolean;
+}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, elementVisibility, saveStorageBroken }) => {
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
     const backgroundVideoRef = React.useRef<HTMLVideoElement>(null);
@@ -3971,7 +4066,9 @@ const UIScreenRenderer: React.FC<{
             if (activeState.transitionMs) stateTransition = `transform ${activeState.transitionMs}ms ease, opacity ${activeState.transitionMs}ms ease, filter ${activeState.transitionMs}ms ease`;
         }
 
-        const transitionStyle = getTransitionStyle(element.transitionIn, element.transitionDuration, element.transitionDelay);
+        const transitionStyle = isClosing
+            ? {}
+            : getTransitionStyle(element.transitionIn, element.transitionDuration, element.transitionDelay, element.transitionFade, element.transitionDistance);
 
         // "Disabled When" gating: when disabledConditions are met, the element is shown
         // greyed-out and non-interactive (e.g. a Buy button you can't yet afford). This is
@@ -3990,6 +4087,10 @@ const UIScreenRenderer: React.FC<{
             // vanish behind a parallaxed video bg. Promoting elements keeps normal z-order.
             // `stateExtraTransform` (appearance-state scale/rotation) composes on top.
             transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)${parallaxTransform((element as any).parallaxDepth)} translateZ(0)${stateExtraTransform}`,
+            // The entrance keyframes read these so their end state lands EXACTLY on this element's
+            // anchor (they used to hardcode -50%,-50% and snap on completion for any other anchor).
+            ['--vn-el-tx' as any]: `-${element.anchorX * 100}%`,
+            ['--vn-el-ty' as any]: `-${element.anchorY * 100}%`,
             overflow: 'hidden', // Prevent content overflow when using cover
             // Author-controlled stacking. Default 0 → insertion order (back-compat).
             zIndex: element.layer ?? 0,
@@ -4016,6 +4117,11 @@ const UIScreenRenderer: React.FC<{
                 if (isHidden) {
                     style.opacity = 0;
                     style.pointerEvents = 'none';
+                    // Replay-on-reveal: parking the animation at 'none' while hidden means the
+                    // browser sees a CHANGED animation value at the moment of reveal — which
+                    // restarts the entrance from frame one. Opt-in; a reveal historically just
+                    // faded, and existing projects keep exactly that.
+                    if (element.transitionOnReveal) style.animation = 'none';
                 }
             }
         }
@@ -4297,6 +4403,7 @@ const UIScreenRenderer: React.FC<{
                         style={style}
                         isSaveMode={isSaveMode}
                         gameSaves={gameSaves}
+                        storageBroken={saveStorageBroken}
                         onAction={onAction}
                     />
                 );
@@ -4974,13 +5081,21 @@ const UIScreenRenderer: React.FC<{
                 const clipPath = dir === 'rtl' ? `inset(0 0 0 ${cut}%)` : dir === 'up' ? `inset(${cut}% 0 0 0)` : `inset(0 ${cut}% 0 0)`;
                 const fillImageUrl = el.fillImage ? getElementAssetUrl(el.fillImage) : null;
                 const bgImageUrl = el.backgroundImage ? getElementAssetUrl(el.backgroundImage) : null;
+                // A bar bound to a banded variable can wear the CURRENT band's colour, so an affection
+                // meter goes cold → warm as it fills, and a health bar reddens as it drains. Opt-in
+                // (`fillFromBand`), and it quietly does nothing if the variable has no bands.
+                const meterBand = el.fillFromBand || el.valueFormat === 'band' ? resolveBand(boundVar, raw) : null;
+                const bandFill = el.fillFromBand ? meterBand?.color : undefined;
                 const fillBackground = fillImageUrl
                     ? undefined
-                    : (el.fillColorEnd
-                        ? `linear-gradient(${dir === 'up' ? '0deg' : '90deg'}, ${el.fillColor || '#a78bfa'}, ${el.fillColorEnd})`
-                        : (el.fillColor || '#a78bfa'));
+                    : (bandFill
+                        ? bandFill
+                        : (el.fillColorEnd
+                            ? `linear-gradient(${dir === 'up' ? '0deg' : '90deg'}, ${el.fillColor || '#a78bfa'}, ${el.fillColorEnd})`
+                            : (el.fillColor || '#a78bfa')));
                 const valueText = el.valueFormat === 'percent' ? `${Math.round(pct * 100)}%`
                     : el.valueFormat === 'valueMax' ? `${raw}/${max}`
+                    : el.valueFormat === 'band' ? (meterBand ? `${meterBand.icon ? `${meterBand.icon} ` : ''}${meterBand.name}` : `${raw}`)
                     : `${raw}`;
                 const radius = el.borderRadius ?? 6;
                 // ── Resource animations: detect change direction + low-state, then wrap the meter ──
@@ -5773,6 +5888,46 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const projectRef = useRef(project);
     projectRef.current = project;
 
+    // Publish the variable definitions so that band conditions ("Yuki is a Friend") can be answered
+    // from the ~15 call sites that only hold VALUES (choice options, phone replies, hot spots…).
+    // Done during render, not in an effect: commands can evaluate conditions before effects flush,
+    // and this is an idempotent write of a read-only lookup table.
+    setVariableDefinitions(project.variables);
+
+    // ── Route coverage: watch where the player is ────────────────────────────────────────────────
+    // The topmost screen the player is actually STANDING IN. A non-blocking HUD overlay (a health
+    // bar) is deliberately excluded: the player isn't "in" it, and treating one as the cursor would
+    // credit the author with taking a route out of a screen they never opened.
+    const coverageScreenId = useMemo<VNID | null>(() => {
+        for (let i = hudStack.length - 1; i >= 0; i--) {
+            const s = project.uiScreens[hudStack[i]];
+            if (s && !s.hudNonBlocking) return hudStack[i];
+        }
+        for (let i = screenStack.length - 1; i >= 0; i--) {
+            if (project.uiScreens[screenStack[i]]) return screenStack[i];
+        }
+        return null;
+    }, [hudStack, screenStack, project.uiScreens]);
+
+    const coverageSceneId = (playerState?.mode === 'playing' || playerState?.mode === 'paused')
+        ? (playerState.currentSceneId || null) : null;
+    const coverageCommonEventId = playerState?.commandStack?.length
+        ? (playerState.commandStack[playerState.commandStack.length - 1].commonEventId ?? null) : null;
+    const coverageMapId = playerState?.uiState?.mapOverlay?.mapId ?? null;
+    const coverageMiniGameId = playerState?.uiState?.miniGameOverlay?.gameId ?? null;
+
+    // Deps are the derived IDS, not `playerState` — so this fires on actual transitions, not on
+    // every command of every scene.
+    useEffect(() => {
+        coverageRef.current?.observe({
+            sceneId: coverageSceneId,
+            screenId: coverageScreenId,
+            commonEventId: coverageCommonEventId,
+            mapId: coverageMapId,
+            miniGameId: coverageMiniGameId,
+        });
+    }, [coverageSceneId, coverageScreenId, coverageCommonEventId, coverageMapId, coverageMiniGameId]);
+
     useEffect(() => {
         playerStateRef.current = playerState;
         if (playerState?.mode === 'playing') {
@@ -5962,6 +6117,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // In-memory saves fallback when localStorage is unavailable or full
     const savesPersistentRef = useRef<boolean>(true); // assume persistent until proven otherwise
     const inMemorySavesRef = useRef<Record<number, GameStateSave>>({});
+    // True once a save write has FAILED (storage full/broken): saves are memory-only from then on,
+    // and the save screen says so. A ref alone couldn't re-render the warning into view.
+    const [saveStorageBroken, setSaveStorageBroken] = useState(false);
 
     // Queue music when autoplay is blocked; retry when user interacts
     const queuedMusicRef = useRef<{ url: string; loop: boolean; fadeDuration: number } | null>(null);
@@ -5973,6 +6131,22 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const commandSchedulerRef = useRef(new CommandScheduler());
     const hasRenderedSceneRef = useRef(false);
     const runtimeDiagnosticsRef = useRef(new RuntimeDiagnostics());
+    // ── Route coverage (EDITOR TEST-PLAY ONLY — never in an exported game) ────────────────────────
+    // Records which scenes the author reached and which routes they took, so the Story Flow Map can
+    // paint "you've played this" vs "you have never tested this branch". `isStandalone` is the gate:
+    // this whole file is vendored into gameEngineBundle.ts, so a player's playthrough would otherwise
+    // write into the author's coverage. See utils/routeCoverage.ts.
+    const coverageRef = useRef<CoverageRecorder | null>(null);
+    if (!isStandalone && !coverageRef.current) coverageRef.current = new CoverageRecorder(project.id);
+    useEffect(() => {
+        // Belt and braces: a popped-out test-play window can be closed without React unmounting.
+        const flush = () => coverageRef.current?.flush();
+        window.addEventListener('beforeunload', flush);
+        return () => {
+            window.removeEventListener('beforeunload', flush);
+            coverageRef.current?.dispose();
+        };
+    }, []);
     const variableStoreRef = useRef<RuntimeVariableStore | null>(null);
     const uiDirtyVariableIdsRef = useRef<Set<VNID>>(new Set());
     const activeEffectTimeoutsRef = useRef<number[]>([]);
@@ -6304,43 +6478,62 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             typeof (window as any).electronAPI?.storage !== 'undefined';
     }, []);
 
+    // ── Player saves v2: one storage key PER SLOT (see runtime/saveSlotStore.ts) ─────────────────
+    // v1 kept every slot in one blob; one corrupt byte emptied the whole load screen, and every
+    // save rewrote every slot. The store module handles per-slot keys, the verified migration of
+    // legacy blobs, and quarantine of anything unreadable. This adapter is the only part that
+    // knows which backend we're on.
+    const slotStorage = useMemo<SlotStorage>(() => {
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.storage) {
+            const s = (window as any).electronAPI.storage;
+            return {
+                getItem: (k: string) => s.getItem(k),
+                setItem: (k: string, v: unknown) => s.setItem(k, v),
+                removeItem: (k: string) => s.removeItem ? s.removeItem(k) : s.setItem(k, null),
+                listKeys: async (prefix: string) => {
+                    try {
+                        if (typeof s.keys === 'function') return ((await s.keys()) as string[]).filter(k => k.startsWith(prefix));
+                    } catch { /* fall through to index/probe discovery */ }
+                    return null;
+                },
+            };
+        }
+        return {
+            getItem: async (k: string) => localStorage.getItem(k),        // raw string; store parses
+            setItem: async (k: string, v: unknown) => { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); },
+            removeItem: async (k: string) => { localStorage.removeItem(k); },
+            listKeys: async (prefix: string) => Object.keys(localStorage).filter(k => k.startsWith(prefix)),
+        };
+    }, []);
+
     const getGameSaves = useCallback(async (): Promise<Record<number, GameStateSave>> => {
         try {
-            if (hasElectronStorage()) {
-                const raw = await (window as any).electronAPI.storage.getItem(savesKey);
-                if (raw == null) return {};
-                // We store the object directly in Electron storage
-                return raw as Record<number, GameStateSave>;
-            }
-
-            const savesJson = localStorage.getItem(savesKey);
-            return savesJson ? JSON.parse(savesJson) : {};
+            return await readAllSaves<GameStateSave>(slotStorage, project.id);
         } catch (e) {
             runtimeDebugWarn('Failed to load saves from storage:', e);
             return {};
         }
-    }, [hasElectronStorage, savesKey]);
+    }, [slotStorage, project.id]);
 
-    const saveGameSaves = useCallback(async (saves: Record<number, GameStateSave>) => {
+    /** Persist ONE slot. On failure: keep the save alive in memory AND tell the player — the save
+     *  screen shows a storage warning instead of silently pretending everything worked. */
+    const persistSlot = useCallback(async (slotNumber: number, save: GameStateSave, allSaves: Record<number, GameStateSave>) => {
         try {
-            if (hasElectronStorage()) {
-                await (window as any).electronAPI.storage.setItem(savesKey, saves);
-            } else {
-                localStorage.setItem(savesKey, JSON.stringify(saves));
-            }
+            await writeSlot(slotStorage, project.id, slotNumber, save);
             savesPersistentRef.current = true;
         } catch (e) {
             console.error('Failed to save to storage:', e);
-            // switch to in-memory saves and mark persistence as false to avoid repeated attempts
             savesPersistentRef.current = false;
-            inMemorySavesRef.current = saves;
-            // Could show a user notification here
+            inMemorySavesRef.current = allSaves;
+            setSaveStorageBroken(true);       // ← the notification that was "could show" for years
         }
-    }, [hasElectronStorage, savesKey]);
+    }, [slotStorage, project.id]);
 
     // Export saves to a file (user can download to keep them outside localStorage)
-    const exportSavesToFile = useCallback(() => {
-        const saves = savesPersistentRef.current ? getGameSaves() : inMemorySavesRef.current;
+    const exportSavesToFile = useCallback(async () => {
+        // (This await was missing for as long as the feature existed — it serialized a pending
+        // Promise, so the "exported" file always contained `{}` instead of the saves.)
+        const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
         const blob = new Blob([JSON.stringify(saves, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -6377,8 +6570,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return new Promise((resolve) => {
                 try {
                     const stage = playerState.stageState;
-                    const THUMB_W = 640;
-                    const THUMB_H = 360;
+                    // Sized for a save-slot thumbnail, not a wallpaper: screenshots are the main
+                    // weight in a save, and the old 640×360 @ q0.85 was the primary driver of games
+                    // silently hitting the storage quota. 480×270 @ q0.72 is ~40% of the bytes and
+                    // indistinguishable at slot size.
+                    const THUMB_W = 480;
+                    const THUMB_H = 270;
                     const canvas = document.createElement('canvas');
                     canvas.width = THUMB_W;
                     canvas.height = THUMB_H;
@@ -6421,7 +6618,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         // No visual content, just fill black
                         ctx.fillStyle = '#000';
                         ctx.fillRect(0, 0, THUMB_W, THUMB_H);
-                        resolve(canvas.toDataURL('image/jpeg', 0.85));
+                        resolve(canvas.toDataURL('image/jpeg', 0.72));
                         return;
                     }
 
@@ -6437,7 +6634,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 ctx.drawImage(img, src.x, src.y, src.w, src.h);
                             }
                         }
-                        resolve(canvas.toDataURL('image/jpeg', 0.85));
+                        resolve(canvas.toDataURL('image/jpeg', 0.72));
                     };
 
                     for (let idx = 0; idx < imageSources.length; idx++) {
@@ -6487,7 +6684,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             if (!savesPersistentRef.current) {
                 inMemorySavesRef.current = saves;
             } else {
-                await saveGameSaves(saves);
+                // v2: write ONLY the slot being saved — not the whole collection. Saving slot 3 can
+                // no longer corrupt (or even touch) slots 1–8.
+                await persistSlot(slotNumber, saves[slotNumber], saves);
             }
             setGameSaves(saves);
         };
@@ -6495,22 +6694,24 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         void createSaveRecord();
     };
 
-    // Erase one save slot. Saves live in a single per-project record (`vn-saves-<id>`) that BOTH the
-    // Save and Load screens read, so removing the slot here clears it everywhere; setGameSaves
-    // refreshes the grid live (no reload). Mirrors saveGame's persistent/in-memory split.
+    // Erase one save slot. Per-slot keys (v2): removing a slot deletes ITS key only; BOTH the Save
+    // and Load screens read the same store, so the grid refreshes live via setGameSaves.
     const deleteGameSaveSlot = (slotNumber: number) => {
         const doDelete = async () => {
             const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
             if (!(slotNumber in saves)) return;
             delete saves[slotNumber];
             if (!savesPersistentRef.current) inMemorySavesRef.current = saves;
-            else await saveGameSaves(saves);
+            else await deleteSlot(slotStorage, project.id, slotNumber).catch(e => console.error('Failed to delete save slot:', e));
             setGameSaves({ ...saves });
         };
         void doDelete();
     };
 
     const loadGame = (slotNumber: number) => {
+        // Route coverage: teleporting into a save is not a route the author "walked" — forget the
+        // cursor so we don't credit them with a branch they never took.
+        coverageRef.current?.resetCursor();
         // Tear down any in-flight phone event (ringing call / queued follow-ups) before loading.
         clearPhoneTimers(); stopRingtone(); activeCallCmdRef.current = null;
         // Immediately stop music without fade to avoid race condition where
@@ -6593,6 +6794,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // vars, economy reset) is identical; the scene's non-blocking visual setup fast-forwards so
     // the stage is composed when the chosen line runs.
     const startNewGame = useCallback((startOverride?: { sceneId: VNID; index: number }) => {
+        // Route coverage: a fresh playthrough starts from nowhere (and "Play from here" drops the
+        // author mid-story) — so record no route into the first scene, only that they reached it.
+        coverageRef.current?.resetCursor();
         stopAndResetMusic();
         // Tear down any in-flight phone event (ringing call / queued follow-ups) for the fresh start.
         clearPhoneTimers(); stopRingtone(); activeCallCmdRef.current = null;
@@ -6640,7 +6844,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const conditionsMet = combineConditions(startScene.conditions, condition => {
                 const varValue = initialVariables[condition.variableId];
                 if (varValue === undefined) return false;
-                
+
+                if (isBandOperator(condition.operator)) {
+                    return compareBand(project.variables[condition.variableId], varValue, String(condition.value), condition.operator);
+                }
                 switch (condition.operator) {
                     case 'is true': return !!varValue;
                     case 'is false': return !varValue;
@@ -6843,9 +7050,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 runtimeDebugLog('[DEBUG evaluateConditions] Variable undefined, returning false');
                 return false; // condition on non-existent variable is false
             }
-            
+
+            // Named bands ("Yuki is a Friend") are answered against the variable's DEFINITION, not
+            // against a literal — so they short-circuit before all the string/asset/bool coercion below.
+            if (isBandOperator(condition.operator)) {
+                const inBand = compareBand(projectVar, effectiveVarValue, String(condition.value), condition.operator);
+                runtimeDebugLog('[DEBUG evaluateConditions] band operator →', inBand);
+                return inBand;
+            }
+
             let result = false;
-            
+
             // For string comparisons, also check if we're comparing against an asset name when variable contains an asset ID
             const stringVarValue = String(effectiveVarValue);
             const stringCondValue = String(condition.value);
@@ -9853,6 +10068,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 backwardReplayRef.current = { sceneId: cur.currentSceneId, index: cur.currentIndex };
             }
         }
+        // Route coverage: stepping BACKWARD is not a route. Without this, rewinding from B to A in a
+        // story loop would record A←B and light up an edge the author never actually took forward.
+        coverageRef.current?.resetCursor();
         updatePlayerState(p => {
             if (!p || p.history.length === 0) return p;
 
@@ -12590,7 +12808,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             let combinedFilterAnimation = '';
                             let flickerAnimation = '';
                             let filterVars: Record<string, string> = {};
-                            
+                            // Glitch (FNF-style corruption) on ONE character: displacement filter on the
+                            // sprite content + bursty jitter + discoloured bands masked to the sprite.
+                            let charGlitch: { intensity: number; speed: number; colors: string[]; rimSize: number } | null = null;
+
                             for (const eff of effectsList) {
                                 if (!eff || eff.type === 'none') continue;
                                 const speed = eff.speed ?? 1;
@@ -12650,6 +12871,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     case 'flicker':
                                         flickerAnimation = `vnCharFlicker ${0.1 / speed}s step-end infinite`;
                                         break;
+                                    case 'glitch': {
+                                        const glitchColors = (eff.colors && eff.colors.length > 0) ? eff.colors : [eff.color || '#33ff66'];
+                                        charGlitch = { intensity, speed, colors: glitchColors, rimSize: (eff as any).rimSize ?? 1 };
+                                        // Positional snaps (steps — a glitch teleports, it never glides).
+                                        const s: React.CSSProperties & Record<string, any> = {};
+                                        s.animation = `vnCharGlitchJitter ${(1.1 / speed).toFixed(2)}s steps(1, end) infinite`;
+                                        s['--char-glitch-px'] = `${Math.round(3 + 5 * intensity)}px`;
+                                        transformEffects.push({ style: s });
+                                        // The tear: a per-character SVG displacement filter on the sprite
+                                        // CONTENT (so only this character's pixels shift — filters respect
+                                        // the sprite's transparency, unlike an overlay box would).
+                                        combinedFilter += ` url(#vnfx-charglitch-${char.charId})`;
+                                        break;
+                                    }
                                 }
                             }
 
@@ -12711,6 +12946,95 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                             transition: `opacity ${dnTrans}s ease-in-out, background-color ${dnTrans}s ease-in-out`,
                                         }} />
                                     ))}
+                                    {/* Glitch: RIM GHOSTS — solid-colour copies of the sprite (masked to its own
+                                        pixels, so they trace the silhouette exactly), pushed a few pixels off-centre
+                                        BEHIND the sprite. Only the edges peek out → a corrupted outline hugging the
+                                        character's shape, per the user's reference drawing (not stripes across the
+                                        body). Each colour gets its own offset direction and a staggered flicker, so
+                                        multiple colours flash around the rim in turn. */}
+                                    {charGlitch && !char.isVideo && charGlitch.colors.map((rimColor, ci) => {
+                                        const g = charGlitch!;
+                                        // Thickness is the author's own dial (rimSize), NOT intensity —
+                                        // rimSize 1 reproduces the old intensity-1 look exactly.
+                                        const push = 7 * Math.max(0.2, Math.min(3, g.rimSize));
+                                        const dir = [[-1, 0], [1, 0], [0, -1], [1, 1], [-1, 1], [0, 1]][ci % 6];
+                                        const dur = (1.1 / g.speed);
+                                        return char.imageUrls.map((url, index) => (
+                                            <div key={`glitch-rim-${ci}-${index}`} aria-hidden style={{
+                                                position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                                                zIndex: -(g.colors.length - ci),   // behind every sprite layer
+                                                pointerEvents: 'none',
+                                                backgroundColor: rimColor,
+                                                transform: `translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + 0.015 * Math.max(0.2, Math.min(3, g.rimSize))).toFixed(3)})`,
+                                                animation: `vnfx-glitch-bands-flicker ${dur.toFixed(2)}s steps(1, end) infinite`,
+                                                animationDelay: `${((dur / g.colors.length) * ci).toFixed(2)}s`,
+                                                WebkitMaskImage: `url("${url}")`, maskImage: `url("${url}")`,
+                                                WebkitMaskSize: 'contain', maskSize: 'contain',
+                                                WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+                                                WebkitMaskPosition: 'center', maskPosition: 'center',
+                                            }} />
+                                        ));
+                                    })}
+                                    {/* Glitch: DEAD-PIXEL CLUSTERS — same behind-the-sprite ghost trick as the rims,
+                                        but scaled out a touch further and filled with a sparse thresholded-noise
+                                        tile instead of a solid colour. Only the ring past the sprite's edge shows,
+                                        so chunky stuck-pixel clusters flash AROUND the silhouette. Faster flicker
+                                        and a counter-offset from the rim keep them reading as separate debris. */}
+                                    {charGlitch && !char.isVideo && charGlitch.colors.map((pxColor, ci) => {
+                                        const g = charGlitch!;
+                                        const rim = Math.max(0.2, Math.min(3, g.rimSize));
+                                        const push = 5 * rim;   // debris sits just beyond the rim, whatever its size
+                                        const dir = [[1, -1], [-1, 1], [1, 1], [-1, -1], [0, -1], [1, 0]][ci % 6];
+                                        const dur = (1.1 / g.speed) * 0.7;
+                                        const blockPx = Math.round(36 + 26 * Math.min(1.5, g.intensity));
+                                        return char.imageUrls.map((url, index) => (
+                                            <div key={`glitch-px-${ci}-${index}`} aria-hidden style={{
+                                                position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                                                // Further back than the rims, so the pixels flash BEYOND the rim edge.
+                                                zIndex: -(g.colors.length + 1) - ci,
+                                                pointerEvents: 'none',
+                                                backgroundImage: deadPixelTile(pxColor, 13 + ci * 37),
+                                                backgroundSize: `${blockPx}px ${blockPx}px`,
+                                                imageRendering: 'pixelated',
+                                                transform: `translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + (0.035 + ci * 0.012) * rim).toFixed(3)})`,
+                                                animation: `vnfx-glitch-bands-flicker ${dur.toFixed(2)}s steps(1, end) infinite`,
+                                                animationDelay: `${((dur / g.colors.length) * ci + dur * 0.31).toFixed(2)}s`,
+                                                WebkitMaskImage: `url("${url}")`, maskImage: `url("${url}")`,
+                                                WebkitMaskSize: 'contain', maskSize: 'contain',
+                                                WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+                                                WebkitMaskPosition: 'center', maskPosition: 'center',
+                                            }} />
+                                        ));
+                                    })}
+                                    {/* Glitch: the per-character displacement filter definition. Lives inside the
+                                        content wrapper so it mounts/unmounts with the sprite; the id is stable per
+                                        character so the SMIL burst clock doesn't restart on unrelated re-renders. */}
+                                    {charGlitch && (
+                                        <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+                                            <defs>
+                                                <filter id={`vnfx-charglitch-${char.charId}`} x="-20%" y="-10%" width="140%" height="120%">
+                                                    <feTurbulence type="fractalNoise" baseFrequency="0.002 0.1" numOctaves="1" seed="11" result="noise">
+                                                        <animate attributeName="seed" values="11;37;73;5;11" dur={`${(4.4 / charGlitch.speed).toFixed(2)}s`} calcMode="discrete" repeatCount="indefinite" />
+                                                    </feTurbulence>
+                                                    <feComponentTransfer in="noise" result="bands">
+                                                        <feFuncR type="discrete" tableValues="0 0 0.4 0.5 0.6 1 1" />
+                                                        <feFuncG type="discrete" tableValues="0.5" />
+                                                        <feFuncB type="discrete" tableValues="0.5" />
+                                                    </feComponentTransfer>
+                                                    <feDisplacementMap in="SourceGraphic" in2="bands" xChannelSelector="R" yChannelSelector="G" scale="0">
+                                                        <animate
+                                                            attributeName="scale"
+                                                            values={`0;0;${Math.round(6 + 22 * charGlitch.intensity)};${Math.round(2 + 7 * charGlitch.intensity)};0;0;${Math.round(4 + 14 * charGlitch.intensity)};0;0`}
+                                                            keyTimes="0;0.38;0.42;0.47;0.52;0.72;0.75;0.8;1"
+                                                            dur={`${(1.1 / charGlitch.speed).toFixed(2)}s`}
+                                                            calcMode="discrete"
+                                                            repeatCount="indefinite"
+                                                        />
+                                                    </feDisplacementMap>
+                                                </filter>
+                                            </defs>
+                                        </svg>
+                                    )}
                                 </>
                             );
 
@@ -13824,6 +14148,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const belowCharEffects = activeOverlayEffects.filter(e => FOG_LAYER_TYPES.has(e.type) && !e.params?.aboveCharacters);
     const aboveCharEffects = activeOverlayEffects.filter(e => !(FOG_LAYER_TYPES.has(e.type) && !e.params?.aboveCharacters));
 
+    // The glitch's DISPLACEMENT cannot live in the overlay component: an overlay only draws on top,
+    // and Chromium ignores SVG reference filters in `backdrop-filter` (which is how the first version
+    // tried it — the tear silently did nothing, leaving only the coloured bands: "just green lines").
+    // The tear must be a real `filter: url(#…)` on the CONTENT — so it goes on the letterboxed game
+    // container, and the overlay keeps only the decorations (bands, debris).
+    const stageGlitch = activeOverlayEffects.find(e => e.type === 'glitch' && (e.intensity ?? 0) > 0);
+
     // Use fallback dimensions if stageSize hasn't been measured yet (width/height are 0)
     const overlayWidth = (stageSize?.width && stageSize.width > 0) ? stageSize.width : 1280;
     const overlayHeight = (stageSize?.height && stageSize.height > 0) ? stageSize.height : 720;
@@ -13931,25 +14262,53 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     from { opacity: 0; }
                     to { opacity: 1; }
                 }
+                /* Element entrances.
+                   ANCHOR-AWARE: the old keyframes hardcoded translate(-50%,-50%) — correct only for
+                   center-anchored elements; anything else animated to the wrong spot and SNAPPED to
+                   its real position when the animation ended. The element's true anchor translate now
+                   rides in on --vn-el-tx/--vn-el-ty (fallback -50% keeps old projects identical).
+                   Slide distance rides --vn-el-dist (default 20% of the element's own size).
+                   The *NoFade variants slide WITHOUT fading — a user asked for exactly this: the box
+                   arrives whole and eases to a stop, no ghosting in. */
                 @keyframes elementTransitionslideUp {
-                    from { opacity: 0; transform: translate(-50%, 20%); }
-                    to { opacity: 1; transform: translate(-50%, -50%); }
+                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) + var(--vn-el-dist, 70%))); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
                 }
                 @keyframes elementTransitionslideDown {
-                    from { opacity: 0; transform: translate(-50%, -70%); }
-                    to { opacity: 1; transform: translate(-50%, -50%); }
+                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) - var(--vn-el-dist, 20%))); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
                 }
                 @keyframes elementTransitionslideLeft {
-                    from { opacity: 0; transform: translate(-20%, -50%); }
-                    to { opacity: 1; transform: translate(-50%, -50%); }
+                    from { opacity: 0; transform: translate(calc(var(--vn-el-tx, -50%) + var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
                 }
                 @keyframes elementTransitionslideRight {
-                    from { opacity: 0; transform: translate(-80%, -50%); }
-                    to { opacity: 1; transform: translate(-50%, -50%); }
+                    from { opacity: 0; transform: translate(calc(var(--vn-el-tx, -50%) - var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
                 }
                 @keyframes elementTransitionscale {
-                    from { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
-                    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(0.5); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(1); }
+                }
+                @keyframes elementTransitionslideUpNoFade {
+                    from { transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) + var(--vn-el-dist, 70%))); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                }
+                @keyframes elementTransitionslideDownNoFade {
+                    from { transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) - var(--vn-el-dist, 20%))); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                }
+                @keyframes elementTransitionslideLeftNoFade {
+                    from { transform: translate(calc(var(--vn-el-tx, -50%) + var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                }
+                @keyframes elementTransitionslideRightNoFade {
+                    from { transform: translate(calc(var(--vn-el-tx, -50%) - var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                }
+                @keyframes elementTransitionscaleNoFade {
+                    from { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(0.5); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(1); }
                 }
                 /* Appearance-state image swap crossfade (new image fades in over the old) */
                 @keyframes vnImgCrossfade {
@@ -14147,6 +14506,34 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     100% { transform: translate3d(0, 0, 0); }
                 }
 
+                /* Glitch (FNF-style corruption). The tear layer's backdrop-filter does the real
+                   pixel displacement (SMIL-driven, so it idles free); the bands layer is the
+                   discolouration, flickering in hard steps() — smooth easing reads as a fade,
+                   and a glitch never fades. */
+                .vnfx-glitch-tear {
+                    position: absolute;
+                    inset: 0;
+                    pointer-events: none;
+                }
+                .vnfx-glitch-bands {
+                    position: absolute;
+                    inset: -1%;
+                    pointer-events: none;
+                    mix-blend-mode: screen;
+                    animation: vnfx-glitch-bands-flicker 1s steps(1, end) infinite;
+                }
+                @keyframes vnfx-glitch-bands-flicker {
+                    0%   { opacity: 0; transform: translate3d(0, 0, 0); }
+                    38%  { opacity: 0; }
+                    42%  { opacity: 1; transform: translate3d(-6px, 2px, 0); }
+                    47%  { opacity: 0.5; transform: translate3d(4px, -1px, 0); }
+                    52%  { opacity: 0; transform: translate3d(0, 0, 0); }
+                    72%  { opacity: 0; }
+                    75%  { opacity: 0.8; transform: translate3d(5px, 1px, 0); }
+                    80%  { opacity: 0; transform: translate3d(0, 0, 0); }
+                    100% { opacity: 0; }
+                }
+
                 .vnfx-sunbeams {
                     position: absolute;
                     inset: -30%;
@@ -14200,7 +14587,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 `width:100% + aspect-ratio + max-height` STRETCHED on wider-than-aspect screens,
                 which shifted every %-positioned element (e.g. the quick menu) on Android. At a
                 16:9 window this resolves to the same 1280x720 as before (desktop unchanged). */}
-            <div ref={playContainerRef} className="relative overflow-hidden" style={{ width: `min(100vw, calc(100vh * ${project.gameResolution?.width || 1920} / ${project.gameResolution?.height || 1080}))`, height: `min(100vh, calc(100vw * ${project.gameResolution?.height || 1080} / ${project.gameResolution?.width || 1920}))`, '--font-scale': playContainerSize.width > 0 ? playContainerSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}>
+            <div ref={playContainerRef} className="relative overflow-hidden" style={{ width: `min(100vw, calc(100vh * ${project.gameResolution?.width || 1920} / ${project.gameResolution?.height || 1080}))`, height: `min(100vh, calc(100vw * ${project.gameResolution?.height || 1080} / ${project.gameResolution?.width || 1920}))`, '--font-scale': playContainerSize.width > 0 ? playContainerSize.width / (project.gameResolution?.width || 1920) : 1, ...(stageGlitch ? { filter: 'url(#vnfx-stage-glitch)' } : {}) } as React.CSSProperties}>
+                {stageGlitch && <StageGlitchFilterDef effect={stageGlitch} />}
                 {playerState?.mode === 'playing' ? renderStage() : null}
                 
                 {/* Render closing + current menu screens together so a screen transitioning
@@ -14252,6 +14640,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             onSettingsChange={(key, value) => setSettings(s => ({...s, [key]: value}))}
                             assetResolver={assetResolver}
                             gameSaves={gameSaves}
+                            saveStorageBroken={saveStorageBroken}
                             playSound={playSound}
                             variables={screenVariables}
                             onVariableChange={handleVariableChange}
@@ -14302,6 +14691,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             onSettingsChange={(key, value) => setSettings(s => ({...s, [key]: value}))}
                             assetResolver={assetResolver}
                             gameSaves={gameSaves}
+                            saveStorageBroken={saveStorageBroken}
                             playSound={playSound}
                             variables={screenVariables}
                             onVariableChange={handleVariableChange}
@@ -14643,9 +15033,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     {defs.map(def => {
                                         const raw = (def.id in liveVars) ? liveVars[def.id] : def.defaultValue;
                                         const bl = resolveBoolLabels(def, 'Yes', 'No');
-                                        const display = def.type === 'boolean' ? (raw ? bl.yes : bl.no) : String(raw);
                                         const isNum = def.type === 'number';
                                         const isBool = def.type === 'boolean';
+                                        // A banded number always shows its NAME here, whatever the player sees in
+                                        // story text — the tracker exists for the author, and "Friend (34)" is what
+                                        // they need to reason about.
+                                        const band = isNum ? resolveBand(def, raw) : null;
+                                        const display = isBool ? (raw ? bl.yes : bl.no) : String(raw);
                                         const clampNum = (val: number) => {
                                             let r = val;
                                             if (typeof def.min === 'number') r = Math.max(def.min, r);
@@ -14657,9 +15051,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                             <li key={def.id} className="flex items-center justify-between gap-3">
                                                 <span className="flex items-center gap-1.5 min-w-0">
                                                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${scopeColor[def.scope || 'global'] || 'bg-slate-400'}`} />
-                                                    <span className="text-slate-300 truncate" title={def.name}>{def.name}</span>
+                                                    {def.icon && <span className="flex-shrink-0">{def.icon}</span>}
+                                                    <span className="text-slate-300 truncate" title={def.description || def.name}>{def.name}</span>
                                                 </span>
                                                 <span className="flex items-center gap-1 flex-shrink-0">
+                                                    {band && (
+                                                        <span
+                                                            className="px-1.5 py-0.5 rounded-full text-[10px] leading-none whitespace-nowrap"
+                                                            style={{
+                                                                background: `color-mix(in srgb, ${band.color ?? '#94a3b8'} 25%, transparent)`,
+                                                                color: band.color ?? '#cbd5e1',
+                                                            }}
+                                                        >
+                                                            {band.icon ? `${band.icon} ` : ''}{band.name}
+                                                        </span>
+                                                    )}
                                                     {isNum && (
                                                         <button title="−1" className={btn} onClick={() => setTestVariable(def.id, clampNum((Number(raw) || 0) - 1))}>−</button>
                                                     )}

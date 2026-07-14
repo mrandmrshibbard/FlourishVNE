@@ -7,7 +7,7 @@
  * execute automatically at scene start.
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import { useProject } from '../contexts/ProjectContext';
@@ -57,9 +57,12 @@ const formatCommandName = (type: string): string =>
 
 interface CommonEventsManagerProps {
     project: any;
+    /** One-shot deep link (from the variable X-ray's "take me there"). Consumed on arrival. */
+    initialSelection?: VNID | null;
+    onSelectionConsumed?: () => void;
 }
 
-const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) => {
+const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, initialSelection, onSelectionConsumed }) => {
     const { dispatch } = useProject();
     const { t } = useTranslation(['commonEvents', 'common']);
     const commonEvents = useMemo(
@@ -80,6 +83,15 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
     );
 
     const selectedEvent = selectedEventId ? (project.commonEvents || {})[selectedEventId] as VNCommonEvent | undefined : undefined;
+
+    // Adopt a deep link from elsewhere in the editor (the variable X-ray's "take me there"), then tell
+    // the owner it's been used — otherwise it would re-select on every later visit to this tab.
+    useEffect(() => {
+        if (!initialSelection) return;
+        if ((project.commonEvents || {})[initialSelection]) setSelectedEventId(initialSelection);
+        onSelectionConsumed?.();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialSelection]);
 
     // The command currently open for editing, and a writer that targets it in the reducer.
     const selectedCommand: VNCommand | undefined =

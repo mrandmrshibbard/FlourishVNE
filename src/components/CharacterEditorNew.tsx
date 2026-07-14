@@ -28,6 +28,8 @@ import TrimmedVideo from './ui/TrimmedVideo';
 import TextboxStyleFields from './ui/TextboxStyleFields';
 import { popularFonts as _sharedFonts } from './ui/FontEditor';
 import ConfirmationModal from './ui/ConfirmationModal';
+import SpriteImportModal from './character-import/SpriteImportModal';
+import { partLayerName } from '../features/character/import/nameGrouping';
 
 type EditorArea = 'appearance' | 'voice';
 
@@ -43,6 +45,7 @@ const AppearanceLayerCard: React.FC<{
 }> = ({ characterId, layer, activeAssetId, onPick }) => {
     const { t } = useTranslation('characters');
     const { project, dispatch } = useProject();
+    const toast = useToast();
     const [isRenaming, setIsRenaming] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -71,6 +74,50 @@ const AppearanceLayerCard: React.FC<{
     };
     const handleDeleteAsset = (assetId: VNID, name: string) => {
         if (confirm(t('editor.deleteAssetConfirm', { name }))) dispatch({ type: 'DELETE_LAYER_ASSET', payload: { characterId, layerId: layer.id, assetId } });
+    };
+
+    /**
+     * "Give this sprite its own layer."
+     *
+     * Sprites inside one layer are ALTERNATIVES — the character shows one of them. But a PSD group
+     * often holds PIECES that stack (the whites, iris and pupil of an eye). This moves one sprite out
+     * into a layer of its own, so it always shows instead of being one of the choices.
+     *
+     * Rebuilds the whole layers record in ONE dispatch, because layer key insertion order IS the
+     * paint order — the new layer must land directly on top of the one it came from.
+     */
+    const handleSplitAsset = (asset: VNLayerAsset) => {
+        const character = project.characters[characterId];
+        if (!character) return;
+        const newLayerId = `layer-${Math.random().toString(36).substring(2, 9)}` as VNID;
+        const newLayerName = partLayerName(layer.name, asset.name);
+
+        const layers: Record<VNID, VNCharacterLayer> = {};
+        for (const [id, l] of Object.entries(character.layers) as [VNID, VNCharacterLayer][]) {
+            if (id === layer.id) {
+                // The source layer keeps everything EXCEPT the sprite we're moving out.
+                const rest = { ...l.assets };
+                delete rest[asset.id];
+                layers[id] = { ...l, assets: rest };
+                // Insert the new layer immediately above it, preserving the stacking.
+                layers[newLayerId] = { id: newLayerId, name: newLayerName, assets: { [asset.id]: asset } };
+            } else {
+                layers[id] = l;
+            }
+        }
+
+        // A split-out piece ALWAYS shows — select it in every expression. And any expression that was
+        // showing it from the old layer must stop pointing at a sprite that no longer lives there.
+        const expressions: Record<VNID, VNCharacterExpression> = {};
+        for (const [id, e] of Object.entries(character.expressions) as [VNID, VNCharacterExpression][]) {
+            const cfg = { ...e.layerConfiguration };
+            if (cfg[layer.id] === asset.id) cfg[layer.id] = null;
+            cfg[newLayerId] = asset.id;
+            expressions[id] = { ...e, layerConfiguration: cfg };
+        }
+
+        dispatch({ type: 'UPDATE_CHARACTER', payload: { characterId, updates: { layers, expressions } } });
+        toast.success(t('editor.splitAssetDone', '"{{sprite}}" now has its own layer — "{{layer}}".', { sprite: asset.name, layer: newLayerName }));
     };
 
     const assets = Object.values(layer.assets) as VNLayerAsset[];
@@ -116,6 +163,19 @@ const AppearanceLayerCard: React.FC<{
                                 className="text-[9px] text-white truncate block w-full bg-transparent outline-none rounded px-0.5 focus:bg-black/70 focus:ring-1 focus:ring-sky-500"
                             />
                         </div>
+                        {/* Give this sprite its own layer (so it STACKS instead of being one of the
+                            choices). Top-LEFT so it can never sit under the delete button, and always
+                            visible — it's the fix for a PSD group of eye pieces. */}
+                        {assets.length > 1 && (
+                            <button
+                                onClick={e => { e.stopPropagation(); handleSplitAsset(asset); }}
+                                title={t('editor.splitAssetHint', 'Give this sprite its own layer, so it always shows instead of being one of the choices (e.g. the whites, iris and pupil of an eye)')}
+                                className="absolute top-0.5 left-0.5 px-1 py-0.5 rounded text-[9px] font-bold text-white opacity-80 group-hover:opacity-100 transition-opacity"
+                                style={{ background: 'color-mix(in srgb, var(--accent-mint) 80%, black)' }}
+                            >
+                                ⤴
+                            </button>
+                        )}
                         <button onClick={e => { e.stopPropagation(); handleDeleteAsset(asset.id, asset.name); }} className="absolute top-0.5 right-0.5 p-0.5 bg-red-600/80 hover:bg-red-500 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity"><TrashIcon className="w-2.5 h-2.5" /></button>
                     </div>
                 ))}
@@ -142,6 +202,11 @@ const CharacterEditorNew: React.FC<{
     const toast = useToast();
     const character = project.characters[activeCharacterId];
     const [area, setArea] = useState<EditorArea>('appearance');
+    // Bulk sprite import (many PNGs / .psd / .ora)
+    const [importOpen, setImportOpen] = useState(false);
+    const [importFiles, setImportFiles] = useState<File[] | null>(null);
+    const [dragOver, setDragOver] = useState(false);
+    const spriteInputRef = useRef<HTMLInputElement>(null);
     const [renamingExprId, setRenamingExprId] = useState<VNID | null>(null);
     const [confirmDeleteExpr, setConfirmDeleteExpr] = useState<VNCharacterExpression | null>(null);
     const baseImageInputRef = useRef<HTMLInputElement>(null);
@@ -263,7 +328,34 @@ const CharacterEditorNew: React.FC<{
     /* ── Render ── */
 
     return (
-        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+        <div
+            className="flex-1 flex flex-col min-w-0 min-h-0 relative"
+            onDragOver={e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true); } }}
+            onDragLeave={e => { e.preventDefault(); setDragOver(false); }}
+            onDrop={e => {
+                if (!e.dataTransfer.types.includes('Files')) return;
+                e.preventDefault();
+                setDragOver(false);
+                const files = Array.from(e.dataTransfer.files);
+                if (files.length) { setImportFiles(files); setImportOpen(true); }
+            }}
+        >
+            {dragOver && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none rounded-lg"
+                    style={{ background: 'color-mix(in srgb, var(--accent-lavender) 18%, transparent)', border: '2px dashed var(--accent-lavender)' }}>
+                    <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {t('spriteImport.dropHere', 'Drop your layers here — PNGs, or a .psd / .ora file')}
+                    </span>
+                </div>
+            )}
+            {importOpen && (
+                <SpriteImportModal
+                    isOpen={importOpen}
+                    onClose={() => { setImportOpen(false); setImportFiles(null); }}
+                    character={character}
+                    initialFiles={importFiles}
+                />
+            )}
             {/* Header: avatar, name, color, area tabs, view toggle */}
             <div className="flex items-center gap-3 px-4 py-2.5 border-b flex-shrink-0" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-elevated)' }}>
                 <div className="w-9 h-9 rounded-lg flex-shrink-0 overflow-hidden bg-slate-700/50 flex items-center justify-center">
@@ -286,6 +378,28 @@ const CharacterEditorNew: React.FC<{
                     <ColorInput value={character.color} onChange={v => updateCharacter({ color: v })} />
                     <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('editor.color')}</span>
                 </div>
+
+                {/* Bulk sprite import — many PNGs at once, or a layered .psd / .ora */}
+                <button
+                    onClick={() => { setImportFiles(null); setImportOpen(true); spriteInputRef.current?.click(); }}
+                    title={t('spriteImport.buttonHint', 'Import all your layers at once — drop many PNGs, or a Photoshop (.psd) / Krita (.ora) file')}
+                    className="text-[11px] px-2 py-1 rounded-md border flex items-center gap-1 flex-shrink-0 hover:bg-[var(--bg-tertiary)] transition-colors"
+                    style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}
+                >
+                    <UploadIcon className="w-3 h-3" /> {t('spriteImport.button', 'Import sprites')}
+                </button>
+                <input
+                    ref={spriteInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,.psd,.ora"
+                    className="hidden"
+                    onChange={e => {
+                        const files = Array.from(e.target.files || []);
+                        if (files.length) { setImportFiles(files); setImportOpen(true); }
+                        e.target.value = '';
+                    }}
+                />
 
                 {/* Area switch */}
                 <div className="flex items-center gap-1 ml-auto rounded-lg p-0.5 flex-shrink-0" style={{ background: 'var(--bg-primary)' }}>

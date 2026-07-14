@@ -3,6 +3,7 @@ import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNUIAction, UIActionType } from '../types/shared';
 import { VNScene, CommandType, LabelCommand } from '../features/scene/types';
+import { summarizeSetVariable } from './variableLanguage';
 
 /**
  * Single source of truth for UI-action metadata, shared by ActionEditor, ActionCard,
@@ -106,8 +107,11 @@ export function actionSummaryDetail(action: VNUIAction, project: VNProject): str
     const a = action as any;
     switch (action.type) {
         case UIActionType.SetVariable:
+            // Was the bare variable name — a collapsed "Affection" row gave no clue whether it went up,
+            // down, or was set to something. Now: "Affection +1".
+            return summarizeSetVariable(project, a);
         case UIActionType.ResetVariable:
-            return project.variables[a.variableId]?.name || '';
+            return a.variableId ? (project.variables[a.variableId]?.name || '') : 'every variable';
         case UIActionType.GoToScreen:
         case UIActionType.ToggleScreen:
             return (project.uiScreens[a.targetScreenId] as any)?.name || '';

@@ -491,6 +491,9 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                     { type: 'chromaticGlitch' as const, label: 'Chromatic Glitch',
                       extraParams: ['chromaticSpread', 'speed'] as const,
                       paramLabels: { chromaticSpread: 'Offset Spread', speed: 'Jitter Speed' } },
+                    { type: 'glitch' as const, label: 'Glitch (corruption)',
+                      extraParams: ['blockiness', 'chromaticSpread', 'speed'] as const,
+                      paramLabels: { blockiness: 'Slice Size', chromaticSpread: 'Colour Fringing', speed: 'Burst Speed' } },
                     { type: 'sunbeams' as const, label: 'Undulating Sunbeams', supportsColor: true, defaultColor: '#FFCC66',
                       extraParams: ['spread', 'speed'] as const,
                       paramLabels: { spread: 'Ray Spread', speed: 'Animation Speed' },
@@ -587,6 +590,28 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                                 </Select>
                                             </div>
                                         )}
+
+                                        {/* Glitch: multi-colour list — the corrupted slices alternate through these. */}
+                                        {type === 'glitch' && (() => {
+                                            const colors: string[] = (params as any).colors?.length ? (params as any).colors : ['#33FF66'];
+                                            const setColors = (next: string[]) => setEffect(type, intensity, variant, effectColor || undefined, { ...params, colors: next } as any);
+                                            return (
+                                                <div className="mt-1">
+                                                    <div className="text-xs text-slate-400 mb-0.5">{t('screenInspector.glitchColors', 'Glitch colours')}</div>
+                                                    <div className="flex flex-wrap gap-1.5 items-center">
+                                                        {colors.map((c, ci) => (
+                                                            <div key={ci} className="relative">
+                                                                <ColorInput value={c} onChange={v => setColors(colors.map((x, i) => i === ci ? v : x))} />
+                                                                {colors.length > 1 && (
+                                                                    <button onClick={() => setColors(colors.filter((_, i) => i !== ci))} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] leading-none flex items-center justify-center">×</button>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                        <button onClick={() => setColors([...colors, '#ff4d9d'])} className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:text-white">{t('screenInspector.addColor', '+ Colour')}</button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
 
                                         {/* Shimmer-specific controls */}
                                         {type === 'shimmer' && (

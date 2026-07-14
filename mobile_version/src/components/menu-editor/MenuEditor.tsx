@@ -9,6 +9,7 @@ import { VNProject } from '../../types/project';
 import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UICustomElement } from '../../features/ui/types';
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import { UIActionType } from '../../types/shared';
+import { resolveBand } from '../../features/variables/bands';
 import ResizableDraggable from './ResizableDraggable';
 import CanvasSnapGuides from './CanvasSnapGuides';
 import CanvasEdgeFrame from '../ui/CanvasEdgeFrame';
@@ -718,11 +719,20 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             const dir = m.direction || 'ltr';
             const cut = (1 - pct) * 100;
             const clipPath = dir === 'rtl' ? `inset(0 0 0 ${cut}%)` : dir === 'up' ? `inset(${cut}% 0 0 0)` : `inset(0 ${cut}% 0 0)`;
-            const fill = m.fillColorEnd
-                ? `linear-gradient(${dir === 'up' ? '0deg' : '90deg'}, ${m.fillColor || '#a78bfa'}, ${m.fillColorEnd})`
-                : (m.fillColor || '#a78bfa');
+            // Band-driven fill/label — MUST mirror the engine's Meter (LivePreview), or the canvas
+            // shows the author something their players will never see.
+            const meterBand = m.fillFromBand || m.valueFormat === 'band' ? resolveBand(boundVar, raw) : null;
+            const bandFill = m.fillFromBand ? meterBand?.color : undefined;
+            const fill = bandFill
+                ? bandFill
+                : (m.fillColorEnd
+                    ? `linear-gradient(${dir === 'up' ? '0deg' : '90deg'}, ${m.fillColor || '#a78bfa'}, ${m.fillColorEnd})`
+                    : (m.fillColor || '#a78bfa'));
             const radius = m.borderRadius ?? 6;
-            const valueText = m.valueFormat === 'percent' ? `${Math.round(pct * 100)}%` : m.valueFormat === 'valueMax' ? `${raw}/${max}` : `${raw}`;
+            const valueText = m.valueFormat === 'percent' ? `${Math.round(pct * 100)}%`
+                : m.valueFormat === 'valueMax' ? `${raw}/${max}`
+                : m.valueFormat === 'band' ? (meterBand ? `${meterBand.icon ? `${meterBand.icon} ` : ''}${meterBand.name}` : `${raw}`)
+                : `${raw}`;
             // Repeated-symbol / hearts style: show the chosen image N times so the canvas matches test-play.
             if (m.style === 'icons') {
                 const n = Math.max(1, m.iconCount ?? 3);

@@ -10,7 +10,7 @@
  * The radial's center hub ("expand") routes to the full PropertiesInspector for
  * anything not surfaced here, so no functionality is lost.
  */
-import React from 'react';
+import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNProject } from '../../types/project';
@@ -41,6 +41,9 @@ import { pluginManager } from '../../features/plugins/PluginManagerService';
 import { ChoiceLayoutSelect, ChoiceOptionAppearance } from './ChoiceAppearanceFields';
 import { SetVariablePreview } from './SetVariablePreview';
 import { resolveBoolLabels } from '../../features/variables/booleanLabels';
+import { summarizeSetVariable } from '../../utils/variableLanguage';
+import VariablePicker from '../variables/VariablePicker';
+import VariableTokenButton from '../variables/VariableTokenButton';
 import { PHONE_GLYPHS } from '../../features/ui/phoneIcons';
 import ConversationStudio from '../ConversationStudio';
 
@@ -435,6 +438,8 @@ export const CommandGroupAccordion: React.FC<{ command: VNCommand; updateCommand
 // ─────────────────────────────────────────────────────────────────────────────
 const DialogueGroup: React.FC<{ groupId: InspectorGroupId; cmd: DialogueCommand; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
     const currentTextEffect = cmd.textEffect?.type || 'none';
+    // The "{ }" button inserts at the CARET, so it needs the real <textarea>.
+    const dialogueTextRef = useRef<HTMLTextAreaElement>(null);
     if (groupId === 'content') {
         const characterOptions = [
             { value: '', label: t('shared.narrator') },
@@ -457,7 +462,17 @@ const DialogueGroup: React.FC<{ groupId: InspectorGroupId; cmd: DialogueCommand;
             </FormField>
             {cmd.characterSource === 'player' && <p className="text-[11px] text-[var(--text-muted)] -mt-1">Speaks as the player-created character; the name box shows the player's chosen name.</p>}
             <FormField label={t('dialogue.text')}>
-                <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value } as any)} />
+                <TextArea ref={dialogueTextRef} value={cmd.text} onChange={e => updateCommand({ text: e.target.value } as any)} />
+                <div className="flex items-center gap-1.5 mt-1">
+                    {/* Insert {Affection} rather than typing it: a typo would silently ship as literal
+                        braces in the player's dialogue. */}
+                    <VariableTokenButton
+                        targetRef={dialogueTextRef}
+                        value={cmd.text || ''}
+                        onChange={text => updateCommand({ text } as any)}
+                    />
+                    <span className="text-[10px] text-[var(--text-muted)]">{t('dialogue.insertVariable', 'Show a variable’s value in this line')}</span>
+                </div>
             </FormField>
             <FormField label={t('dialogue.textboxTheme')}>
                 {Object.keys(project.textboxThemes || {}).length > 0 ? (
@@ -1142,8 +1157,8 @@ const SetVariableGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
     const variable = project.variables[cmd.variableId];
     return <>
         <FormField label={t('vars.variable')}>
-            <Select value={cmd.variableId} onChange={e => {
-                const newVar = project.variables[e.target.value];
+            <VariablePicker value={cmd.variableId} onChange={id => {
+                const newVar = project.variables[id];
                 let op = cmd.operator;
                 if (newVar?.type !== 'number' && (op === 'add' || op === 'subtract' || op === 'random')) op = 'set';
                 // Keep `value` concrete so a boolean Set never saves an empty value (read as the
@@ -1151,11 +1166,8 @@ const SetVariableGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
                 let value = cmd.value;
                 if (newVar?.type === 'boolean' && typeof value !== 'boolean') value = true;
                 else if (newVar?.type !== 'boolean' && typeof value === 'boolean') value = '';
-                updateCommand({ variableId: e.target.value, operator: op, value } as any);
-            }}>
-                {Object.keys(project.variables).length === 0 && <option disabled>{t('vars.noVariables')}</option>}
-                {Object.values(project.variables).map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </Select>
+                updateCommand({ variableId: id, operator: op, value } as any);
+            }} />
         </FormField>
         <FormField label={t('vars.operator')}>
             <Select value={cmd.operator} onChange={e => updateCommand({ operator: e.target.value as any } as any)}>
@@ -1461,7 +1473,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
             const effectType = cmd.effectType as string;
             const intensity = typeof cmd.intensity === 'number' ? cmd.intensity : 0;
             const supportsColor = ['sunbeams', 'shimmer', 'rain', 'snowAsh', 'fog', 'haze', 'smoke', 'fireworks'].includes(effectType) || !!pluginManager.getEffect(effectType);
-            const defaultColors: Record<string, string> = { sunbeams: '#FFDC8C', shimmer: '#FFFFFF', rain: '#B4D2FF', snowAsh: '#FFFFFF', fog: '#CDD2D8', haze: '#E1DED2', smoke: '#46484C', fireworks: '#FFD23B' };
+            const defaultColors: Record<string, string> = { glitch: '#33FF66', sunbeams: '#FFDC8C', shimmer: '#FFFFFF', rain: '#B4D2FF', snowAsh: '#FFFFFF', fog: '#CDD2D8', haze: '#E1DED2', smoke: '#46484C', fireworks: '#FFD23B' };
             const effectColor = cmd.color || defaultColors[effectType] || '#FFFFFF';
             const overlayDuration = typeof cmd.duration === 'number' ? cmd.duration : 0;
             const isPersistent = overlayDuration === 0;
@@ -1470,6 +1482,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                     <Select value={effectType} onChange={e => updateCommand({ effectType: e.target.value, color: undefined } as any)}>
                         <option value="crtScanlines">{t('screen.effects.crtScanlines')}</option>
                         <option value="chromaticGlitch">{t('screen.effects.chromaticGlitch')}</option>
+                        <option value="glitch">{t('screen.effects.glitch', 'Glitch (corruption)')}</option>
                         <option value="sunbeams">{t('screen.effects.sunbeams')}</option>
                         <option value="shimmer">{t('screen.effects.shimmer')}</option>
                         <option value="rain">{t('screen.effects.rain')}</option>
@@ -1506,6 +1519,40 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                 )}
                 {['fog', 'haze', 'smoke'].includes(effectType) && (
                     <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={!!cmd.params?.aboveCharacters} onChange={e => updateCommand({ params: { ...cmd.params, aboveCharacters: e.target.checked } } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.renderInFront')}</span></label>
+                )}
+                {effectType === 'glitch' && (
+                    <>
+                        <FormField label={t('screen.glitchColors', 'Glitch colours')}>
+                            <div className="flex flex-wrap gap-1.5 items-center">
+                                {(cmd.params?.colors?.length ? cmd.params.colors : [cmd.color || '#33FF66']).map((c: string, i: number, all: string[]) => (
+                                    <div key={i} className="relative">
+                                        <ColorInput value={c} onChange={(val: string) => updateCommand({ params: { ...cmd.params, colors: all.map((x, idx) => idx === i ? val : x) } } as any)} className="w-8 h-8 p-0.5" />
+                                        {all.length > 1 && (
+                                            <button onClick={() => updateCommand({ params: { ...cmd.params, colors: all.filter((_, idx) => idx !== i) } } as any)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] leading-none flex items-center justify-center" title={t('fx.removeColor')}>×</button>
+                                        )}
+                                    </div>
+                                ))}
+                                <button onClick={() => updateCommand({ params: { ...cmd.params, colors: [...(cmd.params?.colors?.length ? cmd.params.colors : [cmd.color || '#33FF66']), '#ff4d9d'] } } as any)} className="text-xs px-2 py-1 rounded-md border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-white">{t('fx.addColor')}</button>
+                            </div>
+                            <p className="text-xs text-[var(--text-secondary)] mt-1">{t('screen.glitchColorsHint', 'The corrupted slices alternate through these colours.')}</p>
+                        </FormField>
+                        <FormField label={t('screen.glitchBlockiness', 'Slice size')}>
+                            <RangeInput min="0" max="1" step="0.01" value={cmd.params?.blockiness ?? 0.5}
+                                onChange={e => updateCommand({ params: { ...cmd.params, blockiness: parseFloat(e.target.value) } } as any)}
+                                className="w-full accent-[var(--accent-lavender)]" />
+                            <p className="text-xs text-[var(--text-secondary)] mt-1">{t('screen.glitchBlockinessHint', 'Left = fine tearing, right = big chunky blocks.')}</p>
+                        </FormField>
+                        <FormField label={t('screen.glitchAberration', 'Colour fringing')}>
+                            <RangeInput min="0" max="1" step="0.01" value={cmd.params?.chromaticSpread ?? 0.5}
+                                onChange={e => updateCommand({ params: { ...cmd.params, chromaticSpread: parseFloat(e.target.value) } } as any)}
+                                className="w-full accent-[var(--accent-lavender)]" />
+                        </FormField>
+                        <FormField label={t('screen.glitchSpeed', 'Burst speed')}>
+                            <RangeInput min="0" max="1" step="0.01" value={cmd.params?.speed ?? 0.5}
+                                onChange={e => updateCommand({ params: { ...cmd.params, speed: parseFloat(e.target.value) } } as any)}
+                                className="w-full accent-[var(--accent-lavender)]" />
+                        </FormField>
+                    </>
                 )}
                 <FormField label={t('screen.duration')}>
                     <label className="flex items-center gap-2 mb-2"><input type="checkbox" checked={isPersistent} onChange={e => updateCommand({ duration: e.target.checked ? 0 : 5 } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('screen.persistentShort')}</span></label>
@@ -3069,7 +3116,8 @@ export function summarizeGroup(groupId: InspectorGroupId, command: VNCommand, pr
         if (groupId === 'audio') { const c = command as any; return c.audioId ? (assetName(project.audio as any, c.audioId) || '') : 'all'; }
     }
     if (command.type === CommandType.SetVariable) {
-        if (groupId === 'logic') { const c = command as any; const n = project.variables[c.variableId]?.name || '?'; return `${n} ${c.operator} ${c.operator === 'random' ? `${c.randomMin ?? 0}-${c.randomMax ?? 100}` : c.value}`; }
+        // "Affection +1", not "Affection add 1" — the shared compact form (utils/variableLanguage.ts).
+        if (groupId === 'logic') return summarizeSetVariable(project, command as any);
     }
     if (command.type === CommandType.Jump) {
         if (groupId === 'content') return project.scenes[(command as any).targetSceneId]?.name || '—';

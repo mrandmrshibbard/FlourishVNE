@@ -68,6 +68,7 @@ import { combineConditions } from '../utils/conditionLogic';
 import { VNFontSettings } from '../features/ui/types';
 import { VNCharacterLayer } from '../features/character/types';
 import { resolveBoolLabels } from '../features/variables/booleanLabels';
+import { compareBand, isBandOperator, formatBandedValue, resolveBand } from '../features/variables/bands';
 import { EyeIcon, EyeSlashIcon, FilmIcon, VariablesIcon } from './icons';
 import { computeArrangedPositions } from '../utils/characterArrange';
 import Panel from './ui/Panel';
@@ -355,6 +356,9 @@ const StagingArea: React.FC<{
                 const projectVar = project.variables[condition.variableId];
                 const effectiveVarValue = varValue !== undefined ? varValue : (projectVar ? projectVar.defaultValue : undefined);
                 if (effectiveVarValue === undefined) return false;
+                if (isBandOperator(condition.operator)) {
+                    return compareBand(projectVar, effectiveVarValue, String(condition.value), condition.operator);
+                }
                 switch (condition.operator) {
                     case 'is true': return !!effectiveVarValue;
                     case 'is false': return !effectiveVarValue;
@@ -2276,10 +2280,26 @@ const StagingArea: React.FC<{
                                     const varName = def?.name || id;
                                     const bl = resolveBoolLabels(def, t('boolOn'), t('boolOff'));
                                     const display = def?.type === 'boolean' ? (value ? bl.yes : bl.no) : String(value);
+                                    // Named band, if this number has one — same language as the live tracker.
+                                    const band = def?.type === 'number' ? resolveBand(def, value) : null;
                                     return (
                                         <li key={id} className="flex items-center justify-between gap-3">
-                                            <span className="text-slate-300 truncate">{varName}</span>
-                                            <span className="font-mono text-white flex-shrink-0">{display}</span>
+                                            <span className="text-slate-300 truncate flex items-center gap-1">
+                                                {def?.icon && <span>{def.icon}</span>}
+                                                <span className="truncate">{varName}</span>
+                                            </span>
+                                            <span className="flex items-center gap-1 flex-shrink-0">
+                                                {band && (
+                                                    <span className="px-1.5 py-0.5 rounded-full text-[10px] leading-none whitespace-nowrap"
+                                                        style={{
+                                                            background: `color-mix(in srgb, ${band.color ?? '#94a3b8'} 25%, transparent)`,
+                                                            color: band.color ?? '#cbd5e1',
+                                                        }}>
+                                                        {band.icon ? `${band.icon} ` : ''}{band.name}
+                                                    </span>
+                                                )}
+                                                <span className="font-mono text-white">{display}</span>
+                                            </span>
                                         </li>
                                     );
                                 })}

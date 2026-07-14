@@ -203,13 +203,56 @@ const Header: React.FC<{
                 // Save to recent projects now that we have a saved file
                 saveRecentProject(project, result.filePath);
                 markSaved();
-                // Confirm the save — especially important for silent re-saves (2nd+ save writes
-                // straight to the file with no dialog), so users can see it actually saved.
-                toast.success(t('toast.saved', 'Project saved'));
+                if (result.missingAssets?.length) {
+                    // The file SAVED, but it references media we couldn't read from disk — every
+                    // copy made from it inherits those holes. Silence here is how damage launders
+                    // itself into all of a user's backups.
+                    toast.warning(t('toast.savedMissingAssets',
+                        'Saved — but {{count}} media file(s) could not be found on disk and are NOT inside the saved file. The project will still open, but that art/audio is missing. Check your images and sounds.',
+                        { count: result.missingAssets.length }), { duration: 12000 });
+                } else {
+                    // Confirm the save — especially important for silent re-saves (2nd+ save writes
+                    // straight to the file with no dialog), so users can see it actually saved.
+                    toast.success(t('toast.saved', 'Project saved'));
+                }
             }
         } catch (error) {
             console.error("Export failed:", error);
             setErrorMessage(`Failed to export project. ${error instanceof Error ? error.message : 'Unknown error'}`);
+            setShowErrorModal(true);
+        } finally {
+            setIsExportingQuick(false);
+        }
+    };
+
+    /**
+     * Save As — always shows the file dialog, never the silent re-save.
+     *
+     * The quick Save re-uses the stored path (that's what makes it quick), which also means the
+     * author has no way to CHOOSE where their project lives, move it, or keep a second copy — a
+     * direct user request after the corruption incident ("let me decide where and how to save").
+     * After a successful Save As, the recent-projects entry is repointed at the NEW file, so
+     * subsequent quick Saves follow it there.
+     */
+    const handleSaveAs = async () => {
+        if (!(await confirmLargeExport())) return;
+        setIsExportingQuick(true);
+        try {
+            const result = await exportProject(project);   // no overwritePath → dialog, always
+            if (result.saved) {
+                saveRecentProject(project, result.filePath);
+                markSaved();
+                if (result.missingAssets?.length) {
+                    toast.warning(t('toast.savedMissingAssets',
+                        'Saved — but {{count}} media file(s) could not be found on disk and are NOT inside the saved file. The project will still open, but that art/audio is missing. Check your images and sounds.',
+                        { count: result.missingAssets.length }), { duration: 12000 });
+                } else {
+                    toast.success(t('toast.saved', 'Project saved'));
+                }
+            }
+        } catch (error) {
+            console.error("Save As failed:", error);
+            setErrorMessage(`Failed to save project. ${error instanceof Error ? error.message : 'Unknown error'}`);
             setShowErrorModal(true);
         } finally {
             setIsExportingQuick(false);
@@ -511,12 +554,29 @@ const Header: React.FC<{
                         </div>
                         <button
                             onClick={handleExport}
-                            className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-lavender)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)] font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
-                            title={t('saveToDisk')}
+                            // A second save while one is running used to corrupt BOTH files (the two
+                            // runs fought over one write stream in the main process). The main process
+                            // now refuses a concurrent save outright, but don't invite it either.
+                            disabled={isExporting || isExportingQuick}
+                            className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-lavender)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)] font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={isExporting || isExportingQuick ? t('savingInProgress', 'Saving…') : t('saveToDisk')}
                         >
                             <SaveIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
                             {t('common:save')}
                         </button>
+                        {/* Save As only exists where a real file dialog does (desktop). On mobile the
+                            project lives in app-private storage — there is no "where" to choose. */}
+                        {typeof window !== 'undefined' && !!(window as any).electronAPI && (
+                            <button
+                                onClick={handleSaveAs}
+                                disabled={isExporting || isExportingQuick}
+                                className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-lavender)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)] font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group disabled:opacity-50 disabled:cursor-not-allowed"
+                                title={t('saveAsTip', 'Choose where to save this project (and keep saving there)')}
+                            >
+                                <SaveIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                {t('saveAs', 'Save As…')}
+                            </button>
+                        )}
                         <div className="flex flex-col gap-0.5">
                             <div className="flex gap-0.5">
                                 <button

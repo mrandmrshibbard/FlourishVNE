@@ -22,6 +22,7 @@ import { VNID } from '../../types';
 import { VNCondition } from '../../types/shared';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../character/types';
 import { UICustomizerOptionMeta } from '../ui/types';
+import { splitNameTokens } from '../character/import/nameGrouping';
 
 export interface DetectedOutfitRule {
     /** Stable key for the wizard's checkbox list. */
@@ -39,9 +40,12 @@ export interface DetectedOutfitRule {
     token: string;
 }
 
-/** Lowercased name tokens, split on underscore/dash/space; short + numeric tokens dropped. */
+/** Lowercased name tokens, split on underscore/dash/space; short + numeric tokens dropped.
+ *  Shares the raw splitter with the sprite importer (`character/import/nameGrouping.ts`) but keeps
+ *  its OWN filter: outfit rules want meaningful words, whereas the importer must KEEP short/numeric
+ *  tokens (`mouth_a`, `body-01` are variant names). One splitter, two policies. */
 const tokenize = (name: string): string[] =>
-    name.toLowerCase().split(/[_\-\s]+/).filter(tk => tk.length >= 3 && !/^\d+$/.test(tk));
+    splitNameTokens(name).filter(tk => tk.length >= 3 && !/^\d+$/.test(tk));
 
 /**
  * Scan a character's layers for filename-token relationships and suggest fit rules.

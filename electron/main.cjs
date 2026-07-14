@@ -453,7 +453,28 @@ function createWindow() {
     }
   });
 
+  // ── The renderer died or is reloading: release any in-flight save ──────────────────────────────
+  // The streaming export is driven chunk-by-chunk from the renderer; if that renderer goes away
+  // (crash, Ctrl+R, the "New Project" reload, the unresponsive-recovery reload), its abort call
+  // never arrives. Without this, `exportStream` stayed open forever and the re-entrancy guard then
+  // refused EVERY future save with "A save is already in progress" until the app was restarted —
+  // we'd traded a corruption bug for a can't-save bug. The user's real file is safe either way
+  // (we only ever stream into a sidecar .part); this just cleans up so saving works again.
+  const releaseAbandonedExport = (why) => {
+    if (!isExportInProgress()) return;
+    console.warn(`Renderer went away mid-save (${why}) — releasing the abandoned export stream.`);
+    const temp = exportTempPath;
+    try { exportStream.destroy(); } catch {}
+    clearExportState();
+    try { if (temp) fs.rmSync(temp, { force: true }); } catch {}
+  };
+  mainWindow.webContents.on('did-start-navigation', (_e, _url, _isInPlace, isMainFrame) => {
+    if (isMainFrame) releaseAbandonedExport('reload/navigation');
+  });
+  mainWindow.webContents.on('destroyed', () => releaseAbandonedExport('webContents destroyed'));
+
   mainWindow.webContents.on('render-process-gone', async (_event, details) => {
+    releaseAbandonedExport(`render process gone: ${details?.reason || 'unknown'}`);
     try {
       const result = await dialog.showMessageBox(mainWindow, {
         type: 'error',
@@ -644,15 +665,64 @@ function createWindow() {
       return;
     }
 
-    // Safety net: if the renderer never replies within 10 seconds, force-close
-    // so the process doesn't linger as a background zombie.
-    setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.forceClose) {
-        console.warn('Close confirmation timed out – force-closing window.');
-        mainWindow.forceClose = true;
-        mainWindow.destroy();
+    // Safety net: if the renderer never replies, force-close so the process doesn't linger as a
+    // background zombie.
+    //
+    // ⚠️ THIS TIMER USED TO DESTROY THE WINDOW MID-SAVE.
+    // The renderer answers `request-save-before-quit` by showing a modal; the author reads it, clicks
+    // "Save & Quit", and only THEN does the export start. So the old flat 10-second clock had to cover
+    // the reading, the clicking, AND compressing/streaming a multi-hundred-megabyte project. On a big
+    // project it simply could not. At t=10s the window was destroyed with the write stream still open
+    // on the author's save file — which is how a good .flourish became a headless stump.
+    //
+    // The watchdog only fires when nothing is actually happening — three states, three rules:
+    //  1. A save is in flight and still writing chunks → WAIT (a stall of 30s+ still lets us exit).
+    //  2. No save yet, but the renderer ANSWERS a ping → the user is reading the "Save & Quit?"
+    //     modal. A human deciding is not a hang — NEVER destroy the window under them. (The first
+    //     version of this fix only protected state 1: a user who took >10s to click still had the
+    //     window destroyed with the modal open, discarding the very save they were about to make.)
+    //  3. The renderer doesn't answer → it's genuinely dead/hung; force-close so the process doesn't
+    //     linger as a background zombie — the one job this watchdog was born to do.
+    // ⚠️ THIS IS NOT A COUNTDOWN. It never closes a working app, no matter how long the user sits
+    // with the "Save before quitting?" modal open — a human deciding is not a hang. Its ONE job is
+    // the zombie case: close was intercepted to show the modal, so if the renderer is genuinely dead
+    // (crashed/hung), nothing will ever answer it and the window would be unclosable short of Task
+    // Manager. We detect "dead" by pinging the renderer, and require TWO consecutive failed pings so
+    // a momentary main-thread stall can't be mistaken for death.
+    const IDLE_LIMIT = 10_000;
+    const STALLED_SAVE_LIMIT = 30_000;
+    const PING_TIMEOUT = 3_000;
+    let failedPings = 0;
+    const forceClose = (why) => {
+      console.warn(`${why} – force-closing window.`);
+      mainWindow.forceClose = true;
+      mainWindow.destroy();
+    };
+    const tick = () => {
+      if (!mainWindow || mainWindow.isDestroyed() || mainWindow.forceClose) return;
+      if (isExportInProgress()) {
+        const quiet = Date.now() - exportLastActivity;
+        if (quiet < STALLED_SAVE_LIMIT) {
+          setTimeout(tick, 2_000);      // still saving — let it finish, check back shortly
+          return;
+        }
+        forceClose('Save appears stalled');
+        return;
       }
-    }, 10_000);
+      // No save running: is anyone home?
+      Promise.race([
+        mainWindow.webContents.executeJavaScript('1', true),
+        new Promise((_r, reject) => setTimeout(() => reject(new Error('ping timeout')), PING_TIMEOUT)),
+      ]).then(
+        () => { failedPings = 0; setTimeout(tick, 5_000); },   // alive — user is deciding; wait as long as they like
+        () => {
+          failedPings++;
+          if (failedPings < 2) { setTimeout(tick, 2_000); return; }   // one blip ≠ dead — ask again
+          if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.forceClose) forceClose('Renderer unresponsive during close (2 failed pings)');
+        },
+      );
+    };
+    setTimeout(tick, IDLE_LIMIT);
   });
 
   // Handle window closed
@@ -1647,14 +1717,61 @@ ipcMain.on('sync-editor-context', (event, context) => {
   });
 });
 
+/**
+ * Write a file WITHOUT ever endangering what's already there.
+ *
+ * `fs.writeFileSync(target, data)` opens with 'w' — it truncates the existing file to zero bytes and
+ * THEN writes. A crash, power cut, or full disk in that window leaves the user a stump where their
+ * file was. That is precisely the failure that destroyed a real user's project via the streaming
+ * path; these one-shot paths carried the identical disease with a smaller window.
+ *
+ * So: write a sidecar next to the destination (same volume — a cross-device rename is a copy, not
+ * atomic), fsync it, park the old file as .bak, rename the new one into place, drop the .bak.
+ * Every failure branch leaves the original either untouched or restored.
+ */
+function writeFileAtomicSync(target, buffer) {
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  const temp = `${target}.saving-${process.pid}-${Date.now()}.part`;
+  try {
+    const fd = fs.openSync(temp, 'w');
+    try {
+      fs.writeSync(fd, buffer);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+
+    const backup = `${target}.bak`;
+    let backedUp = false;
+    if (fs.existsSync(target)) {
+      try { fs.rmSync(backup, { force: true }); } catch {}
+      fs.renameSync(target, backup);
+      backedUp = true;
+    }
+    try {
+      fs.renameSync(temp, target);
+    } catch (swapError) {
+      if (backedUp) { try { fs.renameSync(backup, target); } catch {} }
+      throw swapError;
+    }
+    if (backedUp) { try { fs.rmSync(backup, { force: true }); } catch {} }
+  } catch (error) {
+    try { fs.rmSync(temp, { force: true }); } catch {}
+    throw error;
+  }
+}
+
 ipcMain.handle('save-project-export', async (event, { data, filename, filePath }) => {
   try {
     // Silent re-save: when the renderer passes the project's existing file path (name unchanged),
     // write straight to it — no dialog, no overwrite prompt. Any failure falls through to the dialog.
-    if (filePath) {
+    //
+    // GUARD: only overwrite silently if the file is STILL THERE. If the user moved or renamed it in
+    // Explorer, the recent-projects entry still points at the old spot; recreating the file there
+    // would silently fork their project into two diverging copies. Fall through to the dialog instead.
+    if (filePath && fs.existsSync(filePath)) {
       try {
-        fs.mkdirSync(path.dirname(filePath), { recursive: true });
-        fs.writeFileSync(filePath, Buffer.from(data));
+        writeFileAtomicSync(filePath, Buffer.from(data));
         return { success: true, filePath };
       } catch (silentErr) {
         console.warn('Silent project save failed, falling back to dialog:', silentErr);
@@ -1677,8 +1794,7 @@ ipcMain.handle('save-project-export', async (event, { data, filename, filePath }
       return { success: false, canceled: true };
     }
 
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(result.filePath, buffer);
+    writeFileAtomicSync(result.filePath, Buffer.from(data));
 
     return { success: true, filePath: result.filePath };
   } catch (error) {
@@ -1690,14 +1806,66 @@ ipcMain.handle('save-project-export', async (event, { data, filename, filePath }
 // ── Streaming project export (chunked write to disk) ──────────────────────────────────────────
 // Lets very large projects export without ever holding the whole .flourish archive in one buffer
 // (which would hit V8's ~2GB ArrayBuffer limit). The renderer opens a stream, sends chunks, finalizes.
+//
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+// THE RULE THIS CODE EXISTS TO ENFORCE: **NEVER TOUCH THE USER'S SAVE UNTIL THE NEW ONE IS WHOLE.**
+//
+// The original version of this streamed STRAIGHT INTO the user's existing .flourish
+// (`fs.createWriteStream(target)`, which opens with 'w' and truncates it to zero bytes on the spot).
+// From that instant until the very last byte landed, the author had NO valid save — and a zip whose
+// central directory hasn't been written yet is unopenable. Anything that interrupted the run (a
+// force-close on quit, a second Save click, an error mid-compression) left the author's newest save
+// as a headless stump: "Corrupt Zip: can't find end of central directory". That is exactly the bug a
+// user reported, and it destroyed real work.
+//
+// So now: we stream to a SIDECAR temp file, fsync it, and only then swap it into place with an
+// atomic rename. The real file is either the old good one or the new good one — never a half one.
+// On any failure we delete the temp and leave the original completely untouched.
+// ═════════════════════════════════════════════════════════════════════════════════════════════
 let exportStream = null;
-let exportStreamPath = null;
+let exportStreamPath = null;      // the FINAL destination
+let exportTempPath = null;        // what we are actually writing to
+/** Bumped on every chunk, so the quit watchdog can tell "still saving" from "hung". */
+let exportLastActivity = 0;
+
+/** Is a project save in flight? The quit path must not kill the app while this is true. */
+function isExportInProgress() {
+  return !!exportStream;
+}
+
+function clearExportState() {
+  exportStream = null;
+  exportStreamPath = null;
+  exportTempPath = null;
+  exportLastActivity = 0;
+}
 
 ipcMain.handle('export-stream-start', async (event, { filename, filePath }) => {
   try {
-    // Clean up any abandoned prior stream.
-    if (exportStream) { try { exportStream.destroy(); } catch {} exportStream = null; exportStreamPath = null; }
+    // RE-ENTRANCY GUARD. The old code destroyed the in-flight stream and stole its globals, so a
+    // second Save (a double-click, or a manual save racing the save-on-quit) would corrupt BOTH
+    // files: leftover chunks from run #1 got written into run #2's file, and run #1's abort handler
+    // would happily unlink run #2's output. Refuse instead.
+    if (isExportInProgress()) {
+      return { success: false, error: 'A save is already in progress. Please wait for it to finish.' };
+    }
+
     let target = filePath;
+    // The SILENT overwrite path (no dialog) is only honest while the file it claims to be updating
+    // is actually there. Two guards:
+    //  • If it's missing but its `.bak` survives (we died between the two renames of a previous
+    //    save), restore the .bak — that IS the user's file.
+    //  • If it's simply gone (the user moved/renamed it in Explorer), do NOT quietly recreate it at
+    //    the stale path — that forks their project into two diverging copies. Ask instead.
+    if (target && !fs.existsSync(target)) {
+      const bak = `${target}.bak`;
+      if (fs.existsSync(bak)) {
+        console.warn(`Save target missing but backup found — restoring ${bak}`);
+        try { fs.renameSync(bak, target); } catch { target = null; }
+      } else {
+        target = null;   // fall through to the save dialog
+      }
+    }
     if (target) {
       fs.mkdirSync(path.dirname(target), { recursive: true });
     } else {
@@ -1705,7 +1873,7 @@ ipcMain.handle('export-stream-start', async (event, { filename, filePath }) => {
       const defaultName = String(filename || 'project').replace(/\.(zip|flourish)$/i, '') + '.flourish';
       const result = await dialog.showSaveDialog(win, {
         title: 'Save Project',
-        defaultPath: path.join(defaultProjectsDir, defaultName),
+        defaultPath: filePath || path.join(defaultProjectsDir, defaultName),
         filters: [
           { name: 'Flourish Project', extensions: ['flourish'] },
           { name: 'Zip Archive (legacy)', extensions: ['zip'] },
@@ -1715,12 +1883,18 @@ ipcMain.handle('export-stream-start', async (event, { filename, filePath }) => {
       if (result.canceled || !result.filePath) return { canceled: true };
       target = result.filePath;
     }
-    exportStream = fs.createWriteStream(target);
+
+    // Sidecar next to the destination (NOT in the OS temp dir) so the final rename stays on the same
+    // filesystem — a cross-device rename is a copy, which is neither atomic nor fast.
+    const temp = `${target}.saving-${process.pid}-${Date.now()}.part`;
+    exportStream = fs.createWriteStream(temp);
     exportStreamPath = target;
+    exportTempPath = temp;
+    exportLastActivity = Date.now();
     return { success: true, filePath: target };
   } catch (error) {
     console.error('export-stream-start failed:', error);
-    exportStream = null; exportStreamPath = null;
+    clearExportState();
     return { success: false, error: error.message };
   }
 });
@@ -1732,6 +1906,7 @@ ipcMain.handle('export-stream-chunk', async (_event, chunk) => {
     await new Promise((resolve, reject) => {
       exportStream.write(buf, (err) => (err ? reject(err) : resolve()));
     });
+    exportLastActivity = Date.now();
     return { success: true };
   } catch (error) {
     console.error('export-stream-chunk failed:', error);
@@ -1740,17 +1915,46 @@ ipcMain.handle('export-stream-chunk', async (_event, chunk) => {
 });
 
 ipcMain.handle('export-stream-end', async () => {
+  const target = exportStreamPath;
+  const temp = exportTempPath;
+  const stream = exportStream;
   try {
-    if (!exportStream) return { success: false, error: 'No export in progress.' };
-    const p = exportStreamPath;
+    if (!stream || !temp || !target) return { success: false, error: 'No export in progress.' };
+
+    // 1. Flush and close the temp file. Only now is the archive complete — central directory and all.
     await new Promise((resolve, reject) => {
-      exportStream.end((err) => (err ? reject(err) : resolve()));
+      stream.end((err) => (err ? reject(err) : resolve()));
     });
-    exportStream = null; exportStreamPath = null;
-    return { success: true, filePath: p };
+    // Force it to the platter before we swap. Without this a power loss right after the rename could
+    // leave the *new* name pointing at unwritten data.
+    try {
+      const fd = fs.openSync(temp, 'r+');
+      try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    } catch { /* fsync is best-effort; a failure here is not worth losing the save over */ }
+
+    // 2. Swap it in. Keep the old file until the new one is safely in place, then drop it.
+    const backup = `${target}.bak`;
+    let backedUp = false;
+    if (fs.existsSync(target)) {
+      try { fs.rmSync(backup, { force: true }); } catch {}
+      fs.renameSync(target, backup);       // old save → .bak
+      backedUp = true;
+    }
+    try {
+      fs.renameSync(temp, target);         // new save → the real name (atomic on the same volume)
+    } catch (swapError) {
+      // Put the original back. The author's save survives even a failed save.
+      if (backedUp) { try { fs.renameSync(backup, target); } catch {} }
+      throw swapError;
+    }
+    if (backedUp) { try { fs.rmSync(backup, { force: true }); } catch {} }
+
+    clearExportState();
+    return { success: true, filePath: target };
   } catch (error) {
     console.error('export-stream-end failed:', error);
-    exportStream = null; exportStreamPath = null;
+    try { if (temp) fs.rmSync(temp, { force: true }); } catch {}
+    clearExportState();
     return { success: false, error: error.message };
   }
 });
@@ -1758,10 +1962,12 @@ ipcMain.handle('export-stream-end', async () => {
 ipcMain.handle('export-stream-abort', async () => {
   try {
     if (exportStream) {
-      const p = exportStreamPath;
+      const temp = exportTempPath;
       try { exportStream.destroy(); } catch {}
-      exportStream = null; exportStreamPath = null;
-      try { if (p) fs.unlinkSync(p); } catch {} // remove the partial file
+      clearExportState();
+      // Delete ONLY the half-written temp. The old code unlinked the DESTINATION here, which meant a
+      // failed save deleted the author's previous good file outright.
+      try { if (temp) fs.rmSync(temp, { force: true }); } catch {}
     }
     return { success: true };
   } catch (error) {
@@ -1775,8 +1981,9 @@ ipcMain.handle('write-project-asset', async (_event, { projectId, type, id, ext,
   try {
     const rel = path.posix.join('assets', safeSeg(type), `${safeSeg(id)}.${safeSeg(ext || 'bin')}`);
     const filePath = path.join(projectAssetDir(projectId), rel);
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, Buffer.from(data));
+    // Atomic: an asset id can be re-written (character base image replaced) — a crash mid-write must
+    // not leave the author's ONLY copy of that art half-written on disk.
+    writeFileAtomicSync(filePath, Buffer.from(data));
     return { success: true, relPath: rel };
   } catch (error) {
     console.error('write-project-asset failed:', error);
@@ -1957,8 +2164,9 @@ ipcMain.handle('save-project-to-path', async (event, { data, filename, filePath,
       targetPath = result.filePath;
     }
 
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(targetPath, buffer);
+    // Atomic — this handler is pointed at EXISTING files (Game Builder re-saves); a plain
+    // writeFileSync would truncate the user's file before writing. See writeFileAtomicSync.
+    writeFileAtomicSync(targetPath, Buffer.from(data));
 
     return { success: true, filePath: targetPath };
   } catch (error) {
@@ -2010,8 +2218,32 @@ ipcMain.handle('open-project-dialog', async (event) => {
 ipcMain.handle('read-project-file', async (_event, filePath) => {
   try {
     if (!fs.existsSync(filePath)) {
-      return { success: false, error: 'File not found: ' + filePath };
+      // CRASH RECOVERY: the atomic-save dance parks the old file as `<name>.bak` before renaming the
+      // new one into place. If the process died exactly between those two renames, the real name is
+      // gone but the .bak holds the user's last good save. Nothing else ever restores it — a
+      // non-technical user just sees their project "vanished". So restore it here, at the moment
+      // they try to open it.
+      const bak = `${filePath}.bak`;
+      if (fs.existsSync(bak)) {
+        console.warn(`Project file missing but backup found — restoring ${bak}`);
+        fs.renameSync(bak, filePath);
+      } else {
+        return { success: false, error: 'File not found: ' + filePath };
+      }
     }
+    // Housekeeping: clear out stale sidecars from saves that died mid-write (>1h old, so we can
+    // never race a save that's genuinely running — those are refreshed every chunk).
+    try {
+      const dir = path.dirname(filePath);
+      const base = path.basename(filePath);
+      for (const f of fs.readdirSync(dir)) {
+        if (!f.startsWith(`${base}.saving-`) || !f.endsWith('.part')) continue;
+        const full = path.join(dir, f);
+        try {
+          if (Date.now() - fs.statSync(full).mtimeMs > 3600_000) fs.rmSync(full, { force: true });
+        } catch {}
+      }
+    } catch {}
     const fileBuffer = fs.readFileSync(filePath);
     return {
       success: true,

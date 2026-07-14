@@ -690,6 +690,14 @@ interface BaseUIElement {
     transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'scale';
     transitionDuration?: number; // Duration in milliseconds (default 300)
     transitionDelay?: number; // Delay before starting transition in milliseconds (default 0)
+    /** Fade in while entering. Default TRUE (the historical behaviour). Off = the element arrives
+     *  fully visible and just slides/scales into place — a user-requested pure movement. */
+    transitionFade?: boolean;
+    /** Slide distance as a % of the element's own size. Unset = each direction's classic default. */
+    transitionDistance?: number;
+    /** Replay the entrance whenever this element is REVEALED by a Show Element action (not just on
+     *  screen open). Default false — a reveal historically just faded, and existing projects keep that. */
+    transitionOnReveal?: boolean;
     // ─── Hot zone interactivity (any element can opt in) ─── //
     /** Marks an element as "born" inside the hot zone system. Migrated hot zone elements,
      *  quick-added draggable / hot spot / image map entries, and any element the user
@@ -1114,8 +1122,13 @@ export interface UIMeterElement extends BaseUIElement {
     labelFont?: VNFontSettings;
     /** Optional numeric readout rendered on the bar. */
     showValue?: boolean;
-    valueFormat?: 'value' | 'valueMax' | 'percent';
+    /** 'band' prints the NAME of the variable's current named range ("Friend") instead of a number.
+     *  Falls back to the number if the variable has no bands, or the value sits below them all. */
+    valueFormat?: 'value' | 'valueMax' | 'percent' | 'band';
     valueFont?: VNFontSettings;
+    /** Take the fill colour from the variable's current named range, so the bar changes colour as it
+     *  fills (cold → warm affection; green → red health). No bands → no effect. Additive-optional. */
+    fillFromBand?: boolean;
     /** Visual style of the meter. 'bar' (default) = the classic clip-path fill; 'battery' = a phone-
      *  style battery (rounded body + terminal nub); 'segments' = N discrete cells; 'icons' = a symbol
      *  repeated N times (e.g. a hearts lives system). Additive-optional; unset/'bar' renders byte-
