@@ -1,7 +1,0 @@
-# Godot 4 import cache / generated data — regenerated on import, never committed.
-.godot/
-# transient screenshot from the --shot self-check
-/shot.png
-# exported builds
-/build/
-/export/

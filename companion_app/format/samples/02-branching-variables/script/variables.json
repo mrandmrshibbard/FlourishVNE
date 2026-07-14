@@ -1,6 +1,0 @@
-{
-  "variables": [
-    { "id": "brave", "name": "brave", "type": "number", "default": 0, "scope": "global", "min": 0, "max": 10 },
-    { "id": "met_yuki", "name": "met_yuki", "type": "boolean", "default": false, "scope": "global", "trueLabel": "Met", "falseLabel": "Not met" }
-  ]
-}
