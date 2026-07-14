@@ -28,6 +28,12 @@ build-tools
 *.sln
 *.sw?
 
+# Companion app: downloaded Godot binaries + local test projects (too big for GitHub — 100MB hard limit)
+companion_app/Godot_v*.exe
+companion_app/Godot_v*_console.exe
+companion_app/*.flourish
+companion_app/proj-*/
+
 # Planning / scratch notes (root-level only; product docs in docs/ and tutorial-doc.md stay tracked)
 /*_PLAN.md
 /*_BRAINSTORM.md
