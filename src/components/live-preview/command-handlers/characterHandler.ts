@@ -1,4 +1,4 @@
-import { ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand } from '../../../features/scene/types';
+﻿import { ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand } from '../../../features/scene/types';
 import { VNCharacterLayer } from '../../../features/character/types';
 import { VNID } from '../../../types';
 import { CommandContext, CommandResult } from './types';
@@ -16,7 +16,7 @@ function buildCharacterMedia(
   const imageUrls: string[] = [];
   const videoUrls: string[] = [];
   // Parallel to videoUrls: the base sprite carries its own [start,end] trim; layer asset
-  // videos have no trim field yet → an empty slice (whole video).
+  // videos have no trim field yet â†’ an empty slice (whole video).
   const videoTrims: Array<{ start?: number; end?: number }> = [];
   let hasVideo = false;
   let videoLoop = false;
@@ -40,10 +40,10 @@ export function handleShowCharacter(
   context: CommandContext
 ): CommandResult {
   const { project, playerState, activeEffectTimeoutsRef, advance, setPlayerState } = context;
-  // ⟨Player's Character⟩ targeting: when characterSource==='player', show whichever character the
+  // âŸ¨Player's CharacterâŸ© targeting: when characterSource==='player', show whichever character the
   // player created (resolved from project.ui.playerCharacterVarId) instead of a hard-coded id. The
   // character is stored on stage under this RESOLVED id so Hide/Move('player') find the same slot.
-  // Resolve ⟨Player's Character⟩; if none is chosen/configured yet, fall back to the command's own
+  // Resolve âŸ¨Player's CharacterâŸ©; if none is chosen/configured yet, fall back to the command's own
   // character so authoring/testing always previews something (the real player character shows once
   // a Character Creator sets one).
   const characterId = resolveCommandCharacterId(command, project, playerState.variables) || command.characterId;
@@ -61,7 +61,7 @@ export function handleShowCharacter(
   // Clear any resting tween values so the new position takes effect cleanly
   TweenManager.cancelForTarget(characterId, 'character');
 
-  // Managed asset refs ("assets/…") → flourish-asset:// URL; data:/http pass through.
+  // Managed asset refs ("assets/â€¦") â†’ flourish-asset:// URL; data:/http pass through.
   const wrap = (u: string): string => resolveFieldUrl(project.id, u) || u;
 
   // Build layer variable bindings by finding which variables contain asset IDs from which layers
@@ -132,10 +132,10 @@ export function handleShowCharacter(
         layerSelections[layer.id] = (assetId && layer.assets[assetId]) ? assetId : null;
       }
     } else if (Object.prototype.hasOwnProperty.call(exprData.layerConfiguration, layer.id)) {
-      // The expression explicitly defines this layer (an assetId, or null = off) → honor it.
+      // The expression explicitly defines this layer (an assetId, or null = off) â†’ honor it.
       layerSelections[layer.id] = exprData.layerConfiguration[layer.id] ?? null;
     } else if (existingChar?.layerSelections && Object.prototype.hasOwnProperty.call(existingChar.layerSelections, layer.id)) {
-      // The expression doesn't define this layer at all — e.g. an accessory (a hat) added later via
+      // The expression doesn't define this layer at all â€” e.g. an accessory (a hat) added later via
       // Set Character Layer that no expression was authored to control. Preserve its CURRENT value
       // instead of dropping it, so re-showing the character (to flip it, change pose, etc.) doesn't
       // silently wipe a Set-Character-Layer layer. (Fixes: flipping a character with Show Character
@@ -168,7 +168,7 @@ export function handleShowCharacter(
 
   // "Keep current position": when the character is already on stage, an expression/pose change
   // leaves it exactly where it is instead of snapping to the command's (often default 'center')
-  // position. Only affects position — the new expression/pose/scale/effects still apply.
+  // position. Only affects position â€” the new expression/pose/scale/effects still apply.
   if (command.keepPosition && existingSameChar) {
     finalPosition = existingSameChar.position;
   }
@@ -240,7 +240,7 @@ export function handleShowCharacter(
             action: 'show' as const,
           }
         : null,
-    ...(command.liveConditions ? { conditions: command.conditions, live: true } : {}),
+    ...(command.liveConditions ? { conditions: command.conditions, live: true, liveTransition: command.liveTransition, liveTransitionDuration: command.liveTransitionDuration } : {}),
   };
 
   // If there's a transition, wait for it to complete before advancing
@@ -293,8 +293,8 @@ export function handleHideCharacter(
   const { project, playerState, setPlayerState, advance } = context;
   const hideTransitionType = command.transition;
 
-  // ⟨Player's Character⟩ targeting — resolve to the player-created character's id when requested.
-  // Resolve ⟨Player's Character⟩; if none is chosen/configured yet, fall back to the command's own
+  // âŸ¨Player's CharacterâŸ© targeting â€” resolve to the player-created character's id when requested.
+  // Resolve âŸ¨Player's CharacterâŸ©; if none is chosen/configured yet, fall back to the command's own
   // character so authoring/testing always previews something (the real player character shows once
   // a Character Creator sets one).
   const characterId = resolveCommandCharacterId(command, project, playerState.variables) || command.characterId;
@@ -363,7 +363,7 @@ export function handleHideCharacter(
 }
 
 /**
- * Change one or more layers on a character already on stage (blush on, draw weapon, swap hat…)
+ * Change one or more layers on a character already on stage (blush on, draw weapon, swap hatâ€¦)
  * without re-showing the whole sprite. Patches the stored layerSelections and rebuilds the composite.
  */
 export function handleSetCharacterLayer(
@@ -374,7 +374,7 @@ export function handleSetCharacterLayer(
   const charData = project.characters[command.characterId];
   const onStage = playerState.stageState.characters[command.characterId];
   if (!charData || !onStage) {
-    // Character not on stage — nothing to change.
+    // Character not on stage â€” nothing to change.
     return { advance: true };
   }
   const wrap = (u: string): string => resolveFieldUrl(project.id, u) || u;

@@ -3,16 +3,112 @@ import { useTranslation } from 'react-i18next';
 import { useInlineRename } from '../hooks/useInlineRename';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
-import { VNScene } from '../features/scene/types';
+import { VNScene, VNCommand, CommandType } from '../features/scene/types';
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import SceneEditor from './SceneEditor';
 import StagingArea from './StagingArea';
-import CommandPalette from './CommandPalette';
-import { PlusIcon, TrashIcon, BookOpenIcon, PencilIcon, SparkleIcon, DuplicateIcon } from './icons';
+import CommandPalette, { getCommandColor } from './CommandPalette';
+import { PlusIcon, TrashIcon, BookOpenIcon, PencilIcon, SparkleIcon, DuplicateIcon, ChevronRightIcon, ChevronDownIcon } from './icons';
 import { ContextMenu } from './ui/ContextMenu';
 import { CommandRadialProvider } from './inspector/CommandRadialContext';
 import { isManagerWindow, isMultiWindowSupported, openManagerWindow, onPanelWindowState } from '../utils/windowManager';
+
+const EXPANDED_SCENES_STORAGE_KEY = 'flourish.sceneManager.expandedScenes';
+
+// Short type chip shown next to each command in the scene tree (fallback: initials from the type name).
+const COMMAND_CHIP: Partial<Record<string, string>> = {
+    [CommandType.Dialogue]: 'DLG', [CommandType.Choice]: 'CHO',
+    [CommandType.ShowCharacter]: 'CHR', [CommandType.HideCharacter]: 'CHR', [CommandType.MoveCharacter]: 'CHR',
+    [CommandType.SetBackground]: 'BG', [CommandType.ShowImage]: 'IMG', [CommandType.HideImage]: 'IMG',
+    [CommandType.ShowText]: 'TXT', [CommandType.HideText]: 'TXT',
+    [CommandType.ShowButton]: 'BTN', [CommandType.HideButton]: 'BTN', [CommandType.ShowItem]: 'ITM',
+    [CommandType.PlayMusic]: 'MUS', [CommandType.StopMusic]: 'MUS',
+    [CommandType.PlaySoundEffect]: 'SFX', [CommandType.StopSoundEffect]: 'SFX',
+    [CommandType.PlayMovie]: 'MOV', [CommandType.StopMovie]: 'MOV',
+    [CommandType.Jump]: 'JMP', [CommandType.Label]: 'LBL', [CommandType.JumpToLabel]: 'LBL',
+    [CommandType.SetVariable]: 'VAR', [CommandType.TextInput]: 'INP', [CommandType.Wait]: 'WAI',
+    [CommandType.BranchStart]: 'IF', [CommandType.BranchElseIf]: 'IF', [CommandType.BranchElse]: 'IF', [CommandType.BranchEnd]: 'IF',
+    [CommandType.ShowScreen]: 'SCR', [CommandType.HideScreen]: 'SCR', [CommandType.CallCommonEvent]: 'EVT',
+};
+const commandChip = (type: string): string =>
+    COMMAND_CHIP[type] || (type.replace(/[a-z]/g, '').slice(0, 3) || type.slice(0, 3)).toUpperCase();
+
+/** Compact one-line description of a command for the scene tree — the key content only
+ *  (the full plain-language summaries live on the command rows in the scene editor). */
+const commandTreeSummary = (cmd: any, project: VNProject): string => {
+    switch (cmd.type as CommandType) {
+        case CommandType.Dialogue: {
+            const speaker = cmd.characterId ? (project.characters[cmd.characterId]?.name || '') : '';
+            return `${speaker ? speaker + ': ' : ''}${cmd.text || ''}`;
+        }
+        case CommandType.Choice:
+            return cmd.prompt || (cmd.options || []).map((o: any) => o.text).filter(Boolean).join(' / ');
+        case CommandType.ShowCharacter:
+        case CommandType.HideCharacter:
+        case CommandType.MoveCharacter:
+            return project.characters[cmd.characterId]?.name || '';
+        case CommandType.SetBackground:
+            return project.backgrounds[cmd.backgroundId]?.name || project.images?.[cmd.backgroundId]?.name || '';
+        case CommandType.ShowImage:
+            return project.images?.[cmd.imageId]?.name || project.backgrounds[cmd.imageId]?.name || '';
+        case CommandType.ShowText:
+        case CommandType.ShowButton:
+            return cmd.text || '';
+        case CommandType.PlayMusic:
+        case CommandType.PlaySoundEffect:
+            return project.audio[cmd.audioId]?.name || '';
+        case CommandType.PlayMovie:
+            return project.videos[cmd.videoId]?.name || '';
+        case CommandType.Jump:
+            return project.scenes[cmd.targetSceneId]?.name || '';
+        case CommandType.Label:
+        case CommandType.JumpToLabel:
+            return cmd.labelId || '';
+        case CommandType.SetVariable:
+            return project.variables[cmd.variableId]?.name || '';
+        case CommandType.ShowScreen:
+        case CommandType.HideScreen:
+            return project.uiScreens[cmd.screenId]?.name || '';
+        case CommandType.CallCommonEvent:
+            return project.commonEvents?.[cmd.commonEventId]?.name || '';
+        default:
+            return '';
+    }
+};
+
+/** One node of the scene-tree command outline: a command + its flat index (for jump-to) and, for
+ *  branches, the nested commands inside the IF…End Branch span. */
+type CmdTreeNode = { cmd: VNCommand; index: number; children: CmdTreeNode[] };
+
+/** Nest BranchStart…BranchEnd spans so branches expand in the tree. Else-if/Else stay as section
+ *  rows INSIDE the branch (they're real, clickable commands); End Branch rows are structural noise
+ *  and dropped from the outline. Handles nested branches; an unclosed branch swallows to the end. */
+const buildCommandTree = (commands: VNCommand[]): CmdTreeNode[] => {
+    let i = 0;
+    const walk = (isTop: boolean): CmdTreeNode[] => {
+        const nodes: CmdTreeNode[] = [];
+        while (i < commands.length) {
+            const cmd = commands[i];
+            if (cmd.type === CommandType.BranchEnd) {
+                if (isTop) { i++; continue; } // stray end with no open branch — skip the row
+                return nodes; // the caller consumes the matching End
+            }
+            if (cmd.type === CommandType.BranchStart) {
+                const index = i;
+                i++;
+                const children = walk(false);
+                if (i < commands.length && commands[i].type === CommandType.BranchEnd) i++;
+                nodes.push({ cmd, index, children });
+                continue;
+            }
+            nodes.push({ cmd, index: i, children: [] });
+            i++;
+        }
+        return nodes;
+    };
+    return walk(true);
+};
 
 export interface SceneManagerProps {
     project: VNProject;
@@ -50,6 +146,25 @@ const SceneManagerList: React.FC<SceneManagerProps> = ({
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sceneId: VNID } | null>(null);
     const [draggedSceneId, setDraggedSceneId] = useState<VNID | null>(null);
     const [dropTargetId, setDropTargetId] = useState<VNID | null>(null);
+
+    // Expansion state for the scene tree (command children) — persisted like the screen tree's.
+    const [expandedScenes, setExpandedScenes] = useState<Set<VNID>>(() => {
+        try {
+            const raw = localStorage.getItem(EXPANDED_SCENES_STORAGE_KEY);
+            const parsed = raw ? JSON.parse(raw) : null;
+            return Array.isArray(parsed) ? new Set(parsed as VNID[]) : new Set();
+        } catch { return new Set(); }
+    });
+    useEffect(() => {
+        try { localStorage.setItem(EXPANDED_SCENES_STORAGE_KEY, JSON.stringify(Array.from(expandedScenes))); } catch { /* ignore */ }
+    }, [expandedScenes]);
+    const toggleSceneExpanded = (sceneId: VNID) => {
+        setExpandedScenes(prev => {
+            const next = new Set(prev);
+            if (next.has(sceneId)) next.delete(sceneId); else next.add(sceneId);
+            return next;
+        });
+    };
 
     // When the scene canvas is popped into its own window, hide the inline staging area so the command
     // list gets the full center column (the floating canvas docks beside the editor instead).
@@ -165,6 +280,16 @@ const SceneManagerList: React.FC<SceneManagerProps> = ({
                                 onDragLeave={handleDragLeave}
                                 onDrop={(e) => handleDrop(e, scene.id)}
                                 onContextMenu={(e) => handleContextMenu(e, scene.id)}
+                                isExpanded={expandedScenes.has(scene.id)}
+                                onToggleExpanded={() => toggleSceneExpanded(scene.id)}
+                                selectedCommandIndex={activeSceneId === scene.id ? selectedCommandIndex : null}
+                                project={project}
+                                onSelectCommand={(index) => {
+                                    // ORDER MATTERS: selecting the scene clears the command index,
+                                    // so set the index AFTER (same as the variable X-ray jump).
+                                    setActiveSceneId(scene.id);
+                                    setSelectedCommandIndex(index);
+                                }}
                             />
                         ))}
                     </div>
@@ -286,6 +411,13 @@ interface SceneItemProps {
     onDragLeave: () => void;
     onDrop: (e: React.DragEvent) => void;
     onContextMenu: (e: React.MouseEvent) => void;
+    /** Command children (like the screen tree's elements): expand to list this scene's commands;
+     *  clicking one selects that command in the scene editor. */
+    isExpanded: boolean;
+    onToggleExpanded: () => void;
+    selectedCommandIndex: number | null;
+    project: VNProject;
+    onSelectCommand: (index: number) => void;
 }
 
 const SceneItem: React.FC<SceneItemProps> = ({
@@ -305,12 +437,28 @@ const SceneItem: React.FC<SceneItemProps> = ({
     onDragOver,
     onDragLeave,
     onDrop,
-    onContextMenu
+    onContextMenu,
+    isExpanded,
+    onToggleExpanded,
+    selectedCommandIndex,
+    project,
+    onSelectCommand
 }) => {
     const { t } = useTranslation(['scenes', 'common']);
     const { inputProps: renameInputProps } = useInlineRename(scene.name, onCommitRename);
+    const commands = (scene.commands || []) as VNCommand[];
+    const hasCommands = commands.length > 0;
+    const commandTree = useMemo(() => buildCommandTree(commands), [commands]);
+    // Branch nodes collapse individually (default open — the outline should read like the story).
+    const [collapsedBranches, setCollapsedBranches] = useState<Set<string>>(new Set());
+    const toggleBranch = (cmdId: string) => setCollapsedBranches(prev => {
+        const next = new Set(prev);
+        if (next.has(cmdId)) next.delete(cmdId); else next.add(cmdId);
+        return next;
+    });
 
     return (
+        <div>
         <div
             draggable={!isRenaming}
             onDragStart={onDragStart}
@@ -330,6 +478,17 @@ const SceneItem: React.FC<SceneItemProps> = ({
                     : 'hover:bg-[var(--bg-secondary)]'
             }`}
         >
+            <button
+                onClick={(e) => { e.stopPropagation(); onToggleExpanded(); }}
+                className={`p-0.5 rounded flex-shrink-0 transition-colors ${
+                    hasCommands ? 'text-[var(--text-secondary)] hover:text-white' : 'text-[var(--text-muted)] opacity-30 cursor-default'
+                }`}
+                title={hasCommands ? (isExpanded ? t('collapseCommands', 'Hide commands') : t('expandCommands', 'Show commands')) : t('noCommands', 'No commands yet')}
+                disabled={!hasCommands}
+            >
+                {isExpanded ? <ChevronDownIcon className="w-3 h-3" /> : <ChevronRightIcon className="w-3 h-3" />}
+            </button>
+
             <BookOpenIcon className="w-3 h-3 text-[var(--text-secondary)] flex-shrink-0" />
 
             <div className="flex-1 min-w-0 overflow-hidden">
@@ -385,6 +544,53 @@ const SceneItem: React.FC<SceneItemProps> = ({
                     <TrashIcon className="w-3 h-3" />
                 </button>
             </div>
+        </div>
+
+        {/* Command children — click one to select that command in the scene editor (which scrolls
+            to it and opens its properties, same as the variable X-ray jump). Branches nest and
+            collapse; chips carry the same colours as the command picker. */}
+        {isExpanded && hasCommands && (
+            <div className="ml-5 mt-0.5 mb-1 border-l border-[var(--border-subtle)] pl-1.5 space-y-px">
+                {(function renderNodes(nodes: CmdTreeNode[], depth: number): React.ReactNode {
+                    return nodes.map(({ cmd, index, children }) => {
+                        const isBranch = cmd.type === CommandType.BranchStart;
+                        const isCollapsed = collapsedBranches.has(cmd.id);
+                        const summary = commandTreeSummary(cmd, project);
+                        const typeName = t(`names.${cmd.type}`, { defaultValue: (cmd.type as string).replace(/([A-Z])/g, ' $1').trim() });
+                        return (
+                            <React.Fragment key={cmd.id || index}>
+                                <div
+                                    onClick={(e) => { e.stopPropagation(); onSelectCommand(index); }}
+                                    style={depth > 0 ? { marginLeft: depth * 10 } : undefined}
+                                    className={`flex items-center gap-1 px-1 py-0.5 rounded cursor-pointer text-[11px] transition-colors ${
+                                        selectedCommandIndex === index
+                                            ? 'bg-sky-500/20 text-sky-200'
+                                            : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white'
+                                    }`}
+                                    title={`${typeName}${summary ? ` — ${summary}` : ''}`}
+                                >
+                                    {isBranch && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); toggleBranch(cmd.id); }}
+                                            className="p-0 text-[var(--text-secondary)] hover:text-white flex-shrink-0"
+                                            title={isCollapsed ? t('expandCommands', 'Show commands') : t('collapseCommands', 'Hide commands')}
+                                        >
+                                            {isCollapsed ? <ChevronRightIcon className="w-2.5 h-2.5" /> : <ChevronDownIcon className="w-2.5 h-2.5" />}
+                                        </button>
+                                    )}
+                                    <span className={`text-[8px] font-mono px-1 rounded border flex-shrink-0 w-8 text-center ${getCommandColor(cmd.type)}`}>{commandChip(cmd.type)}</span>
+                                    <span className="truncate flex-grow">{summary || typeName}</span>
+                                    {isBranch && isCollapsed && children.length > 0 && (
+                                        <span className="text-[9px] text-[var(--text-muted)] flex-shrink-0">{children.length}</span>
+                                    )}
+                                </div>
+                                {isBranch && !isCollapsed && children.length > 0 && renderNodes(children, depth + 1)}
+                            </React.Fragment>
+                        );
+                    });
+                })(commandTree, 0)}
+            </div>
+        )}
         </div>
     );
 };

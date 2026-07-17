@@ -90,6 +90,10 @@ export enum UIActionType {
     PlayMusic = 'PlayMusic',
     /** Fades out and stops the background music — same as the Stop Music command. */
     StopMusic = 'StopMusic',
+    /** Stops playing sound effects (one specific sound, or all of them), with optional fade. */
+    StopSound = 'StopSound',
+    /** Plays a full-screen video. Can block input while playing and run actions when it ends. */
+    PlayVideo = 'PlayVideo',
     /** Show a spotlight beam (carries its own look, so a screen button can turn one on from scratch). */
     ShowSpotlight = 'ShowSpotlight',
     /** Turn the current spotlight beam off. */
@@ -167,7 +171,9 @@ export interface BaseUIAction {
 }
 export interface GoToScreenAction extends BaseUIAction { type: UIActionType.GoToScreen; targetScreenId: VNID; }
 // FIX: Renamed targetScreenId to targetSceneId to match its purpose and usage.
-export interface JumpToSceneAction extends BaseUIAction { type: UIActionType.JumpToScene; targetSceneId: VNID; }
+/** `transition` optionally overrides the leaving scene's exit transition for this jump only —
+ *  a built-in name or `custom:<id>` (project.customTransitions). Unset = the scene's own setting. */
+export interface JumpToSceneAction extends BaseUIAction { type: UIActionType.JumpToScene; targetSceneId: VNID; transition?: string; }
 export interface JumpToLabelAction extends BaseUIAction { type: UIActionType.JumpToLabel; targetLabel: string; }
 export interface SetVariableAction extends BaseUIAction { type: UIActionType.SetVariable; variableId: VNID; operator: VNSetVariableOperator; value: string | number | boolean; randomMin?: number; randomMax?: number; }
 /** Sentinel `variableId` for a ResetVariable action that resets every variable. */
@@ -176,6 +182,11 @@ export interface ResetVariableAction extends BaseUIAction { type: UIActionType.R
 export interface PlaySoundAction extends BaseUIAction { type: UIActionType.PlaySound; audioId: VNID; volume?: number; loop?: boolean; }
 export interface PlayMusicAction extends BaseUIAction { type: UIActionType.PlayMusic; audioId: VNID; volume?: number; loop?: boolean; fadeDuration?: number; }
 export interface StopMusicAction extends BaseUIAction { type: UIActionType.StopMusic; fadeDuration?: number; }
+/** Stop sound effects: a specific sound (audioId) or ALL currently playing (audioId unset). */
+export interface StopSoundAction extends BaseUIAction { type: UIActionType.StopSound; audioId?: VNID | null; fadeDuration?: number; }
+/** Full-screen video from a button/screen. Works on menus AND during gameplay. `blockInput`
+ *  removes click-to-skip; `onEndActions` run when the video finishes (or is skipped). */
+export interface PlayVideoAction extends BaseUIAction { type: UIActionType.PlayVideo; videoId: VNID | null; loop?: boolean; blockInput?: boolean; onEndActions?: VNUIAction[]; }
 export interface ShowSpotlightAction extends BaseUIAction { type: UIActionType.ShowSpotlight; spotlightId?: string; sourceX?: number; sourceY?: number; aimAngle?: number; intensity?: number; beamWidth?: number; sourceWidth?: number; height?: number; falloff?: number; color?: string; followMouse?: boolean; swivelMax?: number; toggleKey?: string; affectsDialogue?: boolean; sfxId?: VNID | null; }
 export interface HideSpotlightAction extends BaseUIAction { type: UIActionType.HideSpotlight; spotlightId?: string; }
 export interface ShowFlashlightAction extends BaseUIAction { type: UIActionType.ShowFlashlight; radius?: number; softness?: number; darkness?: number; color?: string; toggleKey?: string; affectsDialogue?: boolean; sfxId?: VNID | null; }
@@ -221,4 +232,4 @@ export interface SetTimeOfDayAction extends BaseUIAction { type: UIActionType.Se
 /** Clear the palette→UI restyle applied by a coloring mini game. */
 export interface ClearUiPaletteAction extends BaseUIAction { type: UIActionType.ClearUiPalette; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | PlayMusicAction | StopMusicAction | ShowSpotlightAction | HideSpotlightAction | ShowFlashlightAction | HideFlashlightAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | OpenPhoneAppAction | ShowMapAction | ShowMiniGameAction | StartTimerAction | StopTimerAction | SetTimeOfDayAction | ClearUiPaletteAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | PlayMusicAction | StopMusicAction | ShowSpotlightAction | HideSpotlightAction | ShowFlashlightAction | HideFlashlightAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | OpenPhoneAppAction | ShowMapAction | ShowMiniGameAction | StartTimerAction | StopTimerAction | SetTimeOfDayAction | ClearUiPaletteAction | StopSoundAction | PlayVideoAction;

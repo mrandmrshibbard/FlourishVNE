@@ -50,9 +50,21 @@ const SceneConfigEditor: React.FC<{
                                 <option value="wipe-right">{t('config.transitions.wipe-right')}</option>
                                 <option value="slide-left">{t('config.transitions.slide-left')}</option>
                                 <option value="instant">{t('config.transitions.instant')}</option>
+                                {Object.values(project.customTransitions ?? {}).length > 0 && (
+                                    <optgroup label={t('config.yourTransitions', 'Your transitions')}>
+                                        {(Object.values(project.customTransitions ?? {}) as { id: VNID; name: string }[]).map(ct => (
+                                            <option key={ct.id} value={`custom:${ct.id}`}>{ct.name}</option>
+                                        ))}
+                                    </optgroup>
+                                )}
                             </Select>
                         </FormField>
-                        {(activeScene.outTransition || 'fade') !== 'instant' && (
+                        {(activeScene.outTransition || '').startsWith('custom:') && (
+                            <p className="text-[10px] text-[var(--text-secondary)] mb-2">
+                                {t('config.customTransitionHint', 'This plays your closing animation, switches the scene while the screen is covered, then plays your opening animation. Timing comes from the transition itself (set it up under In-Game UI → Scene Transitions).')}
+                            </p>
+                        )}
+                        {(activeScene.outTransition || 'fade') !== 'instant' && !(activeScene.outTransition || '').startsWith('custom:') && (
                             <FormField label={t('config.duration')}>
                                 <TextInput
                                     type="number"

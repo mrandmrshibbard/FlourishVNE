@@ -6,6 +6,7 @@ import {
   type VNScreenOverlayEffect,
   type VNScreenOverlayEffectType,
   type VNEffectParams,
+  type VNScreenLight,
 } from '../../types';
 import { pluginManager } from '../../features/plugins/PluginManagerService';
 import type { CustomEffectDefinition } from '../../types/plugins';
@@ -317,6 +318,86 @@ export const deadPixelTile = (color: string, seed: number): string => {
     return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 };
 
+const hexToRgbStr = (hex: string): string => {
+  const m = (hex || '').match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+  if (!m) return '255, 255, 255';
+  return `${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}`;
+};
+
+/** Renders placed twinkling lights (candle flicker / star sparkle / christmas bulb blink styles).
+ *  Moved here from LivePreview so BOTH the PlaceLights command and the screen-attached 'lights'
+ *  effect share one renderer (LivePreview imports it back). The vnfx-candle/star/bulb keyframes
+ *  live in LivePreview's inline style block, which is always present at runtime. */
+export const LightsLayer: React.FC<{ lights: VNScreenLight[]; stageW: number; stageH: number }> = ({ lights, stageW, stageH }) => {
+    const base = Math.min(stageW || 800, stageH || 600);
+    return <>{lights.map((l, i) => {
+        const sizePx = Math.max(6, base * 0.05 * (l.size ?? 1));
+        const bright = Math.max(0, Math.min(1, l.brightness ?? 1));
+        const spd = l.twinkleSpeed && l.twinkleSpeed > 0 ? l.twinkleSpeed : 1;
+        // Every light is a pure point of light: a tight bright center that drops off through one
+        // continuous radial gradient to FULLY transparent at the edge — no boxShadow (its spread
+        // left a visible halo ring/boundary) and a box large enough to hold the whole soft glow.
+        let background = '';
+        let animation: string | undefined;
+        let delay = `${(i % 7) * 0.13}s`;
+        const wPx = sizePx * 1.8;
+        const hPx = sizePx * 1.8;
+        if (l.type === 'candle') {
+            background = `radial-gradient(circle at 50% 45%, rgba(255,250,220,${0.97 * bright}) 0%, rgba(255,185,75,${0.8 * bright}) 9%, rgba(255,135,45,${0.4 * bright}) 24%, rgba(255,105,25,${0.14 * bright}) 46%, rgba(255,95,15,${0.04 * bright}) 70%, rgba(255,95,15,0) 100%)`;
+            animation = `vnfx-candle ${(1.1 / spd).toFixed(2)}s ease-in-out infinite`;
+        } else if (l.type === 'star') {
+            const rgb = hexToRgbStr(l.color || '#ffffff');
+            background = `radial-gradient(circle, rgba(255,255,255,${0.98 * bright}) 0%, rgba(${rgb},${0.85 * bright}) 8%, rgba(${rgb},${0.4 * bright}) 22%, rgba(${rgb},${0.14 * bright}) 44%, rgba(${rgb},${0.04 * bright}) 68%, rgba(${rgb},0) 100%)`;
+            animation = `vnfx-star ${(2.2 / spd).toFixed(2)}s ease-in-out infinite`;
+        } else {
+            const rgb = hexToRgbStr(l.color || '#ff3b3b');
+            background = `radial-gradient(circle, rgba(255,255,255,${0.98 * bright}) 0%, rgba(${rgb},${0.95 * bright}) 5%, rgba(${rgb},${0.5 * bright}) 13%, rgba(${rgb},${0.26 * bright}) 26%, rgba(${rgb},${0.1 * bright}) 44%, rgba(${rgb},${0.03 * bright}) 66%, rgba(${rgb},0) 100%)`;
+            const tw = l.twinkle ?? 'fade';
+            if (tw === 'fade') animation = `vnfx-bulb-fade ${(1.6 / spd).toFixed(2)}s ease-in-out infinite`;
+            else if (tw === 'blink') animation = `vnfx-bulb-blink ${(1.0 / spd).toFixed(2)}s steps(1, end) infinite`;
+            else if (tw === 'chase') { animation = `vnfx-bulb-fade ${(1.6 / spd).toFixed(2)}s ease-in-out infinite`; delay = `${(i % 5) * (0.32 / spd)}s`; }
+            // 'steady' → no animation
+        }
+        return <div key={l.id} data-vnlight={l.type} className="absolute pointer-events-none" style={{
+            left: `${l.x}%`, top: `${l.y}%`, width: wPx, height: hPx,
+            transform: 'translate(-50%, -50%)', borderRadius: '50%', background,
+            animation, animationDelay: animation ? delay : undefined,
+            mixBlendMode: 'screen',
+        }} />;
+    })}</>;
+};
+
+/** Mouse-following darkness with a clear circle at the cursor — the screen-attached version of the
+ *  scene Flashlight. Intensity = darkness; params.radius sizes the lit circle, params.softness
+ *  feathers its edge. Listens on window (the overlay itself is pointer-events: none). */
+const FlashlightOverlay: React.FC<{ effect: VNScreenOverlayEffect; minDim: number }> = ({ effect, minDim }) => {
+    const ref = useRef<HTMLDivElement | null>(null);
+    const darkness = clamp01(effect.intensity ?? 0);
+    const radius01 = ep(effect.params, 'radius');
+    const softness = ep(effect.params, 'softness');
+    const { r, g, b } = parseColor(effect.color, { r: 0, g: 0, b: 0 });
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const paint = (mx: number, my: number) => {
+            const radiusPx = Math.max(20, minDim * (0.12 + radius01 * 0.38));
+            const inner = Math.round(Math.max(0, Math.min(1, 1 - softness)) * 100);
+            el.style.background = `radial-gradient(circle ${radiusPx}px at ${mx}px ${my}px, transparent 0%, transparent ${inner}%, rgba(${r},${g},${b},${darkness}) 100%)`;
+        };
+        // Until the pointer moves, light the middle of the screen.
+        const rect0 = el.getBoundingClientRect();
+        paint(rect0.width / 2, rect0.height / 2);
+        const onMove = (e: PointerEvent) => {
+            const rect = el.getBoundingClientRect();
+            paint(e.clientX - rect.left, e.clientY - rect.top);
+        };
+        window.addEventListener('pointermove', onMove);
+        return () => window.removeEventListener('pointermove', onMove);
+    }, [darkness, radius01, softness, r, g, b, minDim]);
+    if (darkness <= 0) return null;
+    return <div ref={ref} className="absolute inset-0" />;
+};
+
 export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
   effects,
   width,
@@ -340,6 +421,10 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
   const haze = getEffect(normalized, 'haze');
   const smoke = getEffect(normalized, 'smoke');
   const fireworks = getEffect(normalized, 'fireworks');
+  const lightning = getEffect(normalized, 'lightning');
+  const flashlight = getEffect(normalized, 'flashlight');
+  const spotlight = getEffect(normalized, 'spotlight');
+  const lightsFx = getEffect(normalized, 'lights');
 
   // Plugin-registered custom effects: any active effect whose type isn't a built-in and whose
   // plugin provides a `render` callback. These render through PluginEffectCanvas.
@@ -1006,6 +1091,80 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
       {/* Fireworks (continuous show) — additive glow */}
       {fireworks && clamp01(fireworks.intensity) > 0 && (
         <canvas ref={fireworksCanvasRef} className="vnfx-canvas" style={{ mixBlendMode: 'screen' }} aria-hidden />
+      )}
+
+      {/* Spotlight — positionable stage beams over a darkened screen. Same geometry as the scene
+          Spotlight command / its placement picker: clipPath trapezoid + radial glow, rotated
+          around the source point. Intensity = how dark the rest of the screen goes. */}
+      {spotlight && clamp01(spotlight.intensity) > 0 && (() => {
+        const darkness = clamp01(spotlight.intensity);
+        const beams = spotlight.params?.beams ?? [];
+        const cl = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, isNaN(v) ? lo : v));
+        return (
+          <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute inset-0" style={{ background: `rgba(0,0,0,${darkness})` }} />
+            {beams.map(bm => {
+              const half = cl(bm.beamWidth ?? 45, 5, 100) / 2;
+              const len = cl(bm.height ?? 100, 10, 200);
+              const srcHalf = cl(bm.sourceWidth ?? 8, 0, 60) / 2;
+              const inner = Math.round(cl(1 - (bm.falloff ?? 0.5), 0, 1) * 100);
+              const { r, g, b } = parseColor(bm.color, { r: 255, g: 243, b: 214 });
+              const sx = cl(bm.sourceX, 0, 100), sy = cl(bm.sourceY, 0, 100);
+              return (
+                <div key={bm.id} className="absolute inset-0" style={{ mixBlendMode: 'screen', transformOrigin: `${sx}% ${sy}%`, transform: `rotate(${-(bm.aimAngle ?? 0)}deg)`, filter: `blur(${Math.max(3, minDim * 0.012)}px)`, willChange: 'transform' }}>
+                  <div className="absolute inset-0" style={{
+                    clipPath: `polygon(${sx - srcHalf}% ${sy}%, ${sx + srcHalf}% ${sy}%, ${sx + half}% ${sy + len}%, ${sx - half}% ${sy + len}%)`,
+                    background: `radial-gradient(120% ${len}% at ${sx}% ${sy}%, rgba(${r},${g},${b},0.95) 0%, rgba(${r},${g},${b},0.55) ${inner}%, rgba(${r},${g},${b},0) 100%)`,
+                  }} />
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {/* Placed lights — twinkling light points; intensity = master brightness (⚡-dimmable). */}
+      {lightsFx && clamp01(lightsFx.intensity) > 0 && (
+        <div className="absolute inset-0 overflow-hidden">
+          <LightsLayer
+            lights={(lightsFx.params?.lights ?? []).map(l => ({ ...l, brightness: (l.brightness ?? 1) * clamp01(lightsFx.intensity) }))}
+            stageW={safeWidth}
+            stageH={safeHeight}
+          />
+        </div>
+      )}
+
+      {/* Lightning — a continuous storm: long dark gaps broken by quick double-flashes. The outer
+          div scales the peak by intensity (the keyframes own the element opacity — same trap as
+          the glitch bands); speed sets how often it strikes. Keyframes are defined here, NOT in
+          LivePreview's style block, so the effect is self-contained wherever this renders. */}
+      {lightning && clamp01(lightning.intensity) > 0 && (() => {
+        const cycle = (14 - ep(lightning.params, 'speed') * 11).toFixed(2);
+        const { r, g, b } = parseColor(lightning.color, { r: 234, g: 242, b: 255 });
+        return (
+          <div className="absolute inset-0" style={{ opacity: clamp01(lightning.intensity), mixBlendMode: 'screen' }}>
+            <style>{`
+                @keyframes vnsfx-lightning {
+                    0% { opacity: 0; }
+                    1.2% { opacity: 1; }
+                    2.4% { opacity: 0.12; }
+                    3.6% { opacity: 0.85; }
+                    6.5% { opacity: 0; }
+                    54% { opacity: 0; }
+                    55% { opacity: 0.55; }
+                    56.5% { opacity: 0; }
+                    100% { opacity: 0; }
+                }
+            `}</style>
+            <div className="absolute inset-0" style={{ backgroundColor: `rgb(${r},${g},${b})`, opacity: 0, animation: `vnsfx-lightning ${cycle}s linear infinite` }} />
+          </div>
+        );
+      })()}
+
+      {/* Flashlight — mouse-following darkness with a lit circle at the cursor. Above everything
+          so the darkness swallows the other effects too, exactly like the scene version. */}
+      {flashlight && clamp01(flashlight.intensity) > 0 && (
+        <FlashlightOverlay effect={flashlight} minDim={minDim} />
       )}
 
       {/* Plugin-registered custom effects (visual pipeline) */}

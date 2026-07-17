@@ -1,5 +1,20 @@
 {
   "listTitle": "Variables",
+  "list": {
+    "searchPlaceholder": "Search variables…",
+    "sortTitle": "How the list is ordered",
+    "sortProject": "Creation order",
+    "sortAz": "A → Z",
+    "sortType": "By type",
+    "group": "Group",
+    "groupHint": "Variables named like \"hero_gold\" and \"hero_trust\" group under a \"hero\" heading",
+    "noResults": "No variables match your search.",
+    "newFolder": "New folder — drag variables into it to organise them",
+    "newFolderName": "New folder",
+    "dragHere": "Drag variables here",
+    "noFolder": "Not in a folder",
+    "deleteFolderConfirm": "Delete the folder \"{{name}}\"? The variables inside are kept — they just leave the folder."
+  },
   "newVariableName": "new_variable_{{n}}",
   "addVariable": "Add Variable",
   "selectToInspect": "Select a variable to inspect",

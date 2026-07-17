@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
+import { VarFollowSelect } from '../inspector/fields';
+import { SpotlightBeamsEditor, ScreenLightsEditor } from './ScreenLightFxEditors';
 import { VNUIScreen, VNScreenCategory, VNHotZoneWinCondition, VNUIElement, UIElementType, UIHotSpotElement, UIImageElement, VNScreenBackgroundLayer } from '../../features/ui/types';
 import { getScreenCategory, getScreenCategoryColor, SCREEN_CATEGORY_ORDER, SCREEN_CATEGORY_LABEL_KEY } from '../../utils/screenCategory';
 import { FormField, TextInput, Select, ColorInput, RangeInput } from '../ui/Form';
@@ -72,17 +74,11 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
 
     const isSpecialScreen = Object.values(project.ui).includes(screenId);
 
-    // Overlay/open-behavior controls only make sense for HUD or Overlay screens — gate the whole
-    // section behind the category to cut clutter on menus/system/regular screens. Safety: keep it
-    // visible if the screen already has any overlay setting, so nothing gets orphaned/hidden.
-    const screenCategory = getScreenCategory(screen, project);
-    const hasOverlaySettings = !!(screen.passThrough || screen.hudAboveDialogue || screen.pauseSceneWhileOpen
-        || screen.hudNonBlocking || screenId === project.ui.gameHudScreenId
-        || screen.backdropOpacity || screen.backdropBlur
-        || screen.resetElementVisibilityOnOpen === false
-        || (screen.onCloseBehavior && screen.onCloseBehavior !== 'default')
-        || (screen.onCloseActions && screen.onCloseActions.length));
-    const showOpenBehavior = screenCategory === 'hud' || screenCategory === 'overlay' || hasOverlaySettings;
+    // Overlay/open-behavior used to be gated to the HUD/Overlay categories to cut clutter — but the
+    // category hint (truthfully) says categories change nothing in-game, and ANY screen can be
+    // opened over gameplay via Show Screen, where every one of these settings applies. A user
+    // called out the contradiction ("Overlay Behavior should be in every category"). It's a
+    // collapsed section, so showing it everywhere costs one row.
     const isGameHud = screenId === project.ui.gameHudScreenId;
 
     const currentEffects = screen.effects ?? [];
@@ -102,7 +98,8 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
         const e = currentEffects.find(x => x.type === type);
         return e?.params ?? {};
     };
-    const setEffect = (type: VNScreenOverlayEffectType, intensity: number, variant?: 'snow' | 'ash', color?: string, params?: VNEffectParams) => {
+    const getVarId = (type: VNScreenOverlayEffectType) => currentEffects.find(x => x.type === type)?.intensityVariableId ?? null;
+    const setEffect = (type: VNScreenOverlayEffectType, intensity: number, variant?: 'snow' | 'ash', color?: string, params?: VNEffectParams, intensityVariableId?: VNID | null) => {
         updateScreen({
             effects: upsertOverlayEffect(currentEffects, {
                 type,
@@ -110,6 +107,11 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                 variant,
                 color,
                 params,
+                // Preserve an existing ⚡ live binding across ordinary slider/param edits;
+                // pass null explicitly to clear it. Unchecking an effect clears it too (an
+                // intensity-0 effect WITH a binding would silently stay alive at runtime).
+                intensityVariableId: intensity <= 0 ? null
+                    : (intensityVariableId !== undefined ? intensityVariableId : getVarId(type)),
             })
         });
     };
@@ -179,6 +181,12 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                 }} />
                         )}
                     </div>
+                    <FormField label={t('screenInspector.bgOpacity', 'See-through (opacity): {{pct}}%', { pct: Math.round(((screen.background as any).opacity ?? 1) * 100) })}>
+                        <RangeInput min="0" max="100" value={Math.round(((screen.background as any).opacity ?? 1) * 100)}
+                            onChange={e => { const v = parseInt(e.target.value, 10) / 100; updateScreen({ background: { ...(screen.background as any), opacity: v >= 1 ? undefined : Math.max(0, v) } }); }}
+                            className="w-full accent-purple-500" />
+                    </FormField>
+                    <p className="text-[10px] text-slate-500 -mt-1">{t('screenInspector.bgOpacityHint', '100% = solid. Lower it to let whatever is behind this screen show through.')}</p>
                     {screen.background.type === 'video' && (
                         <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer mt-2">
                             <input type="checkbox" checked={screen.background.loop ?? true}
@@ -272,6 +280,11 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                         <VideoTrimFields className="mt-1" start={(b.background as any).trimStart} end={(b.background as any).trimEnd}
                                             onChange={patch => updateAddlBg(b.id, { background: { ...(b.background as any), ...patch } })} />
                                     )}
+                                    <FormField label={t('screenInspector.bgOpacity', 'See-through (opacity): {{pct}}%', { pct: Math.round(((b.background as any).opacity ?? 1) * 100) })}>
+                                        <RangeInput min="0" max="100" value={Math.round(((b.background as any).opacity ?? 1) * 100)}
+                                            onChange={e => { const v = parseInt(e.target.value, 10) / 100; updateAddlBg(b.id, { background: { ...(b.background as any), opacity: v >= 1 ? undefined : Math.max(0, v) } }); }}
+                                            className="w-full accent-purple-500" />
+                                    </FormField>
                                     <div className="grid grid-cols-2 gap-2 mt-1">
                                         <FormField label={t('screenInspector.layerN', { n: b.layer ?? 0 })}>
                                             <div className="flex items-center gap-1">
@@ -377,7 +390,6 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                     </FormField>
                 </CollapsibleSection>
 
-                {showOpenBehavior && (
                 <CollapsibleSection title={t('screenInspector.overlayBehavior')}>
                     <FormField label={t('screenInspector.gameHud')}>
                         <input
@@ -452,7 +464,6 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         </div>
                     )}
                 </CollapsibleSection>
-                )}
 
                 <CollapsibleSection title={t('screenInspector.parallax')}>
                     <FormField label={t('screenInspector.parallaxMode')}>
@@ -520,14 +531,24 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                     { type: 'fireworks' as const, label: t('screenFx.fireworks'), supportsColor: true, defaultColor: '#FFD23B',
                       extraParams: ['speed'] as const,
                       paramLabels: { speed: t('screenFx.launchSpeed') } },
-                ] as const).map(({ type, supportsColor, defaultColor, extraParams, supportsBlend }: { type: any; supportsColor?: boolean; defaultColor?: string; extraParams: readonly (keyof VNEffectParams)[]; supportsBlend?: boolean }) => {
+                    { type: 'lightning' as const, label: 'Lightning', supportsColor: true, defaultColor: '#EAF2FF',
+                      extraParams: ['speed'] as const,
+                      paramLabels: { speed: 'Strike Frequency' } },
+                    { type: 'flashlight' as const, label: 'Flashlight', supportsColor: true, defaultColor: '#000000',
+                      extraParams: ['radius', 'softness'] as const,
+                      paramLabels: { radius: 'Light Size', softness: 'Edge Softness' } },
+                    { type: 'spotlight' as const, label: 'Spotlights',
+                      extraParams: [] as const, paramLabels: {}, custom: 'spotlight' as const },
+                    { type: 'lights' as const, label: 'Placed Lights',
+                      extraParams: [] as const, paramLabels: {}, custom: 'lights' as const },
+                ] as const).map(({ type, supportsColor, defaultColor, extraParams, supportsBlend, custom }: { type: any; supportsColor?: boolean; defaultColor?: string; extraParams: readonly (keyof VNEffectParams)[]; supportsBlend?: boolean; custom?: 'spotlight' | 'lights' }) => {
                     const intensity = getIntensity(type);
                     const enabled = intensity > 0;
                     const effectColor = getColor(type);
                     const params = getParams(type);
                     const variant = type === 'snowAsh' ? getSnowAshVariant() : undefined;
 
-                    const updateParam = (key: keyof VNEffectParams, val: number | string) => {
+                    const updateParam = (key: keyof VNEffectParams, val: number | string | unknown) => {
                         setEffect(type, intensity, variant, effectColor || undefined, { ...params, [key]: val });
                     };
 
@@ -563,6 +584,10 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                             onChange={(e) => setEffect(type, parseFloat(e.target.value), variant, effectColor || undefined, params)}
                                             className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-sky-500"
                                         />
+                                        {/* ⚡ Live Evaluation: strength follows a number variable while the screen
+                                            is up (0–1). The engine already resolves this for screen effects — this
+                                            is the same binding the Set Screen Effect command offers. */}
+                                        <VarFollowSelect value={getVarId(type)} onChange={id => setEffect(type, intensity, variant, effectColor || undefined, params, id)} project={project} range="0–1" mode="live" />
                                     </div>
 
                                     {/* Per-effect granular sliders */}
@@ -612,6 +637,30 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                                 </div>
                                             );
                                         })()}
+
+                                        {/* Spotlight: positionable beams over a darkened screen.
+                                            The strength slider above = how dark the screen goes. */}
+                                        {custom === 'spotlight' && (
+                                            <>
+                                                <p className="text-[10px] text-slate-500">{t('screenInspector.spotlightIntensityHint', 'The strength slider sets how dark the rest of the screen goes behind the beams.')}</p>
+                                                <SpotlightBeamsEditor
+                                                    beams={(params as any).beams ?? []}
+                                                    darkness={intensity}
+                                                    onChange={beams => updateParam('beams' as any, beams)}
+                                                />
+                                            </>
+                                        )}
+
+                                        {/* Placed lights: twinkling light points; strength = master brightness. */}
+                                        {custom === 'lights' && (
+                                            <>
+                                                <p className="text-[10px] text-slate-500">{t('screenInspector.lightsIntensityHint', 'The strength slider is a master brightness for all the lights — bind it to a variable to dim them in play.')}</p>
+                                                <ScreenLightsEditor
+                                                    lights={(params as any).lights ?? []}
+                                                    onChange={ls => updateParam('lights' as any, ls)}
+                                                />
+                                            </>
+                                        )}
 
                                         {/* Shimmer-specific controls */}
                                         {type === 'shimmer' && (

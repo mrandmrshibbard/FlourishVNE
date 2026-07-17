@@ -44,16 +44,20 @@ import {
     SpawnParticlesCommand, StopParticlesCommand,
     CallCommonEventCommand,
     ShowHotSpotCommand, HideHotSpotCommand,
-    TweenElementCommand, MoveCharacterCommand, StartTimerCommand, StopTimerCommand, SetTimeOfDayCommand, REACTIVE_VISUAL_TYPES,
+    TweenElementCommand, MoveCharacterCommand, StartTimerCommand, StopTimerCommand, SetTimeOfDayCommand, REACTIVE_VISUAL_TYPES, REACTIVE_FX_TYPES,
+    VNCustomTransition, VNTransitionAnimation,
 } from '../features/scene/types';
+import { resolveSceneTransition, transitionHalfDuration, transitionHalfHasContent } from '../utils/sceneTransition';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
 import { VNCharacter, VNCharacterLayer } from '../features/character/types';
 import { VNVariable, VNSetVariableOperator, VNVariableScope } from '../features/variables/types';
-import { ScreenOverlayEffects, runFireworksSim, deadPixelTile } from './live-preview/ScreenOverlayEffects';
+import { ScreenOverlayEffects, runFireworksSim, deadPixelTile, LightsLayer } from './live-preview/ScreenOverlayEffects';
 import { ParticleSystem } from './live-preview/ParticleSystem';
 import { registerDropTarget, hitTestDropTarget } from './live-preview/dropTargetRegistry';
 import { AnimatedDialogueText, useRainbowTick } from './live-preview/AnimatedDialogueText';
+import { GlossaryTooltip } from './live-preview/GlossaryTooltip';
+import { compileGlossary } from '../utils/glossaryMatcher';
 import { analyzeVoiceWordStarts } from './live-preview/voiceWordTiming';
 import { 
     normalizeSetVariableOperator as normalizeOperator,
@@ -113,45 +117,8 @@ const hexToRgbStr = (hex: string): string => {
     return `${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}`;
 };
 
-/** Renders the placed twinkling lights (candle flicker / star sparkle / christmas bulb blink styles). */
-const LightsLayer: React.FC<{ lights: VNLight[]; stageW: number; stageH: number }> = ({ lights, stageW, stageH }) => {
-    const base = Math.min(stageW || 800, stageH || 600);
-    return <>{lights.map((l, i) => {
-        const sizePx = Math.max(6, base * 0.05 * (l.size ?? 1));
-        const bright = Math.max(0, Math.min(1, l.brightness ?? 1));
-        const spd = l.twinkleSpeed && l.twinkleSpeed > 0 ? l.twinkleSpeed : 1;
-        // Every light is a pure point of light: a tight bright center that drops off through one
-        // continuous radial gradient to FULLY transparent at the edge — no boxShadow (its spread
-        // left a visible halo ring/boundary) and a box large enough to hold the whole soft glow.
-        let background = '';
-        let animation: string | undefined;
-        let delay = `${(i % 7) * 0.13}s`;
-        const wPx = sizePx * 1.8;
-        const hPx = sizePx * 1.8;
-        if (l.type === 'candle') {
-            background = `radial-gradient(circle at 50% 45%, rgba(255,250,220,${0.97 * bright}) 0%, rgba(255,185,75,${0.8 * bright}) 9%, rgba(255,135,45,${0.4 * bright}) 24%, rgba(255,105,25,${0.14 * bright}) 46%, rgba(255,95,15,${0.04 * bright}) 70%, rgba(255,95,15,0) 100%)`;
-            animation = `vnfx-candle ${(1.1 / spd).toFixed(2)}s ease-in-out infinite`;
-        } else if (l.type === 'star') {
-            const rgb = hexToRgbStr(l.color || '#ffffff');
-            background = `radial-gradient(circle, rgba(255,255,255,${0.98 * bright}) 0%, rgba(${rgb},${0.85 * bright}) 8%, rgba(${rgb},${0.4 * bright}) 22%, rgba(${rgb},${0.14 * bright}) 44%, rgba(${rgb},${0.04 * bright}) 68%, rgba(${rgb},0) 100%)`;
-            animation = `vnfx-star ${(2.2 / spd).toFixed(2)}s ease-in-out infinite`;
-        } else {
-            const rgb = hexToRgbStr(l.color || '#ff3b3b');
-            background = `radial-gradient(circle, rgba(255,255,255,${0.98 * bright}) 0%, rgba(${rgb},${0.95 * bright}) 5%, rgba(${rgb},${0.5 * bright}) 13%, rgba(${rgb},${0.26 * bright}) 26%, rgba(${rgb},${0.1 * bright}) 44%, rgba(${rgb},${0.03 * bright}) 66%, rgba(${rgb},0) 100%)`;
-            const tw = l.twinkle ?? 'fade';
-            if (tw === 'fade') animation = `vnfx-bulb-fade ${(1.6 / spd).toFixed(2)}s ease-in-out infinite`;
-            else if (tw === 'blink') animation = `vnfx-bulb-blink ${(1.0 / spd).toFixed(2)}s steps(1, end) infinite`;
-            else if (tw === 'chase') { animation = `vnfx-bulb-fade ${(1.6 / spd).toFixed(2)}s ease-in-out infinite`; delay = `${(i % 5) * (0.32 / spd)}s`; }
-            // 'steady' → no animation
-        }
-        return <div key={l.id} data-vnlight={l.type} className="absolute pointer-events-none" style={{
-            left: `${l.x}%`, top: `${l.y}%`, width: wPx, height: hPx,
-            transform: 'translate(-50%, -50%)', borderRadius: '50%', background,
-            animation, animationDelay: animation ? delay : undefined,
-            mixBlendMode: 'screen',
-        }} />;
-    })}</>;
-};
+// LightsLayer (placed twinkling lights renderer) moved to ScreenOverlayEffects so the PlaceLights
+// command and the screen-attached 'lights' effect share one renderer — imported below.
 
 function isRuntimeDebugEnabled(): boolean {
     try {
@@ -399,6 +366,25 @@ const buildSlideStyle = (x: number, _y: number, action: 'show' | 'hide' | undefi
     return style;
 };
 
+/** Live-Evaluation fade: with liveTransition 'fade' the overlay stays MOUNTED and animates opacity
+ *  as its conditions flip; unset/'instant' keeps the legacy unmount pop (the default — authors'
+ *  systems depend on it). `__liveHidden` is stamped by the render maps when a fade overlay's
+ *  conditions are currently false; while hidden, clicks pass straight through. */
+const isLiveFade = (o: { live?: boolean; liveTransition?: string }) => !!o.live && o.liveTransition === 'fade';
+const liveFadeStyle = (o: { live?: boolean; liveTransition?: string; liveTransitionDuration?: number; __liveHidden?: boolean }): React.CSSProperties => {
+    if (!isLiveFade(o)) return {};
+    const dur = o.liveTransitionDuration ?? 0.3;
+    const hidden = !!o.__liveHidden;
+    return {
+        // visibility flips AFTER the fade-out completes (and instantly on fade-in) — unlike
+        // pointerEvents:'none', hidden visibility disables hit-testing for the WHOLE subtree,
+        // which matters for buttons whose content-box hit layer sets pointerEvents:'auto'.
+        transition: `opacity ${dur}s ease, visibility 0s linear ${hidden ? dur : 0}s`,
+        visibility: hidden ? ('hidden' as const) : ('visible' as const),
+        ...(hidden ? { opacity: 0, pointerEvents: 'none' as const } : {}),
+    };
+};
+
 const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize }> = ({ overlay, stageSize }) => {
     const tweenValues = useTween(overlay.id, 'text');
     const hasTransition = overlay.transition && overlay.transition !== 'instant';
@@ -501,6 +487,7 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
         ...baseStyle,
         ...(applyTransition ? { animationDuration: animDuration } : {}),
         ...(isSlideTransition ? slideStyle : {}),
+        ...liveFadeStyle(overlay as any),
     } as React.CSSProperties;
 
     return (
@@ -760,7 +747,7 @@ const ButtonOverlayElement: React.FC<{
     return (
         <div
             key={overlay.id}
-            style={{...containerStyle, ...(hasTransition ? { animationDuration: animDuration } : {})}}
+            style={{...containerStyle, ...(hasTransition ? { animationDuration: animDuration } : {}), ...liveFadeStyle(overlay as any)}}
             className={`${transitionClass}`}
             // Quick-menu buttons must never trigger a Wait command's click-to-advance.
             // The Wait handler is a capture-phase window listener (fires before this
@@ -969,6 +956,7 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
         ...containerStyle,
         ...(applyTransition ? { animationDuration: animDuration } : {}),
         ...(isSlideTransition ? slideStyle : {}),
+        ...liveFadeStyle(overlay as any),
     } as React.CSSProperties;
 
     return (
@@ -1325,6 +1313,31 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     const interpolatedText = interpolateVariables(dialogue.text, variables, project);
     // Per-line text-speed override (Dialogue command) takes precedence over the global setting.
     const effectiveTextSpeed = (dialogue.textSpeed != null && dialogue.textSpeed > 0) ? dialogue.textSpeed : settings.textSpeed;
+
+    // ── Glossary: term highlighting + hover tooltip ──
+    // Matches are computed once per FULL interpolated line (variables participate in matching —
+    // a variable expanding to a glossary term highlights, deliberately). AnimatedDialogueText
+    // clips rendering to what the typewriter has revealed, so this memo never churns per tick.
+    const compiledGlossary = useMemo(() => compileGlossary(project.glossary), [project.glossary]);
+    const glossaryMatches = useMemo(() => {
+        if (!compiledGlossary?.hasEntries) return null;
+        const gSettings = project.glossary?.settings;
+        const defColor = gSettings?.defaultColor || '#7ee7ff';
+        const defStyle = gSettings?.highlightStyle || 'underline';
+        const found = compiledGlossary.findMatches(interpolatedText);
+        if (!found.length) return null;
+        return found.map(m => {
+            const entry = project.glossary!.entries[m.entryId];
+            return { ...m, color: entry?.color || defColor, style: defStyle };
+        });
+    }, [compiledGlossary, interpolatedText, project.glossary]);
+    const [glossaryHover, setGlossaryHover] = useState<{ entryId: string; x: number; y: number } | null>(null);
+    // A new line means the hovered span is gone — never leave a stale tooltip floating.
+    useEffect(() => { setGlossaryHover(null); }, [dialogue.text]);
+    const handleGlossaryHover = useCallback((entryId: string | null, ev: React.MouseEvent) => {
+        setGlossaryHover(entryId ? { entryId, x: ev.clientX, y: ev.clientY } : null);
+    }, []);
+    const glossaryHoverEntry = glossaryHover ? project.glossary?.entries[glossaryHover.entryId] : undefined;
 
     // ── Voice-paced text: fit the reveal to the clip's length ──
     // Poll the shared voice element briefly for its duration (metadata lands within ~1 tick for
@@ -1694,6 +1707,8 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                                 textEffect={dialogue.textEffect}
                                 gradientStyle={extractTextGradientStyle(projectUI.dialogueTextFont) || undefined}
                                 revealHighlight={revealHighlight}
+                                glossaryMatches={glossaryMatches}
+                                onGlossaryHover={handleGlossaryHover}
                             />
                             {!hasFinished && (
                                 <span style={{ 
@@ -1731,6 +1746,15 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                             background: projectUI.choiceHoverColor || '#6B4C9A',
                             transition: 'width 0.12s linear',
                         }} />
+                    )}
+                    {/* Glossary hover tooltip (cursor-anchored, never intercepts clicks). */}
+                    {glossaryHover && glossaryHoverEntry && (
+                        <GlossaryTooltip
+                            entry={glossaryHoverEntry}
+                            accentColor={glossaryHoverEntry.color || project.glossary?.settings?.defaultColor || '#7ee7ff'}
+                            x={glossaryHover.x}
+                            y={glossaryHover.y}
+                        />
                     )}
                 </div>
                 {/* Inject keyframe animations */}
@@ -2351,14 +2375,17 @@ const SaveSlotGridComponent: React.FC<{
  *  parent re-render can't stale them. Uses a 250ms tick (matching the engine's Start/Stop-Timer cadence)
  *  which also drives the optional visible countdown. */
 /** One live spotlight beam (a positioned, aimable stage light). Runtime-only; not serialized. */
-type SpotlightState = { sourceX: number; sourceY: number; aimAngle: number; intensity: number; beamWidth: number; sourceWidth: number; height: number; falloff: number; color: string; followMouse: boolean; swivelMax: number; toggleKey?: string; affectsDialogue: boolean; on: boolean };
-/** Build a live beam (on) from a Spotlight command / Show Spotlight action's fields, filling defaults. */
+type SpotlightState = { sourceX: number; sourceY: number; aimAngle: number; intensity: number; beamWidth: number; sourceWidth: number; height: number; falloff: number; color: string; followMouse: boolean; swivelMax: number; toggleKey?: string; affectsDialogue: boolean; on: boolean; conditions?: VNCondition[] | null };
+/** Build a live beam (on) from a Spotlight command / Show Spotlight action's fields, filling defaults.
+ *  `conditions` is attached only when the COMMAND opted into Live Evaluation (actions have no
+ *  liveConditions flag, so their run-once conditions never leak in here). */
 const makeSpotlightState = (c: any): SpotlightState => ({
     sourceX: c.sourceX ?? 50, sourceY: c.sourceY ?? 0, aimAngle: c.aimAngle ?? 0,
     intensity: c.intensity ?? 0.85, beamWidth: c.beamWidth ?? 45, sourceWidth: c.sourceWidth ?? 8,
     height: c.height ?? 100, falloff: c.falloff ?? 0.5, color: c.color || '#fff3d6',
     followMouse: c.followMouse !== false, swivelMax: c.swivelMax ?? 30, toggleKey: c.toggleKey,
     affectsDialogue: c.affectsDialogue !== false, on: true,
+    conditions: c.liveConditions ? (c.conditions ?? null) : null,
 });
 
 const TIMER_VAR_MUTATION_TYPES = new Set<UIActionType>([
@@ -3299,7 +3326,7 @@ const InventoryGridElement: React.FC<{
 // the letterboxed game container while a 'glitch' overlay effect is active — that is what actually
 // TEARS the picture. (It cannot be done from the overlay layer: an overlay draws on top, and
 // Chromium ignores SVG reference filters in backdrop-filter.) Burst timing is SMIL — no JS/frame.
-const StageGlitchFilterDef: React.FC<{ effect: VNScreenOverlayEffect }> = ({ effect }) => {
+const StageGlitchFilterDef: React.FC<{ effect: VNScreenOverlayEffect; id?: string }> = ({ effect, id = 'vnfx-stage-glitch' }) => {
     const intensity = Math.max(0, Math.min(1, effect.intensity ?? 0.5));
     const blockiness = effect.params?.blockiness ?? 0.5;
     const speed = effect.params?.speed ?? 0.5;
@@ -3310,7 +3337,7 @@ const StageGlitchFilterDef: React.FC<{ effect: VNScreenOverlayEffect }> = ({ eff
     return (
         <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
             <defs>
-                <filter id="vnfx-stage-glitch" x="-10%" y="-10%" width="120%" height="120%">
+                <filter id={id} x="-10%" y="-10%" width="120%" height="120%">
                     <feTurbulence type="fractalNoise" baseFrequency={`0.002 ${bandFreq.toFixed(4)}`} numOctaves="1" seed="7" result="noise">
                         <animate attributeName="seed" values="7;23;51;89;7" dur={`${(dur * 4).toFixed(2)}s`} calcMode="discrete" repeatCount="indefinite" />
                     </feTurbulence>
@@ -3337,6 +3364,71 @@ const StageGlitchFilterDef: React.FC<{ effect: VNScreenOverlayEffect }> = ({ eff
                 </filter>
             </defs>
         </svg>
+    );
+};
+
+// --- Author-made custom scene transition overlay ---
+// Renders one half of a VNCustomTransition full-screen: a single animated file (animated PNG /
+// animated WebP / GIF plays once on mount and holds its last frame; a video does the same
+// without loop) or a frame sequence stepped at the author's fps. Mounted fresh per phase
+// (key=phase) so the animation always starts from frame one. Purely decorative — the phase
+// TIMING lives in startSceneExitTransition's timeouts, so a slow or broken file can never
+// leave the screen stuck covered.
+const CustomTransitionOverlay: React.FC<{
+    def: VNCustomTransition;
+    phase: 'closing' | 'opening';
+    assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+}> = ({ def, phase, assetResolver }) => {
+    const half = phase === 'closing' ? def.close : def.open;
+    const fit: React.CSSProperties['objectFit'] = (def.fit ?? 'stretch') === 'stretch' ? 'fill' : (def.fit as 'cover' | 'contain');
+    const frameUrls = useMemo(
+        () => (half?.frameIds && half.frameIds.length > 0)
+            ? half.frameIds.map(id => assetResolver(id, 'image')).filter((u): u is string => !!u)
+            : null,
+        [half, assetResolver]
+    );
+    const [frameIdx, setFrameIdx] = useState(0);
+    useEffect(() => {
+        if (!frameUrls || frameUrls.length <= 1) return;
+        const fps = Math.max(1, Math.min(60, half?.fps ?? 12));
+        const iv = window.setInterval(() => {
+            setFrameIdx(i => Math.min(i + 1, frameUrls.length - 1)); // hold the last frame
+        }, 1000 / fps);
+        return () => window.clearInterval(iv);
+    }, [frameUrls, half?.fps]);
+    // While the CLOSING half plays, pre-warm the opening half's images so the reveal starts
+    // without a decode hiccup. (Skip videos — the browser streams those on its own.)
+    useEffect(() => {
+        if (phase !== 'closing') return;
+        const open = def.open;
+        const urls = open?.frameIds?.length
+            ? open.frameIds.map(id => assetResolver(id, 'image'))
+            : (assetResolver(open?.assetId ?? null, 'video') ? [] : [assetResolver(open?.assetId ?? null, 'image')]);
+        urls.forEach(u => { if (u) { const img = new Image(); img.src = u; } });
+    }, [phase, def, assetResolver]);
+
+    const mediaStyle: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit };
+    let media: React.ReactNode = null;
+    if (frameUrls && frameUrls.length > 0) {
+        media = <img src={frameUrls[Math.min(frameIdx, frameUrls.length - 1)]} alt="" style={mediaStyle} draggable={false} />;
+    } else if (half?.assetId) {
+        // Asset-collection siloing: an animated file can live in images OR videos depending on
+        // which tab uploaded it — try both resolvers. VIDEO FIRST: the 'image' resolver also
+        // returns a video asset's URL (its lookup prefers videoUrl), which would put a video
+        // file inside an <img> → the broken-picture icon. 'video' returns null for plain
+        // images, so this order is safe for both kinds.
+        const vidUrl = assetResolver(half.assetId, 'video');
+        if (vidUrl) {
+            media = <video src={vidUrl} autoPlay muted playsInline style={mediaStyle} />;
+        } else {
+            const imgUrl = assetResolver(half.assetId, 'image');
+            if (imgUrl) media = <img src={imgUrl} alt="" style={mediaStyle} draggable={false} />;
+        }
+    }
+    return (
+        <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
+            {media}
+        </div>
     );
 };
 
@@ -3994,13 +4086,17 @@ const UIScreenRenderer: React.FC<{
         }
     };
     const buildBgPlane = (
-        bg: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null, loop?: boolean },
+        bg: { type: 'color', value: string, opacity?: number } | { type: 'image' | 'video', assetId: VNID | null, loop?: boolean, opacity?: number },
         depth: number, layer: number, key: string, videoRef?: React.RefObject<HTMLVideoElement>,
         transition?: string, transitionDuration?: number
     ): React.ReactNode => {
+        // See-through backgrounds: opacity lives on the INNER media node — the outer wrapper's
+        // entry transition animates opacity with a forwards fill, which would permanently
+        // override an inline value there.
+        const bgOpacity = (bg.opacity != null && bg.opacity < 1) ? Math.max(0, bg.opacity) : undefined;
         let node: React.ReactNode = null;
         if (bg.type === 'color') {
-            node = <div className="absolute inset-0" style={{ backgroundColor: bg.value }} />;
+            node = <div className="absolute inset-0" style={{ backgroundColor: bg.value, opacity: bgOpacity }} />;
         } else if (bg.assetId) {
             // Render based on the ACTUAL asset, not the declared type: a video can be selected
             // under an 'image'-typed background (the image picker lists videos), which otherwise
@@ -4012,8 +4108,8 @@ const UIScreenRenderer: React.FC<{
             if (url) {
                 // `loop` defaults to true (preserves existing behavior); off = play once and hold last frame.
                 node = isVid
-                    ? <TrimmedVideo ref={videoRef} src={url} autoPlay loop={bg.loop ?? true} muted trimStart={bgTrim.start} trimEnd={bgTrim.end} playsInline className="absolute inset-0 w-full h-full object-cover" />
-                    : <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover" />;
+                    ? <TrimmedVideo ref={videoRef} src={url} autoPlay loop={bg.loop ?? true} muted trimStart={bgTrim.start} trimEnd={bgTrim.end} playsInline className="absolute inset-0 w-full h-full object-cover" style={bgOpacity !== undefined ? { opacity: bgOpacity } : undefined} />
+                    : <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover" style={bgOpacity !== undefined ? { opacity: bgOpacity } : undefined} />;
             }
         }
         if (!node) return null;
@@ -5772,7 +5868,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     /** "Play from here" (editor test play): skip the title screen and start a fresh game at this
      *  scene + command index (the scene's visual setup fast-forwards to compose the stage). */
     startAt?: { sceneId: VNID; index: number } | null;
-}> = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false, startAt = null }) => {
+    /** "Test this screen" (editor Screens tab): boot straight into this UI screen instead of the
+     *  title — fully interactive (buttons navigate, a Jump To Scene starts the game from there).
+     *  Editor-only; the standalone player never passes it. */
+    startScreenId?: VNID | null;
+}> = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false, startAt = null, startScreenId = null }) => {
     const { project } = useProject();
     const toast = useToast();
     // Stable notify bridge for scripts (game.notify) and surfaced script errors.
@@ -5796,7 +5896,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     const titleScreenId = getValidTitleScreenId();
     // "Play from here" skips the title menu entirely — the mount effect below starts the game.
-    const [screenStack, setScreenStack] = useState<VNID[]>(startAt ? [] : (titleScreenId ? [titleScreenId] : []));
+    // "Test this screen" boots straight into the requested screen instead of the title.
+    const [screenStack, setScreenStack] = useState<VNID[]>(
+        (startScreenId && project.uiScreens[startScreenId]) ? [startScreenId]
+        : startAt ? []
+        : (titleScreenId ? [titleScreenId] : []));
     // hudStack holds screens shown as in-game overlays while in 'playing' mode
     const [hudStack, setHudStack] = useState<VNID[]>([]);
     // Runtime Show/Hide-Element overrides: elementId -> visible. Absent = use the element's
@@ -5836,6 +5940,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [sceneTransitionFading, setSceneTransitionFading] = useState(false);
     const [sceneTransitionType, setSceneTransitionType] = useState<'fade' | 'dissolve' | 'iris-out' | 'wipe-right' | 'slide-left' | 'instant'>('fade');
     const [sceneTransitionDuration, setSceneTransitionDuration] = useState(0.5);
+    // Author-made custom scene transition currently playing: the closing animation covers the old
+    // scene, the scene swaps while the screen is covered, then the opening animation reveals the
+    // new one. Cleared on quit/new game/load so a leftover overlay can never black out the menu.
+    const [customTransition, setCustomTransition] = useState<{ def: VNCustomTransition; phase: 'closing' | 'opening' } | null>(null);
+    const customTransitionTimeoutsRef = useRef<number[]>([]);
+    // Full-screen video played by a Play Video ACTION. Unlike the Play Movie command's video
+    // (which lives in playerState.uiState), this is component state — so it works from MENUS
+    // (title screen intro video) as well as during gameplay and pause.
+    const [actionMovie, setActionMovie] = useState<{ url: string; loop: boolean; blockInput: boolean; onEndActions?: VNUIAction[]; trimStart?: number; trimEnd?: number } | null>(null);
     // New-game transition: fade the title out to black, load the scene, then fade in.
     const [gameStartFade, setGameStartFade] = useState<'none' | 'toBlack' | 'fromBlack'>('none');
     const [settings, setSettings] = useState<GameSettings>(() => {
@@ -6234,8 +6347,51 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [lightningTrigger, setLightningTrigger] = useState(0);
     const activeFireworksRef = useRef<{ colors: string[]; intensity: number; bursts: number; duration: number; burstHeight: number; affectsDialogue: boolean; sfxId: VNID | null; sfxVolume?: number; sfxPerBurst: boolean; key: number } | null>(null);
     const [fireworksTrigger, setFireworksTrigger] = useState(0);
+    // Continuous lightning STORM (Lightning command, storm:'continuous'): strikes keep coming at a
+    // (possibly random) interval until storm:'stop' / Reset Screen Effects / quit / load. Each
+    // strike drives the same one-shot overlay via activeLightningRef, so the visuals are identical.
+    const [lightningStorm, setLightningStorm] = useState<{ color: string; intensity: number; intensityVariableId?: VNID | null; duration: number; flashes: number; affectsDialogue: boolean; thunderSfxId: VNID | null; thunderDelay: number; thunderVolume?: number; intervalMin: number; intervalMax: number } | null>(null);
+    useEffect(() => {
+        if (!lightningStorm) return;
+        const storm = lightningStorm;
+        let cancelled = false;
+        let tid = 0;
+        const schedule = () => {
+            const min = Math.max(0.3, storm.intervalMin);
+            const max = Math.max(min, storm.intervalMax);
+            // The wait is measured AFTER the strike's own flicker, so strikes never overlap
+            // (equal min/max = steady rhythm; different = random storm timing).
+            tid = window.setTimeout(strike, (storm.duration + min + Math.random() * (max - min)) * 1000);
+        };
+        const strike = () => {
+            if (cancelled) return;
+            // No flashes over menus/pause — the storm keeps ticking underneath and resumes visibly.
+            if (playerStateRef.current?.mode === 'playing') {
+                activeLightningRef.current = {
+                    color: storm.color,
+                    // ⚡ intensity binding re-resolves PER STRIKE, so a rising "storm" variable
+                    // makes each successive strike brighter.
+                    intensity: resolveVarNumber(playerStateRef.current?.variables, storm.intensityVariableId, storm.intensity, { min: 0, max: 1 }),
+                    duration: storm.duration,
+                    flashes: storm.flashes,
+                    affectsDialogue: storm.affectsDialogue,
+                    key: Date.now(),
+                };
+                setLightningTrigger(prev => prev + 1);
+                if (storm.thunderSfxId) {
+                    const th = window.setTimeout(() => playSound(storm.thunderSfxId, storm.thunderVolume), Math.max(0, storm.thunderDelay * 1000));
+                    activeEffectTimeoutsRef.current.push(th);
+                }
+            }
+            schedule();
+        };
+        // First strike lands quickly so the author sees the storm begin.
+        tid = window.setTimeout(strike, 250 + Math.random() * 500);
+        return () => { cancelled = true; window.clearTimeout(tid); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [lightningStorm]);
     // Flashlight (persistent mouse-following dark overlay). `on` is the live toggle state.
-    const [flashlight, setFlashlight] = useState<{ radius: number; softness: number; darkness: number; radiusVariableId?: VNID | null; darknessVariableId?: VNID | null; color: string; toggleKey?: string; affectsDialogue: boolean; darkWhenOff: boolean; on: boolean } | null>(null);
+    const [flashlight, setFlashlight] = useState<{ radius: number; softness: number; darkness: number; radiusVariableId?: VNID | null; darknessVariableId?: VNID | null; color: string; toggleKey?: string; affectsDialogue: boolean; darkWhenOff: boolean; on: boolean; conditions?: VNCondition[] | null } | null>(null);
     const flashlightOverlayRef = useRef<HTMLDivElement | null>(null);
 
     // Flashlight: let the player toggle it on/off with the author-chosen key.
@@ -6762,6 +6918,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             setScreenStack([]);
             setHudStack([]);
             setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
+            customTransitionTimeoutsRef.current.forEach(t => window.clearTimeout(t)); customTransitionTimeoutsRef.current = []; setCustomTransition(null); setActionMovie(null); // cancel any in-flight custom scene transition (and its pending scene swap) + action-played video
             timersRef.current.clear(); blockingTimerRef.current = null; fastForwardTargetRef.current = null; backwardReplayRef.current = null; // stop any running background timers / hot-reload fast-forward / rewind-replay window from a prior session
             setIsJustLoaded(true);
             // Re-arm a call that was ringing when the game was saved (ringtone + timeout restart).
@@ -6891,6 +7048,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         setScreenStack([]);
         setHudStack([]);
         setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
+            customTransitionTimeoutsRef.current.forEach(t => window.clearTimeout(t)); customTransitionTimeoutsRef.current = []; setCustomTransition(null); setActionMovie(null); // cancel any in-flight custom scene transition (and its pending scene swap) + action-played video
         timersRef.current.clear(); blockingTimerRef.current = null; fastForwardTargetRef.current = null; backwardReplayRef.current = null; // stop any running background timers / hot-reload fast-forward / rewind-replay window from a prior session
         // "Play from here": fast-forward the scene's visual setup up to the chosen command
         // (same FF_VISUAL_TYPES machinery as the hot-reload's "Reload to line"). MUST be set
@@ -6963,6 +7121,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             setScreenStack([]);
             setHudStack([]);
             setClosingScreens(new Set());
+            customTransitionTimeoutsRef.current.forEach(t => window.clearTimeout(t)); customTransitionTimeoutsRef.current = []; setCustomTransition(null); setActionMovie(null); // cancel any in-flight custom scene transition + action-played video
             timersRef.current.clear();
             blockingTimerRef.current = null;
         };
@@ -7337,16 +7496,69 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }, [project.scenes, evaluateConditions]);
 
     // --- Scene Exit Transition Helper ---
-    const startSceneExitTransition = useCallback((currentSceneId: string, executeChange: () => void) => {
+    // `override` is a per-jump transition choice (from the Jump command or a JumpToScene action) —
+    // it beats the leaving scene's Scene Settings pick. Custom transitions (author-made curtain
+    // animations) play close → swap the scene while covered → open; built-ins keep the black
+    // overlay CSS animations.
+    const startSceneExitTransition = useCallback((currentSceneId: string, executeChange: () => void, override?: string) => {
         const currentScene = project.scenes[currentSceneId];
-        const transType = currentScene?.outTransition || 'fade';
-        const duration = currentScene?.outTransitionDuration ?? 0.5;
+        const resolved = resolveSceneTransition(override, currentScene, project.customTransitions);
         const shouldFade = hasRenderedSceneRef.current;
 
-        if (transType === 'instant' || !shouldFade) {
+        if (resolved.kind === 'instant' || !shouldFade) {
             executeChange();
             return;
         }
+
+        if (resolved.kind === 'custom') {
+            const def = resolved.def;
+            const hasClose = transitionHalfHasContent(def.close);
+            const hasOpen = transitionHalfHasContent(def.open);
+            const closeS = hasClose ? transitionHalfDuration(def.close) : 0;
+            const openS = hasOpen ? transitionHalfDuration(def.open) : 0;
+            const holdS = Math.max(0, def.holdDuration ?? 0);
+            const playHalfSfx = (half: VNTransitionAnimation) => {
+                const url = half.sfxId ? assetResolver(half.sfxId, 'audio') : null;
+                if (!url) return;
+                try {
+                    const a = new Audio(url);
+                    a.volume = Number.isFinite(settings.sfxVolume) ? settings.sfxVolume : 0.8;
+                    a.play().catch(() => {});
+                } catch (e) { /* ignore */ }
+            };
+            // Fade audio out over the closing half (same policy as the built-ins).
+            const audio = musicAudioRef.current;
+            if (audio && !audio.paused) {
+                fadeAudio(audio, 0, Math.max(0.1, closeS || 0.3), () => {
+                    audio.pause();
+                    audio.currentTime = 0;
+                });
+            }
+            const openPhase = () => {
+                executeChange();
+                if (hasOpen) {
+                    playHalfSfx(def.open);
+                    setCustomTransition({ def, phase: 'opening' });
+                    // Timeouts drive the phases, not media events — a broken/missing animation
+                    // file can therefore never leave the screen stuck covered.
+                    const t2 = window.setTimeout(() => setCustomTransition(null), openS * 1000);
+                    customTransitionTimeoutsRef.current.push(t2);
+                } else {
+                    setCustomTransition(null);
+                }
+            };
+            if (hasClose) {
+                playHalfSfx(def.close);
+                setCustomTransition({ def, phase: 'closing' });
+                const t1 = window.setTimeout(openPhase, (closeS + holdS) * 1000);
+                customTransitionTimeoutsRef.current.push(t1);
+            } else {
+                openPhase();
+            }
+            return;
+        }
+
+        const { type: transType, duration } = resolved;
 
         // Fade audio during transition
         const audio = musicAudioRef.current;
@@ -7365,7 +7577,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             executeChange();
             setSceneTransitionFading(false);
         }, duration * 1000);
-    }, [project.scenes]);
+    }, [project.scenes, project.customTransitions, assetResolver, settings.sfxVolume]);
 
     // --- Audio Management ---
     useEffect(() => {
@@ -8319,7 +8531,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // condition as variables change (show/hide or play/stop live). Without this, a live
     // command reached while its condition is false would be skipped and never react.
     const isLiveReactive = !!(command as any).liveConditions
-        && (REACTIVE_VISUAL_TYPES.has(command.type) || command.type === CommandType.PlaySoundEffect);
+        && (REACTIVE_VISUAL_TYPES.has(command.type) || REACTIVE_FX_TYPES.has(command.type) || command.type === CommandType.PlaySoundEffect);
     runtimeDebugLog('[DEBUG] Command:', command.type, 'Index:', playerState.currentIndex, 'Conditions met:', conditionsMet, 'live:', isLiveReactive, 'Variables:', getRuntimeVariables());
         if (!conditionsMet && !isLiveReactive) {
             runtimeDebugLog('[DEBUG] Skipping command due to failed conditions');
@@ -8576,6 +8788,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         return;
                     }
                     case 'Lightning': {
+                        // Storm modes mirror the main-loop Lightning case (FX land in BOTH exec paths).
+                        if (cmd.storm === 'stop') { setLightningStorm(null); return; }
+                        if (cmd.storm === 'continuous') {
+                            setLightningStorm({
+                                color: cmd.color || '#EAF2FF', intensity: cmd.intensity ?? 0.9, intensityVariableId: cmd.intensityVariableId ?? null,
+                                duration: cmd.duration ?? 0.7, flashes: cmd.flashes ?? 2, affectsDialogue: cmd.affectsDialogue !== false,
+                                thunderSfxId: cmd.thunderSfxId ?? null, thunderDelay: cmd.thunderDelay ?? 0.6, thunderVolume: cmd.thunderVolume,
+                                intervalMin: Math.max(0.3, cmd.intervalMin ?? 2), intervalMax: Math.max(0.3, cmd.intervalMax ?? 8),
+                            });
+                            return;
+                        }
                         activeLightningRef.current = {
                             color: cmd.color || '#EAF2FF', intensity: resolveVarNumber(playerStateRef.current?.variables, cmd.intensityVariableId, cmd.intensity ?? 0.9, { min: 0, max: 1 }), duration: cmd.duration ?? 0.7,
                             flashes: cmd.flashes ?? 2, affectsDialogue: cmd.affectsDialogue !== false, key: Date.now(),
@@ -8659,7 +8882,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             ] } } : p);
                             return;
                         }
-                        updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, movieUrl, movieLoop: cmd.loop ?? false, movieTrimStart: sTrim.start, movieTrimEnd: sTrim.end, movieHoldLastFrame: cmd.holdLastFrame ?? false, movieTransition: cmd.transition, movieTransitionDuration: cmd.transitionDuration, movieExiting: false } } : p);
+                        updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, movieUrl, movieLoop: cmd.loop ?? false, movieTrimStart: sTrim.start, movieTrimEnd: sTrim.end, movieHoldLastFrame: cmd.holdLastFrame ?? false, movieTransition: cmd.transition, movieTransitionDuration: cmd.transitionDuration, movieBlockInput: cmd.blockInput ?? false, movieExiting: false } } : p);
                         if (cmd.waitsForCompletion !== false && !(cmd.loop ?? false)) {
                             return new Promise<void>(resolve => { scriptInputResolverRef.current = { kind: 'movie', resolve: () => resolve() }; });
                         }
@@ -8787,6 +9010,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         activeFlashRef.current = null;
                         setFlashTrigger(0);
                         activeLightningRef.current = null;
+                        setLightningStorm(null); // also ends a continuous storm
                         activeFireworksRef.current = null;
                         setFlashlight(null);
                         setSpotlights({});
@@ -8972,7 +9196,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     startSceneExitTransition(playerState.currentSceneId, () => {
                         const result = handleJump(command as JumpCommand, commandContext);
                         applyResult(result);
-                    });
+                    }, (command as JumpCommand).transition);
                     break;
                 }
                 case CommandType.PlayMusic: {
@@ -9057,12 +9281,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             instantAdvance = false;
                             updatePlayerState(p => p ? {
                                 ...p,
-                                uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false },
+                                uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieBlockInput: movieCmd.blockInput ?? false, movieExiting: false },
                             } : null);
                         } else {
                             updatePlayerState(p => p ? {
                                 ...p,
-                                uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false },
+                                uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieBlockInput: movieCmd.blockInput ?? false, movieExiting: false },
                             } : null);
                         }
                     }
@@ -9265,6 +9489,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.ResetScreenEffects: {
                     const cmd = command as ResetScreenEffectsCommand;
+                    setLightningStorm(null); // a continuous storm counts as a screen effect — reset ends it
                     updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: 'transparent', tintOpacity: 100, tintOpacityVariableId: null, zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] }}} : null);
                     break;
                 }
@@ -9280,6 +9505,28 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.Lightning: {
                     const cmd = command as LightningCommand;
+                    if (cmd.storm === 'stop') {
+                        // End the continuous storm (any strike currently mid-flicker finishes on its own).
+                        setLightningStorm(null);
+                        break;
+                    }
+                    if (cmd.storm === 'continuous') {
+                        // Register/replace the storm — the strike loop takes over from here.
+                        setLightningStorm({
+                            color: cmd.color || '#EAF2FF',
+                            intensity: cmd.intensity ?? 0.9,
+                            intensityVariableId: cmd.intensityVariableId ?? null,
+                            duration: cmd.duration ?? 0.7,
+                            flashes: cmd.flashes ?? 2,
+                            affectsDialogue: cmd.affectsDialogue !== false,
+                            thunderSfxId: cmd.thunderSfxId ?? null,
+                            thunderDelay: cmd.thunderDelay ?? 0.6,
+                            thunderVolume: cmd.thunderVolume,
+                            intervalMin: Math.max(0.3, cmd.intervalMin ?? 2),
+                            intervalMax: Math.max(0.3, cmd.intervalMax ?? 8),
+                        });
+                        break;
+                    }
                     activeLightningRef.current = {
                         color: cmd.color || '#EAF2FF',
                         intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity ?? 0.9, { min: 0, max: 1 }),
@@ -9325,11 +9572,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.PlaceLights: {
                     const cmd = command as PlaceLightsCommand;
-                    applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null }) });
+                    // lightsConditions: Live Evaluation — lights stay placed but only render while met.
+                    applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null, lightsConditions: (cmd as any).liveConditions ? (cmd.conditions ?? null) : null } as any) });
                     break;
                 }
                 case CommandType.ClearLights: {
-                    applyResult({ advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null }) });
+                    applyResult({ advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null, lightsConditions: null } as any) });
                     break;
                 }
                 case CommandType.ShowPhone: { applyResult(handleShowPhone(command as ShowPhoneCommand, commandContext)); break; }
@@ -9419,6 +9667,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             affectsDialogue: cmd.affectsDialogue !== false,
                             darkWhenOff: cmd.darkWhenOff === true,
                             on: true,
+                            // Live Evaluation: keep the flashlight registered and show/hide it as
+                            // these conditions flip (renderer re-checks every render).
+                            conditions: (cmd as any).liveConditions ? (cmd.conditions ?? null) : null,
                         });
                         if (cmd.sfxId) playSound(cmd.sfxId);
                     } else {
@@ -9452,6 +9703,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     variant: cmd.variant,
                                     color: (cmd as any).color,
                                     params: (cmd as any).params,
+                                    // Live Evaluation: the effect stays registered and renders only
+                                    // while these conditions hold (re-checked every render).
+                                    conditions: (cmd as any).liveConditions ? (cmd.conditions ?? undefined) : undefined,
                                 }),
                             }
                         }
@@ -10004,7 +10258,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         };
         const sceneToExit = playerStateRef.current?.currentSceneId;
         if (willJumpScene && sceneToExit) {
-            startSceneExitTransition(sceneToExit, runSelection);
+            const choiceJump = allActions.find(a => a.type === UIActionType.JumpToScene) as JumpToSceneAction | undefined;
+            startSceneExitTransition(sceneToExit, runSelection, choiceJump?.transition);
         } else {
             runSelection();
         }
@@ -10612,6 +10867,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 // if that flag survived, the pause screen would render mid-fade-out (→ blank/black)
                 // the next time it's opened in a new game / loaded save.
                 setClosingScreens(new Set());
+                customTransitionTimeoutsRef.current.forEach(t => window.clearTimeout(t)); customTransitionTimeoutsRef.current = []; setCustomTransition(null); setActionMovie(null); // a leftover curtain overlay / video would black out the title/menus
             };
 
             // Mark topmost screen(s) as closing so the transitionOut plays before the quit
@@ -10765,6 +11021,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 activeFlashRef.current = null;
                 setFlashTrigger(0);
                 activeLightningRef.current = null;
+                setLightningStorm(null); // also ends a continuous storm
                 activeFireworksRef.current = null;
                 setFlashlight(null);
                 setSpotlights({});
@@ -10928,7 +11185,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
             // Use scene exit transition if we're in an active scene, otherwise honour the screen's own transitionOut
             if (playerState?.currentSceneId) {
-                startSceneExitTransition(playerState.currentSceneId, executeJump);
+                startSceneExitTransition(playerState.currentSceneId, executeJump, (action as JumpToSceneAction).transition);
             } else if (jumpScreenOutDuration > 0) {
                 setTimeout(executeJump, jumpScreenOutDuration);
             } else {
@@ -11078,6 +11335,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const cmd = { type: CommandType.StopMusic, fadeDuration: a.fadeDuration ?? 1 } as StopMusicCommand;
             const r = handleStopMusic(cmd, { musicAudioRef, fadeAudio, playerState: playerStateRef.current } as any);
             if (r.updates?.musicState) updatePlayerState(p => p ? { ...p, musicState: { ...p.musicState, ...r.updates!.musicState } } : p);
+        } else if (action.type === UIActionType.StopSound) {
+            // Same engine path as the Stop Sound Effect command: one sound or all, optional fade.
+            const a = action as { audioId?: VNID | null; fadeDuration?: number };
+            stopSfx(a.audioId || null, a.fadeDuration);
+        } else if (action.type === UIActionType.PlayVideo) {
+            const a = action as { videoId?: VNID | null; loop?: boolean; blockInput?: boolean; onEndActions?: VNUIAction[] };
+            const url = a.videoId ? assetResolver(a.videoId, 'video') : null;
+            if (url) {
+                const asset: any = a.videoId ? (project.videos[a.videoId] || project.backgrounds[a.videoId] || project.images?.[a.videoId]) : null;
+                const trim = resolveVideoTrim({} as any, asset); // the asset's default trim
+                // A looping video ignores blockInput — otherwise it could never be closed.
+                setActionMovie({ url, loop: !!a.loop, blockInput: !!a.blockInput && !a.loop, onEndActions: a.onEndActions, trimStart: trim.start, trimEnd: trim.end });
+            }
         } else if (action.type === UIActionType.ShowSpotlight) {
             const a = action as any;
             const sid = a.spotlightId || 'main';
@@ -12432,6 +12702,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // so merge them here — otherwise a HUD click/drop that sets a variable wouldn't
         // affect the live scene until a navigation event flushed it.
         const liveVars = mergeDirtyUiVariables(playerState.variables);
+        // Live-condition visibility for stage overlays/characters (instant = filtered/unmounted;
+        // 'fade' overlays stay mounted and fade via liveFadeStyle).
+        const liveShown = (o: { live?: boolean; conditions?: VNCondition[] }) =>
+            !o.live || !o.conditions || evaluateConditions(o.conditions, liveVars);
         // Reactive background: a live Set Background registers conditional layers; the last
         // layer whose conditions currently match overrides the base background.
         const matchedBgLayer = (state.backgroundLayers || [])
@@ -12500,8 +12774,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const dnSpriteTint = dnGrade ? gradeToSpriteTint(dnGrade.sprites) : null;
         const dnTrans = dnTransitionRef.current;
         const dnBgFilterStyle: React.CSSProperties = dnBg ? { filter: dnBg.filter, transition: `filter ${dnTrans}s ease-in-out` } : {};
+        // Scene glitch tear — applied to the scene PICTURE layers only (spread AFTER dnBgFilterStyle
+        // so it composes with the day/night grade rather than losing it). The grade's filter
+        // transition is dropped while tearing: a url() filter can't be interpolated anyway.
+        const sceneGlitchFilterStyle: React.CSSProperties = sceneGlitch
+            ? { filter: `${dnBg?.filter ? dnBg.filter + ' ' : ''}url(#vnfx-scene-glitch)`, transition: undefined }
+            : {};
 
-        const handleStageClick = () => {
+        const handleStageClick = (e: React.MouseEvent) => {
+            // Elements marked data-vn-no-advance (glossary terms, quick-menu buttons) must never
+            // count as a click-to-advance — same marker the capture-phase Wait listener honours.
+            if ((e.target as Element)?.closest?.('[data-vn-no-advance]')) return;
             // Only advance if dialogue is showing and not waiting for choice or text input.
             // Locked timed lines advance only by their own timer.
             const d = playerState.uiState.dialogue;
@@ -12533,6 +12816,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     ['--ovl-scale' as any]: stageSize?.width ? stageSize.width / 1280 : 1,
                 }}
             >
+                {sceneGlitch && <StageGlitchFilterDef effect={sceneGlitch} id="vnfx-scene-glitch" />}
                 <div style={panZoomStyle}>
                     <div className={`w-full h-full ${shakeClass} z-10`} style={{ ...shakeIntensityStyle, backgroundColor: effBgColor }}>
                         {effBgUrl && (() => {
@@ -12558,7 +12842,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             // overlays (rendered just below at z0, later in DOM) always sit above it
                             // — multi-plane LAYERING is done via stacked backgrounds (below), which
                             // keeps fades working regardless of any stack layers.
-                            return <div className="absolute inset-0 overflow-hidden" style={{ zIndex: 0, ...dnBgFilterStyle }}>{inner}</div>;
+                            return <div className="absolute inset-0 overflow-hidden" style={{ zIndex: 0, ...dnBgFilterStyle, ...sceneGlitchFilterStyle }}>{inner}</div>;
                         })()}
                         {/* render background transition visuals here so characters render above them */}
                         {playerState?.uiState.transitionElement}
@@ -12586,7 +12870,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     default: return `dissolve-in ${dur}s forwards`; // fade / cross-fade / dissolve
                                 }
                             })();
-                            return <div key={plane.commandId} className="absolute inset-0 overflow-hidden" style={{ zIndex: plane.layer ?? 0, backgroundColor: plane.color, animation: anim, ...dnBgFilterStyle }}>{planeInner}</div>;
+                            return <div key={plane.commandId} className="absolute inset-0 overflow-hidden" style={{ zIndex: plane.layer ?? 0, backgroundColor: plane.color, animation: anim, ...dnBgFilterStyle, ...sceneGlitchFilterStyle }}>{planeInner}</div>;
                         })}
                         {/* Day/night BACKGROUND grade tint — above the background/planes/movie, below characters. */}
                         {dnBg && dnBg.overlayColor !== 'transparent' && (
@@ -12616,6 +12900,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             const containerStyle: React.CSSProperties = isCustom
                                 ? { position: 'absolute', left: `${mX}%`, top: `${mY}%`, width: `${mW}%`, height: `${mH}%`, zIndex: 2, animation: movieAnim }
                                 : { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 2, animation: movieAnim };
+                            // Movie overlays are part of the scene picture — they tear with it.
+                            if (sceneGlitch) containerStyle.filter = 'url(#vnfx-scene-glitch)';
                             // 'contain' keeps the video's aspect within its box — resizing never squishes it.
                             const videoFit = (isCustom ? 'contain' : (movie.objectFit || 'cover')) as React.CSSProperties['objectFit'];
                             // Fade-out: when a transition is set, the video fades to transparent on end before removal.
@@ -12662,9 +12948,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         })}
                         {(() => {
                             // Pre-compute arranged positions when auto-arrange is on.
-                            // Live characters are hidden while their conditions aren't met.
+                            // Live characters are hidden while their conditions aren't met — removed
+                            // outright (instant, the default) or kept mounted + faded ('fade').
                             const allChars = (Object.values(state.characters) as StageCharacterState[])
-                                .filter(c => !c.live || !c.conditions || evaluateConditions(c.conditions, liveVars));
+                                .filter(c => liveShown(c) || isLiveFade(c as any))
+                                .map(c => (isLiveFade(c as any) && !liveShown(c)) ? ({ ...c, __liveHidden: true } as StageCharacterState) : c);
                             const arranged = project.autoArrangeCharacters
                                 ? computeArrangedPositions(allChars.filter(c => !c.charId.startsWith('__ghost')).map(c => ({ id: c.charId, position: c.position })))
                                 : null;
@@ -13126,6 +13414,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         // A running/forwards-filled entrance animation animates opacity and would
                                         // override inline opacity, so disable it when a tween controls opacity.
                                         ...(charOpacity !== undefined ? { opacity: charOpacity, animationName: 'none' } : {}),
+                                        // Live-condition fade (kills any entrance animation while hidden so
+                                        // the forwards-filled entrance opacity can't fight the fade).
+                                        ...liveFadeStyle(char as any),
+                                        ...((char as any).__liveHidden ? { animationName: 'none' } : {}),
                                     }}
                                 >
                                     {wrappedContent}
@@ -13164,7 +13456,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         })()}
                         {/* Placed twinkling lights (PlaceLights) — behind characters by default, or in front if set.
                             A bound brightness variable MULTIPLIES every light's brightness live (1 = as authored). */}
-                        {state.lights && state.lights.length > 0 && (() => {
+                        {state.lights && state.lights.length > 0
+                            // Live Evaluation: placed lights stay registered but only glow while met.
+                            && (!((state as any).lightsConditions?.length) || evaluateConditions((state as any).lightsConditions, liveVars))
+                            && (() => {
                             const lb = (state as any).lightsBrightnessVariableId
                                 ? resolveVarNumber(liveVars, (state as any).lightsBrightnessVariableId, 1, { min: 0, max: 2 })
                                 : 1;
@@ -13175,7 +13470,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 </div>
                             );
                         })()}
-                        {state.textOverlays.filter((o: TextOverlay) => !o.live || !o.conditions || evaluateConditions(o.conditions, liveVars)).map((overlay: TextOverlay) => {
+                        {/* Live-condition visibility: instant overlays are FILTERED (unmount pop — the
+                            long-standing default many games rely on); 'fade' overlays stay mounted and
+                            get __liveHidden stamped so their element fades via liveFadeStyle. */}
+                        {state.textOverlays.filter((o: TextOverlay) => liveShown(o) || isLiveFade(o)).map((rawOverlay: TextOverlay) => {
+                            const overlay = (isLiveFade(rawOverlay) && !liveShown(rawOverlay)) ? { ...rawOverlay, __liveHidden: true } as TextOverlay : rawOverlay;
                             // Live text re-interpolates its {variable} tokens against current
                             // variables each render, so values shown in the text update live.
                             const liveText = (overlay.live && overlay.rawText !== undefined)
@@ -13189,14 +13488,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 />
                             );
                         })}
-                        {state.imageOverlays.filter((o: ImageOverlay) => !o.live || !o.conditions || evaluateConditions(o.conditions, liveVars)).map((overlay: ImageOverlay) => (
-                            <ImageOverlayElement
-                                key={overlay.id}
-                                overlay={overlay}
-                                stageSize={stageSize}
-                            />
-                        ))}
-                        {state.buttonOverlays.filter((o: ButtonOverlay) => !o.live || !o.conditions || evaluateConditions(o.conditions, liveVars)).map((overlay: ButtonOverlay) => (
+                        {state.imageOverlays.filter((o: ImageOverlay) => liveShown(o) || isLiveFade(o)).map((rawOverlay: ImageOverlay) => {
+                            const overlay = (isLiveFade(rawOverlay) && !liveShown(rawOverlay)) ? { ...rawOverlay, __liveHidden: true } as ImageOverlay : rawOverlay;
+                            return (
+                                <ImageOverlayElement
+                                    key={overlay.id}
+                                    overlay={overlay}
+                                    stageSize={stageSize}
+                                />
+                            );
+                        })}
+                        {state.buttonOverlays.filter((o: ButtonOverlay) => liveShown(o) || isLiveFade(o)).map((rawOverlay: ButtonOverlay) => {
+                            const overlay = (isLiveFade(rawOverlay) && !liveShown(rawOverlay)) ? { ...rawOverlay, __liveHidden: true } as ButtonOverlay : rawOverlay;
+                            return (
                             <ButtonOverlayElement
                                 key={overlay.id}
                                 overlay={overlay}
@@ -13251,7 +13555,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     });
                                 }}
                             />
-                        ))}
+                            );
+                        })}
                         {(state.hotSpotOverlays || []).map((overlay: HotSpotOverlay) => (
                             <HotSpotOverlayElement
                                 key={overlay.id}
@@ -13696,6 +14001,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     className="absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white"
                     style={{ opacity: uiState.movieExiting ? 0 : 1, transition: uiState.movieExiting ? `opacity ${movieExitDur}s ease-out` : undefined }}
                     onClick={() => {
+                        // "Players can't skip": swallow every click while the video runs.
+                        if (uiState.movieBlockInput) return;
                         // Script-driven movie (game.playMovie): clicking skips it → resolve the script, clear.
                         if (scriptInputResolverRef.current?.kind === 'movie') {
                             const r = scriptInputResolverRef.current; scriptInputResolverRef.current = null;
@@ -13724,7 +14031,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         onSegmentEnd={handleMovieEnded}
                         onEnded={handleMovieEnded}
                     />
-                    {(uiState.isWaitingForInput || scriptInputResolverRef.current?.kind === 'movie') && (
+                    {!uiState.movieBlockInput && (uiState.isWaitingForInput || scriptInputResolverRef.current?.kind === 'movie') && (
                         <div className="absolute bottom-4 right-4 text-xs opacity-50 pointer-events-none">Click to skip</div>
                     )}
                 </div>
@@ -14015,7 +14322,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 <div key={activeLightningRef.current.key} className="absolute inset-0 pointer-events-none" style={{ opacity: activeLightningRef.current.intensity, zIndex: activeLightningRef.current.affectsDialogue ? 50 : 15 }}>
                     <div
                         className="absolute inset-0"
-                        style={{ backgroundColor: activeLightningRef.current.color, animation: `vn-lightning-${activeLightningRef.current.flashes} ${activeLightningRef.current.duration}s ease-out` }}
+                        // Base opacity 0 is LOAD-BEARING: the keyframes end at 0, but without it the
+                        // element reverts to its natural opacity (1) for the frame between the
+                        // animation finishing and React unmounting it — a spurious full flash at the
+                        // very end of every strike (user-reported).
+                        style={{ backgroundColor: activeLightningRef.current.color, opacity: 0, animation: `vn-lightning-${activeLightningRef.current.flashes} ${activeLightningRef.current.duration}s ease-out` }}
                         onAnimationEnd={(e) => {
                             if (e.target === e.currentTarget) {
                                 activeLightningRef.current = null;
@@ -14051,7 +14362,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             {/* Flashlight — dark overlay with a soft hole that follows the cursor (updated imperatively).
                 z above the dialogue box (20) so it dims too, unless "don't affect dialogue box".
                 When toggled OFF with `darkWhenOff`, render SOLID darkness (no light hole) for dark rooms. */}
-            {flashlight && (flashlight.on || flashlight.darkWhenOff) && (() => {
+            {flashlight && (flashlight.on || flashlight.darkWhenOff)
+                // Live Evaluation: a conditions-carrying flashlight only shines while they hold.
+                && (!flashlight.conditions?.length || evaluateConditions(flashlight.conditions, fxLiveVars))
+                && (() => {
                 // Radius/darkness may follow number variables (live) — same resolution as onMove.
                 const fVars = playerState?.variables;
                 const fRadius = resolveVarNumber(fVars, (flashlight as any).radiusVariableId, flashlight.radius, { min: 1, max: 100 });
@@ -14074,9 +14388,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 feather it (no boxy edges). COMPOSE: if a flashlight is also active it already provides the
                 darkness, so we skip ours and just add the beams — flashlight hole AND beams all reveal. */}
             {(() => {
-                const active = (Object.entries(spotlights) as [string, SpotlightState][]).filter(([, s]) => s.on);
+                const active = (Object.entries(spotlights) as [string, SpotlightState][])
+                    // Live Evaluation: beams with attached conditions only shine while they hold.
+                    .filter(([, s]) => s.on && (!s.conditions?.length || evaluateConditions(s.conditions, fxLiveVars)));
                 if (!active.length) return null;
-                const flashActive = !!(flashlight && (flashlight.on || flashlight.darkWhenOff));
+                const flashActive = !!(flashlight && (flashlight.on || flashlight.darkWhenOff)
+                    && (!flashlight.conditions?.length || evaluateConditions(flashlight.conditions, fxLiveVars)));
                 const maxIntensity = Math.max(...active.map(([, s]) => Math.max(0, Math.min(1, s.intensity))));
                 const affectsDialogue = active.some(([, s]) => s.affectsDialogue);
                 const vpMin = typeof window !== 'undefined' ? Math.min(window.innerWidth, window.innerHeight) : 720;
@@ -14128,6 +14445,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const activeMenuScreen = currentScreenId ? project.uiScreens[currentScreenId] : null;
     const activeHudScreen = hudScreenId ? project.uiScreens[hudScreenId] : null;
 
+    // Variable source for stage-FX live features (⚡ bindings + Live Evaluation conditions).
+    // MUST be the merged view — raw playerState.variables misses HotSpot/HUD/screen-button
+    // flips still sitting in the dirty buffer (see the dirty-uiVars gotcha).
+    const fxLiveVars = mergeDirtyUiVariables(playerState?.variables || {});
+
     const activeOverlayEffects: VNScreenOverlayEffect[] = normalizeOverlayEffects([
         // Scene screen-FX belong to the scene stage, which isn't rendered while paused.
         // Including them in pause let a restored (Continue/load) effect fade in over the
@@ -14135,25 +14457,45 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         ...((playerState?.mode === 'playing' ? playerState?.stageState.screen.overlayEffects : []) ?? []),
         ...(activeHudScreen?.effects ?? []),
         ...(activeMenuScreen?.effects ?? []),
-    ]).map(e => e.intensityVariableId
+    ])
+        // Live Evaluation: a Set Screen Effect command can attach its conditions — the effect
+        // stays registered but only renders while they hold (re-checked every render).
+        .filter(e => !e.conditions?.length || evaluateConditions(e.conditions, fxLiveVars))
+        .map(e => e.intensityVariableId
         // LIVE binding: intensity follows a number variable (0-1) while the effect is active —
         // resolved every render from the current variables (rain thickens as the storm rises).
-        ? { ...e, intensity: resolveVarNumber(mergeDirtyUiVariables(playerState?.variables || {}), e.intensityVariableId, e.intensity, { min: 0, max: 1 }) }
+        ? { ...e, intensity: resolveVarNumber(fxLiveVars, e.intensityVariableId, e.intensity, { min: 0, max: 1 }) }
         : e);
-
-    // Fog/haze/smoke render BEHIND character sprites by default (atmospheric depth) unless the
-    // author ticked "in front of characters". Every other effect (rain, snow, …) stays in the
-    // normal overlay layer above the stage.
-    const FOG_LAYER_TYPES = new Set(['fog', 'haze', 'smoke']);
-    const belowCharEffects = activeOverlayEffects.filter(e => FOG_LAYER_TYPES.has(e.type) && !e.params?.aboveCharacters);
-    const aboveCharEffects = activeOverlayEffects.filter(e => !(FOG_LAYER_TYPES.has(e.type) && !e.params?.aboveCharacters));
 
     // The glitch's DISPLACEMENT cannot live in the overlay component: an overlay only draws on top,
     // and Chromium ignores SVG reference filters in `backdrop-filter` (which is how the first version
     // tried it — the tear silently did nothing, leaving only the coloured bands: "just green lines").
-    // The tear must be a real `filter: url(#…)` on the CONTENT — so it goes on the letterboxed game
-    // container, and the overlay keeps only the decorations (bands, debris).
-    const stageGlitch = activeOverlayEffects.find(e => e.type === 'glitch' && (e.intensity ?? 0) > 0);
+    // The tear must be a real `filter: url(#…)` on the CONTENT — and WHICH content depends on where
+    // the glitch came from:
+    //  - the SCENE (SetScreenOverlayEffect command): only the scene PICTURE tears — background layers,
+    //    stacked planes and movie overlays. Characters are excluded (they have their own glitch
+    //    effect) and the dialogue box must stay readable. Its bands/debris render in the
+    //    below-characters overlay slot for the same reason.
+    //  - a UI SCREEN's effects list: the screen is styling itself, so the whole game container tears
+    //    (a glitching pause menu should glitch everything it shows).
+    const activeGlitch = activeOverlayEffects.find(e => e.type === 'glitch' && (e.intensity ?? 0) > 0);
+    const glitchFromScreen = normalizeOverlayEffects([
+        ...(activeHudScreen?.effects ?? []),
+        ...(activeMenuScreen?.effects ?? []),
+    ]).some(e => e.type === 'glitch');
+    const screenGlitch = glitchFromScreen ? activeGlitch : undefined;
+    const sceneGlitch = glitchFromScreen ? undefined : activeGlitch;
+
+    // Fog/haze/smoke render BEHIND character sprites by default (atmospheric depth) unless the
+    // author ticked "in front of characters". Every other effect (rain, snow, …) stays in the
+    // normal overlay layer above the stage — except the SCENE glitch's dressing (bands + dead
+    // pixels), which corrupts the picture, not the cast or the text.
+    const FOG_LAYER_TYPES = new Set(['fog', 'haze', 'smoke']);
+    const rendersBelowCharacters = (e: VNScreenOverlayEffect) =>
+        (FOG_LAYER_TYPES.has(e.type) && !e.params?.aboveCharacters)
+        || (e.type === 'glitch' && !glitchFromScreen);
+    const belowCharEffects = activeOverlayEffects.filter(rendersBelowCharacters);
+    const aboveCharEffects = activeOverlayEffects.filter(e => !rendersBelowCharacters(e));
 
     // Use fallback dimensions if stageSize hasn't been measured yet (width/height are 0)
     const overlayWidth = (stageSize?.width && stageSize.width > 0) ? stageSize.width : 1280;
@@ -14587,8 +14929,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 `width:100% + aspect-ratio + max-height` STRETCHED on wider-than-aspect screens,
                 which shifted every %-positioned element (e.g. the quick menu) on Android. At a
                 16:9 window this resolves to the same 1280x720 as before (desktop unchanged). */}
-            <div ref={playContainerRef} className="relative overflow-hidden" style={{ width: `min(100vw, calc(100vh * ${project.gameResolution?.width || 1920} / ${project.gameResolution?.height || 1080}))`, height: `min(100vh, calc(100vw * ${project.gameResolution?.height || 1080} / ${project.gameResolution?.width || 1920}))`, '--font-scale': playContainerSize.width > 0 ? playContainerSize.width / (project.gameResolution?.width || 1920) : 1, ...(stageGlitch ? { filter: 'url(#vnfx-stage-glitch)' } : {}) } as React.CSSProperties}>
-                {stageGlitch && <StageGlitchFilterDef effect={stageGlitch} />}
+            <div ref={playContainerRef} className="relative overflow-hidden" style={{ width: `min(100vw, calc(100vh * ${project.gameResolution?.width || 1920} / ${project.gameResolution?.height || 1080}))`, height: `min(100vh, calc(100vw * ${project.gameResolution?.height || 1080} / ${project.gameResolution?.width || 1920}))`, '--font-scale': playContainerSize.width > 0 ? playContainerSize.width / (project.gameResolution?.width || 1920) : 1, ...(screenGlitch ? { filter: 'url(#vnfx-stage-glitch)' } : {}) } as React.CSSProperties}>
+                {screenGlitch && <StageGlitchFilterDef effect={screenGlitch} />}
                 {playerState?.mode === 'playing' ? renderStage() : null}
                 
                 {/* Render closing + current menu screens together so a screen transitioning
@@ -14763,6 +15105,47 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         style={{ animationDuration: `${sceneTransitionDuration}s` }}
                     />
                 )}
+                {/* Author-made custom scene transition (curtain close → scene swap → curtain open).
+                    key=phase remounts the media so each half's animation starts from frame one. */}
+                {customTransition && (
+                    <CustomTransitionOverlay
+                        key={customTransition.phase}
+                        def={customTransition.def}
+                        phase={customTransition.phase}
+                        assetResolver={assetResolver}
+                    />
+                )}
+                {/* Full-screen video from a Play Video ACTION — works over menus AND gameplay.
+                    On-end actions run after the video finishes (or is click-skipped). */}
+                {actionMovie && (() => {
+                    const finish = () => {
+                        const acts = actionMovie.onEndActions;
+                        setActionMovie(null);
+                        acts?.forEach(x => { try { handleUIAction(x); } catch (e) { console.error('[PlayVideo] on-end action failed:', e); } });
+                    };
+                    return (
+                        <div
+                            className="absolute inset-0 bg-black z-[55] flex items-center justify-center"
+                            onClick={() => { if (!actionMovie.blockInput) finish(); }}
+                        >
+                            <TrimmedVideo
+                                src={actionMovie.url}
+                                autoPlay
+                                playsInline
+                                loop={actionMovie.loop}
+                                trimStart={actionMovie.trimStart}
+                                trimEnd={actionMovie.trimEnd}
+                                ref={(el) => { if (el) el.play().catch(() => { el.muted = true; el.play().catch(() => {}); }); }}
+                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                onSegmentEnd={() => { if (!actionMovie.loop) finish(); }}
+                                onEnded={() => { if (!actionMovie.loop) finish(); }}
+                            />
+                            {!actionMovie.blockInput && (
+                                <div className="absolute bottom-4 right-4 text-xs text-white opacity-50 pointer-events-none">Click to skip</div>
+                            )}
+                        </div>
+                    );
+                })()}
             </div>
             {/* In-game phone (built-in chrome). Shows whenever something opens it (command / action /
                 hotkey) — no separate "enabled" gate, so it works out of the box. */}

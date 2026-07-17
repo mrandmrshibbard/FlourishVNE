@@ -111,10 +111,26 @@ const ActionFields: React.FC<{
             </>)));
         }
         case UIActionType.JumpToScene:
-            return group('sky', field(t('actionEditor.targetScene', 'Target scene'), sel(a.targetSceneId || '', v => set({ targetSceneId: v }), <>
-                <option value="">{t('actionsList.selectScene', 'Select a scene…')}</option>
-                {Object.values(project.scenes).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </>)));
+            return group('sky', <>
+                {field(t('actionEditor.targetScene', 'Target scene'), sel(a.targetSceneId || '', v => set({ targetSceneId: v }), <>
+                    <option value="">{t('actionsList.selectScene', 'Select a scene…')}</option>
+                    {Object.values(project.scenes).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </>))}
+                {field(t('actionEditor.jumpTransition', 'Scene transition'), sel(a.transition || '', v => set({ transition: v || undefined }), <>
+                    <option value="">{t('actionEditor.jumpTransitionDefault', "Use the scene's setting")}</option>
+                    <option value="fade">{t('actionEditor.jumpTransitionFade', 'Fade to black')}</option>
+                    <option value="dissolve">{t('actionEditor.jumpTransitionDissolve', 'Dissolve')}</option>
+                    <option value="iris-out">{t('actionEditor.jumpTransitionIris', 'Iris (closing circle)')}</option>
+                    <option value="wipe-right">{t('actionEditor.jumpTransitionWipe', 'Wipe')}</option>
+                    <option value="slide-left">{t('actionEditor.jumpTransitionSlide', 'Slide')}</option>
+                    <option value="instant">{t('actionEditor.jumpTransitionInstant', 'Instant (no effect)')}</option>
+                    {Object.values(project.customTransitions ?? {}).length > 0 && (
+                        <optgroup label={t('actionEditor.jumpTransitionYours', 'Your transitions')}>
+                            {Object.values(project.customTransitions ?? {}).map((ct: any) => <option key={ct.id} value={`custom:${ct.id}`}>{ct.name}</option>)}
+                        </optgroup>
+                    )}
+                </>))}
+            </>);
         case UIActionType.JumpToLabel: {
             const labels: Array<{ labelId: string; sceneName: string }> = [];
             Object.values(project.scenes).forEach((scene: VNScene) => scene.commands.forEach((cmd: any) => {
@@ -199,6 +215,41 @@ const ActionFields: React.FC<{
                     {t('actionsList.loop', 'Loop')}
                 </label>
             </>);
+        case UIActionType.StopSound:
+            return group('purple', <>
+                {field(t('actionEditor.soundToStop', 'Sound to stop'), sel(a.audioId || '', v => set({ audioId: v || null }), <>
+                    <option value="">{t('actionEditor.allSounds', 'All playing sounds')}</option>
+                    {Object.values(project.audio).map((au: any) => <option key={au.id} value={au.id}>{au.name}</option>)}
+                </>))}
+                {field(t('actionsList.fadeSeconds', 'Fade (seconds)'), txt(String(a.fadeDuration ?? 0), v => set({ fadeDuration: Math.max(0, parseFloat(v) || 0) }), { type: 'number', min: 0 }))}
+                <p className="text-[10px] text-[var(--text-muted)]">{t('actionEditor.stopSoundHint', 'Stops sound effects — background music has its own Stop Music action.')}</p>
+            </>);
+        case UIActionType.PlayVideo: {
+            // A video can live in videos OR backgrounds/images (upload-tab siloing) — list them all.
+            const videoOptions = [
+                ...Object.values(project.videos || {}),
+                ...Object.values(project.backgrounds || {}).filter((v: any) => v.isVideo || v.videoUrl),
+                ...Object.values(project.images || {}).filter((v: any) => v.isVideo || v.videoUrl),
+            ] as any[];
+            return group('purple', <>
+                {field(t('actionEditor.video', 'Video'), sel(a.videoId || '', v => set({ videoId: v || null }), <>
+                    <option value="">{t('actionEditor.selectVideo', 'Select a video…')}</option>
+                    {videoOptions.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </>))}
+                <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+                    <input type="checkbox" checked={a.loop ?? false} onChange={e => set({ loop: e.target.checked })} />
+                    {t('actionsList.loop', 'Loop')}
+                </label>
+                <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+                    <input type="checkbox" checked={a.blockInput ?? false} disabled={a.loop ?? false} onChange={e => set({ blockInput: e.target.checked })} />
+                    {t('actionEditor.videoBlockInput', "Players can't skip it (no clicking through)")}
+                </label>
+                {(a.loop ?? false) && <p className="text-[10px] text-[var(--text-muted)]">{t('actionEditor.videoLoopBlockHint', 'A looping video always stays skippable — otherwise it could never be closed.')}</p>}
+                {options?.renderActionList
+                    ? <div className="mt-1">{options.renderActionList((a.onEndActions as VNUIAction[]) || [], (acts) => set({ onEndActions: acts }), t('actionEditor.videoOnEnd', 'When the video ends, run'))}</div>
+                    : null}
+            </>);
+        }
         case UIActionType.PlayMusic:
             return group('purple', <>
                 {field(t('actionEditor.music', 'Music'), sel(a.audioId || '', v => set({ audioId: v }), <>

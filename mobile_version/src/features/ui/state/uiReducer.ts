@@ -3,6 +3,7 @@ import { VNProject } from '../../../types/project';
 // FIX: GoToScreenAction and UIActionType are exported from shared types.
 import { VNFontSettings, VNProjectUI, VNUIScreen, VNUIElement, UIElementType, UIButtonElement } from '../types';
 import { VNTextboxTheme } from '../../character/types';
+import { VNCustomTransition } from '../../scene/types';
 import { GoToScreenAction, UIActionType } from '../../../types/shared';
 import { createDefaultUIScreens } from '../../../constants';
 
@@ -21,13 +22,19 @@ export type UIAction =
     | { type: 'DELETE_UI_SCREEN', payload: { screenId: VNID } }
     | { type: 'DUPLICATE_UI_SCREEN', payload: { screenId: VNID } }
     | { type: 'ADD_UI_ELEMENT', payload: { screenId: VNID, element: VNUIElement } }
+    | { type: 'REORDER_UI_ELEMENT', payload: { screenId: VNID, elementId: VNID, direction: -1 | 1 } }
+    | { type: 'REORDER_UI_ELEMENTS', payload: { screenId: VNID, elementIds: VNID[] } }
     | { type: 'UPDATE_UI_ELEMENT', payload: { screenId: VNID, elementId: VNID, updates: Partial<VNUIElement> } }
     | { type: 'DELETE_UI_ELEMENT', payload: { screenId: VNID, elementId: VNID } }
     | { type: 'RESTORE_DEFAULT_UI_SCREENS' }
     // ── Reusable dialogue textbox themes ── //
     | { type: 'ADD_TEXTBOX_THEME', payload: { id?: VNID; name: string } }
     | { type: 'UPDATE_TEXTBOX_THEME', payload: { themeId: VNID; updates: Partial<VNTextboxTheme> } }
-    | { type: 'DELETE_TEXTBOX_THEME', payload: { themeId: VNID } };
+    | { type: 'DELETE_TEXTBOX_THEME', payload: { themeId: VNID } }
+    // ── Custom scene transitions (author-made closing/opening animations) ── //
+    | { type: 'ADD_CUSTOM_TRANSITION', payload: { id?: VNID; name: string } }
+    | { type: 'UPDATE_CUSTOM_TRANSITION', payload: { transitionId: VNID; updates: Partial<VNCustomTransition> } }
+    | { type: 'DELETE_CUSTOM_TRANSITION', payload: { transitionId: VNID } };
 
 
 export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
@@ -106,6 +113,28 @@ export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
         // Dangling references (character.textboxThemeId / dialogue lines) resolve to the global look,
         // so we don't need to scrub them — keeping this action cheap and side-effect free.
         return { ...state, textboxThemes: next };
+    }
+
+    case 'ADD_CUSTOM_TRANSITION': {
+        const id = action.payload.id || `ctrans-${generateId()}`;
+        const transition: VNCustomTransition = { id, name: action.payload.name, close: {}, open: {} };
+        return { ...state, customTransitions: { ...(state.customTransitions || {}), [id]: transition } };
+    }
+
+    case 'UPDATE_CUSTOM_TRANSITION': {
+        const { transitionId, updates } = action.payload;
+        const existing = state.customTransitions?.[transitionId];
+        if (!existing) return state;
+        return { ...state, customTransitions: { ...state.customTransitions, [transitionId]: { ...existing, ...updates, id: transitionId } } };
+    }
+
+    case 'DELETE_CUSTOM_TRANSITION': {
+        if (!state.customTransitions?.[action.payload.transitionId]) return state;
+        const next = { ...state.customTransitions };
+        delete next[action.payload.transitionId];
+        // Dangling `custom:<id>` references (scene outTransition / jump overrides) fall back to a
+        // plain fade at runtime, so no scrubbing needed here either.
+        return { ...state, customTransitions: next };
     }
 
     case 'ADD_UI_SCREEN': {
@@ -233,6 +262,35 @@ export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
         if (!screen) return state;
         const newElements = { ...screen.elements, [element.id]: element };
         return { ...state, uiScreens: { ...state.uiScreens, [screenId]: { ...screen, elements: newElements } } };
+    }
+
+    case 'REORDER_UI_ELEMENT': {
+        // Element key order IS the base render order (later = drawn on top within the same
+        // layer band), so moving an element in the screen tree is a real stacking tool.
+        const { screenId, elementId, direction } = action.payload;
+        const screen = state.uiScreens[screenId];
+        if (!screen?.elements[elementId]) return state;
+        const ids = Object.keys(screen.elements) as VNID[];
+        const i = ids.indexOf(elementId);
+        const j = i + direction;
+        if (i < 0 || j < 0 || j >= ids.length) return state;
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+        const elements: Record<VNID, VNUIElement> = {};
+        for (const id of ids) elements[id] = screen.elements[id];
+        return { ...state, uiScreens: { ...state.uiScreens, [screenId]: { ...screen, elements } } };
+    }
+
+    case 'REORDER_UI_ELEMENTS': {
+        // Full-order variant (drag & drop). Guard: the new order must be exactly the same id set —
+        // a stale drag can't drop or duplicate elements.
+        const { screenId, elementIds } = action.payload;
+        const screen = state.uiScreens[screenId];
+        if (!screen) return state;
+        const current = Object.keys(screen.elements);
+        if (elementIds.length !== current.length || elementIds.some(id => !screen.elements[id])) return state;
+        const elements: Record<VNID, VNUIElement> = {};
+        for (const id of elementIds) elements[id] = screen.elements[id];
+        return { ...state, uiScreens: { ...state.uiScreens, [screenId]: { ...screen, elements } } };
     }
 
     case 'UPDATE_UI_ELEMENT': {

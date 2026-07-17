@@ -53,6 +53,10 @@ export function defaultActionForType(type: UIActionType, project: VNProject): VN
             return { ...base, audioId: firstKey(project.audio), volume: 1, loop: true, fadeDuration: 1 };
         case UIActionType.StopMusic:
             return { ...base, fadeDuration: 1 };
+        case UIActionType.StopSound:
+            return { ...base, audioId: null, fadeDuration: 0 };
+        case UIActionType.PlayVideo:
+            return { ...base, videoId: firstKey(project.videos), loop: false, blockInput: false, onEndActions: [] };
         case UIActionType.CycleLayerAsset: {
             const firstCharId = firstKey(project.characters);
             const firstChar = (project.characters as any)[firstCharId];
@@ -128,6 +132,10 @@ export function actionSummaryDetail(action: VNUIAction, project: VNProject): str
         case UIActionType.PlaySound:
         case UIActionType.PlayMusic:
             return (project.audio[a.audioId] as any)?.name || '';
+        case UIActionType.StopSound:
+            return a.audioId ? ((project.audio[a.audioId] as any)?.name || '') : 'all sounds';
+        case UIActionType.PlayVideo:
+            return (project.videos[a.videoId] as any)?.name || (project.backgrounds[a.videoId] as any)?.name || (project.images?.[a.videoId] as any)?.name || '';
         case UIActionType.CallCommonEvent:
             return ((project as any).commonEvents?.[a.commonEventId])?.name || '';
         case UIActionType.GiveItem:

@@ -332,6 +332,8 @@ async function fetchVendorScripts(): Promise<{ react: string; reactDom: string; 
  *  - Any plugin the user opted out of via `includeInBuild === false`.
  * Their plugin-scoped storage is dropped too (e.g. a Story Bible's notes don't belong in the game).
  * Runtime plugins (the default) are kept so games that intentionally use a plugin still work.
+ * The built-in Story Bible (`project.storyBible`) is stripped for the same reason — private
+ * writer's notes never ship. The glossary intentionally SHIPS (players hover its terms).
  */
 export function stripBuildExcludedPlugins(project: VNProject): VNProject {
   const plugins = (project.plugins || {}) as Record<string, VNPlugin>;
@@ -344,7 +346,8 @@ export function stripBuildExcludedPlugins(project: VNProject): VNProject {
     keptPlugins[id] = p;
     if (project.pluginStorage && project.pluginStorage[id] !== undefined) keptStorage[id] = project.pluginStorage[id];
   }
-  return { ...project, plugins: keptPlugins, pluginStorage: keptStorage };
+  const { storyBible: _privateNotes, ...rest } = project;
+  return { ...rest, plugins: keptPlugins, pluginStorage: keptStorage };
 }
 
 export async function generateStandaloneHTML(project: VNProject): Promise<string> {

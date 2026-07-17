@@ -27,6 +27,9 @@ export type ExportManifest = {
     project: { id: VNID; title: string };
     embedded: { backgrounds: string[]; images: string[]; audio: string[]; videos: string[]; characters: string[]; ui: string[]; fonts: string[] };
     fetchFailures: string[];
+    /** Archive paths the final project.json references but the zip does NOT contain — the ground
+     *  truth behind the "missing media" warning (fetchFailures alone has phantom entries). */
+    danglingRefs?: string[];
 };
 
 const dataUrlToBlob = async (dataUrl: string): Promise<{ blob: Blob, mimeType: string }> => {
@@ -930,6 +933,11 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
         const handleStr = async (val: string): Promise<string> => {
             const rel = refToRelPath(val);
             if (!rel) return val;
+            // Fields rewritten by the extraction pass above already point INSIDE this zip — the
+            // file is present by construction. Reading it from the on-disk library would fail
+            // (it only exists in the archive being built) and log a phantom "missing file" for
+            // every embedded asset, on every save. Skip straight past.
+            if (zip.file(rel)) return rel;
             if (!added.has(rel)) {
                 added.add(rel);
                 let ok = false;
@@ -960,6 +968,43 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
         };
         await walk(projectClone);
     }
+
+    // ── GROUND-TRUTH MISSING-MEDIA CHECK ────────────────────────────────────────────────────────
+    // fetchFailures records every read/fetch that failed along the way, but some of those are
+    // phantoms: a managed file-backed ref hits the raw fetch() in the asset processors (which
+    // cannot read the library folder) before the managed-assets walk embeds it successfully, and
+    // embedded data-URL assets used to be re-read from disk by that walk. Users saw "41 media
+    // files could not be found" on every save of a perfectly healthy project. The one measure
+    // that can't lie: a reference is missing iff the FINAL project.json points at an archive
+    // path this zip does not contain. That list drives the user-facing warning; fetchFailures
+    // stays in manifest.json for later diagnosis.
+    const danglingRefs: string[] = [];
+    {
+        const seenRefs = new Set<string>();
+        const checkRef = (val: string): void => {
+            const rel = refToRelPath(val);
+            if (rel && !seenRefs.has(rel)) {
+                seenRefs.add(rel);
+                if (!zip.file(rel)) danglingRefs.push(rel);
+            }
+        };
+        const collectRefs = (node: any): void => {
+            if (Array.isArray(node)) {
+                for (const v of node) {
+                    if (typeof v === 'string') checkRef(v);
+                    else if (v && typeof v === 'object') collectRefs(v);
+                }
+            } else if (node && typeof node === 'object') {
+                for (const k in node) {
+                    const v = node[k];
+                    if (typeof v === 'string') checkRef(v);
+                    else if (v && typeof v === 'object') collectRefs(v);
+                }
+            }
+        };
+        collectRefs(projectClone);
+    }
+    manifest.danglingRefs = danglingRefs;
 
     // --- 3. SAVE PROJECT.JSON AND GENERATE ZIP ---
     // Fills the slots reserved at the top — these stay FIRST in the archive. See the note there.
@@ -995,7 +1040,7 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
             });
             const end = await electronAPI.exportStreamEnd();
             if (!end?.success) throw new Error(end?.error || 'Could not finalize the file.');
-            return { saved: true, filePath: end.filePath || start.filePath, missingAssets: manifest.fetchFailures.length ? [...manifest.fetchFailures] : undefined };
+            return { saved: true, filePath: end.filePath || start.filePath, missingAssets: danglingRefs.length ? [...danglingRefs] : undefined };
         } catch (err) {
             try { await electronAPI.exportStreamAbort(); } catch { /* best-effort cleanup */ }
             throw err;
@@ -1016,12 +1061,12 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
             throw new Error(result?.error || 'Failed to save project export.');
         }
 
-        return { saved: true, filePath: result.filePath, missingAssets: manifest.fetchFailures.length ? [...manifest.fetchFailures] : undefined };
+        return { saved: true, filePath: result.filePath, missingAssets: danglingRefs.length ? [...danglingRefs] : undefined };
     }
 
     const blob = new Blob([archiveData], { type: 'application/octet-stream' });
     saveAs(blob, filename);
-    return { saved: true, missingAssets: manifest.fetchFailures.length ? [...manifest.fetchFailures] : undefined };
+    return { saved: true, missingAssets: danglingRefs.length ? [...danglingRefs] : undefined };
 };
 
 /**

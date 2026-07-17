@@ -837,7 +837,10 @@ const MenuEditor: React.FC<{
     /** Switch the UI editor to another screen (used when a wizard generates a new one).
      *  Optional — hosts without screen navigation (popped-out canvas) fall back to a toast. */
     onNavigateToScreen?: (screenId: VNID) => void,
-}> = ({ activeScreenId, selectedElementIds, setSelectedElementIds, isPlaying, onNavigateToScreen }) => {
+    /** Eye toggles from the screen tree: elements hidden on the EDITOR canvas only (the game and
+     *  test play are untouched — this is a declutter-while-designing tool). */
+    hiddenElementIds?: Set<VNID>,
+}> = ({ activeScreenId, selectedElementIds, setSelectedElementIds, isPlaying, onNavigateToScreen, hiddenElementIds }) => {
     const { t } = useTranslation('ui');
     const { project, dispatch } = useProject();
     const toast = useToast();
@@ -1249,12 +1252,21 @@ const MenuEditor: React.FC<{
     // Mirror that here for WYSIWYG, using the same flat scale the additional-plane preview uses.
     const mainBgParallax = (screen.backgroundParallaxDepth ?? 0) > 0;
     const parallaxActive = !!screen.parallax?.mode && screen.parallax.mode !== 'off';
+    // See-through main background (matches the engine's per-plane opacity).
+    const mainBgOpacity = (screen.background as any).opacity;
+    const mainBgSeeThrough = mainBgOpacity != null && mainBgOpacity < 1;
     const getBackground = () => {
-        if (screen.background.type === 'color') return { backgroundColor: screen.background.value };
+        if (screen.background.type === 'color') {
+            // Opacity can't go on the canvas div (it would fade the elements too) — mix the
+            // transparency into the colour itself.
+            return { backgroundColor: mainBgSeeThrough
+                ? `color-mix(in srgb, ${screen.background.value} ${Math.round(Math.max(0, mainBgOpacity) * 100)}%, transparent)`
+                : screen.background.value };
+        }
         // Video backgrounds can't be a CSS background-image — they render as a <video> child below.
         if (bgIsVideo) return {};
-        // A parallaxed image bg is rendered as a scaled <div> layer below instead of on the stage.
-        if (bgAsset?.imageUrl && !mainBgParallax) return { backgroundImage: `url(${bgAsset.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+        // A parallaxed OR see-through image bg renders as a <div> layer below instead of on the stage.
+        if (bgAsset?.imageUrl && !mainBgParallax && !mainBgSeeThrough) return { backgroundImage: `url(${bgAsset.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' };
         return {};
     };
 
@@ -1298,13 +1310,13 @@ const MenuEditor: React.FC<{
                         autoPlay, leaving it broken/blank on return — so we unmount it during play
                         and let it mount fresh when the editor is shown again. */}
                     {mainBgVideoUrl && !isPlaying && (
-                        <TrimmedVideo key={`mainbg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={mainBgVideoUrl} autoPlay loop muted trimStart={(screen.background as any)?.trimStart} trimEnd={(screen.background as any)?.trimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" style={{ zIndex: 0, transform: mainBgParallax ? 'scale(1.15)' : undefined, transformOrigin: 'center' }} />
+                        <TrimmedVideo key={`mainbg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={mainBgVideoUrl} autoPlay loop muted trimStart={(screen.background as any)?.trimStart} trimEnd={(screen.background as any)?.trimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" style={{ zIndex: 0, transform: mainBgParallax ? 'scale(1.15)' : undefined, transformOrigin: 'center', opacity: mainBgSeeThrough ? Math.max(0, mainBgOpacity) : undefined }} />
                     )}
 
-                    {/* Parallaxed image main background — scaled layer mirroring the engine's over-scale. */}
-                    {!bgIsVideo && mainBgParallax && bgAsset?.imageUrl && (
+                    {/* Parallaxed or see-through image main background — child layer mirroring the engine. */}
+                    {!bgIsVideo && (mainBgParallax || mainBgSeeThrough) && bgAsset?.imageUrl && (
                         <div className="absolute inset-0 overflow-hidden" style={{ zIndex: 0 }}>
-                            <img src={bgAsset.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ transform: 'scale(1.15)', transformOrigin: 'center' }} />
+                            <img src={bgAsset.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ transform: mainBgParallax ? 'scale(1.15)' : undefined, transformOrigin: 'center', opacity: mainBgSeeThrough ? Math.max(0, mainBgOpacity) : undefined }} />
                         </div>
                     )}
 
@@ -1319,20 +1331,22 @@ const MenuEditor: React.FC<{
                     {/* Additional background planes (multi-plane parallax) — shown at their layer
                         so the author can arrange them. Static here (no parallax drift). */}
                     {(screen.additionalBackgrounds || []).map(b => {
+                        const planeOpacity = ((b.background as any).opacity != null && (b.background as any).opacity < 1) ? Math.max(0, (b.background as any).opacity) : undefined;
                         if (b.background.type === 'color') {
-                            return <div key={b.id} className="absolute inset-0" style={{ zIndex: b.layer ?? 0, backgroundColor: b.background.value }} />;
+                            return <div key={b.id} className="absolute inset-0" style={{ zIndex: b.layer ?? 0, backgroundColor: b.background.value, opacity: planeOpacity }} />;
                         }
                         // Detect video by the actual asset, not the declared type.
                         const planeAsset: any = b.background.assetId ? (project.backgrounds[b.background.assetId] || project.images?.[b.background.assetId] || project.videos[b.background.assetId]) : null;
                         const planeIsVideo = !!(planeAsset && (planeAsset.isVideo || planeAsset.videoUrl));
                         const url = planeAsset ? (planeIsVideo ? planeAsset.videoUrl : planeAsset.imageUrl) : null;
                         if (!url) return null;
-                        const planeScale = b.parallaxDepth ? { transform: 'scale(1.15)', transformOrigin: 'center' } as const : undefined;
+                        const planeScale = b.parallaxDepth ? { transform: 'scale(1.15)', transformOrigin: 'center' } : {};
+                        const planeStyle = { ...planeScale, opacity: planeOpacity } as React.CSSProperties;
                         return (
                             <div key={b.id} className="absolute inset-0 overflow-hidden" style={{ zIndex: b.layer ?? 0 }}>
                                 {planeIsVideo
-                                    ? (!isPlaying && <TrimmedVideo key={`v-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={url} autoPlay loop muted trimStart={(b.background as any)?.trimStart} trimEnd={(b.background as any)?.trimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" style={planeScale} />)
-                                    : <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover" style={planeScale} />}
+                                    ? (!isPlaying && <TrimmedVideo key={`v-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={url} autoPlay loop muted trimStart={(b.background as any)?.trimStart} trimEnd={(b.background as any)?.trimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" style={planeStyle} />)
+                                    : <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover" style={planeStyle} />}
                             </div>
                         );
                     })}
@@ -1341,6 +1355,7 @@ const MenuEditor: React.FC<{
                         draggable element are skipped here — they render via the dedicated
                         interactive-element overlays below, read from `screen.elements`. */}
                     {isReady && stageSize.width > 0 && Object.values(screen.elements).map((element: VNUIElement) => {
+                        if (hiddenElementIds?.has(element.id)) return null; // eye-toggled off in the tree (editor-only)
                         if (isInteractiveElement(element)) return null;
                         // Free-placement SaveSlotGrid / CGGallery / Inventory: render per-slot drag
                         // handles instead of one box for the whole element.
@@ -1467,6 +1482,7 @@ const MenuEditor: React.FC<{
                     {/* Interactive-element overlays. Hot spots, image maps, and draggables are typed
                         entries in screen.elements — the overlay components consume them directly. */}
                     {isReady && stageSize.width > 0 && Object.values(screen.elements).map((el: VNUIElement) => {
+                        if (hiddenElementIds?.has(el.id)) return null; // eye-toggled off in the tree (editor-only)
                         if (isHotSpotElement(el)) {
                             return (
                                 <HotSpotOverlay

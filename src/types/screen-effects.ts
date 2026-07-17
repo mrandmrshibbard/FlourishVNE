@@ -1,4 +1,6 @@
 import { VNID } from './index';
+// Type-only (erased at runtime) — avoids a module cycle: shared → index → screen-effects.
+import type { VNCondition } from './shared';
 
 /** The built-in screen-overlay effects. */
 export type VNKnownScreenOverlayEffectType =
@@ -12,7 +14,11 @@ export type VNKnownScreenOverlayEffectType =
   | 'fog'
   | 'haze'
   | 'smoke'
-  | 'fireworks';
+  | 'fireworks'
+  | 'lightning'
+  | 'flashlight'
+  | 'spotlight'
+  | 'lights';
 
 /** Effect type: a built-in name OR a plugin-registered effect id (e.g. "myPlugin.glow").
  *  Widened to `string` (additive) so plugin custom effects are valid effect types. */
@@ -21,7 +27,38 @@ export type VNScreenOverlayEffectType = VNKnownScreenOverlayEffectType | (string
 /** The set of built-in effect type names (used to separate built-ins from plugin effects). */
 export const BUILTIN_OVERLAY_EFFECT_TYPES: readonly VNKnownScreenOverlayEffectType[] = [
   'crtScanlines', 'chromaticGlitch', 'glitch', 'sunbeams', 'shimmer', 'rain', 'snowAsh', 'fog', 'haze', 'smoke', 'fireworks',
+  'lightning', 'flashlight', 'spotlight', 'lights',
 ];
+
+/** One positionable beam of a screen-attached 'spotlight' effect. Field names deliberately match
+ *  the Spotlight COMMAND's config so the same placement picker (click to place, drag to aim)
+ *  serves both. All positions are % of the screen. */
+export interface VNScreenBeam {
+  id: string;
+  sourceX: number;
+  sourceY: number;
+  aimAngle: number;      // degrees, 0 = straight down
+  beamWidth?: number;    // far-end width, % (default 45)
+  sourceWidth?: number;  // source slit width, % (default 8)
+  height?: number;       // beam length, % (default 100)
+  falloff?: number;      // 0..1 glow falloff (default 0.5)
+  color?: string;        // beam colour (default warm white)
+}
+
+/** One placed light point of a screen-attached 'lights' effect. Structurally identical to the
+ *  scene command's VNLight (defined here too because scene/types imports from this file). */
+export interface VNScreenLight {
+  id: string;
+  /** 'christmas' = a coloured string-light bulb (matches the scene command's VNLightType). */
+  type: 'candle' | 'star' | 'christmas';
+  x: number;             // % of the screen
+  y: number;             // % of the screen
+  size?: number;         // relative size multiplier (~0.5..3, default 1)
+  color?: string;        // bulb/star colour (candle is always warm)
+  twinkle?: 'fade' | 'blink' | 'chase' | 'steady';
+  twinkleSpeed?: number; // speed multiplier (default 1)
+  brightness?: number;   // 0..1 (default 1)
+}
 
 export type VNSnowAshVariant = 'snow' | 'ash';
 
@@ -69,6 +106,15 @@ export interface VNEffectParams {
   /** Render this atmospheric layer IN FRONT OF character sprites (foreground). Default (false) =
    *  behind characters, so they stand within the fog. Only meaningful for fog/haze/smoke. */
   aboveCharacters?: boolean;
+  // --- Flashlight (mouse-following darkness with a clear circle at the cursor) ---
+  /** Size of the lit circle (0 = small, 1 = large). Default ≈ 0.5. Intensity = darkness. */
+  radius?: number;
+  /** Feathering of the lit circle's edge (0 = hard rim, 1 = very soft). Default ≈ 0.5 */
+  softness?: number;
+  // --- Spotlight (positionable stage beams; intensity = how dark the rest of the screen goes) ---
+  beams?: VNScreenBeam[];
+  // --- Lights (placed twinkling light points; intensity = master brightness) ---
+  lights?: VNScreenLight[];
 }
 
 export interface VNScreenOverlayEffect {
@@ -80,6 +126,10 @@ export interface VNScreenOverlayEffect {
    *  clamped). The static `intensity` is the fallback when the variable is missing/non-numeric.
    *  Additive-optional. */
   intensityVariableId?: VNID | null;
+  /** Live-evaluated show conditions — present only when a Set Screen Effect command opted into
+   *  Live Evaluation. The effect stays registered; it renders only while these hold (re-checked
+   *  every render as variables change). Additive-optional. */
+  conditions?: VNCondition[];
   /** Only used for snowAsh */
   variant?: VNSnowAshVariant;
   /** Optional color for the effect (hex string like #FFAA00) */

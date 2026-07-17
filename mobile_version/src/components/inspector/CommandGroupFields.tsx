@@ -17,7 +17,7 @@ import { VNProject } from '../../types/project';
 import type { VNID } from '../../types';
 import VideoTrimFields from '../ui/VideoTrimFields';
 import {
-    VNCommand, CommandType, DialogueCommand, ShowButtonCommand, ShowItemCommand, ShowTextCommand, ShowImageCommand, ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand, REACTIVE_VISUAL_TYPES,
+    VNCommand, CommandType, DialogueCommand, ShowButtonCommand, ShowItemCommand, ShowTextCommand, ShowImageCommand, ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand, REACTIVE_VISUAL_TYPES, REACTIVE_FX_TYPES,
     ShowPhoneTextCommand, ChoiceOption,
 } from '../../features/scene/types';
 import { VNUIAction, UIActionType } from '../../types/shared';
@@ -34,6 +34,7 @@ import { OrientationFields, TransitionFields, PositionInputs, CharacterVisualEff
 import { canvasPointPick, useCanvasPointPick } from '../../utils/canvasPointPick';
 import { computeCharacterFitScale } from '../../utils/characterFit';
 import CollapsibleSection from '../ui/CollapsibleSection';
+import SceneTransitionSelect from '../ui/SceneTransitionSelect';
 import { InspectorGroupId, INSPECTOR_GROUPS, getCommandGroups } from './inspectorGroups';
 import { LayerControl, ParallaxDepthControl } from './LayerControl';
 import SpotlightPlacementField from './SpotlightPlacementField';
@@ -104,6 +105,12 @@ interface GroupProps {
     ctx?: GroupCtx;
 }
 
+/** The live-condition visuals whose runtime supports the optional show/hide FADE (overlays +
+ *  characters). SetBackground/ShowHotSpot are live-capable but pop only, so they're excluded. */
+const LIVE_FADE_TYPES: ReadonlySet<CommandType> = new Set([
+    CommandType.ShowText, CommandType.ShowImage, CommandType.ShowButton, CommandType.ShowItem, CommandType.ShowCharacter,
+]);
+
 /** Renders the fields for one (command, group) pair. Returns null if nothing applies. */
 export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, updateCommand, ctx }) => {
     const { project } = useProject();
@@ -113,7 +120,7 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
     // independent of command type.
     if (groupId === 'conditions') {
         const c = command as any;
-        const supportsLive = REACTIVE_VISUAL_TYPES.has(command.type) || command.type === CommandType.PlaySoundEffect;
+        const supportsLive = REACTIVE_VISUAL_TYPES.has(command.type) || REACTIVE_FX_TYPES.has(command.type) || command.type === CommandType.PlaySoundEffect;
         return <>
             <p className="text-xs text-[var(--text-secondary)] mb-2">{t('footer.conditionsDesc')}</p>
             <ConditionsEditor conditions={c.conditions} project={project} onChange={(cs) => updateCommand({ conditions: cs } as any)} />
@@ -127,6 +134,23 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
                             : t('footer.liveConditionsDesc')}
                     </span>
                 </label>
+            )}
+            {/* Fade option for the overlay/character visuals that support it at runtime. Default is
+                INSTANT and must stay that way — authors' systems depend on the immediate pop. */}
+            {!!c.liveConditions && LIVE_FADE_TYPES.has(command.type) && (
+                <div className="mt-2 pl-6 space-y-1">
+                    <FormField label={t('footer.liveTransition', 'When the condition changes')}>
+                        <Select value={c.liveTransition || 'instant'} onChange={e => updateCommand({ liveTransition: e.target.value === 'instant' ? undefined : e.target.value } as any)}>
+                            <option value="instant">{t('footer.liveTransitionInstant', 'Appear / disappear instantly (default)')}</option>
+                            <option value="fade">{t('footer.liveTransitionFade', 'Fade in and out')}</option>
+                        </Select>
+                    </FormField>
+                    {c.liveTransition === 'fade' && (
+                        <FormField label={t('footer.liveTransitionDuration', 'Fade time (seconds)')}>
+                            <TextInput type="number" min="0.05" step="0.1" value={c.liveTransitionDuration ?? 0.3} onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) updateCommand({ liveTransitionDuration: v } as any); }} />
+                        </FormField>
+                    )}
+                </div>
             )}
         </>;
     }
@@ -335,6 +359,10 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
                 </Select>
             </FormField>
             {!project.scenes[c.targetSceneId] && <p className="text-red-500 text-xs">Warning: Target scene not found.</p>}
+            <FormField label={t('jump.transition', 'Scene transition')}>
+                <SceneTransitionSelect value={c.transition} customTransitions={project.customTransitions} onChange={v => updateCommand({ transition: v } as any)} />
+            </FormField>
+            <p className="text-[10px] text-[var(--text-muted)]">{t('jump.transitionHint', "Just for this jump — overrides the scene's exit transition from Scene Settings.")}</p>
         </>;
     }
     if (command.type === CommandType.Wait) {
@@ -1269,13 +1297,39 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
             </>;
         case CommandType.Lightning: {
             const audioOpts = Object.values(project.audio || {}) as any[];
+            const stormMode: string = cmd.storm ?? 'once';
             return <>
+                <FormField label={t('fx.stormMode', 'Lightning mode')}>
+                    <Select value={stormMode} onChange={e => updateCommand({ storm: e.target.value === 'once' ? undefined : e.target.value } as any)}>
+                        <option value="once">{t('fx.stormOnce', 'Single strike')}</option>
+                        <option value="continuous">{t('fx.stormContinuous', 'Continuous storm (repeats until stopped)')}</option>
+                        <option value="stop">{t('fx.stormStop', 'Stop the storm')}</option>
+                    </Select>
+                </FormField>
+                {stormMode === 'stop' && (
+                    <p className="text-xs text-[var(--text-secondary)]">{t('fx.stormStopHint', 'Ends a continuous storm started earlier. Nothing else to set.')}</p>
+                )}
+                {stormMode !== 'stop' && <>
+                {stormMode === 'continuous' && <>
+                    <div className="grid grid-cols-2 gap-2">
+                        <FormField label={t('fx.stormIntervalMin', 'Shortest wait (s)')}>
+                            <TextInput type="number" min="0.3" step="0.5" value={cmd.intervalMin ?? 2} onChange={e => updateCommand({ intervalMin: Math.max(0.3, parseFloat(e.target.value) || 2) } as any)} />
+                        </FormField>
+                        <FormField label={t('fx.stormIntervalMax', 'Longest wait (s)')}>
+                            <TextInput type="number" min="0.3" step="0.5" value={cmd.intervalMax ?? 8} onChange={e => updateCommand({ intervalMax: Math.max(0.3, parseFloat(e.target.value) || 8) } as any)} />
+                        </FormField>
+                    </div>
+                    <p className="text-[10px] text-[var(--text-muted)]">{t('fx.stormIntervalHint', 'Time between strikes. Same number in both = a steady rhythm; different numbers = random storm timing. The story keeps playing while it storms.')}</p>
+                </>}
                 <FormField label={t('fx.flashColor')}><TextInput type="text" value={cmd.color ?? '#EAF2FF'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
                 <FormField label={t('fx.brightnessPct', { value: Math.round((cmd.intensity ?? 0.9) * 100) })}>
                     <RangeInput min="0.1" max="1" step="0.05" value={cmd.intensity ?? 0.9} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
-                    <VarFollowSelect value={cmd.intensityVariableId} onChange={id => updateCommand({ intensityVariableId: id } as any)} project={project} range="0–1" mode="run" />
+                    <VarFollowSelect value={cmd.intensityVariableId} onChange={id => updateCommand({ intensityVariableId: id } as any)} project={project} range="0–1" mode={stormMode === 'continuous' ? 'live' : 'run'} />
                 </FormField>
-                <FormField label={t('shared.durationSec')}><TextInput type="number" min="0.1" step="0.1" value={cmd.duration ?? 0.7} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0.7 } as any)} /></FormField>
+                <FormField label={t('fx.strikeLengthSec', 'Flash length (seconds)')}>
+                    <TextInput type="number" min="0.1" step="0.1" value={cmd.duration ?? 0.7} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0.7 } as any)} />
+                </FormField>
+                <p className="text-[10px] text-[var(--text-muted)]">{t('fx.strikeLengthHint', 'How long ONE strike’s flicker lasts — not how long the lightning keeps happening. For ongoing lightning use Continuous storm above.')}</p>
                 <FormField label={t('fx.flashes')}>
                     <Select value={String(cmd.flashes ?? 2)} onChange={e => updateCommand({ flashes: parseInt(e.target.value, 10) } as any)}>
                         <option value="1">{t('fx.flashSingle')}</option>
@@ -1292,6 +1346,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                 <FormField label={t('fx.thunderDelaySec')}><TextInput type="number" min="0" step="0.1" value={cmd.thunderDelay ?? 0.6} onChange={e => updateCommand({ thunderDelay: parseFloat(e.target.value) || 0 } as any)} /></FormField>
                 <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.affectsDialogue !== false} onChange={e => updateCommand({ affectsDialogue: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.flashDialogueToo')}</span></label>
                 <p className="text-xs text-[var(--text-secondary)]">{t('fx.lightningHint')}</p>
+                </>}
             </>;
         }
         case CommandType.Fireworks: {
@@ -2787,6 +2842,12 @@ const PlayMovieGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateComm
                     <div className="flex items-center gap-1 mt-2">
                         <input id="grp-movie-wait" type="checkbox" checked={cmd.waitsForCompletion} onChange={e => updateCommand({ waitsForCompletion: e.target.checked } as any)} className="h-4 w-4" />
                         <label htmlFor="grp-movie-wait" className="text-sm">{t('movie.waitForCompletion')}</label>
+                    </div>
+                )}
+                {!isOverlay && (
+                    <div className="flex items-center gap-1 mt-2">
+                        <input id="grp-movie-block" type="checkbox" checked={!!cmd.blockInput} onChange={e => updateCommand({ blockInput: e.target.checked } as any)} className="h-4 w-4" />
+                        <label htmlFor="grp-movie-block" className="text-sm">{t('movie.blockInput', "Players can't skip it (no clicking through)")}</label>
                     </div>
                 )}
             </>;

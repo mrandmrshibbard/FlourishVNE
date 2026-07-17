@@ -28,6 +28,7 @@ import CanvasSnapGuides from './menu-editor/CanvasSnapGuides';
 import CanvasEdgeFrame from './ui/CanvasEdgeFrame';
 import { SnapRect, SnapGuide } from '../utils/canvasSnap';
 import TextboxThemeManager from './ui/TextboxThemeManager';
+import SceneTransitionManager, { SceneTransitionCanvasPreview } from './ui/SceneTransitionManager';
 import DialogueReactiveStatesEditor from './ui/DialogueReactiveStatesEditor';
 import QuickMenuReactiveStatesEditor from './ui/QuickMenuReactiveStatesEditor';
 import ActionEditor from './menu-editor/ActionEditor';
@@ -56,7 +57,8 @@ export type InGameUIElement =
     | 'quickMenu'
     | 'confirmDialogs'
     | 'phone'
-    | 'textboxThemes';
+    | 'textboxThemes'
+    | 'sceneTransitions';
 
 interface ElementConfig {
     id: InGameUIElement;
@@ -74,6 +76,7 @@ const ELEMENTS: ElementConfig[] = [
     { id: 'confirmDialogs', label: 'Confirm Dialogs', icon: <QuestionMarkIcon className="w-4 h-4" />, description: 'Quit & New Game confirmation popups' },
     { id: 'phone', label: 'Phone', icon: <ChatBubbleIcon className="w-4 h-4" />, description: 'In-game cellphone & messaging' },
     { id: 'textboxThemes', label: 'Textbox Themes', icon: <BookmarkSquareIcon className="w-4 h-4" />, description: 'Reusable per-character dialogue box designs' },
+    { id: 'sceneTransitions', label: 'Scene Transitions', icon: <SparklesIcon className="w-4 h-4" />, description: 'Your own scene-change animations (closing + opening)' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -2602,6 +2605,9 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
     const seedInGame = (typeof window !== 'undefined' ? (window as any).__FLOURISH_INGAME_STATE__ : null) as InGameUIState | null;
     const [selectedElement, setSelectedElement] = useState<InGameUIElement | null>((seedInGame?.selectedElement as InGameUIElement) ?? 'dialogueBox');
     const [selectedThemeId, setSelectedThemeId] = useState<VNID | null>(seedInGame?.selectedThemeId ?? null);
+    // Custom scene transitions: which one is being edited + a nonce that (re)plays the canvas preview.
+    const [selectedTransitionId, setSelectedTransitionId] = useState<VNID | null>(null);
+    const [transitionPreviewNonce, setTransitionPreviewNonce] = useState(0);
     // Which confirmation the preview shows (Quit vs New Game). Default to New Game so it's visible.
     const [confirmPreviewVariant, setConfirmPreviewVariant] = useState<ConfirmVariant>((seedInGame?.confirmPreviewVariant as ConfirmVariant) ?? 'newGame');
     // Which phone "view" the canvas previews so each dynamic surface can be seen + themed live.
@@ -3160,7 +3166,30 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                         )
                     )}
 
-                    {!activeEl && selectedElement !== 'confirmDialogs' && selectedElement !== 'textboxThemes' && (
+                    {/* Custom scene transition preview — two sample scenes with the selected
+                        transition playing between them (▶ Preview button in the panel). */}
+                    {selectedElement === 'sceneTransitions' && (
+                        selectedTransitionId && project.customTransitions?.[selectedTransitionId] ? (
+                            <>
+                                <SceneTransitionCanvasPreview
+                                    project={project}
+                                    def={project.customTransitions[selectedTransitionId]}
+                                    nonce={transitionPreviewNonce}
+                                />
+                                {transitionPreviewNonce === 0 && (
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                        <p className="text-sm text-white/50 bg-black/40 px-3 py-1.5 rounded">{t('inGameUi.transitionPreviewHint', 'Press “Preview on the canvas” in the panel →')}</p>
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <p className="text-sm text-white/30">{t('inGameUi.transitionSelectHint', 'Select or create a transition in the panel →')}</p>
+                            </div>
+                        )
+                    )}
+
+                    {!activeEl && selectedElement !== 'confirmDialogs' && selectedElement !== 'textboxThemes' && selectedElement !== 'sceneTransitions' && (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <p className="text-sm text-white/30">{t('inGameUi.selectFromSidebar')}</p>
                         </div>
@@ -3186,6 +3215,13 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                 <div className="flex-1 min-h-0 overflow-y-auto">
                 {selectedElement === 'textboxThemes' ? (
                     <TextboxThemeManager project={project} selectedThemeId={selectedThemeId} onSelect={setSelectedThemeId} />
+                ) : selectedElement === 'sceneTransitions' ? (
+                    <SceneTransitionManager
+                        project={project}
+                        selectedId={selectedTransitionId}
+                        onSelect={id => { setSelectedTransitionId(id); setTransitionPreviewNonce(0); }}
+                        onPreview={() => setTransitionPreviewNonce(n => n + 1)}
+                    />
                 ) : selectedElement ? (
                     <InGameUIPropsEditor key={selectedElement} ui={ui} element={selectedElement} project={project} onUpdate={updateUI} confirmVariant={confirmPreviewVariant} onConfirmVariantChange={setConfirmPreviewVariant} />
                 ) : (

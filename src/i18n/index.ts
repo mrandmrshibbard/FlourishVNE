@@ -33,6 +33,7 @@ import enEditorTools from './locales/en/editorTools.json';
 import enTemplates from './locales/en/templates.json';
 import enContentTools from './locales/en/contentTools.json';
 import enContextPanels from './locales/en/contextPanels.json';
+import enStoryBible from './locales/en/storyBible.json';
 import ptCommon from './locales/pt/common.json';
 import ptHeader from './locales/pt/header.json';
 import ptSettings from './locales/pt/settings.json';
@@ -53,6 +54,7 @@ import ptEditorTools from './locales/pt/editorTools.json';
 import ptTemplates from './locales/pt/templates.json';
 import ptContentTools from './locales/pt/contentTools.json';
 import ptContextPanels from './locales/pt/contextPanels.json';
+import ptStoryBible from './locales/pt/storyBible.json';
 import esCommon from './locales/es/common.json';
 import esHeader from './locales/es/header.json';
 import esSettings from './locales/es/settings.json';
@@ -233,8 +235,8 @@ export type LanguageCode = typeof SUPPORTED_LANGUAGES[number]['code'];
 const LANGUAGE_STORAGE_KEY = 'flourish-editor-language';
 
 const resources = {
-    en: { common: enCommon, header: enHeader, settings: enSettings, hub: enHub, nav: enNav, scenes: enScenes, characters: enCharacters, variables: enVariables, commonEvents: enCommonEvents, commands: enCommands, properties: enProperties, assets: enAssets, ui: enUi, components: enComponents, staging: enStaging, gameBuilder: enGameBuilder, editorTools: enEditorTools, templates: enTemplates, contentTools: enContentTools, contextPanels: enContextPanels },
-    pt: { common: ptCommon, header: ptHeader, settings: ptSettings, hub: ptHub, nav: ptNav, scenes: ptScenes, characters: ptCharacters, variables: ptVariables, commonEvents: ptCommonEvents, commands: ptCommands, properties: ptProperties, assets: ptAssets, ui: ptUi, components: ptComponents, staging: ptStaging, gameBuilder: ptGameBuilder, editorTools: ptEditorTools, templates: ptTemplates, contentTools: ptContentTools, contextPanels: ptContextPanels },
+    en: { common: enCommon, header: enHeader, settings: enSettings, hub: enHub, nav: enNav, scenes: enScenes, characters: enCharacters, variables: enVariables, commonEvents: enCommonEvents, commands: enCommands, properties: enProperties, assets: enAssets, ui: enUi, components: enComponents, staging: enStaging, gameBuilder: enGameBuilder, editorTools: enEditorTools, templates: enTemplates, contentTools: enContentTools, contextPanels: enContextPanels, storyBible: enStoryBible },
+    pt: { common: ptCommon, header: ptHeader, settings: ptSettings, hub: ptHub, nav: ptNav, scenes: ptScenes, characters: ptCharacters, variables: ptVariables, commonEvents: ptCommonEvents, commands: ptCommands, properties: ptProperties, assets: ptAssets, ui: ptUi, components: ptComponents, staging: ptStaging, gameBuilder: ptGameBuilder, editorTools: ptEditorTools, templates: ptTemplates, contentTools: ptContentTools, contextPanels: ptContextPanels, storyBible: ptStoryBible },
     es: { common: esCommon, header: esHeader, settings: esSettings, hub: esHub, nav: esNav, scenes: esScenes, characters: esCharacters, variables: esVariables, commonEvents: esCommonEvents, commands: esCommands, properties: esProperties, assets: esAssets, ui: esUi, components: esComponents, staging: esStaging, gameBuilder: esGameBuilder, editorTools: esEditorTools, templates: esTemplates, contentTools: esContentTools, contextPanels: esContextPanels },
     it: { common: itCommon, header: itHeader, settings: itSettings, hub: itHub, nav: itNav, scenes: itScenes, characters: itCharacters, variables: itVariables, commonEvents: itCommonEvents, commands: itCommands, properties: itProperties, assets: itAssets, ui: itUi, components: itComponents, staging: itStaging, gameBuilder: itGameBuilder, editorTools: itEditorTools, templates: itTemplates, contentTools: itContentTools, contextPanels: itContextPanels },
     zh: { common: zhCommon, header: zhHeader, settings: zhSettings, hub: zhHub, nav: zhNav, scenes: zhScenes, characters: zhCharacters, variables: zhVariables, commonEvents: zhCommonEvents, commands: zhCommands, properties: zhProperties, assets: zhAssets, ui: zhUi, components: zhComponents, staging: zhStaging, gameBuilder: zhGameBuilder, editorTools: zhEditorTools, templates: zhTemplates, contentTools: zhContentTools, contextPanels: zhContextPanels },
@@ -262,7 +264,7 @@ i18n.use(initReactI18next).init({
     lng: getInitialLanguage(),
     fallbackLng: 'en',
     defaultNS: 'common',
-    ns: ['common', 'header', 'settings', 'hub', 'nav', 'scenes', 'characters', 'variables', 'commonEvents', 'commands', 'properties', 'assets', 'ui', 'components', 'staging', 'gameBuilder', 'editorTools', 'templates', 'contentTools', 'contextPanels'],
+    ns: ['common', 'header', 'settings', 'hub', 'nav', 'scenes', 'characters', 'variables', 'commonEvents', 'commands', 'properties', 'assets', 'ui', 'components', 'staging', 'gameBuilder', 'editorTools', 'templates', 'contentTools', 'contextPanels', 'storyBible'],
     interpolation: { escapeValue: false }, // React already escapes
     returnNull: false,
 });

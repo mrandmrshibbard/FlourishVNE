@@ -26,6 +26,7 @@ const SettingsManager = React.lazy(() => import('./SettingsManager'));
 const CommonEventsManager = React.lazy(() => import('./CommonEventsManager'));
 const SystemsManager = React.lazy(() => import('./SystemsManager'));
 const MiniGamesManager = React.lazy(() => import('./MiniGamesManager'));
+const StoryBibleManager = React.lazy(() => import('./story-bible/StoryBibleManager'));
 const TemplateGallery = React.lazy(() => import('./templates/TemplateGallery'));
 const TemplateConfigComponent = React.lazy(() => import('./templates/TemplateConfig').then(m => ({ default: m.TemplateConfigComponent })));
 import InfoModal from './ui/InfoModal';
@@ -71,6 +72,9 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     // "Play from here": test play starting at a specific scene + command (set by the ▶ button on
     // a command row; cleared when the preview closes so the normal Play button is unaffected).
     const [playStartAt, setPlayStartAt] = useState<{ sceneId: VNID; index: number } | null>(null);
+    // "Test this screen": test play boots straight into this UI screen (set by the ▶ button on a
+    // screen row in the Screens tab; cleared when the preview closes).
+    const [playStartScreenId, setPlayStartScreenId] = useState<VNID | null>(null);
     // Suspend any extensions flagged "Hide during test play" while the preview is open, restore after.
     // Also flip the global test-play flag so editor previews UNMOUNT their <video> backgrounds while
     // the full-screen preview is up (the browser evicts an off-screen video and won't auto-resume,
@@ -548,7 +552,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                 '5': 'variables',
                 '6': 'commonEvents',
                 '7': 'settings',
-                '8': 'miniGames'
+                '8': 'miniGames',
+                '9': 'storyBible'
             };
 
             const newTab = tabMap[e.key];
@@ -596,6 +601,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                         assetCount={assetCount}
                         variableCount={variableCount}
                         commonEventCount={commonEventCount}
+                        storyBibleCount={project.storyBible?.sections?.length ?? 0}
                         systemItemCount={systemItemCount}
                         miniGameCount={miniGameCount}
                     />
@@ -678,6 +684,11 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                 onEditorModeChange={setUiEditorMode}
                                 initialEditorMode={uiEditorMode}
                                 isPlaying={isPlaying}
+                                onTestScreen={(screenId: VNID) => {
+                                    if (isBgmPlaying()) toggleBackgroundMusic(false);
+                                    setPlayStartScreenId(screenId);
+                                    setIsPlaying(true);
+                                }}
                             />
                         </ErrorBoundary>
                     ) : activeTab === 'assets' ? (
@@ -716,6 +727,12 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                 <MiniGamesManager project={project} />
                             </Suspense>
                         </ErrorBoundary>
+                    ) : activeTab === 'storyBible' ? (
+                        <ErrorBoundary panelName="Story Bible">
+                            <Suspense fallback={<div className="text-slate-300 p-4">Loading story bible…</div>}>
+                                <StoryBibleManager project={project} />
+                            </Suspense>
+                        </ErrorBoundary>
                     ) : null}
                 </div>
 
@@ -750,9 +767,10 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             </main>
             {isPlaying && (
                 <ErrorBoundary panelName="Live Preview">
-                    <LivePreview startAt={playStartAt} onClose={() => {
+                    <LivePreview startAt={playStartAt} startScreenId={playStartScreenId} onClose={() => {
                         setIsPlaying(false);
                         setPlayStartAt(null);
+                        setPlayStartScreenId(null);
                         // Tell the editor canvases to remount their <video> backgrounds — the browser
                         // evicts videos that sat behind the fullscreen preview and won't auto-resume.
                         try { window.dispatchEvent(new CustomEvent('flourish:playended')); } catch { /* no-op */ }

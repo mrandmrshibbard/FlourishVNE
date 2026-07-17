@@ -21,6 +21,9 @@
   "startSceneMarked": "Cena Inicial ✓",
   "startScene": "Cena Inicial",
   "duplicateScene": "Duplicar Cena",
+  "expandCommands": "Mostrar comandos",
+  "collapseCommands": "Ocultar comandos",
+  "noCommands": "Nenhum comando ainda",
   "removeFromStack": "Remover da pilha",
   "runsInParallel": "Executa em paralelo",
   "editor": {
@@ -55,6 +58,8 @@
       "slide-left": "Deslizar à Esquerda",
       "instant": "Instantâneo (Sem Transição)"
     },
+    "yourTransitions": "Suas transições",
+    "customTransitionHint": "Reproduz sua animação de fechamento, troca a cena enquanto a tela está coberta e depois reproduz sua animação de abertura. O tempo vem da própria transição (configure em Interface do Jogo → Transições de Cena).",
     "duration": "Duração (s)",
     "sceneConditions": "Condições da Cena",
     "sceneConditionsDesc": "Esta cena só será reproduzida se todas as condições forem atendidas. Se as condições falharem, a cena será ignorada.",

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import { useInlineRename } from '../hooks/useInlineRename';
@@ -61,6 +61,123 @@ const VariableManager: React.FC<VariableManagerProps> = ({
         [project.variables]
     );
 
+    // List controls (persisted): search filter, sort order, and automatic prefix grouping —
+    // "halloway_door" / "halloway_key" group under a "halloway" header with zero setup,
+    // because prefix naming is how authors already organise big variable sets.
+    const [variableSearch, setVariableSearch] = useState('');
+    const [sortMode, setSortMode] = useState<'project' | 'az' | 'type'>(() =>
+        (localStorage.getItem('flourish.variableManager.sort') as 'project' | 'az' | 'type') || 'project');
+    const [groupByPrefix, setGroupByPrefix] = useState<boolean>(() =>
+        localStorage.getItem('flourish.variableManager.group') === '1');
+    useEffect(() => { try { localStorage.setItem('flourish.variableManager.sort', sortMode); } catch { /* ignore */ } }, [sortMode]);
+    useEffect(() => { try { localStorage.setItem('flourish.variableManager.group', groupByPrefix ? '1' : '0'); } catch { /* ignore */ } }, [groupByPrefix]);
+
+    /** Prefix = text before the first '_' or '-' (only when something follows it). */
+    const prefixOf = (name: string): string | null => {
+        const m = /^([^_\-\s]+)[_-]./.exec(name || '');
+        return m ? m[1] : null;
+    };
+
+    // Folders: real, author-created sections (project.variableFolders + variable.folderId) that
+    // variables are DRAGGED into. Collapse state persists; drag state drives drop highlights.
+    const folders = useMemo(
+        () => (Object.values(project.variableFolders || {}) as { id: string; name: string }[])
+            .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
+        [project.variableFolders]
+    );
+    const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => {
+        try {
+            const raw = localStorage.getItem('flourish.variableManager.collapsedFolders');
+            const parsed = raw ? JSON.parse(raw) : null;
+            return Array.isArray(parsed) ? new Set(parsed) : new Set();
+        } catch { return new Set(); }
+    });
+    useEffect(() => {
+        try { localStorage.setItem('flourish.variableManager.collapsedFolders', JSON.stringify(Array.from(collapsedFolders))); } catch { /* ignore */ }
+    }, [collapsedFolders]);
+    const toggleFolder = (id: string) => setCollapsedFolders(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
+    const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+    const [dragVarId, setDragVarId] = useState<string | null>(null);
+    /** Current drop target while dragging: a folder id, 'loose' (remove from folder), or null. */
+    const [dropTarget, setDropTarget] = useState<string | null>(null);
+    const dropVariable = (target: string) => {
+        if (dragVarId && project.variables[dragVarId]) {
+            const folderId = target === 'loose' ? undefined : target;
+            if (project.variables[dragVarId].folderId !== folderId) {
+                dispatch({ type: 'UPDATE_VARIABLE', payload: { variableId: dragVarId, updates: { folderId } } });
+            }
+        }
+        setDragVarId(null);
+        setDropTarget(null);
+    };
+    const addFolder = () => {
+        const name = t('list.newFolderName', 'New folder');
+        dispatch({ type: 'ADD_VARIABLE_FOLDER', payload: { name } });
+    };
+    const deleteFolder = (folderId: string) => {
+        // Members go loose; nothing is deleted but the header itself.
+        dispatch({ type: 'DELETE_VARIABLE_FOLDER', payload: { folderId } });
+    };
+
+    const visibleList = useMemo(() => {
+        const q = variableSearch.trim().toLowerCase();
+        const list = q
+            ? variablesArray.filter(v => v.name.toLowerCase().includes(q) || (v.description || '').toLowerCase().includes(q))
+            : variablesArray.slice();
+        if (sortMode === 'az') list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+        else if (sortMode === 'type') list.sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+        // 'project' keeps creation order.
+        return list;
+    }, [variablesArray, variableSearch, sortMode]);
+
+    /** Folder sections first (only members), then the loose list. */
+    const { folderSections, looseVariables } = useMemo(() => {
+        const validFolderIds = new Set(folders.map(f => f.id));
+        const byFolder = new Map<string, VNVariable[]>();
+        const loose: VNVariable[] = [];
+        for (const v of visibleList) {
+            if (v.folderId && validFolderIds.has(v.folderId)) {
+                const g = byFolder.get(v.folderId) || [];
+                g.push(v);
+                byFolder.set(v.folderId, g);
+            } else {
+                loose.push(v); // dangling folderId = loose (never hide a variable)
+            }
+        }
+        return {
+            folderSections: folders.map(f => ({ folder: f, items: byFolder.get(f.id) || [] })),
+            looseVariables: loose,
+        };
+    }, [folders, visibleList]);
+
+    /** Prefix auto-grouping applies to the LOOSE variables only (folders are explicit). */
+    const looseGroups = useMemo(() => {
+        if (!groupByPrefix) return [{ label: null as string | null, items: looseVariables }];
+        const groups = new Map<string, VNVariable[]>();
+        const loose: VNVariable[] = [];
+        for (const v of looseVariables) {
+            const p = prefixOf(v.name);
+            if (p) { const g = groups.get(p) || []; g.push(v); groups.set(p, g); }
+            else loose.push(v);
+        }
+        // Only groups with 2+ members earn a header; singletons stay with the loose ones.
+        const out: { label: string | null; items: VNVariable[] }[] = [];
+        const looseAll = [...loose];
+        for (const [label, items] of Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+            if (items.length >= 2) out.push({ label, items });
+            else looseAll.push(...items);
+        }
+        if (looseAll.length) {
+            if (sortMode !== 'project') looseAll.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+            out.push({ label: null, items: looseAll });
+        }
+        return out;
+    }, [looseVariables, groupByPrefix, sortMode]);
+
     const addVariable = () => {
         const name = t('newVariableName', { n: Object.keys(project.variables || {}).length + 1 });
         dispatch({ type: 'ADD_VARIABLE', payload: { name, type: 'number', defaultValue: 0 } });
@@ -96,31 +213,126 @@ const VariableManager: React.FC<VariableManagerProps> = ({
         <div className="flex h-full">
             {/* Variables List Sidebar */}
             <div className="w-80 bg-[var(--bg-primary)] border-r border-[var(--border-subtle)] flex flex-col">
-                <div className="p-4 border-b border-[var(--border-subtle)]">
+                <div className="p-4 border-b border-[var(--border-subtle)] space-y-2">
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
                         <Cog6ToothIcon className="w-5 h-5" />
                         {t('listTitle')}
                     </h2>
+                    <input
+                        type="text"
+                        value={variableSearch}
+                        onChange={e => setVariableSearch(e.target.value)}
+                        placeholder={t('list.searchPlaceholder', 'Search variables…')}
+                        className="w-full bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded px-2 py-1 text-sm text-white outline-none focus:ring-1 focus:ring-sky-500"
+                    />
+                    <div className="flex items-center gap-2">
+                        <select
+                            value={sortMode}
+                            onChange={e => setSortMode(e.target.value as 'project' | 'az' | 'type')}
+                            className="flex-1 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded px-1.5 py-1 text-xs text-white"
+                            title={t('list.sortTitle', 'How the list is ordered')}
+                        >
+                            <option value="project">{t('list.sortProject', 'Creation order')}</option>
+                            <option value="az">{t('list.sortAz', 'A → Z')}</option>
+                            <option value="type">{t('list.sortType', 'By type')}</option>
+                        </select>
+                        <label className="flex items-center gap-1 text-xs text-[var(--text-secondary)] cursor-pointer whitespace-nowrap" title={t('list.groupHint', 'Variables named like "hero_gold" and "hero_trust" group under a "hero" heading')}>
+                            <input type="checkbox" checked={groupByPrefix} onChange={e => setGroupByPrefix(e.target.checked)} />
+                            {t('list.group', 'Group')}
+                        </label>
+                        <button
+                            onClick={addFolder}
+                            className="px-1.5 py-1 rounded text-xs bg-[var(--bg-secondary)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-white hover:border-sky-500/50 whitespace-nowrap"
+                            title={t('list.newFolder', 'New folder — drag variables into it to organise them')}
+                        >
+                            📁+
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                    {variablesArray.map(variable => {
-                        const health = usageIndex.health.get(variable.id as any);
-                        return (
-                            <VariableItem
-                                key={variable.id}
-                                variable={variable}
-                                usageCount={(usageIndex.byVariable.get(variable.id as any) ?? []).length}
-                                hasProblem={!!health && (health.orphan || health.neverChanged || health.neverUsed || health.impossible.length > 0)}
-                                isSelected={selectedVariableId === variable.id}
-                                isRenaming={renamingId === variable.id}
-                                onSelect={() => setSelectedVariableId(variable.id)}
-                                onStartRenaming={() => setRenamingId(variable.id)}
-                                onCommitRename={(name) => handleRenameVariable(variable.id, name)}
-                                onDelete={() => handleRequestDelete(variable.id)}
-                            />
-                        );
-                    })}
+                    {(() => {
+                        const renderVariableRow = (variable: VNVariable) => {
+                            const health = usageIndex.health.get(variable.id as any);
+                            return (
+                                <VariableItem
+                                    key={variable.id}
+                                    variable={variable}
+                                    usageCount={(usageIndex.byVariable.get(variable.id as any) ?? []).length}
+                                    hasProblem={!!health && (health.orphan || health.neverChanged || health.neverUsed || health.impossible.length > 0)}
+                                    isSelected={selectedVariableId === variable.id}
+                                    isRenaming={renamingId === variable.id}
+                                    onSelect={() => setSelectedVariableId(variable.id)}
+                                    onStartRenaming={() => setRenamingId(variable.id)}
+                                    onCommitRename={(name) => handleRenameVariable(variable.id, name)}
+                                    onDelete={() => handleRequestDelete(variable.id)}
+                                    onDragStartRow={() => setDragVarId(variable.id)}
+                                    onDragEndRow={() => { setDragVarId(null); setDropTarget(null); }}
+                                />
+                            );
+                        };
+                        const searching = !!variableSearch.trim();
+                        const empty = folderSections.every(s => s.items.length === 0) && looseVariables.length === 0;
+                        return <>
+                            {/* Author-made folders — whole section is a drop target while dragging. */}
+                            {folderSections.map(({ folder, items }) => {
+                                const collapsed = collapsedFolders.has(folder.id) && !searching;
+                                const isTarget = dropTarget === folder.id && !!dragVarId;
+                                return (
+                                    <div
+                                        key={folder.id}
+                                        onDragOver={(e) => { if (dragVarId) { e.preventDefault(); if (dropTarget !== folder.id) setDropTarget(folder.id); } }}
+                                        onDragLeave={() => setDropTarget(prev => prev === folder.id ? null : prev)}
+                                        onDrop={(e) => { e.preventDefault(); dropVariable(folder.id); }}
+                                        className={`rounded-md transition-colors ${isTarget ? 'ring-1 ring-sky-400 bg-sky-500/10' : ''}`}
+                                    >
+                                        <VariableFolderHeader
+                                            folder={folder}
+                                            count={items.length}
+                                            collapsed={collapsed}
+                                            isRenaming={renamingFolderId === folder.id}
+                                            onToggle={() => toggleFolder(folder.id)}
+                                            onStartRename={() => setRenamingFolderId(folder.id)}
+                                            onCommitRename={(name) => { if (name.trim()) dispatch({ type: 'RENAME_VARIABLE_FOLDER', payload: { folderId: folder.id, name: name.trim() } }); setRenamingFolderId(null); }}
+                                            onDelete={() => deleteFolder(folder.id)}
+                                        />
+                                        {!collapsed && items.map(renderVariableRow)}
+                                        {!collapsed && items.length === 0 && !searching && (
+                                            <p className="pl-7 pb-1 text-[10px] text-[var(--text-muted)] italic">{t('list.dragHere', 'Drag variables here')}</p>
+                                        )}
+                                    </div>
+                                );
+                            })}
+
+                            {/* Loose variables — dropping here takes a variable OUT of its folder. */}
+                            <div
+                                onDragOver={(e) => { if (dragVarId) { e.preventDefault(); if (dropTarget !== 'loose') setDropTarget('loose'); } }}
+                                onDragLeave={() => setDropTarget(prev => prev === 'loose' ? null : prev)}
+                                onDrop={(e) => { e.preventDefault(); dropVariable('loose'); }}
+                                className={`rounded-md transition-colors min-h-[2rem] ${dropTarget === 'loose' && dragVarId ? 'ring-1 ring-sky-400 bg-sky-500/10' : ''}`}
+                            >
+                                {folderSections.length > 0 && looseVariables.length > 0 && (
+                                    <div className="px-1 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                                        {t('list.noFolder', 'Not in a folder')}
+                                    </div>
+                                )}
+                                {looseGroups.map((group, gi) => (
+                                    <React.Fragment key={group.label ?? `loose-${gi}`}>
+                                        {group.label && (
+                                            <div className="px-1 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] flex items-center gap-1">
+                                                <span className="truncate">{group.label}</span>
+                                                <span className="font-normal">({group.items.length})</span>
+                                            </div>
+                                        )}
+                                        {group.items.map(renderVariableRow)}
+                                    </React.Fragment>
+                                ))}
+                            </div>
+                            {empty && (
+                                <p className="text-xs text-[var(--text-muted)] italic p-2">{t('list.noResults', 'No variables match your search.')}</p>
+                            )}
+                        </>;
+                    })()}
                 </div>
 
                 <div className="p-2 border-t border-[var(--border-subtle)]">
@@ -217,7 +429,61 @@ interface VariableItemProps {
     onStartRenaming: () => void;
     onCommitRename: (name: string) => void;
     onDelete: () => void;
+    /** Drag-to-folder support (folders are the drop targets in the parent list). */
+    onDragStartRow?: () => void;
+    onDragEndRow?: () => void;
 }
+
+/** A folder's header row: chevron + name (double-click / pencil to rename) + count + delete.
+ *  The parent wraps it (plus the member rows) in the drag-and-drop target. */
+const VariableFolderHeader: React.FC<{
+    folder: { id: string; name: string };
+    count: number;
+    collapsed: boolean;
+    isRenaming: boolean;
+    onToggle: () => void;
+    onStartRename: () => void;
+    onCommitRename: (name: string) => void;
+    onDelete: () => void;
+}> = ({ folder, count, collapsed, isRenaming, onToggle, onStartRename, onCommitRename, onDelete }) => {
+    const { t } = useTranslation(['variables', 'common']);
+    const { inputProps: renameInputProps } = useInlineRename(folder.name, onCommitRename);
+    return (
+        <div
+            onClick={onToggle}
+            onDoubleClick={(e) => { e.stopPropagation(); onStartRename(); }}
+            className="group/folder flex items-center gap-1 px-1 py-1 rounded cursor-pointer text-xs font-bold text-[var(--text-secondary)] hover:text-white"
+        >
+            <span className="text-[9px] w-3 text-center">{collapsed ? '▶' : '▼'}</span>
+            <span>📁</span>
+            {isRenaming ? (
+                <input
+                    type="text"
+                    {...renameInputProps}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex-1 min-w-0 bg-[var(--bg-primary)] text-white px-1 py-0.5 rounded text-xs outline-none ring-1 ring-sky-500 font-normal"
+                />
+            ) : (
+                <span className="flex-1 min-w-0 truncate uppercase tracking-wide">{folder.name}</span>
+            )}
+            <span className="font-normal text-[var(--text-muted)]">({count})</span>
+            <button
+                onClick={(e) => { e.stopPropagation(); onStartRename(); }}
+                className="p-0.5 opacity-0 group-hover/folder:opacity-100 text-[var(--text-muted)] hover:text-sky-400"
+                title={t('common:rename')}
+            >
+                <PencilIcon className="w-3 h-3" />
+            </button>
+            <button
+                onClick={(e) => { e.stopPropagation(); if (window.confirm(t('list.deleteFolderConfirm', 'Delete the folder "{{name}}"? The variables inside are kept — they just leave the folder.', { name: folder.name }))) onDelete(); }}
+                className="p-0.5 opacity-0 group-hover/folder:opacity-100 text-[var(--text-muted)] hover:text-red-400"
+                title={t('common:delete')}
+            >
+                <TrashIcon className="w-3 h-3" />
+            </button>
+        </div>
+    );
+};
 
 const VariableItem: React.FC<VariableItemProps> = ({
     variable,
@@ -228,7 +494,9 @@ const VariableItem: React.FC<VariableItemProps> = ({
     onSelect,
     onStartRenaming,
     onCommitRename,
-    onDelete
+    onDelete,
+    onDragStartRow,
+    onDragEndRow
 }) => {
     const { t } = useTranslation(['variables', 'common']);
     const { inputProps: renameInputProps } = useInlineRename(variable.name, onCommitRename);
@@ -255,6 +523,9 @@ const VariableItem: React.FC<VariableItemProps> = ({
         <div
             onClick={onSelect}
             onDoubleClick={onStartRenaming}
+            draggable={!!onDragStartRow && !isRenaming}
+            onDragStart={onDragStartRow}
+            onDragEnd={onDragEndRow}
             className={`group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors ${
                 isSelected
                     ? `${sc.bg} border ${sc.border}`
@@ -272,7 +543,7 @@ const VariableItem: React.FC<VariableItemProps> = ({
                 {variable.icon || getTypeIcon(variable.type)}
             </div>
 
-            <div className="flex-grow truncate">
+            <div className="flex-grow min-w-0">
                 {isRenaming ? (
                     <input
                         type="text"
@@ -281,10 +552,19 @@ const VariableItem: React.FC<VariableItemProps> = ({
                     />
                 ) : (
                     <>
-                        <span className="text-sm">{variable.name}</span>
+                        {/* Full name, wrapping to two lines — a single truncated line made
+                            "halloway_door" / "halloway_key" / "halloway_safe" all read "hallo…"
+                            (user report). Clamped at 2 lines; the hover title has the rest. */}
+                        <span
+                            className="text-sm block leading-tight"
+                            title={variable.name}
+                            style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden', wordBreak: 'break-word' }}
+                        >
+                            {variable.name}
+                        </span>
                         {/* Bands are the headline fact about a variable once it has them. */}
                         {bandCount > 0 && (
-                            <span className="ml-2 text-[10px] text-[var(--text-muted)]">
+                            <span className="block text-[10px] text-[var(--text-muted)]">
                                 {t('bands.rowSummary', '{{count}} named steps', { count: bandCount })}
                             </span>
                         )}

@@ -1,0 +1,88 @@
+{
+  "title": "Bíblia da História",
+  "empty": {
+    "title": "Sua Bíblia da História",
+    "body": "Guarde tudo sobre sua história em um só lugar — sinopse, notas de personagens, lugares, arcos da trama. Só você vê isto: nunca é incluído no seu jogo.",
+    "starterButton": "Criar seções iniciais"
+  },
+  "starter": {
+    "synopsis": "Sinopse",
+    "chapters": "Capítulos",
+    "characters": "Personagens",
+    "locations": "Lugares",
+    "arcs": "Arcos da História"
+  },
+  "sections": {
+    "add": "Adicionar seção",
+    "newName": "Nova seção",
+    "unnamed": "Sem título",
+    "none": "Nenhuma seção ainda.",
+    "namePlaceholder": "Nome da seção",
+    "delete": "Excluir seção",
+    "deleteConfirm": "Excluir \"{{name}}\"?",
+    "deleteConfirmWithSubs": "Excluir \"{{name}}\" e suas {{count}} subseções? As notas dentro delas serão perdidas.",
+    "moveUp": "Mover para cima",
+    "moveDown": "Mover para baixo"
+  },
+  "subsections": {
+    "add": "Adicionar subseção",
+    "newName": "Nova subseção",
+    "namePlaceholder": "Nome da subseção",
+    "delete": "Excluir subseção",
+    "deleteConfirm": "Excluir \"{{name}}\"?"
+  },
+  "editor": {
+    "edit": "✏ Editar",
+    "preview": "👁 Visualizar",
+    "heading": "Título (clique de novo para menor)",
+    "bold": "Negrito",
+    "italic": "Itálico",
+    "bulletList": "Lista com marcadores",
+    "numberedList": "Lista numerada",
+    "placeholder": "Escreva suas notas aqui… Use os botões acima para títulos, negrito e listas.",
+    "placeholderWord": "texto"
+  },
+  "glossary": {
+    "title": "Glossário",
+    "navHint": "Palavras que os jogadores podem passar o mouse no diálogo para ver uma explicação",
+    "back": "Bíblia da História",
+    "emptyTitle": "Glossário",
+    "emptyBody": "Adicione palavras que seus jogadores talvez não conheçam. Quando uma aparecer no diálogo, ela fica destacada, e passar o mouse mostra sua explicação.",
+    "addTerm": "Adicionar termo",
+    "newTerm": "Novo termo",
+    "search": "Buscar termos…",
+    "none": "Nenhum termo ainda.",
+    "noResults": "Nenhum termo corresponde.",
+    "term": "Palavra ou frase",
+    "alternatives": "Outras grafias ou formas",
+    "alternativesHelp": "ex.: o plural — Enter para adicionar",
+    "caseSensitive": "Diferenciar maiúsculas de minúsculas",
+    "color": "Cor do destaque",
+    "useDefaultColor": "Usar a cor padrão",
+    "tooltipTitle": "Título da dica (vazio = a própria palavra)",
+    "description": "Explicação",
+    "extra": "Nota de rodapé (opcional)",
+    "enabledEntry": "Mostrar no jogo",
+    "preview": "Como fica no jogo (passe o mouse na palavra):",
+    "previewLine": "Dizem que o {{term}} só aparece à noite.",
+    "previewNoMatch": "O termo não correspondeu ao exemplo — verifique as maiúsculas se a opção de diferenciá-las estiver ligada.",
+    "delete": "Excluir termo",
+    "deleteConfirm": "Excluir \"{{term}}\" do glossário?",
+    "import": "Importar…",
+    "export": "Exportar",
+    "importSuccess": "{{count}} termos importados",
+    "importError": "Esse arquivo não é um glossário do Flourish.",
+    "settings": {
+      "enabled": "Destacar termos do glossário no jogo",
+      "defaultColor": "Cor padrão",
+      "style": "Como os termos se destacam",
+      "styleUnderline": "Sublinhado",
+      "styleColor": "Texto colorido",
+      "styleGlow": "Brilho suave"
+    }
+  },
+  "pluginBanner": {
+    "text": "A Bíblia da História agora faz parte do editor, e suas notas do plugin antigo foram importadas para cá. Você pode desinstalar o plugin com segurança em Ferramentas → Gerenciador de Plugins.",
+    "dismiss": "Entendi"
+  }
+}

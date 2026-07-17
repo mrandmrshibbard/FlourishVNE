@@ -1,5 +1,15 @@
 {
   "fx": {
+    "stormMode": "Modo do relâmpago",
+    "stormOnce": "Raio único",
+    "stormContinuous": "Tempestade contínua (repete até parar)",
+    "stormStop": "Parar a tempestade",
+    "stormStopHint": "Encerra uma tempestade contínua iniciada antes. Nada mais a configurar.",
+    "stormIntervalMin": "Espera mínima (s)",
+    "stormIntervalMax": "Espera máxima (s)",
+    "stormIntervalHint": "Tempo entre os raios. Números iguais = ritmo constante; números diferentes = tempestade aleatória. A história continua enquanto troveja.",
+    "strikeLengthSec": "Duração do clarão (segundos)",
+    "strikeLengthHint": "Quanto tempo dura o tremular de UM raio — não por quanto tempo os raios continuam. Para raios contínuos use a Tempestade contínua acima.",
     "flashColor": "Cor do flash",
     "brightnessPct": "Brilho {{value}}%",
     "flashes": "Lampejos",
@@ -180,7 +190,11 @@
     "conditions": "Condições",
     "conditionsDesc": "Este comando só será executado se todas as condições forem atendidas.",
     "liveConditions": "Continuar avaliando ao vivo",
-    "liveConditionsDesc": "Reavalia as condições a todo momento e mostra/oculta isto ao vivo conforme as variáveis mudam (em vez de apenas uma vez quando alcançado)."
+    "liveConditionsDesc": "Reavalia as condições a todo momento e mostra/oculta isto ao vivo conforme as variáveis mudam (em vez de apenas uma vez quando alcançado).",
+    "liveTransition": "Quando a condição mudar",
+    "liveTransitionInstant": "Aparecer / desaparecer instantaneamente (padrão)",
+    "liveTransitionFade": "Esmaecer ao entrar e sair",
+    "liveTransitionDuration": "Tempo do esmaecimento (segundos)"
   },
   "vars": {
     "variable": "Variável",
@@ -249,6 +263,7 @@
   },
   "movie": {
     "video": "Vídeo",
+    "blockInput": "Jogadores não podem pular (sem cliques durante o vídeo)",
     "noVideos": "Nenhum vídeo enviado",
     "displayMode": "Modo de Exibição",
     "fullscreen": "Tela cheia (fundo preto)",
@@ -283,7 +298,19 @@
     "maxLength": "Comprimento Máximo"
   },
   "jump": {
-    "targetScene": "Cena de Destino"
+    "targetScene": "Cena de Destino",
+    "transition": "Transição de cena",
+    "transitionHint": "Só para este salto — substitui a transição de saída definida nas Configurações da Cena."
+  },
+  "sceneTransitionSelect": {
+    "useSceneSetting": "Usar a configuração da cena",
+    "fade": "Esmaecer para preto",
+    "dissolve": "Dissolver",
+    "irisOut": "Íris (círculo fechando)",
+    "wipeRight": "Varredura",
+    "slideLeft": "Deslizar",
+    "instant": "Instantâneo (sem efeito)",
+    "yourTransitions": "Suas transições"
   },
   "wait": {
     "waitMode": "Modo de Espera",

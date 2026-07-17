@@ -11,6 +11,7 @@ import { migrateProjectRemoveLegacyCommands } from '../utils/legacyCommandMigrat
 import { migrateItemCountVariableBounds, migrateStatVariables, repairOrphanBranchMarkers } from '../utils/itemVariableMigration';
 import { migrateInventorySlotButton } from '../utils/inventoryElementMigration';
 import { migrateMapLocationActions } from '../utils/mapLocationMigration';
+import { migrateStoryBiblePluginStorage } from '../utils/storyBibleMigration';
 import { pluginManager } from '../features/plugins/PluginManagerService';
 import { externalizeProjectAssets, type MigrationProgress } from '../utils/assetMigration';
 import { isElectronAssetStore } from '../utils/assetStore';
@@ -79,6 +80,7 @@ export const ProjectProvider: React.FC<{
       fence('statVariables', migrateStatVariables),
       fence('orphanBranchMarkers', repairOrphanBranchMarkers),
       fence('mapLocationActions', migrateMapLocationActions),
+      fence('storyBiblePluginStorage', migrateStoryBiblePluginStorage),
     ].reduce((p, step) => step(p), initialProject);
     return { past: [], present: migrated, future: [] };
   });

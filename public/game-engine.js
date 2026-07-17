@@ -49,6 +49,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["PlaySound"] = "PlaySound";
     UIActionType2["PlayMusic"] = "PlayMusic";
     UIActionType2["StopMusic"] = "StopMusic";
+    UIActionType2["StopSound"] = "StopSound";
+    UIActionType2["PlayVideo"] = "PlayVideo";
     UIActionType2["ShowSpotlight"] = "ShowSpotlight";
     UIActionType2["HideSpotlight"] = "HideSpotlight";
     UIActionType2["ShowFlashlight"] = "ShowFlashlight";
@@ -546,6 +548,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     "ShowHotSpot"
     /* ShowHotSpot */
   ]);
+  const REACTIVE_FX_TYPES = /* @__PURE__ */ new Set([
+    "Spotlight",
+    "Flashlight",
+    "PlaceLights",
+    "SetScreenOverlayEffect"
+    /* SetScreenOverlayEffect */
+  ]);
   function migrateItemCountVariableBounds(project) {
     var _a, _b;
     if (!project || !project.variables) return project;
@@ -727,10 +736,30 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return anyChanged ? { ...project, maps: nextMaps } : project;
   }
+  const PLUGIN_ID = "com.flourish.story-bible";
+  const newId = () => `sb-${Math.random().toString(36).slice(2, 9)}`;
+  function migrateStoryBiblePluginStorage(project) {
+    var _a, _b;
+    if (!project || project.storyBible) return project;
+    const bible = (_b = (_a = project.pluginStorage) == null ? void 0 : _a[PLUGIN_ID]) == null ? void 0 : _b["bible"];
+    if (!bible || !Array.isArray(bible.sections)) return project;
+    const toSubsection = (raw) => ({
+      id: typeof (raw == null ? void 0 : raw.id) === "string" && raw.id ? raw.id : newId(),
+      name: typeof (raw == null ? void 0 : raw.name) === "string" ? raw.name : "",
+      content: typeof (raw == null ? void 0 : raw.content) === "string" ? raw.content : ""
+    });
+    const sections = bible.sections.filter((s) => s && typeof s === "object").map((s) => ({
+      id: typeof s.id === "string" && s.id ? s.id : newId(),
+      name: typeof s.name === "string" ? s.name : "",
+      content: typeof s.content === "string" ? s.content : "",
+      subsections: Array.isArray(s.subsections) ? s.subsections.filter((x) => x && typeof x === "object").map(toSubsection) : []
+    }));
+    return { ...project, storyBible: { sections } };
+  }
   const projectReducer = (state, action) => {
     switch (action.type) {
       case "SET_PROJECT":
-        return migrateMapLocationActions(repairOrphanBranchMarkers(migrateStatVariables(migrateItemCountVariableBounds(migrateInventorySlotButton(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload)))))));
+        return migrateStoryBiblePluginStorage(migrateMapLocationActions(repairOrphanBranchMarkers(migrateStatVariables(migrateItemCountVariableBounds(migrateInventorySlotButton(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload))))))));
       case "UPDATE_PROJECT": {
         return {
           ...state,
@@ -825,11 +854,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     switch (action.type) {
       case "ADD_CHARACTER": {
         const { name, color } = action.payload;
-        const newId = `char-${generateId$7()}`;
+        const newId2 = `char-${generateId$7()}`;
         const newExprId = `expr-${generateId$7()}`;
         const newExpression = { id: newExprId, name: "Default", layerConfiguration: {} };
         const newCharacter = {
-          id: newId,
+          id: newId2,
           name,
           color,
           baseImageUrl: null,
@@ -840,7 +869,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ...state,
           characters: {
             ...state.characters,
-            [newId]: newCharacter
+            [newId2]: newCharacter
           }
         };
       }
@@ -1005,11 +1034,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   const sceneReducer = (state, action) => {
     switch (action.type) {
       case "ADD_SCENE": {
-        const newId = `scene-${generateId$6()}`;
-        const newScene = { id: newId, name: action.payload.name, commands: [] };
+        const newId2 = `scene-${generateId$6()}`;
+        const newScene = { id: newId2, name: action.payload.name, commands: [] };
         return {
           ...state,
-          scenes: { ...state.scenes, [newId]: newScene }
+          scenes: { ...state.scenes, [newId2]: newScene }
         };
       }
       case "UPDATE_SCENE": {
@@ -1071,11 +1100,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const { sceneId } = action.payload;
         const originalScene = state.scenes[sceneId];
         if (!originalScene) return state;
-        const newId = `scene-${generateId$6()}`;
+        const newId2 = `scene-${generateId$6()}`;
         const branchIdRemap = /* @__PURE__ */ new Map();
         const duplicatedScene = {
           ...originalScene,
-          id: newId,
+          id: newId2,
           name: `${originalScene.name} (Copy)`,
           commands: originalScene.commands.map((cmd) => {
             const copy = { ...cmd, id: `cmd-${generateId$6()}` };
@@ -1092,7 +1121,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         };
         return {
           ...state,
-          scenes: { ...state.scenes, [newId]: duplicatedScene }
+          scenes: { ...state.scenes, [newId2]: duplicatedScene }
         };
       }
       case "REORDER_SCENES": {
@@ -1389,7 +1418,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   };
   const generateId$4 = () => Math.random().toString(36).substring(2, 9);
   const uiReducer = (state, action) => {
-    var _a, _b;
+    var _a, _b, _c, _d;
     switch (action.type) {
       case "UPDATE_UI": {
         return {
@@ -1458,11 +1487,28 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         delete next[action.payload.themeId];
         return { ...state, textboxThemes: next };
       }
+      case "ADD_CUSTOM_TRANSITION": {
+        const id = action.payload.id || `ctrans-${generateId$4()}`;
+        const transition = { id, name: action.payload.name, close: {}, open: {} };
+        return { ...state, customTransitions: { ...state.customTransitions || {}, [id]: transition } };
+      }
+      case "UPDATE_CUSTOM_TRANSITION": {
+        const { transitionId, updates } = action.payload;
+        const existing = (_c = state.customTransitions) == null ? void 0 : _c[transitionId];
+        if (!existing) return state;
+        return { ...state, customTransitions: { ...state.customTransitions, [transitionId]: { ...existing, ...updates, id: transitionId } } };
+      }
+      case "DELETE_CUSTOM_TRANSITION": {
+        if (!((_d = state.customTransitions) == null ? void 0 : _d[action.payload.transitionId])) return state;
+        const next = { ...state.customTransitions };
+        delete next[action.payload.transitionId];
+        return { ...state, customTransitions: next };
+      }
       case "ADD_UI_SCREEN": {
         const { name, id } = action.payload;
-        const newId = id || `screen-${generateId$4()}`;
+        const newId2 = id || `screen-${generateId$4()}`;
         const newScreen = {
-          id: newId,
+          id: newId2,
           name,
           background: { type: "color", value: "#0f172a" },
           music: { audioId: null, policy: "continue", volume: 0.8 },
@@ -1470,7 +1516,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           elements: {},
           effects: []
         };
-        return { ...state, uiScreens: { ...state.uiScreens, [newId]: newScreen } };
+        return { ...state, uiScreens: { ...state.uiScreens, [newId2]: newScreen } };
       }
       case "UPDATE_UI_SCREEN": {
         const { screenId, updates } = action.payload;
@@ -1575,6 +1621,29 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const newElements = { ...screen.elements, [element.id]: element };
         return { ...state, uiScreens: { ...state.uiScreens, [screenId]: { ...screen, elements: newElements } } };
       }
+      case "REORDER_UI_ELEMENT": {
+        const { screenId, elementId, direction } = action.payload;
+        const screen = state.uiScreens[screenId];
+        if (!(screen == null ? void 0 : screen.elements[elementId])) return state;
+        const ids = Object.keys(screen.elements);
+        const i = ids.indexOf(elementId);
+        const j = i + direction;
+        if (i < 0 || j < 0 || j >= ids.length) return state;
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+        const elements = {};
+        for (const id of ids) elements[id] = screen.elements[id];
+        return { ...state, uiScreens: { ...state.uiScreens, [screenId]: { ...screen, elements } } };
+      }
+      case "REORDER_UI_ELEMENTS": {
+        const { screenId, elementIds } = action.payload;
+        const screen = state.uiScreens[screenId];
+        if (!screen) return state;
+        const current = Object.keys(screen.elements);
+        if (elementIds.length !== current.length || elementIds.some((id) => !screen.elements[id])) return state;
+        const elements = {};
+        for (const id of elementIds) elements[id] = screen.elements[id];
+        return { ...state, uiScreens: { ...state.uiScreens, [screenId]: { ...screen, elements } } };
+      }
       case "UPDATE_UI_ELEMENT": {
         const { screenId, elementId, updates } = action.payload;
         const screen = state.uiScreens[screenId];
@@ -1597,13 +1666,36 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   };
   const generateId$3 = () => Math.random().toString(36).substring(2, 9);
   const variableReducer = (state, action) => {
+    var _a, _b;
     switch (action.type) {
+      case "ADD_VARIABLE_FOLDER": {
+        const id = action.payload.id || `vfolder-${generateId$3()}`;
+        const folder = { id, name: action.payload.name };
+        return { ...state, variableFolders: { ...state.variableFolders || {}, [id]: folder } };
+      }
+      case "RENAME_VARIABLE_FOLDER": {
+        const { folderId, name } = action.payload;
+        const existing = (_a = state.variableFolders) == null ? void 0 : _a[folderId];
+        if (!existing) return state;
+        return { ...state, variableFolders: { ...state.variableFolders, [folderId]: { ...existing, name } } };
+      }
+      case "DELETE_VARIABLE_FOLDER": {
+        const { folderId } = action.payload;
+        if (!((_b = state.variableFolders) == null ? void 0 : _b[folderId])) return state;
+        const next = { ...state.variableFolders };
+        delete next[folderId];
+        const variables = { ...state.variables };
+        for (const id in variables) {
+          if (variables[id].folderId === folderId) variables[id] = { ...variables[id], folderId: void 0 };
+        }
+        return { ...state, variableFolders: next, variables };
+      }
       case "ADD_VARIABLE": {
-        const newId = action.payload.id || `var-${generateId$3()}`;
-        const newVar = { id: newId, name: action.payload.name, type: action.payload.type, defaultValue: action.payload.defaultValue };
+        const newId2 = action.payload.id || `var-${generateId$3()}`;
+        const newVar = { id: newId2, name: action.payload.name, type: action.payload.type, defaultValue: action.payload.defaultValue };
         return {
           ...state,
-          variables: { ...state.variables, [newId]: newVar }
+          variables: { ...state.variables, [newId2]: newVar }
         };
       }
       case "UPDATE_VARIABLE": {
@@ -1774,10 +1866,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const original = commonEvents[commonEventId];
         if (!original) return state;
         const now = (/* @__PURE__ */ new Date()).toISOString();
-        const newId = `ce-${generateId$2()}`;
+        const newId2 = `ce-${generateId$2()}`;
         const duplicate = {
           ...JSON.parse(JSON.stringify(original)),
-          id: newId,
+          id: newId2,
           name: `${original.name} (copy)`,
           createdAt: now,
           updatedAt: now,
@@ -1791,7 +1883,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ...state,
           commonEvents: {
             ...commonEvents,
-            [newId]: duplicate
+            [newId2]: duplicate
           }
         };
       }
@@ -2319,6 +2411,96 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return state;
     }
   };
+  const withSections = (state, sections) => ({ ...state, storyBible: { ...state.storyBible || {}, sections } });
+  const withGlossary = (state, entries, settings) => {
+    var _a;
+    return { ...state, glossary: { entries, settings: settings ?? ((_a = state.glossary) == null ? void 0 : _a.settings) } };
+  };
+  const storyBibleReducer = (state, action) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r;
+    switch (action.type) {
+      case "STORY_BIBLE_ADD_SECTION": {
+        const sections = ((_a = state.storyBible) == null ? void 0 : _a.sections) ?? [];
+        return withSections(state, [...sections, action.payload.section]);
+      }
+      case "STORY_BIBLE_UPDATE_SECTION": {
+        const sections = ((_b = state.storyBible) == null ? void 0 : _b.sections) ?? [];
+        if (!sections.some((s) => s.id === action.payload.sectionId)) return state;
+        return withSections(state, sections.map((s) => s.id === action.payload.sectionId ? { ...s, ...action.payload.updates } : s));
+      }
+      case "STORY_BIBLE_DELETE_SECTION": {
+        const sections = ((_c = state.storyBible) == null ? void 0 : _c.sections) ?? [];
+        if (!sections.some((s) => s.id === action.payload.sectionId)) return state;
+        return withSections(state, sections.filter((s) => s.id !== action.payload.sectionId));
+      }
+      case "STORY_BIBLE_MOVE_SECTION": {
+        const sections = [...((_d = state.storyBible) == null ? void 0 : _d.sections) ?? []];
+        const i = sections.findIndex((s) => s.id === action.payload.sectionId);
+        const j = i + action.payload.direction;
+        if (i < 0 || j < 0 || j >= sections.length) return state;
+        [sections[i], sections[j]] = [sections[j], sections[i]];
+        return withSections(state, sections);
+      }
+      case "STORY_BIBLE_ADD_SUBSECTION": {
+        const sections = ((_e = state.storyBible) == null ? void 0 : _e.sections) ?? [];
+        if (!sections.some((s) => s.id === action.payload.sectionId)) return state;
+        return withSections(state, sections.map((s) => s.id === action.payload.sectionId ? { ...s, subsections: [...s.subsections || [], action.payload.subsection] } : s));
+      }
+      case "STORY_BIBLE_UPDATE_SUBSECTION": {
+        const sections = ((_f = state.storyBible) == null ? void 0 : _f.sections) ?? [];
+        const sec = sections.find((s) => s.id === action.payload.sectionId);
+        if (!((_g = sec == null ? void 0 : sec.subsections) == null ? void 0 : _g.some((ss) => ss.id === action.payload.subsectionId))) return state;
+        return withSections(state, sections.map((s) => s.id === action.payload.sectionId ? { ...s, subsections: s.subsections.map((ss) => ss.id === action.payload.subsectionId ? { ...ss, ...action.payload.updates } : ss) } : s));
+      }
+      case "STORY_BIBLE_DELETE_SUBSECTION": {
+        const sections = ((_h = state.storyBible) == null ? void 0 : _h.sections) ?? [];
+        const sec = sections.find((s) => s.id === action.payload.sectionId);
+        if (!((_i = sec == null ? void 0 : sec.subsections) == null ? void 0 : _i.some((ss) => ss.id === action.payload.subsectionId))) return state;
+        return withSections(state, sections.map((s) => s.id === action.payload.sectionId ? { ...s, subsections: s.subsections.filter((ss) => ss.id !== action.payload.subsectionId) } : s));
+      }
+      case "GLOSSARY_ADD_ENTRY": {
+        const entries = ((_j = state.glossary) == null ? void 0 : _j.entries) ?? {};
+        return withGlossary(state, { ...entries, [action.payload.entry.id]: action.payload.entry });
+      }
+      case "GLOSSARY_UPDATE_ENTRY": {
+        const entries = ((_k = state.glossary) == null ? void 0 : _k.entries) ?? {};
+        const existing = entries[action.payload.entryId];
+        if (!existing) return state;
+        return withGlossary(state, { ...entries, [action.payload.entryId]: { ...existing, ...action.payload.updates, id: action.payload.entryId } });
+      }
+      case "GLOSSARY_DELETE_ENTRY": {
+        const entries = ((_l = state.glossary) == null ? void 0 : _l.entries) ?? {};
+        if (!entries[action.payload.entryId]) return state;
+        const next = { ...entries };
+        delete next[action.payload.entryId];
+        return withGlossary(state, next);
+      }
+      case "GLOSSARY_IMPORT_ENTRIES": {
+        const entries = { ...((_m = state.glossary) == null ? void 0 : _m.entries) ?? {} };
+        const byTerm = new Map(Object.values(entries).map((e) => [e.term.trim().toLowerCase(), e.id]));
+        for (const raw of action.payload.entries) {
+          if (!((_n = raw == null ? void 0 : raw.term) == null ? void 0 : _n.trim())) continue;
+          const existingId = byTerm.get(raw.term.trim().toLowerCase());
+          if (existingId) {
+            entries[existingId] = { ...raw, id: existingId };
+          } else {
+            let id = raw.id || `gl-${Math.random().toString(36).slice(2, 9)}`;
+            while (entries[id]) id = `gl-${Math.random().toString(36).slice(2, 9)}`;
+            entries[id] = { ...raw, id };
+            byTerm.set(raw.term.trim().toLowerCase(), id);
+          }
+        }
+        const settings = action.payload.settings ? { ...((_o = state.glossary) == null ? void 0 : _o.settings) || {}, ...action.payload.settings } : (_p = state.glossary) == null ? void 0 : _p.settings;
+        return withGlossary(state, entries, settings);
+      }
+      case "GLOSSARY_UPDATE_SETTINGS": {
+        const entries = ((_q = state.glossary) == null ? void 0 : _q.entries) ?? {};
+        return withGlossary(state, entries, { ...((_r = state.glossary) == null ? void 0 : _r.settings) || {}, ...action.payload.updates });
+      }
+      default:
+        return state;
+    }
+  };
   const reducers = [
     projectReducer,
     assetReducer,
@@ -2330,7 +2512,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     commonEventReducer,
     pluginReducer,
     itemReducer,
-    statReducer
+    statReducer,
+    storyBibleReducer
   ];
   const rootReducer = (state, action) => {
     for (const reducer of reducers) {
@@ -3533,7 +3716,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         fence("itemCountVariableBounds", migrateItemCountVariableBounds),
         fence("statVariables", migrateStatVariables),
         fence("orphanBranchMarkers", repairOrphanBranchMarkers),
-        fence("mapLocationActions", migrateMapLocationActions)
+        fence("mapLocationActions", migrateMapLocationActions),
+        fence("storyBiblePluginStorage", migrateStoryBiblePluginStorage)
       ].reduce((p, step) => step(p), initialProject);
       return { past: [], present: migrated, future: [] };
     });
@@ -4670,7 +4854,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     "fog",
     "haze",
     "smoke",
-    "fireworks"
+    "fireworks",
+    "lightning",
+    "flashlight",
+    "spotlight",
+    "lights"
   ];
   function clamp01(value) {
     if (Number.isNaN(value)) return 0;
@@ -7552,6 +7740,32 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return command.characterId ?? null;
   }
+  const BUILTINS = /* @__PURE__ */ new Set(["fade", "dissolve", "iris-out", "wipe-right", "slide-left"]);
+  function transitionHalfHasContent(half) {
+    return !!(half && (half.assetId || half.frameIds && half.frameIds.length > 0));
+  }
+  function transitionHalfDuration(half) {
+    var _a;
+    if (!half) return 0;
+    if (half.duration != null && half.duration > 0) return half.duration;
+    if ((_a = half.frameIds) == null ? void 0 : _a.length) return half.frameIds.length / Math.max(1, half.fps ?? 12);
+    return 1;
+  }
+  function resolveSceneTransition(override, scene, customTransitions) {
+    var _a, _b, _c, _d, _e, _f;
+    const choice = override && override !== "scene-default" ? override : (scene == null ? void 0 : scene.outTransition) || "fade";
+    const duration = (scene == null ? void 0 : scene.outTransitionDuration) ?? 0.5;
+    if (choice === "instant") return { kind: "instant" };
+    if (choice.startsWith("custom:")) {
+      const def = customTransitions == null ? void 0 : customTransitions[choice.slice("custom:".length)];
+      if (def && (((_a = def.close) == null ? void 0 : _a.assetId) || ((_c = (_b = def.close) == null ? void 0 : _b.frameIds) == null ? void 0 : _c.length) || ((_d = def.open) == null ? void 0 : _d.assetId) || ((_f = (_e = def.open) == null ? void 0 : _e.frameIds) == null ? void 0 : _f.length))) {
+        return { kind: "custom", def };
+      }
+      return { kind: "builtin", type: "fade", duration };
+    }
+    if (BUILTINS.has(choice)) return { kind: "builtin", type: choice, duration };
+    return { kind: "builtin", type: "fade", duration };
+  }
   function getEffect(effects, type) {
     return effects.find((e) => e.type === type);
   }
@@ -7772,13 +7986,87 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><filter id="d" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.35" numOctaves="1" seed="${seed}"/><feComponentTransfer><feFuncA type="discrete" tableValues="0 0 0 0 0 0 0 1"/></feComponentTransfer><feColorMatrix type="matrix" values="0 0 0 0 ${r}  0 0 0 0 ${g}  0 0 0 0 ${b}  0 0 0 1 0"/></filter><rect width="64" height="64" filter="url(#d)"/></svg>`;
     return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
   };
+  const hexToRgbStr = (hex) => {
+    const m = (hex || "").match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+    if (!m) return "255, 255, 255";
+    return `${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}`;
+  };
+  const LightsLayer = ({ lights, stageW, stageH }) => {
+    const base = Math.min(stageW || 800, stageH || 600);
+    return /* @__PURE__ */ jsxRuntime2.jsx(jsxRuntime2.Fragment, { children: lights.map((l, i) => {
+      const sizePx = Math.max(6, base * 0.05 * (l.size ?? 1));
+      const bright = Math.max(0, Math.min(1, l.brightness ?? 1));
+      const spd = l.twinkleSpeed && l.twinkleSpeed > 0 ? l.twinkleSpeed : 1;
+      let background = "";
+      let animation;
+      let delay = `${i % 7 * 0.13}s`;
+      const wPx = sizePx * 1.8;
+      const hPx = sizePx * 1.8;
+      if (l.type === "candle") {
+        background = `radial-gradient(circle at 50% 45%, rgba(255,250,220,${0.97 * bright}) 0%, rgba(255,185,75,${0.8 * bright}) 9%, rgba(255,135,45,${0.4 * bright}) 24%, rgba(255,105,25,${0.14 * bright}) 46%, rgba(255,95,15,${0.04 * bright}) 70%, rgba(255,95,15,0) 100%)`;
+        animation = `vnfx-candle ${(1.1 / spd).toFixed(2)}s ease-in-out infinite`;
+      } else if (l.type === "star") {
+        const rgb = hexToRgbStr(l.color || "#ffffff");
+        background = `radial-gradient(circle, rgba(255,255,255,${0.98 * bright}) 0%, rgba(${rgb},${0.85 * bright}) 8%, rgba(${rgb},${0.4 * bright}) 22%, rgba(${rgb},${0.14 * bright}) 44%, rgba(${rgb},${0.04 * bright}) 68%, rgba(${rgb},0) 100%)`;
+        animation = `vnfx-star ${(2.2 / spd).toFixed(2)}s ease-in-out infinite`;
+      } else {
+        const rgb = hexToRgbStr(l.color || "#ff3b3b");
+        background = `radial-gradient(circle, rgba(255,255,255,${0.98 * bright}) 0%, rgba(${rgb},${0.95 * bright}) 5%, rgba(${rgb},${0.5 * bright}) 13%, rgba(${rgb},${0.26 * bright}) 26%, rgba(${rgb},${0.1 * bright}) 44%, rgba(${rgb},${0.03 * bright}) 66%, rgba(${rgb},0) 100%)`;
+        const tw = l.twinkle ?? "fade";
+        if (tw === "fade") animation = `vnfx-bulb-fade ${(1.6 / spd).toFixed(2)}s ease-in-out infinite`;
+        else if (tw === "blink") animation = `vnfx-bulb-blink ${(1 / spd).toFixed(2)}s steps(1, end) infinite`;
+        else if (tw === "chase") {
+          animation = `vnfx-bulb-fade ${(1.6 / spd).toFixed(2)}s ease-in-out infinite`;
+          delay = `${i % 5 * (0.32 / spd)}s`;
+        }
+      }
+      return /* @__PURE__ */ jsxRuntime2.jsx("div", { "data-vnlight": l.type, className: "absolute pointer-events-none", style: {
+        left: `${l.x}%`,
+        top: `${l.y}%`,
+        width: wPx,
+        height: hPx,
+        transform: "translate(-50%, -50%)",
+        borderRadius: "50%",
+        background,
+        animation,
+        animationDelay: animation ? delay : void 0,
+        mixBlendMode: "screen"
+      } }, l.id);
+    }) });
+  };
+  const FlashlightOverlay = ({ effect, minDim }) => {
+    const ref = React2.useRef(null);
+    const darkness = clamp01(effect.intensity ?? 0);
+    const radius01 = ep(effect.params, "radius");
+    const softness = ep(effect.params, "softness");
+    const { r, g, b } = parseColor(effect.color, { r: 0, g: 0, b: 0 });
+    React2.useEffect(() => {
+      const el = ref.current;
+      if (!el) return;
+      const paint = (mx, my) => {
+        const radiusPx = Math.max(20, minDim * (0.12 + radius01 * 0.38));
+        const inner = Math.round(Math.max(0, Math.min(1, 1 - softness)) * 100);
+        el.style.background = `radial-gradient(circle ${radiusPx}px at ${mx}px ${my}px, transparent 0%, transparent ${inner}%, rgba(${r},${g},${b},${darkness}) 100%)`;
+      };
+      const rect0 = el.getBoundingClientRect();
+      paint(rect0.width / 2, rect0.height / 2);
+      const onMove = (e) => {
+        const rect = el.getBoundingClientRect();
+        paint(e.clientX - rect.left, e.clientY - rect.top);
+      };
+      window.addEventListener("pointermove", onMove);
+      return () => window.removeEventListener("pointermove", onMove);
+    }, [darkness, radius01, softness, r, g, b, minDim]);
+    if (darkness <= 0) return null;
+    return /* @__PURE__ */ jsxRuntime2.jsx("div", { ref, className: "absolute inset-0" });
+  };
   const ScreenOverlayEffects = ({
     effects,
     width,
     height,
     className
   }) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
     const normalized = React2.useMemo(() => normalizeOverlayEffects(effects), [effects]);
     const safeWidth = Math.max(0, Math.min(width, 4096));
     const safeHeight = Math.max(0, Math.min(height, 4096));
@@ -7793,6 +8081,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const haze = getEffect(normalized, "haze");
     const smoke = getEffect(normalized, "smoke");
     const fireworks = getEffect(normalized, "fireworks");
+    const lightning = getEffect(normalized, "lightning");
+    const flashlight = getEffect(normalized, "flashlight");
+    const spotlight = getEffect(normalized, "spotlight");
+    const lightsFx = getEffect(normalized, "lights");
     const pluginEffects = React2.useMemo(() => {
       const builtins = new Set(BUILTIN_OVERLAY_EFFECT_TYPES);
       return normalized.filter((e) => !builtins.has(e.type) && clamp01(e.intensity) > 0).map((e) => ({ effect: e, def: pluginManager.getEffect(e.type) })).filter((x) => !!x.def && typeof x.def.render === "function");
@@ -8321,6 +8613,56 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       fog && clamp01(fog.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: fogCanvasRef, className: "vnfx-canvas", "aria-hidden": true }),
       smoke && clamp01(smoke.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: smokeCanvasRef, className: "vnfx-canvas", "aria-hidden": true }),
       fireworks && clamp01(fireworks.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: fireworksCanvasRef, className: "vnfx-canvas", style: { mixBlendMode: "screen" }, "aria-hidden": true }),
+      spotlight && clamp01(spotlight.intensity) > 0 && (() => {
+        var _a2;
+        const darkness = clamp01(spotlight.intensity);
+        const beams = ((_a2 = spotlight.params) == null ? void 0 : _a2.beams) ?? [];
+        const cl = (v, lo, hi) => Math.max(lo, Math.min(hi, isNaN(v) ? lo : v));
+        return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 overflow-hidden", children: [
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { background: `rgba(0,0,0,${darkness})` } }),
+          beams.map((bm) => {
+            const half = cl(bm.beamWidth ?? 45, 5, 100) / 2;
+            const len = cl(bm.height ?? 100, 10, 200);
+            const srcHalf = cl(bm.sourceWidth ?? 8, 0, 60) / 2;
+            const inner = Math.round(cl(1 - (bm.falloff ?? 0.5), 0, 1) * 100);
+            const { r, g, b } = parseColor(bm.color, { r: 255, g: 243, b: 214 });
+            const sx = cl(bm.sourceX, 0, 100), sy = cl(bm.sourceY, 0, 100);
+            return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { mixBlendMode: "screen", transformOrigin: `${sx}% ${sy}%`, transform: `rotate(${-(bm.aimAngle ?? 0)}deg)`, filter: `blur(${Math.max(3, minDim * 0.012)}px)`, willChange: "transform" }, children: /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: {
+              clipPath: `polygon(${sx - srcHalf}% ${sy}%, ${sx + srcHalf}% ${sy}%, ${sx + half}% ${sy + len}%, ${sx - half}% ${sy + len}%)`,
+              background: `radial-gradient(120% ${len}% at ${sx}% ${sy}%, rgba(${r},${g},${b},0.95) 0%, rgba(${r},${g},${b},0.55) ${inner}%, rgba(${r},${g},${b},0) 100%)`
+            } }) }, bm.id);
+          })
+        ] });
+      })(),
+      lightsFx && clamp01(lightsFx.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", children: /* @__PURE__ */ jsxRuntime2.jsx(
+        LightsLayer,
+        {
+          lights: (((_v = lightsFx.params) == null ? void 0 : _v.lights) ?? []).map((l) => ({ ...l, brightness: (l.brightness ?? 1) * clamp01(lightsFx.intensity) })),
+          stageW: safeWidth,
+          stageH: safeHeight
+        }
+      ) }),
+      lightning && clamp01(lightning.intensity) > 0 && (() => {
+        const cycle = (14 - ep(lightning.params, "speed") * 11).toFixed(2);
+        const { r, g, b } = parseColor(lightning.color, { r: 234, g: 242, b: 255 });
+        return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0", style: { opacity: clamp01(lightning.intensity), mixBlendMode: "screen" }, children: [
+          /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `
+                @keyframes vnsfx-lightning {
+                    0% { opacity: 0; }
+                    1.2% { opacity: 1; }
+                    2.4% { opacity: 0.12; }
+                    3.6% { opacity: 0.85; }
+                    6.5% { opacity: 0; }
+                    54% { opacity: 0; }
+                    55% { opacity: 0.55; }
+                    56.5% { opacity: 0; }
+                    100% { opacity: 0; }
+                }
+            ` }),
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { backgroundColor: `rgb(${r},${g},${b})`, opacity: 0, animation: `vnsfx-lightning ${cycle}s linear infinite` } })
+        ] });
+      })(),
+      flashlight && clamp01(flashlight.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx(FlashlightOverlay, { effect: flashlight, minDim }),
       pluginEffects.map(({ effect, def }) => /* @__PURE__ */ jsxRuntime2.jsx(
         PluginEffectCanvas,
         {
@@ -8827,6 +9169,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return { color: hl.color, WebkitTextFillColor: hl.color };
     }
   }
+  const glossaryTermStyle = (m) => ({
+    ...revealHighlightStyle({ color: m.color, style: m.style }),
+    cursor: "help"
+  });
+  const glossarySpanProps = (entryId, onGlossaryHover) => ({
+    "data-vn-no-advance": "true",
+    onClick: (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+    },
+    onMouseEnter: (e) => onGlossaryHover == null ? void 0 : onGlossaryHover(entryId, e),
+    onMouseMove: (e) => onGlossaryHover == null ? void 0 : onGlossaryHover(entryId, e),
+    onMouseLeave: (e) => onGlossaryHover == null ? void 0 : onGlossaryHover(null, e)
+  });
   const TEXT_EFFECT_KEYFRAMES = `
 @keyframes vnTextShake {
     0%, 100% { transform: translate(0, 0); }
@@ -8959,24 +9315,57 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     textEffect,
     textStyle,
     gradientStyle,
-    revealHighlight
+    revealHighlight,
+    glossaryMatches,
+    onGlossaryHover
   }) => {
     React2.useMemo(() => {
       injectTextEffectStyles();
     }, []);
+    const visibleGlossary = (glossaryMatches ?? []).filter((m) => m.start < m.end && m.end <= displayText.length);
     if (!textEffect || textEffect.type === "none") {
-      if (revealHighlight && revealHighlight.start < displayText.length) {
-        const hlEnd = Math.min(revealHighlight.end ?? displayText.length, displayText.length);
-        const before = displayText.slice(0, revealHighlight.start);
-        const word = displayText.slice(revealHighlight.start, hlEnd);
-        const after = displayText.slice(hlEnd);
-        return /* @__PURE__ */ jsxRuntime2.jsxs("span", { style: gradientStyle || void 0, children: [
-          before,
-          /* @__PURE__ */ jsxRuntime2.jsx("span", { style: revealHighlightStyle(revealHighlight), children: word }),
-          after
-        ] });
+      const hlActive = !!(revealHighlight && revealHighlight.start < displayText.length);
+      if (!hlActive && visibleGlossary.length === 0) {
+        return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: gradientStyle || void 0, children: displayText });
       }
-      return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: gradientStyle || void 0, children: displayText });
+      const hlStart = hlActive ? revealHighlight.start : -1;
+      const hlEnd = hlActive ? Math.min(revealHighlight.end ?? displayText.length, displayText.length) : -1;
+      const bounds = /* @__PURE__ */ new Set([0, displayText.length]);
+      if (hlActive) {
+        bounds.add(hlStart);
+        bounds.add(hlEnd);
+      }
+      for (const m of visibleGlossary) {
+        bounds.add(m.start);
+        bounds.add(m.end);
+      }
+      const sorted = Array.from(bounds).sort((a, b) => a - b);
+      const parts = [];
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const s = sorted[i], e = sorted[i + 1];
+        if (s >= e) continue;
+        const text = displayText.slice(s, e);
+        const match = visibleGlossary.find((m) => m.start <= s && m.end >= e);
+        const inKaraoke = hlActive && s >= hlStart && e <= hlEnd;
+        if (match) {
+          parts.push(
+            /* @__PURE__ */ jsxRuntime2.jsx(
+              "span",
+              {
+                ...glossarySpanProps(match.entryId, onGlossaryHover),
+                style: { ...glossaryTermStyle(match), ...inKaraoke ? revealHighlightStyle(revealHighlight) : {} },
+                children: text
+              },
+              i
+            )
+          );
+        } else if (inKaraoke) {
+          parts.push(/* @__PURE__ */ jsxRuntime2.jsx("span", { style: revealHighlightStyle(revealHighlight), children: text }, i));
+        } else {
+          parts.push(/* @__PURE__ */ jsxRuntime2.jsx(React2.Fragment, { children: text }, i));
+        }
+      }
+      return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: gradientStyle || void 0, children: parts });
     }
     const tokens = displayText.split(/(\s+)/);
     displayText.length;
@@ -8989,30 +9378,143 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       const wordStart = charIndex;
       charIndex += token.length;
-      return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { display: "inline-block", whiteSpace: "nowrap" }, children: token.split("").map((char, ci) => {
-        const charStyle = getCharacterStyle(textEffect, wordStart + ci);
-        const gi = wordStart + ci;
-        const hlStyle = revealHighlight && gi >= revealHighlight.start && gi < (revealHighlight.end ?? displayText.length) ? revealHighlightStyle(revealHighlight) : void 0;
-        return /* @__PURE__ */ jsxRuntime2.jsx(
-          "span",
-          {
-            style: {
-              ...charStyle,
-              // Preserve any gradient styling
-              ...gradientStyle ? {
-                WebkitBackgroundClip: void 0,
-                backgroundClip: void 0,
-                WebkitTextFillColor: void 0
-              } : {},
-              ...hlStyle || {}
-            },
-            children: char
-          },
-          ci
-        );
-      }) }, ti);
+      const wordEnd = wordStart + token.length;
+      const wordMatch = visibleGlossary.find((m) => m.start < wordEnd && m.end > wordStart);
+      return /* @__PURE__ */ jsxRuntime2.jsx(
+        "span",
+        {
+          style: { display: "inline-block", whiteSpace: "nowrap", ...wordMatch ? { cursor: "help" } : {} },
+          ...wordMatch ? glossarySpanProps(wordMatch.entryId, onGlossaryHover) : {},
+          children: token.split("").map((char, ci) => {
+            const charStyle = getCharacterStyle(textEffect, wordStart + ci);
+            const gi = wordStart + ci;
+            const hlStyle = revealHighlight && gi >= revealHighlight.start && gi < (revealHighlight.end ?? displayText.length) ? revealHighlightStyle(revealHighlight) : void 0;
+            const glStyle = wordMatch && gi >= wordMatch.start && gi < wordMatch.end ? glossaryTermStyle(wordMatch) : void 0;
+            return /* @__PURE__ */ jsxRuntime2.jsx(
+              "span",
+              {
+                style: {
+                  ...charStyle,
+                  // Preserve any gradient styling
+                  ...gradientStyle ? {
+                    WebkitBackgroundClip: void 0,
+                    backgroundClip: void 0,
+                    WebkitTextFillColor: void 0
+                  } : {},
+                  ...glStyle || {},
+                  // Karaoke merged LAST — the reading highlight wins while passing over.
+                  ...hlStyle || {}
+                },
+                children: char
+              },
+              ci
+            );
+          })
+        },
+        ti
+      );
     }) });
   };
+  const GlossaryTooltip = ({ entry, accentColor, x, y }) => {
+    var _a, _b, _c;
+    const ref = React2.useRef(null);
+    const [pos, setPos] = React2.useState(null);
+    React2.useLayoutEffect(() => {
+      const el = ref.current;
+      if (!el) return;
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      let left = x + 14;
+      let top = y + 18;
+      if (left + w > vw - 8) left = x - w - 14;
+      if (top + h > vh - 8) top = y - h - 14;
+      setPos({ left: Math.max(8, left), top: Math.max(8, top) });
+    }, [x, y, entry.id]);
+    return reactDom.createPortal(
+      /* @__PURE__ */ jsxRuntime2.jsxs(
+        "div",
+        {
+          ref,
+          className: "fixed z-[10060] pointer-events-none select-none rounded-lg px-3 py-2 shadow-xl border border-white/15 bg-black/85",
+          style: {
+            left: (pos == null ? void 0 : pos.left) ?? x + 14,
+            top: (pos == null ? void 0 : pos.top) ?? y + 18,
+            maxWidth: 280,
+            visibility: pos ? "visible" : "hidden"
+          },
+          children: [
+            /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "text-sm font-semibold leading-snug", style: { color: accentColor }, children: ((_a = entry.title) == null ? void 0 : _a.trim()) || entry.term }),
+            !!((_b = entry.description) == null ? void 0 : _b.trim()) && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "text-xs text-slate-200 whitespace-pre-wrap leading-relaxed mt-1", children: entry.description }),
+            !!((_c = entry.extra) == null ? void 0 : _c.trim()) && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "text-[11px] text-slate-400 italic mt-1", children: entry.extra })
+          ]
+        }
+      ),
+      document.body
+    );
+  };
+  const WORD_CHAR = /[\p{L}\p{N}_]/u;
+  const isWordChar = (ch) => ch != null && WORD_CHAR.test(ch);
+  const EMPTY = [];
+  function compileGlossary(glossary) {
+    var _a;
+    if (!glossary || ((_a = glossary.settings) == null ? void 0 : _a.enabled) === false) return null;
+    const needles = [];
+    let order = 0;
+    for (const entry of Object.values(glossary.entries || {})) {
+      if (!entry || entry.enabled === false) continue;
+      const caseSensitive = !!entry.caseSensitive;
+      const words = [entry.term, ...entry.alternatives || []];
+      for (const raw of words) {
+        const needle = (raw || "").trim();
+        if (!needle) continue;
+        needles.push({ needle, foldedNeedle: needle.toLowerCase(), caseSensitive, entryId: entry.id, order: order++ });
+      }
+    }
+    if (needles.length === 0) return null;
+    const memo = /* @__PURE__ */ new Map();
+    const MEMO_CAP = 50;
+    const findMatches = (text) => {
+      if (!text) return EMPTY;
+      const hit = memo.get(text);
+      if (hit) return hit;
+      const folded = text.toLowerCase();
+      const candidates = [];
+      for (const n of needles) {
+        const haystack = n.caseSensitive ? text : folded;
+        const needle = n.caseSensitive ? n.needle : n.foldedNeedle;
+        let idx = haystack.indexOf(needle);
+        while (idx !== -1) {
+          const end = idx + needle.length;
+          const leftOk = !isWordChar(needle[0]) || !isWordChar(text[idx - 1]);
+          const rightOk = !isWordChar(needle[needle.length - 1]) || !isWordChar(text[end]);
+          if (leftOk && rightOk) candidates.push({ start: idx, end, entryId: n.entryId, order: n.order });
+          idx = haystack.indexOf(needle, idx + 1);
+        }
+      }
+      if (candidates.length === 0) {
+        memo.set(text, EMPTY);
+        return EMPTY;
+      }
+      candidates.sort((a, b) => a.start - b.start || b.end - b.start - (a.end - a.start) || a.order - b.order);
+      const kept = [];
+      let lastEnd = -1;
+      for (const c of candidates) {
+        if (c.start >= lastEnd) {
+          kept.push({ start: c.start, end: c.end, entryId: c.entryId });
+          lastEnd = c.end;
+        }
+      }
+      if (memo.size >= MEMO_CAP) {
+        const oldest = memo.keys().next().value;
+        if (oldest !== void 0) memo.delete(oldest);
+      }
+      memo.set(text, kept);
+      return kept;
+    };
+    return { hasEntries: true, findMatches };
+  }
   const MAX_ANALYZE_BYTES = 6 * 1024 * 1024;
   let sharedCtx = null;
   const getCtx = () => {
@@ -9855,7 +10357,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         startPosition,
         action: "show"
       } : null,
-      ...command.liveConditions ? { conditions: command.conditions, live: true } : {}
+      ...command.liveConditions ? { conditions: command.conditions, live: true, liveTransition: command.liveTransition, liveTransitionDuration: command.liveTransitionDuration } : {}
     };
     if (command.transition && command.transition !== "instant") {
       const duration = (command.duration ?? 0.5) * 1e3 + 100;
@@ -10498,7 +11000,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       // `live` drives per-render re-evaluation: live conditions (visibility) AND/OR live text
       // (re-interpolating {variable} tokens). Conditions are only attached for liveConditions.
       ...command.liveConditions || command.liveText ? { live: true } : {},
-      ...command.liveConditions ? { conditions: command.conditions } : {}
+      ...command.liveConditions ? { conditions: command.conditions, liveTransition: command.liveTransition, liveTransitionDuration: command.liveTransitionDuration } : {}
     };
     const hasTransition = command.transition && command.transition !== "instant";
     const delay = hasTransition ? (command.duration ?? 0.5) * 1e3 + 100 : 0;
@@ -10590,7 +11092,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       duration: command.duration,
       fitToContent: command.fitToContent,
       action: "show",
-      ...command.liveConditions ? { conditions: command.conditions, live: true } : {}
+      ...command.liveConditions ? { conditions: command.conditions, live: true, liveTransition: command.liveTransition, liveTransitionDuration: command.liveTransitionDuration } : {}
     };
     const hasTransition = command.transition && command.transition !== "instant";
     const delay = hasTransition ? (command.duration ?? 0.5) * 1e3 + 100 : 0;
@@ -10690,7 +11192,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       transition: command.transition !== "instant" ? command.transition : void 0,
       duration: command.duration || 0.3,
       action: "show",
-      ...command.liveConditions ? { conditions: command.conditions, live: true } : {}
+      ...command.liveConditions ? { conditions: command.conditions, live: true, liveTransition: command.liveTransition, liveTransitionDuration: command.liveTransitionDuration } : {}
     };
     const hasTransition = command.transition && command.transition !== "instant";
     const waitForClick = command.waitForClick;
@@ -10720,7 +11222,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return {
       advance: shouldAdvance,
       // Functional patch (appends against the LATEST overlays) so stacked/runAsync Show Button
-      // commands compose instead of clobbering each other — e.g. an Exit Game button + a Quit-to-
+      // commands compose instead of clobbering each other â€” e.g. an Exit Game button + a Quit-to-
       // Title button stacked together: the snapshot path made the second overwrite the first, so
       // only one rendered ("two buttons, only one works"; the missing one looked like a dead click).
       stagePatch: (prev) => ({ buttonOverlays: [...prev.buttonOverlays, buttonOverlay] }),
@@ -10763,8 +11265,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       opacity: command.opacity ?? 1,
       imageUrl: visual ? assetResolver(visual.id, visual.type) : null,
       hoverImageUrl: command.hoverImage ? assetResolver(command.hoverImage.id, command.hoverImage.type) : null,
-      // The give is applied directly on click (see giveItemId below) — reliable, atomic with the
-      // overlay removal — so it is NOT a click action. Click actions are only the author's extras.
+      // The give is applied directly on click (see giveItemId below) â€” reliable, atomic with the
+      // overlay removal â€” so it is NOT a click action. Click actions are only the author's extras.
       onClick: extra[0] ?? { type: UIActionType.None },
       actions: extra.slice(1),
       clickSound: command.clickSound ?? null,
@@ -10780,7 +11282,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       giveQuantity: command.quantity ?? 1,
       draggable: command.draggable,
       dragItemId: command.itemId,
-      ...command.liveConditions ? { conditions: command.conditions, live: true } : {}
+      ...command.liveConditions ? { conditions: command.conditions, live: true, liveTransition: command.liveTransition, liveTransitionDuration: command.liveTransitionDuration } : {}
     };
     const hasTransition = command.transition && command.transition !== "instant";
     return {
@@ -12783,54 +13285,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }, [width, height]);
     return /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: canvasRef, className: "absolute inset-0 w-full h-full pointer-events-none", style: { mixBlendMode: "screen" }, "aria-hidden": true });
   };
-  const hexToRgbStr = (hex) => {
-    const m = (hex || "").match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
-    if (!m) return "255, 255, 255";
-    return `${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}`;
-  };
-  const LightsLayer = ({ lights, stageW, stageH }) => {
-    const base = Math.min(stageW || 800, stageH || 600);
-    return /* @__PURE__ */ jsxRuntime2.jsx(jsxRuntime2.Fragment, { children: lights.map((l, i) => {
-      const sizePx = Math.max(6, base * 0.05 * (l.size ?? 1));
-      const bright = Math.max(0, Math.min(1, l.brightness ?? 1));
-      const spd = l.twinkleSpeed && l.twinkleSpeed > 0 ? l.twinkleSpeed : 1;
-      let background = "";
-      let animation;
-      let delay = `${i % 7 * 0.13}s`;
-      const wPx = sizePx * 1.8;
-      const hPx = sizePx * 1.8;
-      if (l.type === "candle") {
-        background = `radial-gradient(circle at 50% 45%, rgba(255,250,220,${0.97 * bright}) 0%, rgba(255,185,75,${0.8 * bright}) 9%, rgba(255,135,45,${0.4 * bright}) 24%, rgba(255,105,25,${0.14 * bright}) 46%, rgba(255,95,15,${0.04 * bright}) 70%, rgba(255,95,15,0) 100%)`;
-        animation = `vnfx-candle ${(1.1 / spd).toFixed(2)}s ease-in-out infinite`;
-      } else if (l.type === "star") {
-        const rgb = hexToRgbStr(l.color || "#ffffff");
-        background = `radial-gradient(circle, rgba(255,255,255,${0.98 * bright}) 0%, rgba(${rgb},${0.85 * bright}) 8%, rgba(${rgb},${0.4 * bright}) 22%, rgba(${rgb},${0.14 * bright}) 44%, rgba(${rgb},${0.04 * bright}) 68%, rgba(${rgb},0) 100%)`;
-        animation = `vnfx-star ${(2.2 / spd).toFixed(2)}s ease-in-out infinite`;
-      } else {
-        const rgb = hexToRgbStr(l.color || "#ff3b3b");
-        background = `radial-gradient(circle, rgba(255,255,255,${0.98 * bright}) 0%, rgba(${rgb},${0.95 * bright}) 5%, rgba(${rgb},${0.5 * bright}) 13%, rgba(${rgb},${0.26 * bright}) 26%, rgba(${rgb},${0.1 * bright}) 44%, rgba(${rgb},${0.03 * bright}) 66%, rgba(${rgb},0) 100%)`;
-        const tw = l.twinkle ?? "fade";
-        if (tw === "fade") animation = `vnfx-bulb-fade ${(1.6 / spd).toFixed(2)}s ease-in-out infinite`;
-        else if (tw === "blink") animation = `vnfx-bulb-blink ${(1 / spd).toFixed(2)}s steps(1, end) infinite`;
-        else if (tw === "chase") {
-          animation = `vnfx-bulb-fade ${(1.6 / spd).toFixed(2)}s ease-in-out infinite`;
-          delay = `${i % 5 * (0.32 / spd)}s`;
-        }
-      }
-      return /* @__PURE__ */ jsxRuntime2.jsx("div", { "data-vnlight": l.type, className: "absolute pointer-events-none", style: {
-        left: `${l.x}%`,
-        top: `${l.y}%`,
-        width: wPx,
-        height: hPx,
-        transform: "translate(-50%, -50%)",
-        borderRadius: "50%",
-        background,
-        animation,
-        animationDelay: animation ? delay : void 0,
-        mixBlendMode: "screen"
-      } }, l.id);
-    }) });
-  };
   function isRuntimeDebugEnabled() {
     try {
       return window.localStorage.getItem("flourish:runtimeDebug") === "1";
@@ -12945,6 +13399,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return style;
   };
+  const isLiveFade = (o) => !!o.live && o.liveTransition === "fade";
+  const liveFadeStyle = (o) => {
+    if (!isLiveFade(o)) return {};
+    const dur = o.liveTransitionDuration ?? 0.3;
+    const hidden = !!o.__liveHidden;
+    return {
+      // visibility flips AFTER the fade-out completes (and instantly on fade-in) — unlike
+      // pointerEvents:'none', hidden visibility disables hit-testing for the WHOLE subtree,
+      // which matters for buttons whose content-box hit layer sets pointerEvents:'auto'.
+      transition: `opacity ${dur}s ease, visibility 0s linear ${hidden ? dur : 0}s`,
+      visibility: hidden ? "hidden" : "visible",
+      ...hidden ? { opacity: 0, pointerEvents: "none" } : {}
+    };
+  };
   const TextOverlayElement = ({ overlay, stageSize }) => {
     var _a, _b, _c;
     const tweenValues = useTween(overlay.id, "text");
@@ -13028,7 +13496,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const style = {
       ...baseStyle,
       ...applyTransition ? { animationDuration: animDuration } : {},
-      ...isSlideTransition ? slideStyle : {}
+      ...isSlideTransition ? slideStyle : {},
+      ...liveFadeStyle(overlay)
     };
     return /* @__PURE__ */ jsxRuntime2.jsx("div", { className, style, children: gradientSpanStyle ? /* @__PURE__ */ jsxRuntime2.jsx("span", { style: gradientSpanStyle, children: overlay.text }, `grad-${(_a = overlay.textGradient) == null ? void 0 : _a.type}-${(_b = overlay.textGradient) == null ? void 0 : _b.angle}-${(((_c = overlay.textGradient) == null ? void 0 : _c.colors) || []).join(",")}`) : overlay.text });
   };
@@ -13224,7 +13693,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return /* @__PURE__ */ jsxRuntime2.jsxs(
       "div",
       {
-        style: { ...containerStyle, ...hasTransition ? { animationDuration: animDuration } : {} },
+        style: { ...containerStyle, ...hasTransition ? { animationDuration: animDuration } : {}, ...liveFadeStyle(overlay) },
         className: `${transitionClass}`,
         ...overlay.quickMenuMode ? { "data-vn-no-advance": "true" } : {},
         children: [
@@ -13389,7 +13858,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const style = {
       ...containerStyle,
       ...applyTransition ? { animationDuration: animDuration } : {},
-      ...isSlideTransition ? slideStyle : {}
+      ...isSlideTransition ? slideStyle : {},
+      ...liveFadeStyle(overlay)
     };
     return /* @__PURE__ */ jsxRuntime2.jsx("div", { className, style, children: overlay.isVideo && overlay.videoUrl ? /* @__PURE__ */ jsxRuntime2.jsx(
       TrimmedVideo,
@@ -13647,10 +14117,32 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return null;
   };
   const DialogueBox = ({ dialogue, settings, projectUI, onFinished, variables, project, reactiveState, timerPaused, uiPalette, voiceRef }) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
     if (!dialogue) return null;
     const interpolatedText = interpolateVariables(dialogue.text, variables, project);
     const effectiveTextSpeed = dialogue.textSpeed != null && dialogue.textSpeed > 0 ? dialogue.textSpeed : settings.textSpeed;
+    const compiledGlossary = React2.useMemo(() => compileGlossary(project.glossary), [project.glossary]);
+    const glossaryMatches = React2.useMemo(() => {
+      var _a2;
+      if (!(compiledGlossary == null ? void 0 : compiledGlossary.hasEntries)) return null;
+      const gSettings = (_a2 = project.glossary) == null ? void 0 : _a2.settings;
+      const defColor = (gSettings == null ? void 0 : gSettings.defaultColor) || "#7ee7ff";
+      const defStyle = (gSettings == null ? void 0 : gSettings.highlightStyle) || "underline";
+      const found = compiledGlossary.findMatches(interpolatedText);
+      if (!found.length) return null;
+      return found.map((m) => {
+        const entry = project.glossary.entries[m.entryId];
+        return { ...m, color: (entry == null ? void 0 : entry.color) || defColor, style: defStyle };
+      });
+    }, [compiledGlossary, interpolatedText, project.glossary]);
+    const [glossaryHover, setGlossaryHover] = React2.useState(null);
+    React2.useEffect(() => {
+      setGlossaryHover(null);
+    }, [dialogue.text]);
+    const handleGlossaryHover = React2.useCallback((entryId, ev) => {
+      setGlossaryHover(entryId ? { entryId, x: ev.clientX, y: ev.clientY } : null);
+    }, []);
+    const glossaryHoverEntry = glossaryHover ? (_a = project.glossary) == null ? void 0 : _a.entries[glossaryHover.entryId] : void 0;
     const wantVoicePacing = !!projectUI.voicePacedText && !!dialogue.voiceAudioId && !(dialogue.textSpeed != null && dialogue.textSpeed > 0);
     const [voiceDurationMs, setVoiceDurationMs] = React2.useState(null);
     React2.useEffect(() => {
@@ -13720,12 +14212,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const boxImage = (charTb == null ? void 0 : charTb.dialogueBoxImage) ?? projectUI.dialogueBoxImage;
     const dialogueBoxUrl = boxImage ? resolveFieldUrl(
       project.id,
-      boxImage.type === "video" ? ((_a = project.videos[boxImage.id]) == null ? void 0 : _a.videoUrl) || ((_b = project.images[boxImage.id]) == null ? void 0 : _b.videoUrl) || ((_c = project.backgrounds[boxImage.id]) == null ? void 0 : _c.videoUrl) : ((_d = project.images[boxImage.id]) == null ? void 0 : _d.imageUrl) || ((_e = project.backgrounds[boxImage.id]) == null ? void 0 : _e.imageUrl)
+      boxImage.type === "video" ? ((_b = project.videos[boxImage.id]) == null ? void 0 : _b.videoUrl) || ((_c = project.images[boxImage.id]) == null ? void 0 : _c.videoUrl) || ((_d = project.backgrounds[boxImage.id]) == null ? void 0 : _d.videoUrl) : ((_e = project.images[boxImage.id]) == null ? void 0 : _e.imageUrl) || ((_f = project.backgrounds[boxImage.id]) == null ? void 0 : _f.imageUrl)
     ) : null;
     const isDialogueBoxVideo = (boxImage == null ? void 0 : boxImage.type) === "video";
     const dialogueBoxTrim = resolveVideoTrim(boxImage, (boxImage == null ? void 0 : boxImage.id) ? project.videos[boxImage.id] || project.images[boxImage.id] || project.backgrounds[boxImage.id] : void 0);
     const borderImage = (charTb == null ? void 0 : charTb.dialogueBoxBorderImage) ?? projectUI.dialogueBoxBorderImage;
-    const dialogueBorderUrl = borderImage ? resolveFieldUrl(project.id, ((_f = project.images[borderImage.id]) == null ? void 0 : _f.imageUrl) || ((_g = project.backgrounds[borderImage.id]) == null ? void 0 : _g.imageUrl)) : null;
+    const dialogueBorderUrl = borderImage ? resolveFieldUrl(project.id, ((_g = project.images[borderImage.id]) == null ? void 0 : _g.imageUrl) || ((_h = project.backgrounds[borderImage.id]) == null ? void 0 : _h.imageUrl)) : null;
     const dialogueBorderPadding = (charTb == null ? void 0 : charTb.dialogueBorderPadding) ?? projectUI.dialogueBorderPadding ?? 12;
     const dialogueBoxWidth = projectUI.dialogueBoxWidth ?? 100;
     const dialogueBoxHeight = projectUI.dialogueBoxHeight || 0;
@@ -13737,7 +14229,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const dialogueOpacity = (charTb == null ? void 0 : charTb.dialogueBoxOpacity) ?? projectUI.dialogueBoxOpacity ?? 90;
     const dialogueBorderRadius = (charTb == null ? void 0 : charTb.dialogueBoxBorderRadius) ?? projectUI.dialogueBoxBorderRadius ?? 8;
     const nameboxImage = (charTb == null ? void 0 : charTb.nameboxImage) ?? projectUI.nameboxImage;
-    const nameboxImageUrl = nameboxImage ? resolveFieldUrl(project.id, ((_h = project.images[nameboxImage.id]) == null ? void 0 : _h.imageUrl) || ((_i = project.backgrounds[nameboxImage.id]) == null ? void 0 : _i.imageUrl)) : null;
+    const nameboxImageUrl = nameboxImage ? resolveFieldUrl(project.id, ((_i = project.images[nameboxImage.id]) == null ? void 0 : _i.imageUrl) || ((_j = project.backgrounds[nameboxImage.id]) == null ? void 0 : _j.imageUrl)) : null;
     const nameboxColor = (uiPalette == null ? void 0 : uiPalette.dialogueName) ?? (charTb == null ? void 0 : charTb.nameboxColor) ?? projectUI.nameboxColor ?? "#0f172a";
     const nameboxOpacity = (charTb == null ? void 0 : charTb.nameboxOpacity) ?? projectUI.nameboxOpacity ?? 92;
     const nameboxPadding = (charTb == null ? void 0 : charTb.nameboxPadding) ?? projectUI.nameboxPadding ?? 8;
@@ -13834,8 +14326,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const nameboxBgStyle = nameboxImageUrl ? { ...buildImageBackgroundStyle(nameboxImageUrl, nameboxSizeMode), borderRadius: scalePx(nameboxBorderRadius), transition: reactiveTransition } : { backgroundColor: hexToRgba(nameboxColor, nameboxOpacity), borderRadius: scalePx(nameboxBorderRadius), transition: reactiveTransition };
     const dialogueBgColor = hexToRgba(dialogueColor, dialogueOpacity);
     const dialogueImageStyle = dialogueBoxUrl && !isDialogueBoxVideo ? buildImageBackgroundStyle(dialogueBoxUrl, dialogueSizeMode, dialogueSlice) : {};
-    const gameW = ((_j = project.gameResolution) == null ? void 0 : _j.width) || 1920;
-    const gameH = ((_k = project.gameResolution) == null ? void 0 : _k.height) || 1080;
+    const gameW = ((_k = project.gameResolution) == null ? void 0 : _k.width) || 1920;
+    const gameH = ((_l = project.gameResolution) == null ? void 0 : _l.height) || 1080;
     const dialogueHPct = dialogueBoxHeight ? dialogueBoxHeight * 100 / gameH : 20;
     const dialogueXPct = projectUI.dialogueBoxX ?? (100 - dialogueBoxWidth) / 2;
     const bmPct = dialogueBoxBottomMargin * 100 / gameH;
@@ -13950,7 +14442,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                           displayText,
                           textEffect: dialogue.textEffect,
                           gradientStyle: extractTextGradientStyle(projectUI.dialogueTextFont) || void 0,
-                          revealHighlight
+                          revealHighlight,
+                          glossaryMatches,
+                          onGlossaryHover: handleGlossaryHover
                         }
                       ),
                       !hasFinished && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: {
@@ -13959,7 +14453,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         height: "1em",
                         marginLeft: "2px",
                         verticalAlign: "text-bottom",
-                        backgroundColor: dialogueTextStyle.color || ((_l = projectUI.dialogueTextFont) == null ? void 0 : _l.color) || "#FFFFFF",
+                        backgroundColor: dialogueTextStyle.color || ((_m = projectUI.dialogueTextFont) == null ? void 0 : _m.color) || "#FFFFFF",
                         animation: "vnCursorBlink 0.8s step-end infinite",
                         opacity: 0.85
                       } })
@@ -13983,7 +14477,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     width: `${Math.max(0, Math.min(100, timerRemaining / timeLimit * 100))}%`,
                     background: projectUI.choiceHoverColor || "#6B4C9A",
                     transition: "width 0.12s linear"
-                  } })
+                  } }),
+                  glossaryHover && glossaryHoverEntry && /* @__PURE__ */ jsxRuntime2.jsx(
+                    GlossaryTooltip,
+                    {
+                      entry: glossaryHoverEntry,
+                      accentColor: glossaryHoverEntry.color || ((_o = (_n = project.glossary) == null ? void 0 : _n.settings) == null ? void 0 : _o.defaultColor) || "#7ee7ff",
+                      x: glossaryHover.x,
+                      y: glossaryHover.y
+                    }
+                  )
                 ]
               }
             ),
@@ -14494,7 +14997,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     swivelMax: c.swivelMax ?? 30,
     toggleKey: c.toggleKey,
     affectsDialogue: c.affectsDialogue !== false,
-    on: true
+    on: true,
+    conditions: c.liveConditions ? c.conditions ?? null : null
   });
   const TIMER_VAR_MUTATION_TYPES = /* @__PURE__ */ new Set([
     UIActionType.SetVariable,
@@ -15315,7 +15819,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     );
   };
-  const StageGlitchFilterDef = ({ effect }) => {
+  const StageGlitchFilterDef = ({ effect, id = "vnfx-stage-glitch" }) => {
     var _a, _b, _c;
     const intensity = Math.max(0, Math.min(1, effect.intensity ?? 0.5));
     const blockiness = ((_a = effect.params) == null ? void 0 : _a.blockiness) ?? 0.5;
@@ -15324,7 +15828,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const bandFreq = 0.012 + Math.pow(1 - blockiness, 2) * 0.3;
     const scale = 10 + intensity * 90;
     const dur = Math.max(0.4, 2.2 - speed * 1.8);
-    return /* @__PURE__ */ jsxRuntime2.jsx("svg", { width: "0", height: "0", style: { position: "absolute" }, "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntime2.jsx("defs", { children: /* @__PURE__ */ jsxRuntime2.jsxs("filter", { id: "vnfx-stage-glitch", x: "-10%", y: "-10%", width: "120%", height: "120%", children: [
+    return /* @__PURE__ */ jsxRuntime2.jsx("svg", { width: "0", height: "0", style: { position: "absolute" }, "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntime2.jsx("defs", { children: /* @__PURE__ */ jsxRuntime2.jsxs("filter", { id, x: "-10%", y: "-10%", width: "120%", height: "120%", children: [
       /* @__PURE__ */ jsxRuntime2.jsx("feTurbulence", { type: "fractalNoise", baseFrequency: `0.002 ${bandFreq.toFixed(4)}`, numOctaves: "1", seed: "7", result: "noise", children: /* @__PURE__ */ jsxRuntime2.jsx("animate", { attributeName: "seed", values: "7;23;51;89;7", dur: `${(dur * 4).toFixed(2)}s`, calcMode: "discrete", repeatCount: "indefinite" }) }),
       /* @__PURE__ */ jsxRuntime2.jsxs("feComponentTransfer", { in: "noise", result: "bands", children: [
         /* @__PURE__ */ jsxRuntime2.jsx("feFuncR", { type: "discrete", tableValues: "0 0 0.4 0.5 0.6 1 1" }),
@@ -15348,6 +15852,49 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       /* @__PURE__ */ jsxRuntime2.jsx("feOffset", { in: "cyanCh", dx: (-aberration / 2).toFixed(1), dy: "0", result: "cyanOff" }),
       /* @__PURE__ */ jsxRuntime2.jsx("feBlend", { in: "redOff", in2: "cyanOff", mode: "screen" })
     ] }) }) });
+  };
+  const CustomTransitionOverlay = ({ def, phase, assetResolver }) => {
+    const half = phase === "closing" ? def.close : def.open;
+    const fit = (def.fit ?? "stretch") === "stretch" ? "fill" : def.fit;
+    const frameUrls = React2.useMemo(
+      () => (half == null ? void 0 : half.frameIds) && half.frameIds.length > 0 ? half.frameIds.map((id) => assetResolver(id, "image")).filter((u) => !!u) : null,
+      [half, assetResolver]
+    );
+    const [frameIdx, setFrameIdx] = React2.useState(0);
+    React2.useEffect(() => {
+      if (!frameUrls || frameUrls.length <= 1) return;
+      const fps = Math.max(1, Math.min(60, (half == null ? void 0 : half.fps) ?? 12));
+      const iv = window.setInterval(() => {
+        setFrameIdx((i) => Math.min(i + 1, frameUrls.length - 1));
+      }, 1e3 / fps);
+      return () => window.clearInterval(iv);
+    }, [frameUrls, half == null ? void 0 : half.fps]);
+    React2.useEffect(() => {
+      var _a;
+      if (phase !== "closing") return;
+      const open = def.open;
+      const urls = ((_a = open == null ? void 0 : open.frameIds) == null ? void 0 : _a.length) ? open.frameIds.map((id) => assetResolver(id, "image")) : assetResolver((open == null ? void 0 : open.assetId) ?? null, "video") ? [] : [assetResolver((open == null ? void 0 : open.assetId) ?? null, "image")];
+      urls.forEach((u) => {
+        if (u) {
+          const img = new Image();
+          img.src = u;
+        }
+      });
+    }, [phase, def, assetResolver]);
+    const mediaStyle = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: fit };
+    let media = null;
+    if (frameUrls && frameUrls.length > 0) {
+      media = /* @__PURE__ */ jsxRuntime2.jsx("img", { src: frameUrls[Math.min(frameIdx, frameUrls.length - 1)], alt: "", style: mediaStyle, draggable: false });
+    } else if (half == null ? void 0 : half.assetId) {
+      const vidUrl = assetResolver(half.assetId, "video");
+      if (vidUrl) {
+        media = /* @__PURE__ */ jsxRuntime2.jsx("video", { src: vidUrl, autoPlay: true, muted: true, playsInline: true, style: mediaStyle });
+      } else {
+        const imgUrl = assetResolver(half.assetId, "image");
+        if (imgUrl) media = /* @__PURE__ */ jsxRuntime2.jsx("img", { src: imgUrl, alt: "", style: mediaStyle, draggable: false });
+      }
+    }
+    return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none z-50 overflow-hidden", children: media });
   };
   const getTransitionStyle = (transitionIn, duration, delay, fade, distance) => {
     const durationMs = duration || 300;
@@ -15926,16 +16473,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     };
     const buildBgPlane = (bg, depth, layer, key, videoRef, transition, transitionDuration) => {
       var _a2;
+      const bgOpacity = bg.opacity != null && bg.opacity < 1 ? Math.max(0, bg.opacity) : void 0;
       let node = null;
       if (bg.type === "color") {
-        node = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { backgroundColor: bg.value } });
+        node = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { backgroundColor: bg.value, opacity: bgOpacity } });
       } else if (bg.assetId) {
         const asset = project.backgrounds[bg.assetId] || ((_a2 = project.images) == null ? void 0 : _a2[bg.assetId]) || project.videos[bg.assetId];
         const isVid = bg.type === "video" || !!(asset && (asset.isVideo || asset.videoUrl));
         const url = isVid ? assetResolver(bg.assetId, "video") : assetResolver(bg.assetId, "image");
         const bgTrim = resolveVideoTrim(bg, asset);
         if (url) {
-          node = isVid ? /* @__PURE__ */ jsxRuntime2.jsx(TrimmedVideo, { ref: videoRef, src: url, autoPlay: true, loop: bg.loop ?? true, muted: true, trimStart: bgTrim.start, trimEnd: bgTrim.end, playsInline: true, className: "absolute inset-0 w-full h-full object-cover" }) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", className: "absolute inset-0 w-full h-full object-cover" });
+          node = isVid ? /* @__PURE__ */ jsxRuntime2.jsx(TrimmedVideo, { ref: videoRef, src: url, autoPlay: true, loop: bg.loop ?? true, muted: true, trimStart: bgTrim.start, trimEnd: bgTrim.end, playsInline: true, className: "absolute inset-0 w-full h-full object-cover", style: bgOpacity !== void 0 ? { opacity: bgOpacity } : void 0 }) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", className: "absolute inset-0 w-full h-full object-cover", style: bgOpacity !== void 0 ? { opacity: bgOpacity } : void 0 });
         }
       }
       if (!node) return null;
@@ -17406,7 +17954,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ] })
     );
   };
-  const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false, startAt = null }) => {
+  const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false, startAt = null, startScreenId = null }) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x;
     const { project } = useProject();
     const toast = useToast();
@@ -17428,7 +17976,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       return Object.keys(project.uiScreens)[0] || null;
     }, [project.ui.titleScreenId, project.uiScreens]);
     const titleScreenId = getValidTitleScreenId();
-    const [screenStack, setScreenStack] = React2.useState(startAt ? [] : titleScreenId ? [titleScreenId] : []);
+    const [screenStack, setScreenStack] = React2.useState(
+      startScreenId && project.uiScreens[startScreenId] ? [startScreenId] : startAt ? [] : titleScreenId ? [titleScreenId] : []
+    );
     const [hudStack, setHudStack] = React2.useState([]);
     const [elementVisibility, setElementVisibility] = React2.useState({});
     const prevOpenScreensRef = React2.useRef(/* @__PURE__ */ new Set());
@@ -17460,6 +18010,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const [sceneTransitionFading, setSceneTransitionFading] = React2.useState(false);
     const [sceneTransitionType, setSceneTransitionType] = React2.useState("fade");
     const [sceneTransitionDuration, setSceneTransitionDuration] = React2.useState(0.5);
+    const [customTransition, setCustomTransition] = React2.useState(null);
+    const customTransitionTimeoutsRef = React2.useRef([]);
+    const [actionMovie, setActionMovie] = React2.useState(null);
     const [gameStartFade, setGameStartFade] = React2.useState("none");
     const [settings, setSettings] = React2.useState(() => {
       var _a2;
@@ -17754,6 +18307,45 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const [lightningTrigger, setLightningTrigger] = React2.useState(0);
     const activeFireworksRef = React2.useRef(null);
     const [fireworksTrigger, setFireworksTrigger] = React2.useState(0);
+    const [lightningStorm, setLightningStorm] = React2.useState(null);
+    React2.useEffect(() => {
+      if (!lightningStorm) return;
+      const storm = lightningStorm;
+      let cancelled = false;
+      let tid = 0;
+      const schedule = () => {
+        const min = Math.max(0.3, storm.intervalMin);
+        const max = Math.max(min, storm.intervalMax);
+        tid = window.setTimeout(strike, (storm.duration + min + Math.random() * (max - min)) * 1e3);
+      };
+      const strike = () => {
+        var _a2, _b2;
+        if (cancelled) return;
+        if (((_a2 = playerStateRef.current) == null ? void 0 : _a2.mode) === "playing") {
+          activeLightningRef.current = {
+            color: storm.color,
+            // ⚡ intensity binding re-resolves PER STRIKE, so a rising "storm" variable
+            // makes each successive strike brighter.
+            intensity: resolveVarNumber((_b2 = playerStateRef.current) == null ? void 0 : _b2.variables, storm.intensityVariableId, storm.intensity, { min: 0, max: 1 }),
+            duration: storm.duration,
+            flashes: storm.flashes,
+            affectsDialogue: storm.affectsDialogue,
+            key: Date.now()
+          };
+          setLightningTrigger((prev) => prev + 1);
+          if (storm.thunderSfxId) {
+            const th = window.setTimeout(() => playSound(storm.thunderSfxId, storm.thunderVolume), Math.max(0, storm.thunderDelay * 1e3));
+            activeEffectTimeoutsRef.current.push(th);
+          }
+        }
+        schedule();
+      };
+      tid = window.setTimeout(strike, 250 + Math.random() * 500);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(tid);
+      };
+    }, [lightningStorm]);
     const [flashlight, setFlashlight] = React2.useState(null);
     const flashlightOverlayRef = React2.useRef(null);
     React2.useEffect(() => {
@@ -18228,6 +18820,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         setScreenStack([]);
         setHudStack([]);
         setClosingScreens(/* @__PURE__ */ new Set());
+        customTransitionTimeoutsRef.current.forEach((t) => window.clearTimeout(t));
+        customTransitionTimeoutsRef.current = [];
+        setCustomTransition(null);
+        setActionMovie(null);
         timersRef.current.clear();
         blockingTimerRef.current = null;
         fastForwardTargetRef.current = null;
@@ -18336,6 +18932,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       setScreenStack([]);
       setHudStack([]);
       setClosingScreens(/* @__PURE__ */ new Set());
+      customTransitionTimeoutsRef.current.forEach((t) => window.clearTimeout(t));
+      customTransitionTimeoutsRef.current = [];
+      setCustomTransition(null);
+      setActionMovie(null);
       timersRef.current.clear();
       blockingTimerRef.current = null;
       fastForwardTargetRef.current = null;
@@ -18391,6 +18991,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         setScreenStack([]);
         setHudStack([]);
         setClosingScreens(/* @__PURE__ */ new Set());
+        customTransitionTimeoutsRef.current.forEach((t) => window.clearTimeout(t));
+        customTransitionTimeoutsRef.current = [];
+        setCustomTransition(null);
+        setActionMovie(null);
         timersRef.current.clear();
         blockingTimerRef.current = null;
       };
@@ -18712,15 +19316,61 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       console.error("Scene navigation exceeded max attempts - possible circular fallback");
       return targetSceneId;
     }, [project.scenes, evaluateConditions2]);
-    const startSceneExitTransition = React2.useCallback((currentSceneId, executeChange) => {
+    const startSceneExitTransition = React2.useCallback((currentSceneId, executeChange, override) => {
       const currentScene = project.scenes[currentSceneId];
-      const transType = (currentScene == null ? void 0 : currentScene.outTransition) || "fade";
-      const duration = (currentScene == null ? void 0 : currentScene.outTransitionDuration) ?? 0.5;
+      const resolved = resolveSceneTransition(override, currentScene, project.customTransitions);
       const shouldFade = hasRenderedSceneRef.current;
-      if (transType === "instant" || !shouldFade) {
+      if (resolved.kind === "instant" || !shouldFade) {
         executeChange();
         return;
       }
+      if (resolved.kind === "custom") {
+        const def = resolved.def;
+        const hasClose = transitionHalfHasContent(def.close);
+        const hasOpen = transitionHalfHasContent(def.open);
+        const closeS = hasClose ? transitionHalfDuration(def.close) : 0;
+        const openS = hasOpen ? transitionHalfDuration(def.open) : 0;
+        const holdS = Math.max(0, def.holdDuration ?? 0);
+        const playHalfSfx = (half) => {
+          const url = half.sfxId ? assetResolver(half.sfxId, "audio") : null;
+          if (!url) return;
+          try {
+            const a = new Audio(url);
+            a.volume = Number.isFinite(settings.sfxVolume) ? settings.sfxVolume : 0.8;
+            a.play().catch(() => {
+            });
+          } catch (e) {
+          }
+        };
+        const audio2 = musicAudioRef.current;
+        if (audio2 && !audio2.paused) {
+          fadeAudio(audio2, 0, Math.max(0.1, closeS || 0.3), () => {
+            audio2.pause();
+            audio2.currentTime = 0;
+          });
+        }
+        const openPhase = () => {
+          executeChange();
+          if (hasOpen) {
+            playHalfSfx(def.open);
+            setCustomTransition({ def, phase: "opening" });
+            const t2 = window.setTimeout(() => setCustomTransition(null), openS * 1e3);
+            customTransitionTimeoutsRef.current.push(t2);
+          } else {
+            setCustomTransition(null);
+          }
+        };
+        if (hasClose) {
+          playHalfSfx(def.close);
+          setCustomTransition({ def, phase: "closing" });
+          const t1 = window.setTimeout(openPhase, (closeS + holdS) * 1e3);
+          customTransitionTimeoutsRef.current.push(t1);
+        } else {
+          openPhase();
+        }
+        return;
+      }
+      const { type: transType, duration } = resolved;
       const audio = musicAudioRef.current;
       if (audio && !audio.paused) {
         fadeAudio(audio, 0, duration, () => {
@@ -18735,7 +19385,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         executeChange();
         setSceneTransitionFading(false);
       }, duration * 1e3);
-    }, [project.scenes]);
+    }, [project.scenes, project.customTransitions, assetResolver, settings.sfxVolume]);
     React2.useEffect(() => {
       if ((playerState == null ? void 0 : playerState.mode) === "playing") {
         return;
@@ -19637,7 +20287,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return;
       }
       const conditionsMet = evaluateConditions2(command.conditions, getRuntimeVariables());
-      const isLiveReactive = !!command.liveConditions && (REACTIVE_VISUAL_TYPES.has(command.type) || command.type === CommandType.PlaySoundEffect);
+      const isLiveReactive = !!command.liveConditions && (REACTIVE_VISUAL_TYPES.has(command.type) || REACTIVE_FX_TYPES.has(command.type) || command.type === CommandType.PlaySoundEffect);
       runtimeDebugLog("[DEBUG] Command:", command.type, "Index:", playerState.currentIndex, "Conditions met:", conditionsMet, "live:", isLiveReactive, "Variables:", getRuntimeVariables());
       if (!conditionsMet && !isLiveReactive) {
         runtimeDebugLog("[DEBUG] Skipping command due to failed conditions");
@@ -19948,6 +20598,26 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               return;
             }
             case "Lightning": {
+              if (cmd.storm === "stop") {
+                setLightningStorm(null);
+                return;
+              }
+              if (cmd.storm === "continuous") {
+                setLightningStorm({
+                  color: cmd.color || "#EAF2FF",
+                  intensity: cmd.intensity ?? 0.9,
+                  intensityVariableId: cmd.intensityVariableId ?? null,
+                  duration: cmd.duration ?? 0.7,
+                  flashes: cmd.flashes ?? 2,
+                  affectsDialogue: cmd.affectsDialogue !== false,
+                  thunderSfxId: cmd.thunderSfxId ?? null,
+                  thunderDelay: cmd.thunderDelay ?? 0.6,
+                  thunderVolume: cmd.thunderVolume,
+                  intervalMin: Math.max(0.3, cmd.intervalMin ?? 2),
+                  intervalMax: Math.max(0.3, cmd.intervalMax ?? 8)
+                });
+                return;
+              }
               activeLightningRef.current = {
                 color: cmd.color || "#EAF2FF",
                 intensity: resolveVarNumber((_d2 = playerStateRef.current) == null ? void 0 : _d2.variables, cmd.intensityVariableId, cmd.intensity ?? 0.9, { min: 0, max: 1 }),
@@ -20061,7 +20731,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 ] } } : p);
                 return;
               }
-              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl, movieLoop: cmd.loop ?? false, movieTrimStart: sTrim.start, movieTrimEnd: sTrim.end, movieHoldLastFrame: cmd.holdLastFrame ?? false, movieTransition: cmd.transition, movieTransitionDuration: cmd.transitionDuration, movieExiting: false } } : p);
+              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl, movieLoop: cmd.loop ?? false, movieTrimStart: sTrim.start, movieTrimEnd: sTrim.end, movieHoldLastFrame: cmd.holdLastFrame ?? false, movieTransition: cmd.transition, movieTransitionDuration: cmd.transitionDuration, movieBlockInput: cmd.blockInput ?? false, movieExiting: false } } : p);
               if (cmd.waitsForCompletion !== false && !(cmd.loop ?? false)) {
                 return new Promise((resolve) => {
                   scriptInputResolverRef.current = { kind: "movie", resolve: () => resolve() };
@@ -20179,6 +20849,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 activeFlashRef.current = null;
                 setFlashTrigger(0);
                 activeLightningRef.current = null;
+                setLightningStorm(null);
                 activeFireworksRef.current = null;
                 setFlashlight(null);
                 setSpotlights({});
@@ -20354,7 +21025,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               startSceneExitTransition(playerState.currentSceneId, () => {
                 const result = handleJump(command, commandContext);
                 applyResult(result);
-              });
+              }, command.transition);
               break;
             }
             case CommandType.PlayMusic: {
@@ -20433,12 +21104,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   instantAdvance = false;
                   updatePlayerState((p) => p ? {
                     ...p,
-                    uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false }
+                    uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieBlockInput: movieCmd.blockInput ?? false, movieExiting: false }
                   } : null);
                 } else {
                   updatePlayerState((p) => p ? {
                     ...p,
-                    uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false }
+                    uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieBlockInput: movieCmd.blockInput ?? false, movieExiting: false }
                   } : null);
                 }
               }
@@ -20609,6 +21280,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             case CommandType.ResetScreenEffects: {
               const cmd = command;
+              setLightningStorm(null);
               updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: "transparent", tintOpacity: 100, tintOpacityVariableId: null, zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] } } } : null);
               break;
             }
@@ -20620,6 +21292,26 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             case CommandType.Lightning: {
               const cmd = command;
+              if (cmd.storm === "stop") {
+                setLightningStorm(null);
+                break;
+              }
+              if (cmd.storm === "continuous") {
+                setLightningStorm({
+                  color: cmd.color || "#EAF2FF",
+                  intensity: cmd.intensity ?? 0.9,
+                  intensityVariableId: cmd.intensityVariableId ?? null,
+                  duration: cmd.duration ?? 0.7,
+                  flashes: cmd.flashes ?? 2,
+                  affectsDialogue: cmd.affectsDialogue !== false,
+                  thunderSfxId: cmd.thunderSfxId ?? null,
+                  thunderDelay: cmd.thunderDelay ?? 0.6,
+                  thunderVolume: cmd.thunderVolume,
+                  intervalMin: Math.max(0.3, cmd.intervalMin ?? 2),
+                  intervalMax: Math.max(0.3, cmd.intervalMax ?? 8)
+                });
+                break;
+              }
               activeLightningRef.current = {
                 color: cmd.color || "#EAF2FF",
                 intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity ?? 0.9, { min: 0, max: 1 }),
@@ -20662,11 +21354,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             case CommandType.PlaceLights: {
               const cmd = command;
-              applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null }) });
+              applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null, lightsConditions: cmd.liveConditions ? cmd.conditions ?? null : null }) });
               break;
             }
             case CommandType.ClearLights: {
-              applyResult({ advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null }) });
+              applyResult({ advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null, lightsConditions: null }) });
               break;
             }
             case CommandType.ShowPhone: {
@@ -20751,7 +21443,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   toggleKey: cmd.toggleKey,
                   affectsDialogue: cmd.affectsDialogue !== false,
                   darkWhenOff: cmd.darkWhenOff === true,
-                  on: true
+                  on: true,
+                  // Live Evaluation: keep the flashlight registered and show/hide it as
+                  // these conditions flip (renderer re-checks every render).
+                  conditions: cmd.liveConditions ? cmd.conditions ?? null : null
                 });
                 if (cmd.sfxId) playSound(cmd.sfxId);
               } else {
@@ -20788,7 +21483,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       intensityVariableId: cmd.intensityVariableId ?? null,
                       variant: cmd.variant,
                       color: cmd.color,
-                      params: cmd.params
+                      params: cmd.params,
+                      // Live Evaluation: the effect stays registered and renders only
+                      // while these conditions hold (re-checked every render).
+                      conditions: cmd.liveConditions ? cmd.conditions ?? void 0 : void 0
                     })
                   }
                 }
@@ -21261,7 +21959,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       };
       const sceneToExit = (_c2 = playerStateRef.current) == null ? void 0 : _c2.currentSceneId;
       if (willJumpScene && sceneToExit) {
-        startSceneExitTransition(sceneToExit, runSelection);
+        const choiceJump = allActions.find((a) => a.type === UIActionType.JumpToScene);
+        startSceneExitTransition(sceneToExit, runSelection, choiceJump == null ? void 0 : choiceJump.transition);
       } else {
         runSelection();
       }
@@ -21391,7 +22090,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       executeUIAction(action, opts);
     };
     const executeUIAction = (action, opts) => {
-      var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r2, _s2, _t2, _u2, _v2, _w2;
+      var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r2, _s2, _t2, _u2, _v2, _w2, _x2;
       if (action.type === UIActionType.StartNewGame) {
         startNewGameWithFade();
       } else if (!playerState && action.type === UIActionType.ContinueGame) {
@@ -21726,6 +22425,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           uiDirtyVariableIdsRef.current.clear();
           if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
           setClosingScreens(/* @__PURE__ */ new Set());
+          customTransitionTimeoutsRef.current.forEach((t) => window.clearTimeout(t));
+          customTransitionTimeoutsRef.current = [];
+          setCustomTransition(null);
+          setActionMovie(null);
         };
         const quitClosingIds = [];
         const topScreenForQuit = screenStack.length > 0 ? screenStack[screenStack.length - 1] : null;
@@ -21865,6 +22568,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           activeFlashRef.current = null;
           setFlashTrigger(0);
           activeLightningRef.current = null;
+          setLightningStorm(null);
           activeFireworksRef.current = null;
           setFlashlight(null);
           setSpotlights({});
@@ -22010,7 +22714,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         }
         if (playerState == null ? void 0 : playerState.currentSceneId) {
-          startSceneExitTransition(playerState.currentSceneId, executeJump);
+          startSceneExitTransition(playerState.currentSceneId, executeJump, action.transition);
         } else if (jumpScreenOutDuration > 0) {
           setTimeout(executeJump, jumpScreenOutDuration);
         } else {
@@ -22145,6 +22849,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const cmd = { type: CommandType.StopMusic, fadeDuration: a.fadeDuration ?? 1 };
         const r = handleStopMusic(cmd, { musicAudioRef, fadeAudio, playerState: playerStateRef.current });
         if ((_k2 = r.updates) == null ? void 0 : _k2.musicState) updatePlayerState((p) => p ? { ...p, musicState: { ...p.musicState, ...r.updates.musicState } } : p);
+      } else if (action.type === UIActionType.StopSound) {
+        const a = action;
+        stopSfx(a.audioId || null, a.fadeDuration);
+      } else if (action.type === UIActionType.PlayVideo) {
+        const a = action;
+        const url = a.videoId ? assetResolver(a.videoId, "video") : null;
+        if (url) {
+          const asset = a.videoId ? project.videos[a.videoId] || project.backgrounds[a.videoId] || ((_l2 = project.images) == null ? void 0 : _l2[a.videoId]) : null;
+          const trim = resolveVideoTrim({}, asset);
+          setActionMovie({ url, loop: !!a.loop, blockInput: !!a.blockInput && !a.loop, onEndActions: a.onEndActions, trimStart: trim.start, trimEnd: trim.end });
+        }
       } else if (action.type === UIActionType.ShowSpotlight) {
         const a = action;
         const sid = a.spotlightId || "main";
@@ -22227,10 +22942,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         runtimeDebugLog("JumpToLabel handler triggered:", {
           targetLabel,
           currentSceneId: playerState.currentSceneId,
-          currentSceneName: (_l2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _l2.name,
+          currentSceneName: (_m2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _m2.name,
           screenSceneId: playerState.uiState.screenSceneId,
           targetSceneId,
-          targetSceneName: (_m2 = project.scenes[targetSceneId]) == null ? void 0 : _m2.name
+          targetSceneName: (_n2 = project.scenes[targetSceneId]) == null ? void 0 : _n2.name
         });
         const targetScene = project.scenes[targetSceneId];
         if (!targetScene) {
@@ -22339,7 +23054,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const savedVariables = {};
         const clearedVariables = [];
         for (const param of ce.parameters || []) {
-          const raw = (_n2 = ccAction.arguments) == null ? void 0 : _n2[param.id];
+          const raw = (_o2 = ccAction.arguments) == null ? void 0 : _o2[param.id];
           overrides[param.id] = raw !== void 0 ? coerceParam(raw, param.type) : param.defaultValue;
           if (Object.prototype.hasOwnProperty.call(playerState.variables, param.id)) savedVariables[param.id] = playerState.variables[param.id];
           else clearedVariables.push(param.id);
@@ -22361,22 +23076,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         });
       } else if (action.type === UIActionType.GiveItem) {
         const a = action;
-        const item = (_o2 = project.items) == null ? void 0 : _o2[a.itemId];
+        const item = (_p2 = project.items) == null ? void 0 : _p2[a.itemId];
         if (item) executeUIAction(item.unique ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 1 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "add", value: a.quantity ?? 1 });
       } else if (action.type === UIActionType.UseItem) {
         const a = action;
-        const item = (_p2 = project.items) == null ? void 0 : _p2[a.itemId];
+        const item = (_q2 = project.items) == null ? void 0 : _q2[a.itemId];
         if (item) {
           if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
           (item.useEffect || []).forEach((eff) => executeUIAction(eff));
         }
       } else if (action.type === UIActionType.DestroyItem) {
         const a = action;
-        const item = (_q2 = project.items) == null ? void 0 : _q2[a.itemId];
+        const item = (_r2 = project.items) == null ? void 0 : _r2[a.itemId];
         if (item) executeUIAction(a.all ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 0 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: a.quantity ?? 1 });
       } else if (action.type === UIActionType.UseSelectedItem) {
-        const selId = (_r2 = playerStateRef.current) == null ? void 0 : _r2.selectedItemId;
-        const item = selId ? (_s2 = project.items) == null ? void 0 : _s2[selId] : void 0;
+        const selId = (_s2 = playerStateRef.current) == null ? void 0 : _s2.selectedItemId;
+        const item = selId ? (_t2 = project.items) == null ? void 0 : _t2[selId] : void 0;
         if (item && item.usable) {
           if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
           (item.useEffect || []).forEach((eff) => executeUIAction(eff));
@@ -22385,7 +23100,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         startCarry(action.itemId);
       } else if (action.type === UIActionType.RestockCollection) {
         const a = action;
-        const collection = (_t2 = project.itemCollections) == null ? void 0 : _t2[a.collectionId];
+        const collection = (_u2 = project.itemCollections) == null ? void 0 : _u2[a.collectionId];
         if (collection) {
           const restocked = computeCollectionRestock(collection, project.variables);
           Object.entries(restocked).forEach(([varId, val]) => {
@@ -22394,12 +23109,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
       } else if (action.type === UIActionType.BuyItem || action.type === UIActionType.SellItem || action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem) {
         const a = action;
-        const collection = (_u2 = project.itemCollections) == null ? void 0 : _u2[a.collectionId];
+        const collection = (_v2 = project.itemCollections) == null ? void 0 : _v2[a.collectionId];
         const isBuy = action.type === UIActionType.BuyItem || action.type === UIActionType.BuySelectedItem;
         const isSelected = action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem;
-        const itemId = isSelected ? (_v2 = playerStateRef.current) == null ? void 0 : _v2.selectedItemId : a.itemId;
+        const itemId = isSelected ? (_w2 = playerStateRef.current) == null ? void 0 : _w2.selectedItemId : a.itemId;
         if (collection && itemId) {
-          const curVars = ((_w2 = playerStateRef.current) == null ? void 0 : _w2.variables) || {};
+          const curVars = ((_x2 = playerStateRef.current) == null ? void 0 : _x2.variables) || {};
           const res = isBuy ? computeBuy(itemId, collection, project, curVars) : computeSell(itemId, collection, project, curVars);
           if (!("blocked" in res)) {
             Object.entries(res.updates).forEach(([varId, val]) => {
@@ -23335,10 +24050,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     }, [playerState == null ? void 0 : playerState.uiState.isSkipping, playerState == null ? void 0 : playerState.uiState.dialogue, playerState == null ? void 0 : playerState.uiState.choices, playerState == null ? void 0 : playerState.uiState.textInput, playerState == null ? void 0 : playerState.mode, scenePaused, settings.enableSkip, handleDialogueAdvance]);
     const renderStage = () => {
-      var _a2, _b2, _c2, _d2;
+      var _a2, _b2, _c2, _d2, _e2;
       if (!playerState) return null;
       const state = playerState.stageState;
       const liveVars = mergeDirtyUiVariables(playerState.variables);
+      const liveShown = (o) => !o.live || !o.conditions || evaluateConditions2(o.conditions, liveVars);
       const matchedBgLayer = (state.backgroundLayers || []).filter((l) => !l.conditions || evaluateConditions2(l.conditions, liveVars)).slice(-1)[0];
       const effBgUrl = matchedBgLayer ? matchedBgLayer.url : state.backgroundUrl;
       const effBgColor = matchedBgLayer ? matchedBgLayer.color : state.backgroundColor;
@@ -23390,7 +24106,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const dnSpriteTint = dnGrade ? gradeToSpriteTint(dnGrade.sprites) : null;
       const dnTrans = dnTransitionRef.current;
       const dnBgFilterStyle = dnBg ? { filter: dnBg.filter, transition: `filter ${dnTrans}s ease-in-out` } : {};
-      const handleStageClick = () => {
+      const sceneGlitchFilterStyle = sceneGlitch ? { filter: `${(dnBg == null ? void 0 : dnBg.filter) ? dnBg.filter + " " : ""}url(#vnfx-scene-glitch)`, transition: void 0 } : {};
+      const handleStageClick = (e) => {
+        var _a3, _b3;
+        if ((_b3 = (_a3 = e.target) == null ? void 0 : _a3.closest) == null ? void 0 : _b3.call(_a3, "[data-vn-no-advance]")) return;
         const d = playerState.uiState.dialogue;
         if (d && !playerState.uiState.choices && !playerState.uiState.textInput && !playerState.uiState.showHistory) {
           if (d.timeLimitLocked && (d.timeLimit ?? 0) > 0) return;
@@ -23418,6 +24137,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             ["--ovl-scale"]: (stageSize == null ? void 0 : stageSize.width) ? stageSize.width / 1280 : 1
           },
           children: [
+            sceneGlitch && /* @__PURE__ */ jsxRuntime2.jsx(StageGlitchFilterDef, { effect: sceneGlitch, id: "vnfx-scene-glitch" }),
             /* @__PURE__ */ jsxRuntime2.jsx("div", { style: panZoomStyle, children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: `w-full h-full ${shakeClass} z-10`, style: { ...shakeIntensityStyle, backgroundColor: effBgColor }, children: [
               effBgUrl && (() => {
                 const bgMedia = effBgIsVideo ? /* @__PURE__ */ jsxRuntime2.jsx(
@@ -23434,7 +24154,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   }
                 ) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: effBgUrl, alt: "background", className: "absolute w-full h-full object-cover" });
                 const inner = effBgDepth ? /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { transform: `scale(${bgParallaxScale(effBgDepth)})${parallaxTransform(effBgDepth)}`, transformOrigin: "center" }, children: bgMedia }) : bgMedia;
-                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", style: { zIndex: 0, ...dnBgFilterStyle }, children: inner });
+                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", style: { zIndex: 0, ...dnBgFilterStyle, ...sceneGlitchFilterStyle }, children: inner });
               })(),
               playerState == null ? void 0 : playerState.uiState.transitionElement,
               (state.backgroundStack || []).map((plane) => {
@@ -23459,7 +24179,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       return `dissolve-in ${dur}s forwards`;
                   }
                 })();
-                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", style: { zIndex: plane.layer ?? 0, backgroundColor: plane.color, animation: anim, ...dnBgFilterStyle }, children: planeInner }, plane.commandId);
+                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", style: { zIndex: plane.layer ?? 0, backgroundColor: plane.color, animation: anim, ...dnBgFilterStyle, ...sceneGlitchFilterStyle }, children: planeInner }, plane.commandId);
               }),
               dnBg && dnBg.overlayColor !== "transparent" && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none", style: { zIndex: 3, backgroundColor: dnBg.overlayColor, transition: `background-color ${dnTrans}s ease-in-out` } }),
               state.movieOverlays && state.movieOverlays.length > 0 && state.movieOverlays.map((movie, idx) => {
@@ -23478,6 +24198,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 const mPx = parallaxTransform(movie.parallaxDepth);
                 const innerTransform = `${mRot || mSX !== 1 || mSY !== 1 ? `rotate(${mRot}deg) scale(${mSX}, ${mSY})` : ""}${mPx}`.trim() || void 0;
                 const containerStyle = isCustom ? { position: "absolute", left: `${mX}%`, top: `${mY}%`, width: `${mW}%`, height: `${mH}%`, zIndex: 2, animation: movieAnim } : { position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 2, animation: movieAnim };
+                if (sceneGlitch) containerStyle.filter = "url(#vnfx-scene-glitch)";
                 const videoFit = isCustom ? "contain" : movie.objectFit || "cover";
                 const exitDur = movie.transition && movie.transition !== "instant" ? movie.transitionDuration ?? 0.5 : 0;
                 const removeOverlay = () => updatePlayerState((p) => {
@@ -23517,7 +24238,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }),
               (() => {
                 var _a3;
-                const allChars = Object.values(state.characters).filter((c) => !c.live || !c.conditions || evaluateConditions2(c.conditions, liveVars));
+                const allChars = Object.values(state.characters).filter((c) => liveShown(c) || isLiveFade(c)).map((c) => isLiveFade(c) && !liveShown(c) ? { ...c, __liveHidden: true } : c);
                 const arranged = project.autoArrangeCharacters ? computeArrangedPositions(allChars.filter((c) => !c.charId.startsWith("__ghost")).map((c) => ({ id: c.charId, position: c.position }))) : null;
                 const emphasisOn = !!project.ui.speakerEmphasisEnabled;
                 const emphasisSpeakerId = emphasisOn ? ((_a3 = playerState.uiState.dialogue) == null ? void 0 : _a3.characterId) ?? null : null;
@@ -23885,7 +24606,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         ...transformStr ? { transform: transformStr, transformOrigin: "center bottom" } : {},
                         // A running/forwards-filled entrance animation animates opacity and would
                         // override inline opacity, so disable it when a tween controls opacity.
-                        ...charOpacity !== void 0 ? { opacity: charOpacity, animationName: "none" } : {}
+                        ...charOpacity !== void 0 ? { opacity: charOpacity, animationName: "none" } : {},
+                        // Live-condition fade (kills any entrance animation while hidden so
+                        // the forwards-filled entrance opacity can't fight the fade).
+                        ...liveFadeStyle(char),
+                        ...char.__liveHidden ? { animationName: "none" } : {}
                       },
                       children: wrappedContent
                     },
@@ -23919,12 +24644,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 }
                 return null;
               })(),
-              state.lights && state.lights.length > 0 && (() => {
+              state.lights && state.lights.length > 0 && (!((_e2 = state.lightsConditions) == null ? void 0 : _e2.length) || evaluateConditions2(state.lightsConditions, liveVars)) && (() => {
                 const lb = state.lightsBrightnessVariableId ? resolveVarNumber(liveVars, state.lightsBrightnessVariableId, 1, { min: 0, max: 2 }) : 1;
                 const lights = lb === 1 ? state.lights : state.lights.map((l) => ({ ...l, brightness: (l.brightness ?? 1) * lb }));
                 return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none", style: { zIndex: state.lightsAbove ? 40 : 4 }, children: /* @__PURE__ */ jsxRuntime2.jsx(LightsLayer, { lights, stageW: stageSize.width, stageH: stageSize.height }) });
               })(),
-              state.textOverlays.filter((o) => !o.live || !o.conditions || evaluateConditions2(o.conditions, liveVars)).map((overlay) => {
+              state.textOverlays.filter((o) => liveShown(o) || isLiveFade(o)).map((rawOverlay) => {
+                const overlay = isLiveFade(rawOverlay) && !liveShown(rawOverlay) ? { ...rawOverlay, __liveHidden: true } : rawOverlay;
                 const liveText = overlay.live && overlay.rawText !== void 0 ? interpolateVariables(overlay.rawText, liveVars, project) : overlay.text;
                 return /* @__PURE__ */ jsxRuntime2.jsx(
                   TextOverlayElement,
@@ -23935,63 +24661,69 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   overlay.id
                 );
               }),
-              state.imageOverlays.filter((o) => !o.live || !o.conditions || evaluateConditions2(o.conditions, liveVars)).map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(
-                ImageOverlayElement,
-                {
-                  overlay,
-                  stageSize
-                },
-                overlay.id
-              )),
-              state.buttonOverlays.filter((o) => !o.live || !o.conditions || evaluateConditions2(o.conditions, liveVars)).map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(
-                ButtonOverlayElement,
-                {
-                  overlay,
-                  onAction: handleUIAction,
-                  playSound,
-                  onCommitVariables: commitUiVariablesToPlayerState,
-                  onItemDrop: handleItemOverlayDrop,
-                  onItemDragMove: handleItemDragMove,
-                  onItemDragEnd: handleItemDragEnd,
-                  onAdvance: overlay.waitForClick ? () => {
-                    updatePlayerState((p) => {
-                      if (!p) return null;
-                      return {
-                        ...p,
-                        currentIndex: p.currentIndex + 1,
-                        uiState: { ...p.uiState, isWaitingForInput: false }
-                      };
-                    });
-                  } : void 0,
-                  onPickup: (ov) => {
-                    updatePlayerState((p) => {
-                      var _a3;
-                      if (!p) return null;
-                      let variables = p.variables;
-                      if (ov.giveItemId) {
-                        const item = (_a3 = project.items) == null ? void 0 : _a3[ov.giveItemId];
-                        if (item && item.countVariableId) {
-                          const countVar = project.variables[item.countVariableId];
-                          const min = (countVar == null ? void 0 : countVar.min) ?? 0;
-                          const max = countVar == null ? void 0 : countVar.max;
-                          const cur = Number(p.variables[item.countVariableId] ?? 0);
-                          let next = item.unique ? 1 : cur + (ov.giveQuantity ?? 1);
-                          next = Math.max(min, next);
-                          if (max !== void 0) next = Math.min(max, next);
-                          variables = { ...variables, [item.countVariableId]: next };
+              state.imageOverlays.filter((o) => liveShown(o) || isLiveFade(o)).map((rawOverlay) => {
+                const overlay = isLiveFade(rawOverlay) && !liveShown(rawOverlay) ? { ...rawOverlay, __liveHidden: true } : rawOverlay;
+                return /* @__PURE__ */ jsxRuntime2.jsx(
+                  ImageOverlayElement,
+                  {
+                    overlay,
+                    stageSize
+                  },
+                  overlay.id
+                );
+              }),
+              state.buttonOverlays.filter((o) => liveShown(o) || isLiveFade(o)).map((rawOverlay) => {
+                const overlay = isLiveFade(rawOverlay) && !liveShown(rawOverlay) ? { ...rawOverlay, __liveHidden: true } : rawOverlay;
+                return /* @__PURE__ */ jsxRuntime2.jsx(
+                  ButtonOverlayElement,
+                  {
+                    overlay,
+                    onAction: handleUIAction,
+                    playSound,
+                    onCommitVariables: commitUiVariablesToPlayerState,
+                    onItemDrop: handleItemOverlayDrop,
+                    onItemDragMove: handleItemDragMove,
+                    onItemDragEnd: handleItemDragEnd,
+                    onAdvance: overlay.waitForClick ? () => {
+                      updatePlayerState((p) => {
+                        if (!p) return null;
+                        return {
+                          ...p,
+                          currentIndex: p.currentIndex + 1,
+                          uiState: { ...p.uiState, isWaitingForInput: false }
+                        };
+                      });
+                    } : void 0,
+                    onPickup: (ov) => {
+                      updatePlayerState((p) => {
+                        var _a3;
+                        if (!p) return null;
+                        let variables = p.variables;
+                        if (ov.giveItemId) {
+                          const item = (_a3 = project.items) == null ? void 0 : _a3[ov.giveItemId];
+                          if (item && item.countVariableId) {
+                            const countVar = project.variables[item.countVariableId];
+                            const min = (countVar == null ? void 0 : countVar.min) ?? 0;
+                            const max = countVar == null ? void 0 : countVar.max;
+                            const cur = Number(p.variables[item.countVariableId] ?? 0);
+                            let next = item.unique ? 1 : cur + (ov.giveQuantity ?? 1);
+                            next = Math.max(min, next);
+                            if (max !== void 0) next = Math.min(max, next);
+                            variables = { ...variables, [item.countVariableId]: next };
+                          }
                         }
-                      }
-                      return {
-                        ...p,
-                        variables,
-                        stageState: ov.removeAfterClick ? { ...p.stageState, buttonOverlays: p.stageState.buttonOverlays.filter((b) => b.id !== ov.id) } : p.stageState,
-                        pickedUpItems: ov.pickUpOnceId ? [...p.pickedUpItems || [], ov.pickUpOnceId] : p.pickedUpItems
-                      };
-                    });
-                  }
-                },
-                overlay.id
-              )),
+                        return {
+                          ...p,
+                          variables,
+                          stageState: ov.removeAfterClick ? { ...p.stageState, buttonOverlays: p.stageState.buttonOverlays.filter((b) => b.id !== ov.id) } : p.stageState,
+                          pickedUpItems: ov.pickUpOnceId ? [...p.pickedUpItems || [], ov.pickUpOnceId] : p.pickedUpItems
+                        };
+                      });
+                    }
+                  },
+                  overlay.id
+                );
+              }),
               (state.hotSpotOverlays || []).map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(
                 HotSpotOverlayElement,
                 {
@@ -24297,6 +25029,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ] });
     };
     const renderPlayerUI = () => {
+      var _a2;
       if (!playerState || playerState.mode !== "playing") return null;
       const { uiState } = playerState;
       const currentHudScreenId = hudStack.length > 0 ? hudStack[hudStack.length - 1] : project.ui.gameHudScreenId;
@@ -24313,10 +25046,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         ),
         uiState.movieUrl && (() => {
-          var _a2;
+          var _a3;
           const handleMovieEnded = () => {
-            var _a3;
-            if (((_a3 = scriptInputResolverRef.current) == null ? void 0 : _a3.kind) === "movie") {
+            var _a4;
+            if (((_a4 = scriptInputResolverRef.current) == null ? void 0 : _a4.kind) === "movie") {
               const r = scriptInputResolverRef.current;
               scriptInputResolverRef.current = null;
               updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl: null, movieLoop: false, movieExiting: false } } : null);
@@ -24344,8 +25077,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               className: "absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white",
               style: { opacity: uiState.movieExiting ? 0 : 1, transition: uiState.movieExiting ? `opacity ${movieExitDur}s ease-out` : void 0 },
               onClick: () => {
-                var _a3;
-                if (((_a3 = scriptInputResolverRef.current) == null ? void 0 : _a3.kind) === "movie") {
+                var _a4;
+                if (uiState.movieBlockInput) return;
+                if (((_a4 = scriptInputResolverRef.current) == null ? void 0 : _a4.kind) === "movie") {
                   const r = scriptInputResolverRef.current;
                   scriptInputResolverRef.current = null;
                   updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl: null, movieLoop: false, movieExiting: false } } : null);
@@ -24378,7 +25112,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     onEnded: handleMovieEnded
                   }
                 ),
-                (uiState.isWaitingForInput || ((_a2 = scriptInputResolverRef.current) == null ? void 0 : _a2.kind) === "movie") && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute bottom-4 right-4 text-xs opacity-50 pointer-events-none", children: "Click to skip" })
+                !uiState.movieBlockInput && (uiState.isWaitingForInput || ((_a3 = scriptInputResolverRef.current) == null ? void 0 : _a3.kind) === "movie") && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute bottom-4 right-4 text-xs opacity-50 pointer-events-none", children: "Click to skip" })
               ]
             }
           );
@@ -24412,7 +25146,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         ),
         uiState.dialogue && (!currentHudScreen || shouldShowDialogueOnHud) && /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
           (() => {
-            var _a2, _b2;
+            var _a3, _b2;
             const qmPosition = project.ui.quickMenuPosition ?? "above-dialogue";
             if (qmPosition === "hidden") return null;
             if (uiState.showHistory) return null;
@@ -24427,7 +25161,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const qmRadius = project.ui.quickMenuBorderRadius ?? 4;
             const qmBg = hexToRgba(qmColor, qmOpacity);
             const qmBgDisabled = hexToRgba(qmColor, Math.max(10, qmOpacity - 35));
-            ((_a2 = project.gameResolution) == null ? void 0 : _a2.width) || 1920;
+            ((_a3 = project.gameResolution) == null ? void 0 : _a3.width) || 1920;
             const lpGameH = ((_b2 = project.gameResolution) == null ? void 0 : _b2.height) || 1080;
             const dlgW = project.ui.dialogueBoxWidth ?? 100;
             const dlgH = project.ui.dialogueBoxHeight ? project.ui.dialogueBoxHeight * 100 / lpGameH : 20;
@@ -24692,7 +25426,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           "div",
           {
             className: "absolute inset-0",
-            style: { backgroundColor: activeLightningRef.current.color, animation: `vn-lightning-${activeLightningRef.current.flashes} ${activeLightningRef.current.duration}s ease-out` },
+            style: { backgroundColor: activeLightningRef.current.color, opacity: 0, animation: `vn-lightning-${activeLightningRef.current.flashes} ${activeLightningRef.current.duration}s ease-out` },
             onAnimationEnd: (e) => {
               if (e.target === e.currentTarget) {
                 activeLightningRef.current = null;
@@ -24720,10 +25454,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           activeFireworksRef.current.key
         ) }),
         !(screenStack.length > 0 || hudStack.some((id) => {
-          var _a2;
-          return !((_a2 = project.uiScreens[id]) == null ? void 0 : _a2.hudNonBlocking);
+          var _a3;
+          return !((_a3 = project.uiScreens[id]) == null ? void 0 : _a3.hudNonBlocking);
         })) && /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
-          flashlight && (flashlight.on || flashlight.darkWhenOff) && (() => {
+          flashlight && (flashlight.on || flashlight.darkWhenOff) && (!((_a2 = flashlight.conditions) == null ? void 0 : _a2.length) || evaluateConditions2(flashlight.conditions, fxLiveVars)) && (() => {
             const fVars = playerState == null ? void 0 : playerState.variables;
             const fRadius = resolveVarNumber(fVars, flashlight.radiusVariableId, flashlight.radius, { min: 1, max: 100 });
             const fDarkness = resolveVarNumber(fVars, flashlight.darknessVariableId, flashlight.darkness, { min: 0, max: 1 });
@@ -24740,9 +25474,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             );
           })(),
           (() => {
-            const active = Object.entries(spotlights).filter(([, s]) => s.on);
+            var _a3;
+            const active = Object.entries(spotlights).filter(([, s]) => {
+              var _a4;
+              return s.on && (!((_a4 = s.conditions) == null ? void 0 : _a4.length) || evaluateConditions2(s.conditions, fxLiveVars));
+            });
             if (!active.length) return null;
-            const flashActive = !!(flashlight && (flashlight.on || flashlight.darkWhenOff));
+            const flashActive = !!(flashlight && (flashlight.on || flashlight.darkWhenOff) && (!((_a3 = flashlight.conditions) == null ? void 0 : _a3.length) || evaluateConditions2(flashlight.conditions, fxLiveVars)));
             const maxIntensity = Math.max(...active.map(([, s]) => Math.max(0, Math.min(1, s.intensity))));
             const affectsDialogue = active.some(([, s]) => s.affectsDialogue);
             const vpMin = typeof window !== "undefined" ? Math.min(window.innerWidth, window.innerHeight) : 720;
@@ -24787,6 +25525,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const hudScreenId = (playerState == null ? void 0 : playerState.mode) === "playing" ? hudStack.length > 0 ? hudStack[hudStack.length - 1] : project.ui.gameHudScreenId : null;
     const activeMenuScreen = currentScreenId ? project.uiScreens[currentScreenId] : null;
     const activeHudScreen = hudScreenId ? project.uiScreens[hudScreenId] : null;
+    const fxLiveVars = mergeDirtyUiVariables((playerState == null ? void 0 : playerState.variables) || {});
     const activeOverlayEffects = normalizeOverlayEffects([
       // Scene screen-FX belong to the scene stage, which isn't rendered while paused.
       // Including them in pause let a restored (Continue/load) effect fade in over the
@@ -24794,17 +25533,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ...((playerState == null ? void 0 : playerState.mode) === "playing" ? playerState == null ? void 0 : playerState.stageState.screen.overlayEffects : []) ?? [],
       ...(activeHudScreen == null ? void 0 : activeHudScreen.effects) ?? [],
       ...(activeMenuScreen == null ? void 0 : activeMenuScreen.effects) ?? []
-    ]).map((e) => e.intensityVariableId ? { ...e, intensity: resolveVarNumber(mergeDirtyUiVariables((playerState == null ? void 0 : playerState.variables) || {}), e.intensityVariableId, e.intensity, { min: 0, max: 1 }) } : e);
+    ]).filter((e) => {
+      var _a2;
+      return !((_a2 = e.conditions) == null ? void 0 : _a2.length) || evaluateConditions2(e.conditions, fxLiveVars);
+    }).map((e) => e.intensityVariableId ? { ...e, intensity: resolveVarNumber(fxLiveVars, e.intensityVariableId, e.intensity, { min: 0, max: 1 }) } : e);
+    const activeGlitch = activeOverlayEffects.find((e) => e.type === "glitch" && (e.intensity ?? 0) > 0);
+    const glitchFromScreen = normalizeOverlayEffects([
+      ...(activeHudScreen == null ? void 0 : activeHudScreen.effects) ?? [],
+      ...(activeMenuScreen == null ? void 0 : activeMenuScreen.effects) ?? []
+    ]).some((e) => e.type === "glitch");
+    const screenGlitch = glitchFromScreen ? activeGlitch : void 0;
+    const sceneGlitch = glitchFromScreen ? void 0 : activeGlitch;
     const FOG_LAYER_TYPES = /* @__PURE__ */ new Set(["fog", "haze", "smoke"]);
-    const belowCharEffects = activeOverlayEffects.filter((e) => {
+    const rendersBelowCharacters = (e) => {
       var _a2;
-      return FOG_LAYER_TYPES.has(e.type) && !((_a2 = e.params) == null ? void 0 : _a2.aboveCharacters);
-    });
-    const aboveCharEffects = activeOverlayEffects.filter((e) => {
-      var _a2;
-      return !(FOG_LAYER_TYPES.has(e.type) && !((_a2 = e.params) == null ? void 0 : _a2.aboveCharacters));
-    });
-    const stageGlitch = activeOverlayEffects.find((e) => e.type === "glitch" && (e.intensity ?? 0) > 0);
+      return FOG_LAYER_TYPES.has(e.type) && !((_a2 = e.params) == null ? void 0 : _a2.aboveCharacters) || e.type === "glitch" && !glitchFromScreen;
+    };
+    const belowCharEffects = activeOverlayEffects.filter(rendersBelowCharacters);
+    const aboveCharEffects = activeOverlayEffects.filter((e) => !rendersBelowCharacters(e));
     const overlayWidth = (stageSize == null ? void 0 : stageSize.width) && stageSize.width > 0 ? stageSize.width : 1280;
     const overlayHeight = (stageSize == null ? void 0 : stageSize.height) && stageSize.height > 0 ? stageSize.height : 720;
     const handleClose = () => {
@@ -25209,8 +25955,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     100% { background-position: 0% 0%; }
                 }
             ` }),
-      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, className: "relative overflow-hidden", style: { width: `min(100vw, calc(100vh * ${((_l = project.gameResolution) == null ? void 0 : _l.width) || 1920} / ${((_m = project.gameResolution) == null ? void 0 : _m.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_n = project.gameResolution) == null ? void 0 : _n.height) || 1080} / ${((_o = project.gameResolution) == null ? void 0 : _o.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_p = project.gameResolution) == null ? void 0 : _p.width) || 1920) : 1, ...stageGlitch ? { filter: "url(#vnfx-stage-glitch)" } : {} }, children: [
-        stageGlitch && /* @__PURE__ */ jsxRuntime2.jsx(StageGlitchFilterDef, { effect: stageGlitch }),
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, className: "relative overflow-hidden", style: { width: `min(100vw, calc(100vh * ${((_l = project.gameResolution) == null ? void 0 : _l.width) || 1920} / ${((_m = project.gameResolution) == null ? void 0 : _m.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_n = project.gameResolution) == null ? void 0 : _n.height) || 1080} / ${((_o = project.gameResolution) == null ? void 0 : _o.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_p = project.gameResolution) == null ? void 0 : _p.width) || 1920) : 1, ...screenGlitch ? { filter: "url(#vnfx-stage-glitch)" } : {} }, children: [
+        screenGlitch && /* @__PURE__ */ jsxRuntime2.jsx(StageGlitchFilterDef, { effect: screenGlitch }),
         (playerState == null ? void 0 : playerState.mode) === "playing" ? renderStage() : null,
         (!playerState || playerState.mode === "paused") && (() => {
           const ordered = [];
@@ -25343,7 +26089,66 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             className: `absolute inset-0 pointer-events-none z-50 ${sceneTransitionType === "fade" ? "bg-black transition-base transition-dissolve" : sceneTransitionType === "dissolve" ? "bg-black transition-base transition-dissolve" : sceneTransitionType === "iris-out" ? "bg-black transition-base transition-iris-out" : sceneTransitionType === "wipe-right" ? "bg-black transition-base transition-wipe-right" : sceneTransitionType === "slide-left" ? "bg-black transition-base transition-slide-out-left" : "bg-black"}`,
             style: { animationDuration: `${sceneTransitionDuration}s` }
           }
-        )
+        ),
+        customTransition && /* @__PURE__ */ jsxRuntime2.jsx(
+          CustomTransitionOverlay,
+          {
+            def: customTransition.def,
+            phase: customTransition.phase,
+            assetResolver
+          },
+          customTransition.phase
+        ),
+        actionMovie && (() => {
+          const finish = () => {
+            const acts = actionMovie.onEndActions;
+            setActionMovie(null);
+            acts == null ? void 0 : acts.forEach((x) => {
+              try {
+                handleUIAction(x);
+              } catch (e) {
+                console.error("[PlayVideo] on-end action failed:", e);
+              }
+            });
+          };
+          return /* @__PURE__ */ jsxRuntime2.jsxs(
+            "div",
+            {
+              className: "absolute inset-0 bg-black z-[55] flex items-center justify-center",
+              onClick: () => {
+                if (!actionMovie.blockInput) finish();
+              },
+              children: [
+                /* @__PURE__ */ jsxRuntime2.jsx(
+                  TrimmedVideo,
+                  {
+                    src: actionMovie.url,
+                    autoPlay: true,
+                    playsInline: true,
+                    loop: actionMovie.loop,
+                    trimStart: actionMovie.trimStart,
+                    trimEnd: actionMovie.trimEnd,
+                    ref: (el) => {
+                      if (el) el.play().catch(() => {
+                        el.muted = true;
+                        el.play().catch(() => {
+                        });
+                      });
+                    },
+                    style: { width: "100%", height: "100%", objectFit: "contain" },
+                    onSegmentEnd: () => {
+                      if (!actionMovie.loop) finish();
+                    },
+                    onEnded: () => {
+                      if (!actionMovie.loop) finish();
+                    }
+                  }
+                ),
+                !actionMovie.blockInput && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute bottom-4 right-4 text-xs text-white opacity-50 pointer-events-none", children: "Click to skip" })
+              ]
+            }
+          );
+        })()
       ] }),
       (playerState == null ? void 0 : playerState.mode) === "playing" && ((_q = playerState.uiState.phone) == null ? void 0 : _q.open) && /* @__PURE__ */ jsxRuntime2.jsx(
         PhonePanel,
@@ -25836,7 +26641,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "3.7.4",
+    version: "3.7.6",
     /**
      * Check if the engine is ready
      */

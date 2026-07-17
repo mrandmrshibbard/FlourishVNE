@@ -3,17 +3,47 @@ import { VNProject } from '../../../types/project';
 import { CommandType, ChoiceCommand } from '../../scene/types';
 // FIX: UIActionType is exported from shared types, not ui types.
 import { UIActionType } from '../../../types/shared';
-import { VNVariable, VNVariableType } from '../types';
+import { VNVariable, VNVariableType, VNVariableFolder } from '../types';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
 export type VariableAction =
     | { type: 'ADD_VARIABLE'; payload: { name: string; type: VNVariableType; defaultValue: string | number | boolean; id?: VNID } }
     | { type: 'UPDATE_VARIABLE'; payload: { variableId: VNID; updates: Partial<VNVariable> } }
-    | { type: 'DELETE_VARIABLE'; payload: { variableId: VNID } };
+    | { type: 'DELETE_VARIABLE'; payload: { variableId: VNID } }
+    // ── Editor-side variable folders (organisation only; the engine never reads them) ── //
+    | { type: 'ADD_VARIABLE_FOLDER'; payload: { name: string; id?: VNID } }
+    | { type: 'RENAME_VARIABLE_FOLDER'; payload: { folderId: VNID; name: string } }
+    | { type: 'DELETE_VARIABLE_FOLDER'; payload: { folderId: VNID } };
 
 export const variableReducer = (state: VNProject, action: VariableAction): VNProject => {
   switch (action.type) {
+    case 'ADD_VARIABLE_FOLDER': {
+      const id = action.payload.id || `vfolder-${generateId()}`;
+      const folder: VNVariableFolder = { id, name: action.payload.name };
+      return { ...state, variableFolders: { ...(state.variableFolders || {}), [id]: folder } };
+    }
+
+    case 'RENAME_VARIABLE_FOLDER': {
+      const { folderId, name } = action.payload;
+      const existing = state.variableFolders?.[folderId];
+      if (!existing) return state;
+      return { ...state, variableFolders: { ...state.variableFolders, [folderId]: { ...existing, name } } };
+    }
+
+    case 'DELETE_VARIABLE_FOLDER': {
+      const { folderId } = action.payload;
+      if (!state.variableFolders?.[folderId]) return state;
+      const next = { ...state.variableFolders };
+      delete next[folderId];
+      // Members go loose — deleting a folder NEVER deletes variables.
+      const variables = { ...state.variables };
+      for (const id in variables) {
+        if (variables[id].folderId === folderId) variables[id] = { ...variables[id], folderId: undefined };
+      }
+      return { ...state, variableFolders: next, variables };
+    }
+
     case 'ADD_VARIABLE': {
       const newId = action.payload.id || `var-${generateId()}`;
       const newVar: VNVariable = { id: newId, name: action.payload.name, type: action.payload.type, defaultValue: action.payload.defaultValue };

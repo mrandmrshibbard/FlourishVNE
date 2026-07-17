@@ -30,7 +30,16 @@ const ELEMENT_TYPE_LABEL: Record<string, string> = {
     [UIElementType.Checkbox]: 'CHK',
     [UIElementType.AssetCycler]: 'AST',
     [UIElementType.CGGallery]: 'CG',
+    [UIElementType.HotSpot]: 'HOT',
+    [UIElementType.draggableImageElement]: 'DRAG',
+    [UIElementType.Inventory]: 'INV',
+    [UIElementType.Meter]: 'MTR',
+    [UIElementType.Customizer]: 'CUS',
+    [UIElementType.Timer]: 'TMR',
 };
+
+/** Interactive elements (hot spots, draggables) get an amber badge so they stand out in the tree. */
+const INTERACTIVE_TYPES = new Set<string>([UIElementType.HotSpot, UIElementType.draggableImageElement]);
 
 type UIEditorMode = 'screens' | 'ingame';
 
@@ -48,6 +57,9 @@ interface UIManagerProps {
      *  then (they're covered anyway) and remounts them fresh on return, avoiding the evicted/
      *  broken video state the browser leaves behind a fullscreen overlay. */
     isPlaying?: boolean;
+    /** "Test this screen": launch test play booted straight into the given screen (no need to
+     *  navigate to it in-game). Wired by VisualNovelEditor to the Live Preview overlay. */
+    onTestScreen?: (screenId: VNID) => void;
 }
 
 const UIManager: React.FC<UIManagerProps> = ({
@@ -58,7 +70,8 @@ const UIManager: React.FC<UIManagerProps> = ({
     setSelectedUIElementIds,
     onEditorModeChange,
     initialEditorMode,
-    isPlaying
+    isPlaying,
+    onTestScreen
 }) => {
     const { dispatch } = useProject();
     const { t } = useTranslation('ui');
@@ -69,6 +82,16 @@ const UIManager: React.FC<UIManagerProps> = ({
     const [renamingId, setRenamingId] = useState<VNID | null>(null);
     const [pendingRestore, setPendingRestore] = useState(false);
     const [restoreModalOpen, setRestoreModalOpen] = useState(false);
+    // Eye toggles: EDITOR-ONLY canvas visibility (declutter while designing). Never saved, never
+    // affects the game — hidden elements still exist and still render in test play / builds.
+    const [hiddenPreviewIds, setHiddenPreviewIds] = useState<Set<VNID>>(new Set());
+    const togglePreviewHidden = useCallback((elementId: VNID) => {
+        setHiddenPreviewIds(prev => {
+            const next = new Set(prev);
+            if (next.has(elementId)) next.delete(elementId); else next.add(elementId);
+            return next;
+        });
+    }, []);
 
     // When the (adaptive) canvas is popped into its own window, hide the inline UI canvas so the screen
     // list gets the full width (the floating canvas docks beside the editor instead).
@@ -252,6 +275,11 @@ const UIManager: React.FC<UIManagerProps> = ({
                                             onCommitRename={(name) => handleRenameUIScreen(screen.id, name)}
                                             onDelete={() => handleDeleteUIScreen(screen.id)}
                                             onDuplicate={() => handleDuplicateUIScreen(screen.id)}
+                                            onTest={onTestScreen ? () => onTestScreen(screen.id) : undefined}
+                                            onReorderElement={(elementId, direction) => dispatch({ type: 'REORDER_UI_ELEMENT', payload: { screenId: screen.id, elementId, direction } })}
+                                            onReorderElements={(elementIds) => dispatch({ type: 'REORDER_UI_ELEMENTS', payload: { screenId: screen.id, elementIds } })}
+                                            hiddenPreviewIds={hiddenPreviewIds}
+                                            onTogglePreviewHidden={togglePreviewHidden}
                                         />
                                     );
                                 })}
@@ -297,6 +325,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                                         setSelectedElementIds={setSelectedUIElementIds}
                                         isPlaying={isPlaying}
                                         onNavigateToScreen={(id) => { setActiveMenuScreenId(id); setSelectedUIElementIds([]); }}
+                                        hiddenElementIds={hiddenPreviewIds}
                                     />
                                 ) : (
                                     <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
@@ -342,6 +371,11 @@ interface UIScreenItemProps {
     onCommitRename: (name: string) => void;
     onDelete: () => void;
     onDuplicate: () => void;
+    onTest?: () => void;
+    onReorderElement: (elementId: VNID, direction: -1 | 1) => void;
+    onReorderElements: (elementIds: VNID[]) => void;
+    hiddenPreviewIds: Set<VNID>;
+    onTogglePreviewHidden: (elementId: VNID) => void;
 }
 
 const UIScreenItem: React.FC<UIScreenItemProps> = ({
@@ -359,11 +393,34 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
     onStartRenaming,
     onCommitRename,
     onDelete,
-    onDuplicate
+    onDuplicate,
+    onTest,
+    onReorderElement,
+    onReorderElements,
+    hiddenPreviewIds,
+    onTogglePreviewHidden
 }) => {
     const { t } = useTranslation('ui');
     const { inputProps: renameInputProps } = useInlineRename(screen.name, onCommitRename);
     const elementRadial = useElementRadial();
+
+    // Drag & drop reorder within this screen's element list (same pattern as the scene tree).
+    const [draggedElId, setDraggedElId] = useState<VNID | null>(null);
+    const [dropElId, setDropElId] = useState<VNID | null>(null);
+    const handleElementDrop = (targetId: VNID) => {
+        if (!draggedElId || draggedElId === targetId) { setDraggedElId(null); setDropElId(null); return; }
+        const ids = (Object.keys(screen.elements || {}) as VNID[]);
+        const from = ids.indexOf(draggedElId);
+        const to = ids.indexOf(targetId);
+        if (from !== -1 && to !== -1) {
+            const next = [...ids];
+            next.splice(from, 1);
+            next.splice(to, 0, draggedElId);
+            onReorderElements(next);
+        }
+        setDraggedElId(null);
+        setDropElId(null);
+    };
 
     // Unified schema: every screen keeps all its widgets (incl. hot spots, image maps,
     // draggable elements) in `screen.elements`. The legacy `screenType: 'hotzone'` split
@@ -420,6 +477,16 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                         <LockClosedIcon className="w-4 h-4 text-[var(--text-muted)]" title={t('manager.essentialScreen')} />
                     )}
 
+                    {onTest && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onTest(); }}
+                            className="p-1 text-emerald-400 hover:text-emerald-300 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
+                            title={t('manager.testScreen', 'Test this screen (opens it directly, no need to reach it in-game)')}
+                        >
+                            <span className="block w-3 h-3 text-[10px] leading-3 text-center">▶</span>
+                        </button>
+                    )}
+
                     <button
                         onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
                         className="p-1 text-sky-400 hover:text-sky-300 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
@@ -452,15 +519,26 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
 
             {isExpanded && hasChildren && (
                 <div className="ml-6 mt-0.5 mb-1 border-l border-[var(--border-subtle)] pl-2 space-y-0.5">
-                    {elements.map(el => (
+                    {elements.map((el, i) => (
                         <ScreenChildRow
                             key={el.id}
                             name={el.name || t('manager.unnamed')}
                             typeLabel={ELEMENT_TYPE_LABEL[el.type] || el.type.slice(0, 3).toUpperCase()}
-                            badgeClass="bg-sky-500/20 text-sky-300"
+                            badgeClass={INTERACTIVE_TYPES.has(el.type) ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/20 text-sky-300'}
+                            isPreviewHidden={hiddenPreviewIds.has(el.id)}
+                            onTogglePreviewHidden={() => onTogglePreviewHidden(el.id)}
                             isSelected={selectedElementIds.includes(el.id)}
                             onClick={() => onSelectChild(el.id)}
                             onContextMenu={isSelected ? (e) => { e.preventDefault(); onSelectChild(el.id); elementRadial?.openByElementId(el.id, e.clientX, e.clientY); } : undefined}
+                            onMoveUp={i > 0 ? () => onReorderElement(el.id, -1) : undefined}
+                            onMoveDown={i < elements.length - 1 ? () => onReorderElement(el.id, 1) : undefined}
+                            isDragging={draggedElId === el.id}
+                            isDropTarget={dropElId === el.id}
+                            onDragStart={() => setDraggedElId(el.id)}
+                            onDragOver={(e) => { e.preventDefault(); if (draggedElId && draggedElId !== el.id) setDropElId(el.id); }}
+                            onDragLeave={() => setDropElId(null)}
+                            onDrop={(e) => { e.preventDefault(); handleElementDrop(el.id); }}
+                            onDragEnd={() => { setDraggedElId(null); setDropElId(null); }}
                         />
                     ))}
                     {screen.winCondition && (
@@ -486,21 +564,75 @@ interface ScreenChildRowProps {
     isSelected: boolean;
     onClick: () => void;
     onContextMenu?: (e: React.MouseEvent) => void;
+    /** Reorder within the screen (tree order = base stacking order). Hidden at the list ends. */
+    onMoveUp?: () => void;
+    onMoveDown?: () => void;
+    /** Drag & drop reorder (same pattern as the scene tree). */
+    isDragging?: boolean;
+    isDropTarget?: boolean;
+    onDragStart?: () => void;
+    onDragOver?: (e: React.DragEvent) => void;
+    onDragLeave?: () => void;
+    onDrop?: (e: React.DragEvent) => void;
+    onDragEnd?: () => void;
+    /** Eye toggle: hide this element on the EDITOR canvas only (never affects the game). */
+    isPreviewHidden?: boolean;
+    onTogglePreviewHidden?: () => void;
 }
 
-const ScreenChildRow: React.FC<ScreenChildRowProps> = ({ name, typeLabel, badgeClass, isSelected, onClick, onContextMenu }) => (
+const ScreenChildRow: React.FC<ScreenChildRowProps> = ({ name, typeLabel, badgeClass, isSelected, onClick, onContextMenu, onMoveUp, onMoveDown, isDragging, isDropTarget, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, isPreviewHidden, onTogglePreviewHidden }) => {
+    const { t } = useTranslation('ui');
+    return (
     <div
+        draggable={!!onDragStart}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        onDragEnd={onDragEnd}
         onClick={(e) => { e.stopPropagation(); onClick(); }}
         onContextMenu={onContextMenu}
-        className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded cursor-pointer text-xs transition-colors ${
-            isSelected
+        className={`group/child flex items-center gap-1.5 px-1.5 py-0.5 rounded cursor-pointer text-xs transition-colors ${
+            isDragging
+                ? 'opacity-40'
+                : isDropTarget
+                ? 'border border-sky-400 bg-sky-500/10 text-sky-200'
+                : isSelected
                 ? 'bg-sky-500/20 text-sky-200'
                 : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white'
         }`}
     >
         <span className={`text-[9px] font-mono px-1 rounded ${badgeClass}`}>{typeLabel}</span>
-        <span className="truncate flex-grow">{name}</span>
+        <span className={`truncate flex-grow ${isPreviewHidden ? 'opacity-40 line-through decoration-1' : ''}`}>{name}</span>
+        {onTogglePreviewHidden && (
+            <button
+                onClick={(e) => { e.stopPropagation(); onTogglePreviewHidden(); }}
+                className={`px-0.5 rounded text-[11px] leading-3 flex-shrink-0 transition-opacity ${isPreviewHidden ? 'opacity-100' : 'opacity-0 group-hover/child:opacity-100'} text-[var(--text-secondary)] hover:text-white`}
+                title={isPreviewHidden
+                    ? t('manager.showOnCanvas', 'Show on the canvas again')
+                    : t('manager.hideOnCanvas', 'Hide on the canvas while editing (never affects the game)')}
+            >
+                {isPreviewHidden ? '🚫' : '👁'}
+            </button>
+        )}
+        {(onMoveUp || onMoveDown) && (
+            <span className="flex items-center gap-0.5 opacity-0 group-hover/child:opacity-100 transition-opacity flex-shrink-0">
+                <button
+                    onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }}
+                    disabled={!onMoveUp}
+                    className="px-0.5 rounded text-[10px] leading-3 text-[var(--text-secondary)] hover:text-white disabled:opacity-25"
+                    title={t('manager.moveElementUp', 'Move up (drawn earlier — further back)')}
+                >↑</button>
+                <button
+                    onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }}
+                    disabled={!onMoveDown}
+                    className="px-0.5 rounded text-[10px] leading-3 text-[var(--text-secondary)] hover:text-white disabled:opacity-25"
+                    title={t('manager.moveElementDown', 'Move down (drawn later — further in front)')}
+                >↓</button>
+            </span>
+        )}
     </div>
-);
+    );
+};
 
 export default React.memo(UIManager);

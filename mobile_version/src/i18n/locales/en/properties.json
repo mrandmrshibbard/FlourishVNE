@@ -1,5 +1,15 @@
 {
   "fx": {
+    "stormMode": "Lightning mode",
+    "stormOnce": "Single strike",
+    "stormContinuous": "Continuous storm (repeats until stopped)",
+    "stormStop": "Stop the storm",
+    "stormStopHint": "Ends a continuous storm started earlier. Nothing else to set.",
+    "stormIntervalMin": "Shortest wait (s)",
+    "stormIntervalMax": "Longest wait (s)",
+    "stormIntervalHint": "Time between strikes. Same number in both = a steady rhythm; different numbers = random storm timing. The story keeps playing while it storms.",
+    "strikeLengthSec": "Flash length (seconds)",
+    "strikeLengthHint": "How long ONE strike's flicker lasts — not how long the lightning keeps happening. For ongoing lightning use Continuous storm above.",
     "flashColor": "Flash color",
     "brightnessPct": "Brightness {{value}}%",
     "flashes": "Flashes",
@@ -180,7 +190,11 @@
     "conditions": "Conditions",
     "conditionsDesc": "This command will only run if all conditions are met.",
     "liveConditions": "Live Evaluation",
-    "liveConditionsDesc": "Re-check the conditions every moment and show/hide this live as variables change (instead of only once when reached)."
+    "liveConditionsDesc": "Re-check the conditions every moment and show/hide this live as variables change (instead of only once when reached).",
+    "liveTransition": "When the condition changes",
+    "liveTransitionInstant": "Appear / disappear instantly (default)",
+    "liveTransitionFade": "Fade in and out",
+    "liveTransitionDuration": "Fade time (seconds)"
   },
   "vars": {
     "variable": "Variable",
@@ -255,6 +269,7 @@
   },
   "movie": {
     "video": "Video",
+    "blockInput": "Players can't skip it (no clicking through)",
     "noVideos": "No videos uploaded",
     "displayMode": "Display Mode",
     "fullscreen": "Fullscreen (black background)",
@@ -289,7 +304,19 @@
     "maxLength": "Max Length"
   },
   "jump": {
-    "targetScene": "Target Scene"
+    "targetScene": "Target Scene",
+    "transition": "Scene transition",
+    "transitionHint": "Just for this jump — overrides the scene's exit transition from Scene Settings."
+  },
+  "sceneTransitionSelect": {
+    "useSceneSetting": "Use the scene's setting",
+    "fade": "Fade to black",
+    "dissolve": "Dissolve",
+    "irisOut": "Iris (closing circle)",
+    "wipeRight": "Wipe",
+    "slideLeft": "Slide",
+    "instant": "Instant (no effect)",
+    "yourTransitions": "Your transitions"
   },
   "wait": {
     "waitMode": "Wait Mode",

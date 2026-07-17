@@ -21,6 +21,9 @@
   "startSceneMarked": "Start Scene ✓",
   "startScene": "Start Scene",
   "duplicateScene": "Duplicate Scene",
+  "expandCommands": "Show commands",
+  "collapseCommands": "Hide commands",
+  "noCommands": "No commands yet",
   "removeFromStack": "Remove from stack",
   "runsInParallel": "Runs in parallel",
   "editor": {
@@ -55,6 +58,8 @@
       "slide-left": "Slide Left",
       "instant": "Instant (No Transition)"
     },
+    "yourTransitions": "Your transitions",
+    "customTransitionHint": "This plays your closing animation, switches the scene while the screen is covered, then plays your opening animation. Timing comes from the transition itself (set it up under In-Game UI → Scene Transitions).",
     "duration": "Duration (s)",
     "sceneConditions": "Scene Conditions",
     "sceneConditionsDesc": "This scene will only play if all conditions are met. If conditions fail, the scene will be skipped.",

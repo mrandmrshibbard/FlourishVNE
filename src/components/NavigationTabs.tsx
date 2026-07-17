@@ -1,9 +1,9 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScenesIcon, CharactersIcon, UIScreensIcon, AssetsIcon, VariablesIcon, SettingsIcon, CommonEventsIcon, ArchiveBoxIcon, GamepadIcon } from './icons';
+import { ScenesIcon, CharactersIcon, UIScreensIcon, AssetsIcon, VariablesIcon, SettingsIcon, CommonEventsIcon, ArchiveBoxIcon, GamepadIcon, BookOpenIcon } from './icons';
 import { isMultiWindowSupported, openManagerWindow, isManagerWindow, focusManagerWindow, type ManagerWindowType } from '../utils/windowManager';
 
-export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'commonEvents' | 'systems' | 'miniGames' | 'settings';
+export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'commonEvents' | 'storyBible' | 'systems' | 'miniGames' | 'settings';
 
 interface NavigationTabsProps {
     activeTab: NavigationTab;
@@ -14,6 +14,7 @@ interface NavigationTabsProps {
     assetCount: number;
     variableCount: number;
     commonEventCount: number;
+    storyBibleCount: number;
     systemItemCount: number;
     miniGameCount: number;
 }
@@ -26,6 +27,7 @@ const tabColors: Record<NavigationTab, { base: string; glow: string; pastel: str
     assets: { base: 'var(--accent-mint)', glow: 'var(--shadow-glow-mint)', pastel: 'var(--pastel-mint)' },
     variables: { base: 'var(--accent-cyan)', glow: 'var(--shadow-glow-cyan)', pastel: 'var(--pastel-cyan)' },
     commonEvents: { base: '#f59e0b', glow: '0 0 20px rgba(245, 158, 11, 0.35)', pastel: '#fbbf24' },
+    storyBible: { base: '#e879f9', glow: '0 0 20px rgba(232, 121, 249, 0.35)', pastel: '#f0abfc' },
     systems: { base: 'var(--accent-lavender)', glow: '0 0 20px rgba(167, 139, 250, 0.35)', pastel: 'var(--pastel-lavender)' },
     miniGames: { base: '#34d399', glow: '0 0 20px rgba(52, 211, 153, 0.35)', pastel: '#6ee7b7' },
     settings: { base: 'var(--accent-sky)', glow: '0 0 20px rgba(102, 179, 255, 0.35)', pastel: 'var(--pastel-sky)' },
@@ -40,6 +42,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     assetCount,
     variableCount,
     commonEventCount,
+    storyBibleCount,
     systemItemCount,
     miniGameCount
 }) => {
@@ -118,6 +121,13 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                 description: 'Reusable command sequences triggered from scenes'
             },
             {
+                id: 'storyBible',
+                label: 'Story Bible',
+                icon: <BookOpenIcon className="w-4 h-4" />,
+                count: storyBibleCount,
+                description: 'Keep your synopsis, character notes, and glossary of story terms'
+            },
+            {
                 id: 'systems',
                 label: 'Systems',
                 icon: <ArchiveBoxIcon className="w-4 h-4" />,
@@ -149,6 +159,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
         assetCount,
         variableCount,
         commonEventCount,
+        storyBibleCount,
         systemItemCount,
         miniGameCount
     ]);
@@ -159,7 +170,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     };
 
     const handleRightClick = (tabId: NavigationTab, event: React.MouseEvent) => {
-        if (!isChildWindow && isMultiWindowSupported() && tabId !== 'settings' && tabId !== 'systems' && tabId !== 'miniGames') {
+        if (!isChildWindow && isMultiWindowSupported() && tabId !== 'settings' && tabId !== 'systems' && tabId !== 'miniGames' && tabId !== 'storyBible') {
             event.preventDefault();
             event.stopPropagation();
             focusManagerWindow(tabId as ManagerWindowType);
@@ -167,7 +178,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     };
 
     const focusableTabs = React.useMemo(
-        () => tabs.filter(tab => tab.id !== 'settings' && tab.id !== 'systems' && tab.id !== 'miniGames'),
+        () => tabs.filter(tab => tab.id !== 'settings' && tab.id !== 'systems' && tab.id !== 'miniGames' && tab.id !== 'storyBible'),
         [tabs]
     );
 
@@ -292,7 +303,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                 const description = t(`desc.${tab.id}`);
                 const shortcut = getShortcutLabel(tab.id);
                 const baseTooltip = shortcut ? `${description} (${shortcut})` : description;
-                const rightClickHint = isMultiWindowSupported() && !isChildWindow && tab.id !== 'settings'
+                const rightClickHint = isMultiWindowSupported() && !isChildWindow && tab.id !== 'settings' && tab.id !== 'systems' && tab.id !== 'miniGames' && tab.id !== 'storyBible'
                     ? t('rightClickHint')
                     : '';
                 const tooltip = `${baseTooltip}${rightClickHint}`;
@@ -395,7 +406,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                         </button>
                     
                         {/* Pop-out Window Button - Only show in main window */}
-                        {!isChildWindow && isMultiWindowSupported() && tab.id !== 'settings' && tab.id !== 'systems' && tab.id !== 'miniGames' && (
+                        {!isChildWindow && isMultiWindowSupported() && tab.id !== 'settings' && tab.id !== 'systems' && tab.id !== 'miniGames' && tab.id !== 'storyBible' && (
                             <button
                                 onClick={(e) => handleOpenInWindow(tab.id, e)}
                                 className="absolute -top-2 -right-2 w-6 h-6 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"

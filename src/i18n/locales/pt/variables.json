@@ -1,5 +1,20 @@
 {
   "listTitle": "Variáveis",
+  "list": {
+    "searchPlaceholder": "Buscar variáveis…",
+    "sortTitle": "Como a lista é ordenada",
+    "sortProject": "Ordem de criação",
+    "sortAz": "A → Z",
+    "sortType": "Por tipo",
+    "group": "Agrupar",
+    "groupHint": "Variáveis nomeadas como \"heroi_ouro\" e \"heroi_confianca\" agrupam sob um título \"heroi\"",
+    "noResults": "Nenhuma variável corresponde à sua busca.",
+    "newFolder": "Nova pasta — arraste variáveis para dentro dela para organizá-las",
+    "newFolderName": "Nova pasta",
+    "dragHere": "Arraste variáveis para cá",
+    "noFolder": "Sem pasta",
+    "deleteFolderConfirm": "Excluir a pasta \"{{name}}\"? As variáveis dentro dela são mantidas — apenas saem da pasta."
+  },
   "newVariableName": "nova_variavel_{{n}}",
   "addVariable": "Adicionar Variável",
   "selectToInspect": "Selecione uma variável para inspecionar",

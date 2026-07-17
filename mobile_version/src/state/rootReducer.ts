@@ -11,6 +11,7 @@ import { commonEventReducer } from '../features/common-events/state/commonEventR
 import { pluginReducer } from '../features/plugins/state/pluginReducer';
 import { itemReducer } from '../features/items/state/itemReducer';
 import { statReducer } from '../features/stats/state/statReducer';
+import { storyBibleReducer } from '../features/story-bible/state/storyBibleReducer';
 
 // Each slice reducer only handles its own actions and ignores the rest. We type
 // the list with an `any` action param so the (large) ProjectAction union isn't
@@ -30,6 +31,7 @@ const reducers: SliceReducer[] = [
   pluginReducer,
   itemReducer,
   statReducer,
+  storyBibleReducer,
 ];
 
 export const rootReducer = (state: VNProject, action: ProjectAction): VNProject => {

@@ -48,6 +48,11 @@ export interface TextOverlay {
     /** Live (reactive) conditions: when `live`, re-evaluated every render to show/hide. */
     conditions?: import('../../../types/shared').VNCondition[];
     live?: boolean;
+    /** How a live-condition flip shows/hides this: 'fade' animates opacity (element stays mounted);
+     *  unset/'instant' = the legacy pop (default — many games depend on it). */
+    liveTransition?: 'instant' | 'fade';
+    /** Fade length in seconds (default 0.3). */
+    liveTransitionDuration?: number;
 }
 
 export interface ImageOverlay {
@@ -81,6 +86,11 @@ export interface ImageOverlay {
     /** Live (reactive) conditions: when `live`, re-evaluated every render to show/hide. */
     conditions?: import('../../../types/shared').VNCondition[];
     live?: boolean;
+    /** How a live-condition flip shows/hides this: 'fade' animates opacity (element stays mounted);
+     *  unset/'instant' = the legacy pop (default — many games depend on it). */
+    liveTransition?: 'instant' | 'fade';
+    /** Fade length in seconds (default 0.3). */
+    liveTransitionDuration?: number;
 }
 
 export interface ButtonOverlay {
@@ -123,6 +133,11 @@ export interface ButtonOverlay {
     /** Live (reactive) conditions: when `live`, re-evaluated every render to show/hide. */
     conditions?: import('../../../types/shared').VNCondition[];
     live?: boolean;
+    /** How a live-condition flip shows/hides this: 'fade' animates opacity (element stays mounted);
+     *  unset/'instant' = the legacy pop (default — many games depend on it). */
+    liveTransition?: 'instant' | 'fade';
+    /** Fade length in seconds (default 0.3). */
+    liveTransitionDuration?: number;
     /** When true, the overlay removes itself once clicked (used by Show Item pickups). */
     removeAfterClick?: boolean;
     /** When set (a source command id), clicking records the pickup in `playerState.pickedUpItems`
@@ -205,6 +220,11 @@ export interface StageCharacterState {
     /** Live (reactive) conditions: when `live`, the character is shown only while met. */
     conditions?: import('../../../types/shared').VNCondition[];
     live?: boolean;
+    /** How a live-condition flip shows/hides this: 'fade' animates opacity (element stays mounted);
+     *  unset/'instant' = the legacy pop (default — many games depend on it). */
+    liveTransition?: 'instant' | 'fade';
+    /** Fade length in seconds (default 0.3). */
+    liveTransitionDuration?: number;
     /** Resolved per-layer asset selection (layerId → assetId|null) used to build the composite.
      *  Lets `SetCharacterLayer` patch one layer mid-scene and rebuild without re-running ShowCharacter. */
     layerSelections?: Record<VNID, VNID | null>;
@@ -420,6 +440,8 @@ export interface PlayerState {
         movieHoldLastFrame?: boolean;
         movieTransition?: string;
         movieTransitionDuration?: number;
+        /** Players can't click/skip while the fullscreen movie plays (Play Movie `blockInput`). */
+        movieBlockInput?: boolean;
         /** Set true while a fullscreen movie is fading out (before clearing). */
         movieExiting?: boolean;
         isWaitingForInput: boolean;

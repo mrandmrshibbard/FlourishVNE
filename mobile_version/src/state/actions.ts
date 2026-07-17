@@ -9,6 +9,7 @@ import { CommonEventAction } from '../features/common-events/state/commonEventRe
 import { PluginAction } from '../features/plugins/state/pluginReducer';
 import { ItemAction } from '../features/items/state/itemReducer';
 import { StatAction } from '../features/stats/state/statReducer';
+import { StoryBibleAction } from '../features/story-bible/state/storyBibleReducer';
 
 export type ProjectAction =
     | ProjectAction_Project
@@ -21,4 +22,5 @@ export type ProjectAction =
     | CommonEventAction
     | PluginAction
     | ItemAction
-    | StatAction;
+    | StatAction
+    | StoryBibleAction;

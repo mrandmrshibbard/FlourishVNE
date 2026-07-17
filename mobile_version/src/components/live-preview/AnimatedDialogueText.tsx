@@ -5,6 +5,15 @@
 import React, { useMemo } from 'react';
 import type { VNDialogueTextEffect, VNTextEffectType } from '../../features/scene/types';
 
+/** One glossary term occurrence in the FULL line, with its resolved look. */
+export interface GlossaryMatchSpan {
+    start: number;
+    end: number;
+    entryId: string;
+    color: string;
+    style: 'color' | 'glow' | 'underline';
+}
+
 export interface AnimatedDialogueTextProps {
     /** The full text being displayed (already sliced by typewriter) */
     displayText: string;
@@ -18,10 +27,17 @@ export interface AnimatedDialogueTextProps {
      *  being typed (typewriter driver, end absent = to the end of displayText) or spoken
      *  (voice driver). Null/absent = no highlight (line finished or feature off). */
     revealHighlight?: { start: number; end?: number; color: string; style: 'color' | 'glow' | 'underline' } | null;
+    /** Glossary matches over the FULL line (sorted, non-overlapping). Only matches fully
+     *  revealed (end <= displayText.length) are rendered — a term never highlights mid-
+     *  typewriter. Null/absent = glossary off. */
+    glossaryMatches?: GlossaryMatchSpan[] | null;
+    /** Hover in/move/out over a term (entryId null = pointer left). Drives the tooltip. */
+    onGlossaryHover?: (entryId: string | null, ev: React.MouseEvent) => void;
 }
 
-/** Style applied to the word being revealed. Kept subtle enough to read at typewriter speed. */
-function revealHighlightStyle(hl: { color: string; style: 'color' | 'glow' | 'underline' }): React.CSSProperties {
+/** Style applied to the word being revealed. Kept subtle enough to read at typewriter speed.
+ *  Exported: the glossary (terms + the editor's live preview) reuses the same style vocabulary. */
+export function revealHighlightStyle(hl: { color: string; style: 'color' | 'glow' | 'underline' }): React.CSSProperties {
     switch (hl.style) {
         case 'glow':
             return { textShadow: `0 0 8px ${hl.color}, 0 0 14px ${hl.color}` };
@@ -33,6 +49,23 @@ function revealHighlightStyle(hl: { color: string; style: 'color' | 'glow' | 'un
             return { color: hl.color, WebkitTextFillColor: hl.color } as React.CSSProperties;
     }
 }
+
+/** Look of a glossary term in the text: reuses the karaoke style vocabulary + a help cursor. */
+const glossaryTermStyle = (m: GlossaryMatchSpan): React.CSSProperties => ({
+    ...revealHighlightStyle({ color: m.color, style: m.style }),
+    cursor: 'help',
+});
+
+/** Interaction props for a glossary term span: hover drives the tooltip; clicks are swallowed
+ *  (stopPropagation for the React advance handlers; data-vn-no-advance for the capture-phase
+ *  window listeners — same marker the quick menu uses). */
+const glossarySpanProps = (entryId: string, onGlossaryHover?: (entryId: string | null, ev: React.MouseEvent) => void) => ({
+    'data-vn-no-advance': 'true',
+    onClick: (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); },
+    onMouseEnter: (e: React.MouseEvent) => onGlossaryHover?.(entryId, e),
+    onMouseMove: (e: React.MouseEvent) => onGlossaryHover?.(entryId, e),
+    onMouseLeave: (e: React.MouseEvent) => onGlossaryHover?.(null, e),
+});
 
 /**
  * Generate CSS keyframe animations for text effects.
@@ -193,30 +226,52 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
     textStyle,
     gradientStyle,
     revealHighlight,
+    glossaryMatches,
+    onGlossaryHover,
 }) => {
     // Inject keyframe styles once
     useMemo(() => {
         injectTextEffectStyles();
     }, []);
 
-    // If no effect or 'none', render plain text (with the optional karaoke word split off).
+    // Glossary terms only light up once the typewriter has revealed them completely.
+    const visibleGlossary = (glossaryMatches ?? []).filter(m => m.start < m.end && m.end <= displayText.length);
+
+    // If no effect or 'none', render plain text, split into segments along the karaoke range
+    // and glossary match boundaries (a generalization of the old before/word/after split).
     if (!textEffect || textEffect.type === 'none') {
-        if (revealHighlight && revealHighlight.start < displayText.length) {
-            const hlEnd = Math.min(revealHighlight.end ?? displayText.length, displayText.length);
-            const before = displayText.slice(0, revealHighlight.start);
-            const word = displayText.slice(revealHighlight.start, hlEnd);
-            const after = displayText.slice(hlEnd);
-            return (
-                <span style={gradientStyle || undefined}>
-                    {before}
-                    <span style={revealHighlightStyle(revealHighlight)}>{word}</span>
-                    {after}
-                </span>
-            );
+        const hlActive = !!(revealHighlight && revealHighlight.start < displayText.length);
+        if (!hlActive && visibleGlossary.length === 0) {
+            return <span style={gradientStyle || undefined}>{displayText}</span>;
         }
-        return (
-            <span style={gradientStyle || undefined}>{displayText}</span>
-        );
+        const hlStart = hlActive ? revealHighlight!.start : -1;
+        const hlEnd = hlActive ? Math.min(revealHighlight!.end ?? displayText.length, displayText.length) : -1;
+        const bounds = new Set<number>([0, displayText.length]);
+        if (hlActive) { bounds.add(hlStart); bounds.add(hlEnd); }
+        for (const m of visibleGlossary) { bounds.add(m.start); bounds.add(m.end); }
+        const sorted = Array.from(bounds).sort((a, b) => a - b);
+        const parts: React.ReactNode[] = [];
+        for (let i = 0; i < sorted.length - 1; i++) {
+            const s = sorted[i], e = sorted[i + 1];
+            if (s >= e) continue;
+            const text = displayText.slice(s, e);
+            const match = visibleGlossary.find(m => m.start <= s && m.end >= e);
+            const inKaraoke = hlActive && s >= hlStart && e <= hlEnd;
+            if (match) {
+                // Karaoke merged LAST so the reading highlight momentarily wins over the term look.
+                parts.push(
+                    <span key={i} {...glossarySpanProps(match.entryId, onGlossaryHover)}
+                        style={{ ...glossaryTermStyle(match), ...(inKaraoke ? revealHighlightStyle(revealHighlight!) : {}) }}>
+                        {text}
+                    </span>
+                );
+            } else if (inKaraoke) {
+                parts.push(<span key={i} style={revealHighlightStyle(revealHighlight!)}>{text}</span>);
+            } else {
+                parts.push(<React.Fragment key={i}>{text}</React.Fragment>);
+            }
+        }
+        return <span style={gradientStyle || undefined}>{parts}</span>;
     }
 
     // Split into word + whitespace tokens. Each word's animated characters are
@@ -241,14 +296,28 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
                 }
                 const wordStart = charIndex;
                 charIndex += token.length;
+                // Glossary: a term covering (any part of) this word attaches its hover/click
+                // handlers at the WORD wrapper (chars are too small a hit target); the visual
+                // highlight is applied per character below. Multi-word terms get the same
+                // entry's handlers on each covered word.
+                const wordEnd = wordStart + token.length;
+                const wordMatch = visibleGlossary.find(m => m.start < wordEnd && m.end > wordStart);
                 return (
-                    <span key={ti} style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>
+                    <span
+                        key={ti}
+                        style={{ display: 'inline-block', whiteSpace: 'nowrap', ...(wordMatch ? { cursor: 'help' } : {}) }}
+                        {...(wordMatch ? glossarySpanProps(wordMatch.entryId, onGlossaryHover) : {})}
+                    >
                         {token.split('').map((char, ci) => {
                             const charStyle = getCharacterStyle(textEffect, wordStart + ci, totalChars);
                             // Karaoke: chars in the currently revealed/spoken word carry the highlight.
                             const gi = wordStart + ci;
                             const hlStyle = revealHighlight && gi >= revealHighlight.start && gi < (revealHighlight.end ?? displayText.length)
                                 ? revealHighlightStyle(revealHighlight) : undefined;
+                            // Glossary term look per char (inline-block chars don't inherit a
+                            // wrapper's text-decoration, so it must sit on each char).
+                            const glStyle = wordMatch && gi >= wordMatch.start && gi < wordMatch.end
+                                ? glossaryTermStyle(wordMatch) : undefined;
                             return (
                                 <span
                                     key={ci}
@@ -260,6 +329,8 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
                                             backgroundClip: undefined,
                                             WebkitTextFillColor: undefined,
                                         } : {}),
+                                        ...(glStyle || {}),
+                                        // Karaoke merged LAST — the reading highlight wins while passing over.
                                         ...(hlStyle || {}),
                                     }}
                                 >

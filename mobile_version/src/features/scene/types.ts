@@ -134,6 +134,21 @@ export const REACTIVE_VISUAL_TYPES: ReadonlySet<CommandType> = new Set([
     CommandType.ShowHotSpot,
 ]);
 
+/**
+ * FX/state commands that may ALSO opt into live conditions via `liveConditions`. Unlike
+ * REACTIVE_VISUAL_TYPES (whose visuals re-render from stage arrays), these register persistent
+ * effect STATE (spotlight beams / flashlight / placed lights / screen overlay effects) with the
+ * conditions ATTACHED — the effect stays registered and the renderer shows/hides it live as
+ * variables change. One-shot FX (Lightning, FlashScreen) stay excluded: there is nothing
+ * persistent to show or hide.
+ */
+export const REACTIVE_FX_TYPES: ReadonlySet<CommandType> = new Set([
+    CommandType.Spotlight,
+    CommandType.Flashlight,
+    CommandType.PlaceLights,
+    CommandType.SetScreenOverlayEffect,
+]);
+
 interface BaseCommand {
     id: VNID;
     type: CommandType;
@@ -145,6 +160,15 @@ interface BaseCommand {
      * "run if conditions met when reached" behavior. Ignored for non-visual commands.
      */
     liveConditions?: boolean;
+    /**
+     * How a live-condition flip shows/hides the visual: 'fade' animates opacity (the element stays
+     * mounted, clicks disabled while hidden); unset/'instant' = appear/disappear immediately —
+     * the DEFAULT, unchanged from before (authors' systems depend on the instant behaviour).
+     * Only read for REACTIVE_VISUAL_TYPES overlays/characters with liveConditions set.
+     */
+    liveTransition?: 'instant' | 'fade';
+    /** Fade length in seconds when liveTransition is 'fade' (default 0.3). */
+    liveTransitionDuration?: number;
     modifiers?: CommandModifiers;
     /**
      * Stage stacking order for visual commands (ShowImage/ShowCharacter/ShowText/
@@ -450,6 +474,9 @@ export interface TextInputCommand extends BaseCommand {
 export interface JumpCommand extends BaseCommand {
     type: CommandType.Jump;
     targetSceneId: VNID;
+    /** Optional override for the leaving scene's exit transition — just for this jump.
+     *  Unset = use the scene's own Scene Settings choice. Additive-optional. */
+    transition?: VNSceneTransitionType;
 }
 
 export interface LabelCommand extends BaseCommand {
@@ -509,6 +536,9 @@ export interface PlayMovieCommand extends BaseCommand {
     transition?: VNTransition;
     /** Entry transition duration in seconds (default 0.5). */
     transitionDuration?: number;
+    /** Players can't click/skip while the (fullscreen) video plays — it always runs to the end.
+     *  Additive-optional (default false = click-to-skip as before). */
+    blockInput?: boolean;
     /** X position as percentage (0-100). Default: 0 (left edge) */
     x?: number;
     /** Y position as percentage (0-100). Default: 0 (top edge) */
@@ -592,15 +622,23 @@ export interface LightningCommand extends BaseCommand {
     type: CommandType.Lightning;
     color?: string;        // flash color (default near-white #EAF2FF)
     intensity?: number;    // 0..1 peak brightness (default 0.9)
-    /** Follow a number variable for intensity (0-1, read when the command RUNS). Additive. */
+    /** Follow a number variable for intensity (0-1, read when the command RUNS — per strike in a storm). Additive. */
     intensityVariableId?: VNID | null;
-    duration?: number;     // total flicker duration in seconds (default 0.7)
+    duration?: number;     // ONE strike's flicker length in seconds (default 0.7)
     flashes?: 1 | 2 | 3;   // flicker pattern (default 2)
-    thunderSfxId?: VNID | null; // optional thunder audio asset
+    thunderSfxId?: VNID | null; // optional thunder audio asset (per strike in a storm)
     thunderDelay?: number; // seconds after the flash before thunder plays (default 0.6)
     thunderVolume?: number; // 0..1 (default uses sfx volume)
     /** When false, the flash sits BEHIND the dialogue box so it isn't lit (default true = flashes everything). */
     affectsDialogue?: boolean;
+    /** 'once' (default/undefined) = a single strike. 'continuous' = a STORM: strikes keep coming at
+     *  the interval below until a Lightning command with storm:'stop' (or Reset Screen Effects /
+     *  quit / load). Additive-optional. */
+    storm?: 'once' | 'continuous' | 'stop';
+    /** Continuous storm: shortest/longest wait between strikes, in seconds (defaults 2–8).
+     *  Equal values = a steady rhythm; different values = random intervals. */
+    intervalMin?: number;
+    intervalMax?: number;
 }
 
 export interface FireworksCommand extends BaseCommand {
@@ -1462,14 +1500,50 @@ export interface RestockCollectionCommand extends BaseCommand { type: CommandTyp
 export interface BuyItemCommand extends BaseCommand { type: CommandType.BuyItem; itemId: VNID; collectionId: VNID; quantity?: number; }
 export interface SellItemCommand extends BaseCommand { type: CommandType.SellItem; itemId: VNID; collectionId: VNID; quantity?: number; }
 
+/** A scene exit transition choice: a built-in, or `custom:<id>` referencing one of the project's
+ *  custom transitions (project.customTransitions). Unknown/missing custom ids fall back to 'fade'. */
+export type VNSceneTransitionType = 'fade' | 'dissolve' | 'iris-out' | 'wipe-right' | 'slide-left' | 'instant' | `custom:${string}`;
+
+/** One half of a custom scene transition (the closing curtain OR the opening curtain).
+ *  Either a single animated file (animated PNG / animated WebP / GIF / video — authored to play
+ *  ONCE; it holds its last frame when done) or a hand-picked frame sequence played in order. */
+export interface VNTransitionAnimation {
+    /** One animated file. Can live in images, backgrounds or videos (upload-tab siloing). */
+    assetId?: VNID | null;
+    /** …or a frame sequence: images played in order (for animators who export loose frames). */
+    frameIds?: VNID[];
+    /** Frames per second when frameIds is used (default 12). */
+    fps?: number;
+    /** How long this half lasts, in seconds (default 1). For a single animated file this should
+     *  match the file's own length — the engine can't read an APNG's duration. */
+    duration?: number;
+    /** Optional sound effect played when this half starts (curtain swish). */
+    sfxId?: VNID | null;
+}
+
+/** An author-made scene transition: a closing animation that covers the screen, then an opening
+ *  animation that reveals the next scene (e.g. a theatre curtain closing and reopening).
+ *  Project-global, referenced from scenes/jumps as `custom:<id>` — same pattern as textbox themes. */
+export interface VNCustomTransition {
+    id: VNID;
+    name: string;
+    close: VNTransitionAnimation;
+    open: VNTransitionAnimation;
+    /** Extra pause while the screen is fully covered, in seconds (default 0). */
+    holdDuration?: number;
+    /** How the animation fills the screen (default 'stretch' — animations are usually drawn at
+     *  the game's own aspect ratio). */
+    fit?: 'cover' | 'contain' | 'stretch';
+}
+
 export interface VNScene {
     id: VNID;
     name: string;
     commands: VNCommand[];
     conditions?: VNCondition[];     // Scene-level conditions (gate access)
     fallbackSceneId?: VNID;         // Jump here if conditions fail
-    outTransition?: 'fade' | 'dissolve' | 'iris-out' | 'wipe-right' | 'slide-left' | 'instant'; // How this scene exits
-    outTransitionDuration?: number;  // Exit transition duration in seconds (default 0.5)
+    outTransition?: VNSceneTransitionType; // How this scene exits
+    outTransitionDuration?: number;  // Exit transition duration in seconds (default 0.5; custom transitions time themselves)
     /** Optional parallax for this scene's stage (off by default). */
     parallax?: VNParallaxSettings;
     /** Day/night override for this scene. 'cycle' (default) follows the global clock; 'fixed' pins the

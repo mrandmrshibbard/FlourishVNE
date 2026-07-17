@@ -36,7 +36,9 @@ const BeamPreview: React.FC<{ sx: number; sy: number; aim: number; cmd: any }> =
     );
 };
 
-const SpotlightCanvasPicker: React.FC<{ cmd: any; onApply: (p: any) => void; onClose: () => void; t: any }> = ({ cmd, onApply, onClose, t }) => {
+/** Exported for reuse: the screen-attached 'spotlight' effect's beam editor opens this same picker
+ *  (beams share the command's field names — sourceX/sourceY/aimAngle/beamWidth/…). */
+export const SpotlightCanvasPicker: React.FC<{ cmd: any; onApply: (p: any) => void; onClose: () => void; t: any }> = ({ cmd, onApply, onClose, t }) => {
     const [sx, setSx] = useState<number>(cmd.sourceX ?? 50);
     const [sy, setSy] = useState<number>(cmd.sourceY ?? 0);
     const [aim, setAim] = useState<number>(cmd.aimAngle ?? 0);

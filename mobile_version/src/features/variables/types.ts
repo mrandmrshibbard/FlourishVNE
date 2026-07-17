@@ -33,11 +33,21 @@ export interface VNVariableBand {
 /** How a banded number variable presents itself to the PLAYER in {text} and to the author in trackers. */
 export type VNVariableShowAs = 'number' | 'band' | 'both';
 
+/** An editor-side organisation folder for variables (drag variables into it in the Variables tab).
+ *  Purely organisational — the engine never reads it. */
+export interface VNVariableFolder {
+    id: VNID;
+    name: string;
+}
+
 export interface VNVariable {
     id: VNID;
     name: string;
     type: VNVariableType;
     defaultValue: string | number | boolean;
+    /** Editor organisation: the folder this variable lives in (see project.variableFolders).
+     *  Dangling ids are treated as "no folder". Additive-optional. */
+    folderId?: VNID;
     /** Lifetime scope – defaults to 'global' for backwards compatibility */
     scope?: VNVariableScope;
     /** Optional inclusive lower bound for NUMBER variables. When set, every write is clamped so the

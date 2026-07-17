@@ -1,9 +1,9 @@
 import { VNID } from './';
 import { VNBackground, VNImage, VNAudio, VNVideo } from '../features/assets/types';
 import { VNCharacter, VNTextboxTheme } from '../features/character/types';
-import { VNScene } from '../features/scene/types';
+import { VNScene, VNCustomTransition } from '../features/scene/types';
 import { VNProjectUI, VNUIScreen, VNFontSettings } from '../features/ui/types';
-import { VNVariable } from '../features/variables/types';
+import { VNVariable, VNVariableFolder } from '../features/variables/types';
 import { VNScript } from './scripting';
 import { VNCommonEvent } from './commonEvents';
 import { PluginRegistryEntry, VNPlugin } from './plugins';
@@ -148,6 +148,49 @@ export interface VNMapConfig {
     maxZoom?: number;
 }
 
+/** One sub-note under a Story Bible section. Content is markdown-lite plain text. */
+export interface VNStoryBibleSubsection {
+    id: VNID;
+    name: string;
+    content: string;
+}
+/** One writer's-notes section in the Story Bible (Synopsis, Characters, …). */
+export interface VNStoryBibleSection {
+    id: VNID;
+    name: string;
+    content: string;
+    subsections: VNStoryBibleSubsection[];
+}
+
+/** One glossary term: highlighted in the dialogue box at runtime with a hover tooltip. */
+export interface VNGlossaryEntry {
+    id: VNID;
+    /** The word or phrase to highlight. */
+    term: string;
+    /** Other spellings/forms that also trigger this entry (plural, nickname…). */
+    alternatives?: string[];
+    /** Match capital letters exactly (default false = any capitalisation matches). */
+    caseSensitive?: boolean;
+    /** Tooltip heading (empty = the term itself). */
+    title?: string;
+    /** Tooltip body text. */
+    description?: string;
+    /** Small footnote under the description. */
+    extra?: string;
+    /** Highlight colour for this term (unset = the glossary's default colour). */
+    color?: string;
+    /** Show this term in the game (default true; false keeps the entry but disables it). */
+    enabled?: boolean;
+}
+export interface VNGlossarySettings {
+    /** Master switch: highlight glossary terms in the game (default true). */
+    enabled?: boolean;
+    /** Default highlight colour (default '#7ee7ff'). */
+    defaultColor?: string;
+    /** How terms stand out in the text (default 'underline'). */
+    highlightStyle?: 'color' | 'glow' | 'underline';
+}
+
 export interface VNProject {
     id: VNID;
     title: string;
@@ -194,6 +237,18 @@ export interface VNProject {
     /** Reusable dialogue textbox themes (project-global). Characters/dialogue lines reference one
      *  by id; missing/deleted ids safely fall back to the global dialogue UI. Additive-optional. */
     textboxThemes?: Record<VNID, VNTextboxTheme>;
+    /** Author-made scene transitions (closing + opening animation pairs, e.g. a theatre curtain).
+     *  Scenes/jumps reference one as `custom:<id>`; missing ids fall back to fade. Additive-optional. */
+    customTransitions?: Record<VNID, VNCustomTransition>;
+    /** Writer's private Story Bible notes (markdown-lite). EDITOR-ONLY — stripped from exported
+     *  games by gameBundler. Additive-optional. */
+    storyBible?: { sections: VNStoryBibleSection[] };
+    /** Glossary: terms auto-highlighted in the dialogue box with hover tooltips. SHIPS with
+     *  exported games. Additive-optional. */
+    glossary?: { entries: Record<VNID, VNGlossaryEntry>; settings?: VNGlossarySettings };
+    /** Editor-side variable folders (Variables tab organisation; engine ignores them).
+     *  Variables reference one via `folderId`. Additive-optional. */
+    variableFolders?: Record<VNID, VNVariableFolder>;
     /** User-defined scripts */
     scripts?: Record<VNID, VNScript>;
     /** Common Events — reusable command sequences callable from any scene */

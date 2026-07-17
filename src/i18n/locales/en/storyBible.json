@@ -1,0 +1,88 @@
+{
+  "title": "Story Bible",
+  "empty": {
+    "title": "Your Story Bible",
+    "body": "Keep everything about your story in one place — synopsis, character notes, places, plot arcs. Only you see this: it never ships with your game.",
+    "starterButton": "Create starter sections"
+  },
+  "starter": {
+    "synopsis": "Synopsis",
+    "chapters": "Chapters",
+    "characters": "Characters",
+    "locations": "Locations",
+    "arcs": "Story Arcs"
+  },
+  "sections": {
+    "add": "Add section",
+    "newName": "New section",
+    "unnamed": "Untitled",
+    "none": "No sections yet.",
+    "namePlaceholder": "Section name",
+    "delete": "Delete section",
+    "deleteConfirm": "Delete \"{{name}}\"?",
+    "deleteConfirmWithSubs": "Delete \"{{name}}\" and its {{count}} sub-sections? This cannot be undone with the notes still inside.",
+    "moveUp": "Move up",
+    "moveDown": "Move down"
+  },
+  "subsections": {
+    "add": "Add sub-section",
+    "newName": "New sub-section",
+    "namePlaceholder": "Sub-section name",
+    "delete": "Delete sub-section",
+    "deleteConfirm": "Delete \"{{name}}\"?"
+  },
+  "editor": {
+    "edit": "✏ Edit",
+    "preview": "👁 Preview",
+    "heading": "Heading (click again for smaller)",
+    "bold": "Bold",
+    "italic": "Italic",
+    "bulletList": "Bullet list",
+    "numberedList": "Numbered list",
+    "placeholder": "Write your notes here… Use the buttons above for headings, bold, and lists.",
+    "placeholderWord": "text"
+  },
+  "glossary": {
+    "title": "Glossary",
+    "navHint": "Words your players can hover in dialogue for an explanation",
+    "back": "Story Bible",
+    "emptyTitle": "Glossary",
+    "emptyBody": "Add words your players might not know. When one appears in dialogue it gets highlighted, and hovering it shows your explanation.",
+    "addTerm": "Add term",
+    "newTerm": "New term",
+    "search": "Search terms…",
+    "none": "No terms yet.",
+    "noResults": "No terms match.",
+    "term": "Word or phrase",
+    "alternatives": "Other spellings or forms",
+    "alternativesHelp": "e.g. the plural — press Enter to add",
+    "caseSensitive": "Match capital letters exactly",
+    "color": "Highlight colour",
+    "useDefaultColor": "Use the default colour",
+    "tooltipTitle": "Tooltip title (empty = the word itself)",
+    "description": "Explanation",
+    "extra": "Small footnote (optional)",
+    "enabledEntry": "Show in game",
+    "preview": "How it looks in the game (hover the word):",
+    "previewLine": "They say the {{term}} appears only at night.",
+    "previewNoMatch": "The term didn't match the sample — check capital letters if Match capital letters is on.",
+    "delete": "Delete term",
+    "deleteConfirm": "Delete \"{{term}}\" from the glossary?",
+    "import": "Import…",
+    "export": "Export",
+    "importSuccess": "Imported {{count}} terms",
+    "importError": "That file isn't a Flourish glossary.",
+    "settings": {
+      "enabled": "Highlight glossary terms in the game",
+      "defaultColor": "Default colour",
+      "style": "How terms stand out",
+      "styleUnderline": "Underlined",
+      "styleColor": "Coloured text",
+      "styleGlow": "Soft glow"
+    }
+  },
+  "pluginBanner": {
+    "text": "The Story Bible is now built into the editor, and your notes from the old plugin were imported here. You can safely uninstall the plugin from Tools → Plugin Manager.",
+    "dismiss": "Got it"
+  }
+}

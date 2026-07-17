@@ -6,6 +6,7 @@
     "assets": "Recursos",
     "variables": "Variáveis",
     "commonEvents": "Eventos",
+    "storyBible": "Bíblia da História",
     "systems": "Sistemas",
     "settings": "Configurações"
   },
@@ -16,6 +17,7 @@
     "assets": "Gerencie arquivos de imagem, áudio e vídeo",
     "variables": "Crie e gerencie variáveis da história e o estado do jogo",
     "commonEvents": "Sequências de comandos reutilizáveis acionadas pelas cenas",
+    "storyBible": "Guarde sua sinopse, notas de personagens e o glossário de termos da história",
     "systems": "Sistemas de jogabilidade opcionais como Inventário, e o registro de itens",
     "settings": "Configure as preferências e configurações do projeto"
   },
