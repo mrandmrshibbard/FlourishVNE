@@ -713,6 +713,7 @@
     "advanceOnClick": "Avançar o diálogo ao clicar",
     "advanceOnClickHint": "Caso contrário, o clique é consumido",
     "drawDuringPlay": "Desenhar o ponto durante o jogo",
+    "visibleOpacity": "Transparência (opacidade)",
     "visibleOutline": "Contorno visível",
     "actions": "Ações",
     "targetToHide": "Ponto interativo alvo a ocultar",

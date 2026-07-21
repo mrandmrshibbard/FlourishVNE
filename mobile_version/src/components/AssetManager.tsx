@@ -656,6 +656,7 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" />
                             <input
                                 type="text"
+                                autoFocus
                                 placeholder={t('searchPlaceholder', { category: t(`categoriesLower.${selectedCategory}`) })}
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}

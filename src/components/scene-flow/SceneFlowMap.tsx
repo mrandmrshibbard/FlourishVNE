@@ -335,6 +335,7 @@ const SceneFlowMap: React.FC<Props> = ({ project, activeSceneId, headerSlot, onO
                 <input
                     value={search}
                     onChange={e => setSearch(e.target.value)}
+                    autoFocus
                     placeholder={t('flowMap.search', 'Find a scene…')}
                     className="text-[11px] px-2 py-0.5 rounded-md border bg-transparent outline-none"
                     style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-primary)', width: 130 }}

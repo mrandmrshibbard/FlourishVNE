@@ -1,4 +1,4 @@
-﻿import {
+import {
   ShowTextCommand,
   HideTextCommand,
   ShowImageCommand,
@@ -127,7 +127,7 @@ export function handleHideText(
       },
     };
   } else {
-    // instant remove â€” functional patch so stacked Hide Text commands compose.
+    // instant remove — functional patch so stacked Hide Text commands compose.
     return {
       advance: true,
       stagePatch: (prev) => ({ textOverlays: prev.textOverlays.filter((o) => o.id !== command.targetCommandId) }),
@@ -356,7 +356,7 @@ export function handleShowButton(
   return {
     advance: shouldAdvance,
     // Functional patch (appends against the LATEST overlays) so stacked/runAsync Show Button
-    // commands compose instead of clobbering each other â€” e.g. an Exit Game button + a Quit-to-
+    // commands compose instead of clobbering each other — e.g. an Exit Game button + a Quit-to-
     // Title button stacked together: the snapshot path made the second overwrite the first, so
     // only one rendered ("two buttons, only one works"; the missing one looked like a dead click).
     stagePatch: (prev) => ({ buttonOverlays: [...prev.buttonOverlays, buttonOverlay] }),
@@ -367,7 +367,7 @@ export function handleShowButton(
 
 /**
  * Handles a Show Item pickup: shows the item's icon as a clickable overlay. Reuses the ButtonOverlay
- * render path â€” the default click action is GiveItem, and the overlay removes/records itself on click.
+ * render path — the default click action is GiveItem, and the overlay removes/records itself on click.
  */
 export function handleShowItem(
   command: ShowItemCommand,
@@ -413,8 +413,8 @@ export function handleShowItem(
     opacity: command.opacity ?? 1,
     imageUrl: visual ? assetResolver(visual.id, visual.type) : null,
     hoverImageUrl: command.hoverImage ? assetResolver(command.hoverImage.id, command.hoverImage.type) : null,
-    // The give is applied directly on click (see giveItemId below) â€” reliable, atomic with the
-    // overlay removal â€” so it is NOT a click action. Click actions are only the author's extras.
+    // The give is applied directly on click (see giveItemId below) — reliable, atomic with the
+    // overlay removal — so it is NOT a click action. Click actions are only the author's extras.
     onClick: extra[0] ?? { type: UIActionType.None } as VNUIAction,
     actions: extra.slice(1),
     clickSound: command.clickSound ?? null,

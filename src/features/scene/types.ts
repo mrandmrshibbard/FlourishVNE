@@ -1204,6 +1204,9 @@ export interface ShowHotSpotCommand extends BaseCommand {
     highlightColor?: string;
     /** Draw the spot at runtime (otherwise it's an invisible hit area). */
     visible?: boolean;
+    /** How solid the drawn spot looks when `visible` is on (0..1, default 1). Purely visual —
+     *  the click/drop area is unaffected. */
+    visibleOpacity?: number;
     /** If true, a click trigger also advances the dialogue (default false — the click is consumed). */
     advanceOnTrigger?: boolean;
 }

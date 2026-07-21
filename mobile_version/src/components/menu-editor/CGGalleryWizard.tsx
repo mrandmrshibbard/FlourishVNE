@@ -335,6 +335,7 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                     <div className="flex gap-2">
                         <input
                             type="text"
+                            autoFocus
                             placeholder={t('cgWizard.searchAssets')}
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}

@@ -60,19 +60,47 @@ function hotSpotElementToLegacy(el: UIHotSpotElement): VNHotSpot {
         id: el.id, name: el.name, shape: el.shape, trigger: el.trigger || 'click',
         x: el.x, y: el.y, width: el.width, height: el.height,
         acceptedElementIds: el.acceptedElementIds,
+        acceptTag: el.acceptTag,
         actions: el.actions || [],
         conditions: el.conditions,
         highlightColor: el.highlightColor,
         visible: el.visible,
+        visibleOpacity: el.visibleOpacity,
     };
 }
 
 /** Translate a unified element back into the legacy `VNHotZoneElement` runtime
  *  shape consumed by the interactive runtime. Used internally by
  *  `deriveInteractiveElementsFromScreen`. */
-function elementToLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
+function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { icon?: { type: string; id: VNID } | null; dragTag?: string; countVariableId?: VNID } | undefined>): VNHotZoneElement | null {
     const anyEl = el as any;
     switch (el.type) {
+        case UIElementType.Item: {
+            // A draggable ITEM element becomes an image-shaped draggable whose art is the item's
+            // icon and whose drag identity IS the item: boundItemId feeds the drop pipeline's
+            // consume/use-effect, and the item's own dragTag is the fallback matcher.
+            const item = anyEl.itemId ? items?.[anyEl.itemId] : undefined;
+            const iconIsVideo = item?.icon?.type === 'video';
+            return {
+                id: el.id, name: el.name,
+                elementType: iconIsVideo ? 'video' : 'image',
+                imageId: (!iconIsVideo ? (item?.icon?.id ?? '') : '') as VNID,
+                videoId: iconIsVideo ? item?.icon?.id : undefined,
+                x: el.x, y: el.y, width: el.width, height: el.height,
+                draggable: anyEl.draggable, snapBack: anyEl.snapBack ?? true,
+                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
+                dragTag: anyEl.dragTag || item?.dragTag,
+                boundItemId: anyEl.itemId ?? anyEl.boundItemId,
+                // "Only show while the player has it" — the interactive runtime evaluates
+                // `conditions` live, so ownership becomes a count-variable condition (the
+                // non-draggable render path gates on the same count).
+                conditions: anyEl.onlyWhileOwned && item?.countVariableId
+                    ? [...(el.conditions || []), { variableId: item.countVariableId, operator: '>=' as const, value: 1 }]
+                    : el.conditions,
+                actions: anyEl.actions,
+                clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
+            };
+        }
         case UIElementType.draggableImageElement: {
             const m = el as UIdraggableImageElementElement;
             return {
@@ -169,12 +197,12 @@ export function deriveHotSpotsFromScreen(screen: VNUIScreen): Record<VNID, VNHot
 
 /** Derive the legacy interactive-element runtime map from a screen by scanning
  *  `screen.elements` for image maps and draggable elements. */
-export function deriveInteractiveElementsFromScreen(screen: VNUIScreen): Record<VNID, VNHotZoneElement> {
+export function deriveInteractiveElementsFromScreen(screen: VNUIScreen, items?: Record<VNID, { icon?: { type: string; id: VNID } | null; dragTag?: string } | undefined>): Record<VNID, VNHotZoneElement> {
     const out: Record<VNID, VNHotZoneElement> = {};
     for (const el of Object.values(screen.elements || {}) as VNUIElement[]) {
         if (el.type === UIElementType.HotSpot) continue;
         if (el.type === UIElementType.draggableImageElement || (el as any).draggable === true) {
-            const legacy = elementToLegacyHotZoneElement(el);
+            const legacy = elementToLegacyHotZoneElement(el, items);
             if (legacy) out[el.id] = legacy;
         }
     }

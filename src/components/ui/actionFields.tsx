@@ -10,6 +10,7 @@ import { resolveBoolLabels } from '../../features/variables/booleanLabels';
 import VariablePicker from '../variables/VariablePicker';
 import { FormField, Select, TextInput, RangeInput } from './Form';
 import type { ActionTargetableElement } from './UIActionsListEditor';
+import { collectTimerIds } from '../../utils/actionMeta';
 
 /**
  * THE single per-action parameter-field renderer, shared by ActionEditor (single action) and
@@ -59,9 +60,9 @@ const ActionFields: React.FC<{
         ? <Select value={value} onChange={e => onCh(e.target.value)}>{children}</Select>
         : <select value={value} onChange={e => onCh(e.target.value)} className={inputCls}>{children}</select>;
 
-    const txt = (value: string, onCh: (v: string) => void, opts?: { type?: string; min?: number; placeholder?: string }) => variant === 'form'
-        ? <TextInput type={opts?.type} value={value} onChange={e => onCh(e.target.value)} placeholder={opts?.placeholder} />
-        : <input type={opts?.type || 'text'} min={opts?.min} value={value} onChange={e => onCh(e.target.value)} placeholder={opts?.placeholder} className={inputCls} />;
+    const txt = (value: string, onCh: (v: string) => void, opts?: { type?: string; min?: number; placeholder?: string; list?: string }) => variant === 'form'
+        ? <TextInput type={opts?.type} value={value} onChange={e => onCh(e.target.value)} placeholder={opts?.placeholder} list={opts?.list} />
+        : <input type={opts?.type || 'text'} min={opts?.min} value={value} onChange={e => onCh(e.target.value)} placeholder={opts?.placeholder} className={inputCls} list={opts?.list} />;
 
     // Screen elements grouped by screen, for Show/Hide-Element pickers.
     const elementsByScreen = Object.values(project.uiScreens).map((s: VNUIScreen) => ({
@@ -357,6 +358,23 @@ const ActionFields: React.FC<{
                     onChange={e => set({ slotNumber: Number(e.target.value) || 1 })} className={variant === 'form' ? 'w-full bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs' : inputCls + ' w-16'} />)}
                 {action.type === UIActionType.DeleteSave && <p className="text-[10px] text-[var(--text-muted)]">{t('actionsList.deleteSaveHint', 'Erases this slot (Save + Load). Shows the “Erase Save” confirmation first.')}</p>}
             </>);
+        case UIActionType.SaveSlotsNextPage:
+        case UIActionType.SaveSlotsPrevPage: {
+            // Every SaveSlotGrid across all screens, labeled "Screen › Element".
+            const gridOptions: { id: string; label: string }[] = [];
+            for (const screen of Object.values(project.uiScreens || {}) as any[]) {
+                for (const elx of Object.values(screen?.elements || {}) as any[]) {
+                    if (elx?.type === 'SaveSlotGrid') gridOptions.push({ id: elx.id, label: `${screen.name} › ${elx.name || 'Save slots'}` });
+                }
+            }
+            return group('sky', <>
+                {field(t('actionEditor.saveSlotsTarget', 'Which slot grid'), sel(a.targetElementId || '', v => set({ targetElementId: v || null }), <>
+                    <option value="">{t('actionEditor.saveSlotsAnyGrid', 'The slot grid on the open screen')}</option>
+                    {gridOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </>))}
+                <p className="text-[10px] text-[var(--text-muted)]">{t('actionEditor.saveSlotsPageHint', 'Turns the save/load slots one page. Tip: hide the built-in arrows on the slot grid to use your own buttons.')}</p>
+            </>);
+        }
         case UIActionType.GiveItem:
         case UIActionType.UseItem:
         case UIActionType.DestroyItem:
@@ -440,7 +458,13 @@ const ActionFields: React.FC<{
             </>);
         }
         case UIActionType.StopTimer:
-            return group('purple', field(t('actionEditor.timerIdStop', 'Timer to stop (blank = default)'), txt(a.timerId || '', v => set({ timerId: v }), { placeholder: 'default' })));
+            return group('purple', <>
+                {field(t('actionEditor.timerIdStop', 'Timer to stop (blank = default)'), txt(a.timerId || '', v => set({ timerId: v }), { placeholder: 'default', list: 'flourish-timer-ids-action' }))}
+                <datalist id="flourish-timer-ids-action">
+                    {collectTimerIds(project).map(id => <option key={id} value={id} />)}
+                </datalist>
+                <p className="text-[10px] text-[var(--text-muted)]">{t('actionEditor.timerIdStopHint', 'Timers are global — this stops the timer no matter which scene started it.')}</p>
+            </>);
         case UIActionType.SetTimeOfDay: {
             const mode = a.mode === 'advance' ? 'advance' : 'set';
             return group('purple', <>

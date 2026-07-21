@@ -309,6 +309,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
+                            autoFocus
                             placeholder={t('searchPlaceholder')}
                             className="w-full pl-7 pr-2 py-1 rounded text-xs outline-none"
                             style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}

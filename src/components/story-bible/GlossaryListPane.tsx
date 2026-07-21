@@ -98,6 +98,7 @@ const GlossaryListPane: React.FC<{
                 <input
                     value={search}
                     onChange={e => setSearch(e.target.value)}
+                    autoFocus
                     placeholder={t('glossary.search', 'Search terms…')}
                     className="w-full bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded px-2 py-1 text-xs text-white outline-none focus:border-sky-500/60"
                 />

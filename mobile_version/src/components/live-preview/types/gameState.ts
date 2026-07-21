@@ -174,6 +174,8 @@ export interface HotSpotOverlay {
     acceptedTag?: string;
     highlightColor?: string;
     visible?: boolean;
+    /** How solid the drawn spot looks when `visible` is on (0..1, default 1). Visual only. */
+    visibleOpacity?: number;
     advanceOnTrigger?: boolean;
     /** Stage stacking order (from the command's `layer`). When set, the spot uses the shared layer
      *  band (1 + layer*100) so items/images can sit above it; when undefined it keeps the legacy
@@ -355,6 +357,10 @@ export interface MusicState {
     loop: boolean;
     currentTime: number;
     isPlaying: boolean;
+    /** The Play Music command's volume (0..1). Undefined = the command didn't set one, so the
+     *  player's music setting applies alone. Persisted so screen open/close, save/load, and
+     *  rewind resume the track at the authored volume instead of resetting to full. */
+    volume?: number;
 }
 
 export interface PlayerState {

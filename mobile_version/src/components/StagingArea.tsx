@@ -287,6 +287,11 @@ const StagingArea: React.FC<{
     const stageRef = React.useRef<HTMLDivElement>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const [stageSize, setStageSize] = React.useState({ width: 1280, height: 720 }); // Default 16:9 at 720p
+    // Canvas zoom (1 = fit the panel). Lets authors fine-tune tiny images/hot spots: the stage
+    // renders larger and the panel scrolls. Multiplied INTO stageSize so every consumer
+    // (drag math, font scale, slide previews) scales consistently. Declared BEFORE the
+    // measurement effect that reads it.
+    const [stageZoom, setStageZoom] = React.useState(1);
     const [stageState, setStageState] = React.useState<StageState>({
         backgroundUrl: null,
         characters: {},
@@ -317,7 +322,7 @@ const StagingArea: React.FC<{
         const el = containerRef.current;
         if (!el) return;
         
-        const observer = new ResizeObserver(() => {
+        const measure = () => {
             const pw = el.clientWidth - 16; // p-2 = 8px each side
             const ph = el.clientHeight - 16;
             const arW = project.gameResolution?.width || 1920;
@@ -330,13 +335,15 @@ const StagingArea: React.FC<{
                 w = h * ar;
             }
             if (w > 0 && h > 0) {
-                setStageSize({ width: Math.round(w), height: Math.round(h) });
+                // Zoom scales the fitted size; >1 overflows the panel, which scrolls.
+                setStageSize({ width: Math.round(w * stageZoom), height: Math.round(h * stageZoom) });
             }
-        });
-        
+        };
+        const observer = new ResizeObserver(measure);
         observer.observe(el);
+        measure();
         return () => observer.disconnect();
-    }, [project.gameResolution]);
+    }, [project.gameResolution, stageZoom]);
 
     React.useEffect(() => {
         const scene = project.scenes[activeSceneId];
@@ -927,6 +934,27 @@ const StagingArea: React.FC<{
     const [overlaySnapGuides, setOverlaySnapGuides] = useState<SnapGuide[]>([]);
     // Smart-snap toggle (editor-only UI pref; default ON). Hold Alt to bypass per-interaction.
     const [snapEnabled, setSnapEnabled] = useState(false);
+    // Collapse the canvas-corner button stack (Snap/HUD/Variables/Notifications) — it can sit
+    // right on top of art the author is aligning. Persisted per machine.
+    const [chromeCollapsed, setChromeCollapsed] = useState<boolean>(() => {
+        try { return localStorage.getItem('flourish:stagingChromeCollapsed') === '1'; } catch { return false; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem('flourish:stagingChromeCollapsed', chromeCollapsed ? '1' : '0'); } catch { /* ignore */ }
+    }, [chromeCollapsed]);
+    // Ctrl+scroll zooms the canvas. Native listener (passive: false) — React's synthetic wheel
+    // handler is passive, so preventDefault (needed to stop the browser's page zoom) is ignored there.
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const onWheel = (e: WheelEvent) => {
+            if (!e.ctrlKey) return;
+            e.preventDefault();
+            setStageZoom(z => Math.max(0.5, Math.min(4, Math.round(z * (e.deltaY < 0 ? 1.15 : 1 / 1.15) * 100) / 100)));
+        };
+        el.addEventListener('wheel', onWheel, { passive: false });
+        return () => el.removeEventListener('wheel', onWheel);
+    }, []);
     // Show the game HUD's click-capturing areas on the scene canvas (default ON) — an always-on
     // HUD renders over every scene in-game, so an author's scene hotspot placed underneath one
     // silently loses the click. Persisted per user.
@@ -1760,14 +1788,16 @@ const StagingArea: React.FC<{
     const dnSpriteTint = dnGrade ? gradeToSpriteTint(dnGrade.sprites) : null;
 
     const stageInner = (
-            <div ref={containerRef} className="w-full h-full flex items-center justify-center p-2">
+            <div ref={containerRef} className="w-full h-full flex overflow-auto p-2">
                 <div
                     ref={stageRef}
                     className="relative bg-[var(--bg-primary)]/50 rounded-md overflow-hidden"
                     // `isolation: isolate` makes the stage its own stacking context so per-element
                     // `layer` z-indices stay confined here (mirroring the runtime's panZoom transform
                     // context) and never float overlays above the editor chrome.
-                    style={{ isolation: 'isolate', width: stageSize.width, height: stageSize.height, '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}
+                    // margin:auto centers the stage when it fits and lets the container scroll when
+                    // zoomed past the panel; flexShrink 0 stops flex from squeezing it back down.
+                    style={{ isolation: 'isolate', margin: 'auto', flexShrink: 0, width: stageSize.width, height: stageSize.height, '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}
                 >
                     {activePick && activePick.sceneId === activeSceneId && (
                         <div
@@ -2349,8 +2379,18 @@ const StagingArea: React.FC<{
                  )}
 
                  {/* Preview controls — kept above all per-layer stage content (characters/overlays can
-                     reach z-index 100+, which previously covered these buttons and ate their clicks). */}
-                 <div className="absolute top-2 right-2 flex flex-col gap-2 z-[10000]">
+                     reach z-index 100+, which previously covered these buttons and ate their clicks).
+                     Collapsible: the stack can sit right on top of art/hot spots the author is
+                     aligning, so a single chevron tucks it away (remembered per machine). */}
+                 <div className="absolute top-2 right-2 flex flex-col gap-2 z-[10000] items-end">
+                    <button
+                        onClick={() => setChromeCollapsed(s => !s)}
+                        className="flex items-center justify-center w-6 h-6 rounded-lg text-xs border bg-[var(--bg-primary)]/70 border-[var(--border-default)]/40 text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]/90"
+                        title={chromeCollapsed ? t('chromeShow', 'Show canvas buttons') : t('chromeHide', 'Hide canvas buttons (they can cover art you are aligning)')}
+                    >
+                        {chromeCollapsed ? '◂' : '▸'}
+                    </button>
+                    {!chromeCollapsed && <>
                     <button
                         onClick={() => setSnapEnabled(s => !s)}
                         className={`flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
@@ -2399,6 +2439,26 @@ const StagingArea: React.FC<{
                         {showCommandIndicators ? <EyeIcon className="w-4 h-4 flex-shrink-0" /> : <EyeSlashIcon className="w-4 h-4 flex-shrink-0" />}
                         <span>{t('eventNotificationsToggle')}</span>
                     </button>
+                    </>}
+                 </div>
+
+                 {/* Canvas zoom — fine-tune tiny images/hot spots (also Ctrl+scroll on the canvas). */}
+                 <div className="absolute bottom-2 right-2 flex items-center gap-1 z-[10000] bg-[var(--bg-primary)]/70 border border-[var(--border-default)]/40 rounded-lg px-1 py-0.5">
+                    <button
+                        onClick={() => setStageZoom(z => Math.max(0.5, Math.round(z / 1.25 * 100) / 100))}
+                        className="w-5 h-5 flex items-center justify-center rounded text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
+                        title={t('zoomOut', 'Zoom out (Ctrl+scroll)')}
+                    >−</button>
+                    <button
+                        onClick={() => setStageZoom(1)}
+                        className="px-1 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] tabular-nums"
+                        title={t('zoomReset', 'Back to fit')}
+                    >{Math.round(stageZoom * 100)}%</button>
+                    <button
+                        onClick={() => setStageZoom(z => Math.min(4, Math.round(z * 1.25 * 100) / 100))}
+                        className="w-5 h-5 flex items-center justify-center rounded text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
+                        title={t('zoomIn', 'Zoom in (Ctrl+scroll)')}
+                    >+</button>
                  </div>
                 </div>
             </div>

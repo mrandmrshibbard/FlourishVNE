@@ -94,6 +94,10 @@ export enum UIActionType {
     StopSound = 'StopSound',
     /** Plays a full-screen video. Can block input while playing and run actions when it ends. */
     PlayVideo = 'PlayVideo',
+    /** Turn the save/load slot grid to its next page (for custom Next buttons). */
+    SaveSlotsNextPage = 'SaveSlotsNextPage',
+    /** Turn the save/load slot grid to its previous page (for custom Previous buttons). */
+    SaveSlotsPrevPage = 'SaveSlotsPrevPage',
     /** Show a spotlight beam (carries its own look, so a screen button can turn one on from scratch). */
     ShowSpotlight = 'ShowSpotlight',
     /** Turn the current spotlight beam off. */
@@ -187,6 +191,9 @@ export interface StopSoundAction extends BaseUIAction { type: UIActionType.StopS
 /** Full-screen video from a button/screen. Works on menus AND during gameplay. `blockInput`
  *  removes click-to-skip; `onEndActions` run when the video finishes (or is skipped). */
 export interface PlayVideoAction extends BaseUIAction { type: UIActionType.PlayVideo; videoId: VNID | null; loop?: boolean; blockInput?: boolean; onEndActions?: VNUIAction[]; }
+/** Turn a save/load slot grid's page (custom Next/Previous buttons). `targetElementId` picks a
+ *  specific grid element; empty = every grid on the open screen (the common single-grid case). */
+export interface SaveSlotsPageAction extends BaseUIAction { type: UIActionType.SaveSlotsNextPage | UIActionType.SaveSlotsPrevPage; targetElementId?: VNID | null; }
 export interface ShowSpotlightAction extends BaseUIAction { type: UIActionType.ShowSpotlight; spotlightId?: string; sourceX?: number; sourceY?: number; aimAngle?: number; intensity?: number; beamWidth?: number; sourceWidth?: number; height?: number; falloff?: number; color?: string; followMouse?: boolean; swivelMax?: number; toggleKey?: string; affectsDialogue?: boolean; sfxId?: VNID | null; }
 export interface HideSpotlightAction extends BaseUIAction { type: UIActionType.HideSpotlight; spotlightId?: string; }
 export interface ShowFlashlightAction extends BaseUIAction { type: UIActionType.ShowFlashlight; radius?: number; softness?: number; darkness?: number; color?: string; toggleKey?: string; affectsDialogue?: boolean; sfxId?: VNID | null; }
@@ -232,4 +239,4 @@ export interface SetTimeOfDayAction extends BaseUIAction { type: UIActionType.Se
 /** Clear the palette→UI restyle applied by a coloring mini game. */
 export interface ClearUiPaletteAction extends BaseUIAction { type: UIActionType.ClearUiPalette; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | PlayMusicAction | StopMusicAction | ShowSpotlightAction | HideSpotlightAction | ShowFlashlightAction | HideFlashlightAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | OpenPhoneAppAction | ShowMapAction | ShowMiniGameAction | StartTimerAction | StopTimerAction | SetTimeOfDayAction | ClearUiPaletteAction | StopSoundAction | PlayVideoAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | PlayMusicAction | StopMusicAction | SaveSlotsPageAction | ShowSpotlightAction | HideSpotlightAction | ShowFlashlightAction | HideFlashlightAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | OpenPhoneAppAction | ShowMapAction | ShowMiniGameAction | StartTimerAction | StopTimerAction | SetTimeOfDayAction | ClearUiPaletteAction | StopSoundAction | PlayVideoAction;

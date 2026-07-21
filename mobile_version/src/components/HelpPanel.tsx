@@ -225,6 +225,7 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
             </svg>
             <input
               type="text"
+              autoFocus
               placeholder={t('helpPanel.searchPlaceholder')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}

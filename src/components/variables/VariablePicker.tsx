@@ -134,7 +134,10 @@ export const VariablePicker: React.FC<{
         };
     }, [isOpen]);
 
-    useEffect(() => { if (isOpen) searchRef.current?.focus(); }, [isOpen]);
+    // Also wait for `coords` — the portal (and the search box) only renders once the position
+    // is measured, so an [isOpen]-only focus could fire while the input didn't exist yet.
+    const pickerCoordsReady = !!coords;
+    useEffect(() => { if (isOpen && pickerCoordsReady) searchRef.current?.focus(); }, [isOpen, pickerCoordsReady]);
 
     const chip = (v: VNVariable) => (
         <span

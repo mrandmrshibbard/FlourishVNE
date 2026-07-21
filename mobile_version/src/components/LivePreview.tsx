@@ -16,23 +16,25 @@ import { resolveVideoTrim } from '../utils/videoTrim';
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject, CGGalleryEntry } from '../types/project';
 import {
-    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, SaveGameAction, LoadGameAction, DeleteSaveAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, CallCommonEventAction, OpenPhoneAppAction, ShowMapAction, ShowMiniGameAction, RESET_ALL_VARIABLES
+    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, SaveGameAction, LoadGameAction, DeleteSaveAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, CallCommonEventAction, OpenPhoneAppAction, ShowMapAction, ShowMiniGameAction, SaveSlotsPageAction, RESET_ALL_VARIABLES
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
-    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UITimerElement, UICustomElement, GameSetting, GameToggleSetting, UIElementType, UIAppearanceState,
+    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UITimerElement, UIItemElement, UICustomElement, GameSetting, GameToggleSetting, UIElementType, UIAppearanceState,
     VNHotSpot, VNHotZoneElement, VNConfirmDialogSettings, QuickMenuButtonConfig, QuickMenuButtonKey, VNProjectUI, PhonePortraitSource
 } from '../features/ui/types';
 import { PHONE_GLYPHS } from '../features/ui/phoneIcons';
 import { PHONE_APPS, resolvePhoneApp, renderContactsRoster, fireAppButton, PhoneGlyph, PhonePortrait, resolvePhonePortrait, PhoneAppContext, MapSurface } from './live-preview/phone/phoneApps';
 import { collectToCameraRoll, phoneThreadKey, countPhoneThread } from './live-preview/command-handlers/phoneHandler';
 import { resolveVarNumber } from './live-preview/systems/resolveVarNumber';
+import { formatSlotText, isSlotDesignActive, slotPartVisible, SLOT_GRID_PAGE_EVENT } from '../utils/slotDesign';
 import MiniGameFrame from './live-preview/minigames/MiniGameFrame';
 import type { PhoneAppId } from './live-preview/types/gameState';
 import { resolveFieldUrl } from '../utils/assetStore';
 import { resolvePlayerCharacterId } from '../utils/playerCharacter';
 import { VNItem, VNItemCollection } from '../features/items/types';
 import {
+    VNScene,
     VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand, DialogueCommand,
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand,
     PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
@@ -142,6 +144,29 @@ function runtimeDebugWarn(...args: unknown[]): void {
 
 // --- Persistent Variable Helpers ---
 /** localStorage key for cross-session persistent variables */
+/** Find a Label command by name, looking in the preferred scene first and then EVERY other
+ *  scene — a hotspot/choice "Jump to label" must work across scenes, not just within the
+ *  current one. Returns the owning scene so the caller can switch scenes when needed. */
+function findLabelAcrossScenes(
+    project: VNProject,
+    targetLabel: string,
+    preferredSceneId: VNID | null,
+): { sceneId: VNID; scene: VNScene; index: number } | null {
+    const isLabel = (cmd: VNCommand) =>
+        cmd.type === CommandType.Label && (cmd as LabelCommand).labelId === targetLabel;
+    if (preferredSceneId) {
+        const scene = project.scenes[preferredSceneId];
+        const index = scene ? scene.commands.findIndex(isLabel) : -1;
+        if (scene && index !== -1) return { sceneId: preferredSceneId, scene, index };
+    }
+    for (const [sceneId, scene] of Object.entries(project.scenes)) {
+        if (sceneId === preferredSceneId || !scene) continue;
+        const index = scene.commands.findIndex(isLabel);
+        if (index !== -1) return { sceneId: sceneId as VNID, scene, index };
+    }
+    return null;
+}
+
 function getPersistentVarsKey(projectId: string): string {
     return `vn-persistent-vars-${projectId}`;
 }
@@ -1033,6 +1058,8 @@ const HotSpotOverlayElement: React.FC<{
         // which always draws hot spots with a label.)
         background: overlay.visible ? (overlay.highlightColor || 'rgba(99,102,241,0.35)') : 'transparent',
         border: overlay.visible ? `1px solid ${overlay.highlightColor || 'rgba(99,102,241,0.6)'}` : undefined,
+        // Author-set see-through for the drawn spot; CSS opacity never affects hit-testing.
+        opacity: overlay.visible ? (overlay.visibleOpacity ?? 1) : undefined,
     };
 
     return (
@@ -1048,6 +1075,8 @@ const HotSpotOverlayElement: React.FC<{
 interface GameStateSave {
     timestamp: number;
     sceneName: string;
+    /** Base64 data URL of a screenshot thumbnail */
+    screenshot?: string;
     playerStateData: {
         currentSceneId: VNID;
         currentCommands: VNCommand[];
@@ -2157,13 +2186,34 @@ const SaveSlotGridComponent: React.FC<{
     /** Storage writes have failed: saves are memory-only and vanish on quit. The player MUST see this. */
     storageBroken?: boolean;
     onAction: (action: VNUIAction) => void;
-}> = ({ element, style, isSaveMode, gameSaves, storageBroken, onAction }) => {
+    assetResolver?: (id: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+}> = ({ element, style, isSaveMode, gameSaves, storageBroken, onAction, assetResolver }) => {
     const [currentPage, setCurrentPage] = useState(0);
     const el = element;
     const totalSlots = el.slotCount;
-    const totalPages = Math.max(1, Math.ceil(totalSlots / SLOTS_PER_PAGE));
-    const startIndex = currentPage * SLOTS_PER_PAGE;
-    const pageSlots = Array.from({ length: SLOTS_PER_PAGE }, (_, k) => startIndex + k).filter(i => i < totalSlots);
+    // Authors control the page size (classic default: 4). Pages derive from total ÷ per-page.
+    const slotsPerPage = Math.max(1, el.slotsPerPage ?? SLOTS_PER_PAGE);
+    const totalPages = Math.max(1, Math.ceil(totalSlots / slotsPerPage));
+    // Clamp against stale state (per-page/total edited while a page > new max was open).
+    const safePage = Math.min(currentPage, totalPages - 1);
+    const startIndex = safePage * slotsPerPage;
+    const pageSlots = Array.from({ length: slotsPerPage }, (_, k) => startIndex + k).filter(i => i < totalSlots);
+    const gridColumns = Math.max(1, el.slotColumns ?? (slotsPerPage <= 4 ? 2 : Math.ceil(Math.sqrt(slotsPerPage))));
+
+    // Custom "Save slots: next/previous page" actions reach the grid through a DOM event —
+    // buttons are independent elements, so there's no direct parent/child channel.
+    useEffect(() => {
+        const onPage = (e: Event) => {
+            const detail = (e as CustomEvent).detail as { targetElementId?: string | null; delta: number } | undefined;
+            if (!detail) return;
+            if (detail.targetElementId && detail.targetElementId !== el.id) return;
+            setCurrentPage(p => Math.max(0, Math.min(totalPages - 1, p + (detail.delta > 0 ? 1 : -1))));
+        };
+        window.addEventListener(SLOT_GRID_PAGE_EVENT, onPage);
+        return () => window.removeEventListener(SLOT_GRID_PAGE_EVENT, onPage);
+    }, [el.id, totalPages]);
+
+    const slotDesignActive = isSlotDesignActive(el.slotDesign);
 
     const baseFont = fontSettingsToStyle(el.font);
     const slotBgColor = el.slotBackgroundColor || '#1e293b';
@@ -2211,6 +2261,65 @@ const SaveSlotGridComponent: React.FC<{
         </div>
     ) : null;
 
+    // Erase control — only on occupied slots. Fires DeleteSave, which routes through the
+    // customizable "Erase Save" confirm. stopPropagation so it doesn't also Save/Load.
+    // A clickable div (can't nest a <button> in the slot <button>). Shared by the classic
+    // card and the author-designed slot so custom designs never lose the erase ability.
+    const renderEraseControl = (i: number) => (
+        <div
+            role="button"
+            aria-label="Erase this save"
+            title="Erase this save"
+            onClick={(e) => { e.stopPropagation(); onAction({ type: UIActionType.DeleteSave, slotNumber: i + 1 } as VNUIAction); }}
+            style={{ position: 'absolute', top: '4px', right: '4px', zIndex: 11, width: '1.5em', height: '1.5em', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: baseFont.fontSize, lineHeight: 1, cursor: 'pointer', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(220,38,38,0.92)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.55)'; }}
+        >
+            ✕
+        </div>
+    );
+
+    // Author-designed slot: background + freely placed parts (screenshot / art / text),
+    // replacing the classic screenshot-strip + info-bar layout entirely.
+    const renderDesignedSlot = (i: number, slotData: GameStateSave | undefined) => {
+        const design = el.slotDesign!;
+        const bgImageUrl = design.background?.type === 'image' && design.background.assetId
+            ? assetResolver?.(design.background.assetId, 'image') || null : null;
+        return (
+            <div className="relative w-full h-full overflow-hidden">
+                {bgImageUrl && (
+                    <img src={bgImageUrl} alt="" className="absolute inset-0 w-full h-full" style={{ objectFit: 'cover' }} />
+                )}
+                {(design.parts || []).filter(p => slotPartVisible(p, !!slotData)).map(p => {
+                    const box: React.CSSProperties = {
+                        position: 'absolute',
+                        left: `${p.x}%`, top: `${p.y}%`, width: `${p.width}%`, height: `${p.height}%`,
+                        borderRadius: p.borderRadius, overflow: 'hidden',
+                    };
+                    if (p.partType === 'screenshot') {
+                        if (!slotData?.screenshot) return null;
+                        return <img key={p.id} src={slotData.screenshot} alt="" style={{ ...box, objectFit: p.objectFit || 'cover' }} />;
+                    }
+                    if (p.partType === 'image') {
+                        const url = p.asset?.id ? assetResolver?.(p.asset.id, 'image') || null : null;
+                        if (!url) return null;
+                        return <img key={p.id} src={url} alt="" style={{ ...box, objectFit: p.objectFit || 'contain' }} />;
+                    }
+                    const fontStyle = p.font
+                        ? fontSettingsToStyle(p.font)
+                        : { color: slotTextColor, fontSize: baseFont.fontSize, fontFamily: baseFont.fontFamily };
+                    const align = (fontStyle as React.CSSProperties).textAlign;
+                    return (
+                        <div key={p.id} style={{ ...box, ...fontStyle, display: 'flex', alignItems: 'center', justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start', whiteSpace: 'pre-wrap' }}>
+                            {formatSlotText(p.text || '', i + 1, slotData)}
+                        </div>
+                    );
+                })}
+                {slotData && !el.hideEraseButtons && renderEraseControl(i)}
+            </div>
+        );
+    };
+
     // Shared slot-card markup — identical between the classic grid and free placement,
     // so a freely-positioned slot looks and behaves exactly like a grid slot.
     const renderSlot = (i: number) => {
@@ -2218,6 +2327,9 @@ const SaveSlotGridComponent: React.FC<{
         const action: VNUIAction = isSaveMode
             ? { type: UIActionType.SaveGame, slotNumber: i + 1 }
             : { type: UIActionType.LoadGame, slotNumber: i + 1 };
+
+        const designBgColor = slotDesignActive && el.slotDesign?.background?.type === 'color'
+            ? el.slotDesign.background.value : null;
 
         return (
             <button
@@ -2229,7 +2341,7 @@ const SaveSlotGridComponent: React.FC<{
                 disabled={!isSaveMode && !slotData}
                 className="rounded-lg border-2 overflow-hidden flex flex-col w-full h-full"
                 style={{
-                    backgroundColor: slotBgColor,
+                    backgroundColor: designBgColor || slotBgColor,
                     borderColor: slotBorderColor,
                     transition: 'border-color 0.15s',
                     cursor: (!isSaveMode && !slotData) ? 'default' : 'pointer',
@@ -2243,6 +2355,7 @@ const SaveSlotGridComponent: React.FC<{
                     e.currentTarget.style.borderColor = slotBorderColor;
                 }}
             >
+                {slotDesignActive ? renderDesignedSlot(i, slotData) : <>
                 {/* Screenshot area — flex:1 so it fills remaining height, info area always visible */}
                 <div className="relative w-full overflow-hidden" style={{ flex: '1 1 0', minHeight: 0 }}>
                     {slotData?.screenshot ? (
@@ -2276,22 +2389,7 @@ const SaveSlotGridComponent: React.FC<{
                         </div>
                     )}
 
-                    {/* Erase control — only on occupied slots. Fires DeleteSave, which routes through the
-                        customizable "Erase Save" confirm. stopPropagation so it doesn't also Save/Load.
-                        A clickable div (can't nest a <button> in the slot <button>). */}
-                    {slotData && !el.hideEraseButtons && (
-                        <div
-                            role="button"
-                            aria-label="Erase this save"
-                            title="Erase this save"
-                            onClick={(e) => { e.stopPropagation(); onAction({ type: UIActionType.DeleteSave, slotNumber: i + 1 } as VNUIAction); }}
-                            style={{ position: 'absolute', top: '4px', right: '4px', zIndex: 11, width: '1.5em', height: '1.5em', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: baseFont.fontSize, lineHeight: 1, cursor: 'pointer', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
-                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(220,38,38,0.92)'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.55)'; }}
-                        >
-                            ✕
-                        </div>
-                    )}
+                    {slotData && !el.hideEraseButtons && renderEraseControl(i)}
                 </div>
 
                 {/* Info area — compact metadata display */}
@@ -2301,6 +2399,7 @@ const SaveSlotGridComponent: React.FC<{
                         <div style={{ color: slotTextColor, opacity: 0.6, margin: 0, fontSize: `calc(0.65 * ${baseFont.fontSize})` }}>{new Date(slotData.timestamp).toLocaleString()}</div>
                     </div>
                 )}
+                </>}
             </button>
         );
     };
@@ -2337,32 +2436,39 @@ const SaveSlotGridComponent: React.FC<{
         <div style={style} className="flex flex-col h-full">
             {storageWarningBanner}
             {/* 2×2 grid – each slot is a card with screenshot on top, info below */}
-            <div className="grid grid-cols-2 gap-[3%] flex-1 min-h-0 p-[2%]">
+            <div className="grid gap-[3%] flex-1 min-h-0 p-[2%]" style={{ gridTemplateColumns: `repeat(${gridColumns}, 1fr)` }}>
                 {pageSlots.map(renderSlot)}
             </div>
 
-            {/* Pagination controls */}
-            {totalPages > 1 && (
+            {/* Pagination controls — either piece can be hidden for authors who bring their own
+                Button elements wired to the "Save slots: next/previous page" actions */}
+            {totalPages > 1 && !(el.hideNavButtons && el.hidePageIndicator) && (
                 <div className="flex items-center justify-center gap-4 py-2 flex-shrink-0">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.max(0, p - 1)); }}
-                        disabled={currentPage === 0}
-                        className="disabled:opacity-30"
-                        style={navBtnStyle}
-                    >
-                        {prevLabel}
-                    </button>
-                    <span style={pageIndicatorStyle}>
-                        Page {currentPage + 1} / {totalPages}
-                    </span>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.min(totalPages - 1, p + 1)); }}
-                        disabled={currentPage >= totalPages - 1}
-                        className="disabled:opacity-30"
-                        style={navBtnStyle}
-                    >
-                        {nextLabel}
-                    </button>
+                    {!el.hideNavButtons && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setCurrentPage(Math.max(0, safePage - 1)); }}
+                            disabled={safePage === 0}
+                            className="disabled:opacity-30"
+                            style={navBtnStyle}
+                        >
+                            {prevLabel}
+                        </button>
+                    )}
+                    {!el.hidePageIndicator && (
+                        <span style={pageIndicatorStyle}>
+                            Page {safePage + 1} / {totalPages}
+                        </span>
+                    )}
+                    {!el.hideNavButtons && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setCurrentPage(Math.min(totalPages - 1, safePage + 1)); }}
+                            disabled={safePage >= totalPages - 1}
+                            className="disabled:opacity-30"
+                            style={navBtnStyle}
+                        >
+                            {nextLabel}
+                        </button>
+                    )}
                 </div>
             )}
         </div>
@@ -3637,7 +3743,7 @@ const InteractiveRuntime: React.FC<{
     // `VNUIElement` entries that we convert back to the shapes this runtime
     // expects via a derivation shim.
     const hotSpots = useMemo(() => deriveHotSpotsFromScreen(screen), [screen]);
-    const interactiveElements = useMemo(() => deriveInteractiveElementsFromScreen(screen), [screen]);
+    const interactiveElements = useMemo(() => deriveInteractiveElementsFromScreen(screen, project.items as any), [screen, project.items]);
 
     // Track element positions during drag (runtime-only state)
     const [elementPositions, setElementPositions] = useState<Record<VNID, { x: number; y: number }>>({});
@@ -3867,6 +3973,7 @@ const InteractiveRuntime: React.FC<{
                             borderRadius: spot.shape === 'circle' ? '50%' : undefined,
                             backgroundColor: spot.visible ? (spot.highlightColor || 'rgba(59, 130, 246, 0.2)') : 'transparent',
                             border: spot.visible ? `2px dashed ${spot.highlightColor || 'rgba(59, 130, 246, 0.5)'}` : 'none',
+                            opacity: spot.visible ? (spot.visibleOpacity ?? 1) : undefined,
                             pointerEvents: spot.trigger === 'drag-drop' ? 'none' : 'auto',
                             cursor: (spot.trigger || 'click') === 'click' ? 'pointer' : undefined,
                         }}
@@ -4001,7 +4108,11 @@ const UIScreenRenderer: React.FC<{
     elementVisibility?: Record<VNID, boolean>;
     /** Save-storage writes are failing (device full) — the save screen must say so. */
     saveStorageBroken?: boolean;
-}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, elementVisibility, saveStorageBroken }) => {
+    /** Item elements in pickup mode already taken (element ids) — they render nothing. */
+    pickedItemElementIds?: ReadonlySet<VNID>;
+    /** Pickup-mode Item element clicked: give the item + record the take (when `once`). */
+    onItemPickup?: (elementId: VNID, itemId: VNID, quantity: number, once: boolean) => void;
+}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, elementVisibility, saveStorageBroken, pickedItemElementIds, onItemPickup }) => {
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
     const backgroundVideoRef = React.useRef<HTMLVideoElement>(null);
@@ -4235,6 +4346,49 @@ const UIScreenRenderer: React.FC<{
             case UIElementType.Timer: {
                 const el = element as UITimerElement;
                 return <TimerElement key={el.id} element={el} style={style} onAction={onAction} onCommitVariables={onCommitVariables} />;
+            }
+            case UIElementType.Item: {
+                // NON-draggable items only — a draggable Item routes through InteractiveRuntime
+                // (the adapter turns it into an image draggable carrying the item's identity).
+                const el = element as UIItemElement;
+                const item = el.itemId ? project.items?.[el.itemId] : undefined;
+                if (!item) return null;
+                const count = Number(variables[item.countVariableId] ?? 0);
+                const mode = el.mode || 'display';
+                if (mode === 'display' && el.onlyWhileOwned && count <= 0) return null;
+                if (mode === 'pickup' && (el.pickupOnce ?? true) && pickedItemElementIds?.has(el.id)) return null;
+                const iconUrl = item.icon ? getElementAssetUrl(item.icon as any) : null;
+                const clickable = mode === 'pickup' || (el.actions?.length ?? 0) > 0;
+                const handleItemClick = (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    if (el.clickSoundId) { try { playSound(el.clickSoundId); } catch { /* ignore */ } }
+                    // Pickup gives FIRST, then the author's actions run — so an action reacting to
+                    // the count (a condition, a toast) already sees the new value.
+                    if (mode === 'pickup' && el.itemId) onItemPickup?.(el.id, el.itemId, Math.max(1, el.pickupQuantity ?? 1), el.pickupOnce ?? true);
+                    (el.actions || []).forEach(a2 => onAction(a2));
+                    onCommitVariables?.();
+                };
+                return (
+                    <div
+                        key={el.id}
+                        style={{ ...style, cursor: clickable ? 'pointer' : style.cursor, ...(isPassThrough && clickable ? { pointerEvents: 'auto' as const } : {}) }}
+                        onClick={clickable ? handleItemClick : undefined}
+                        className="flex flex-col items-center justify-center"
+                        title={item.description || item.name}
+                    >
+                        {iconUrl
+                            ? (item.icon?.type === 'video'
+                                ? <video src={iconUrl} autoPlay muted loop playsInline style={{ width: '100%', height: el.showName ? '78%' : '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                                : <img src={iconUrl} alt={item.name} draggable={false} style={{ width: '100%', height: el.showName ? '78%' : '100%', objectFit: 'contain', pointerEvents: 'none' }} />)
+                            : <div style={{ width: '100%', height: el.showName ? '78%' : '100%' }} className="flex items-center justify-center text-3xl select-none">🎒</div>}
+                        {el.showName && (
+                            <div className="text-center text-xs text-white truncate w-full" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>{item.name}</div>
+                        )}
+                        {el.showCount && count > 0 && (
+                            <div className="absolute top-0 right-0 bg-black/70 text-white text-[10px] px-1 rounded-bl pointer-events-none">×{count}</div>
+                        )}
+                    </div>
+                );
             }
             case UIElementType.Text: {
                 const el = element as UITextElement;
@@ -4501,6 +4655,7 @@ const UIScreenRenderer: React.FC<{
                         gameSaves={gameSaves}
                         storageBroken={saveStorageBroken}
                         onAction={onAction}
+                        assetResolver={assetResolver}
                     />
                 );
             }
@@ -5949,6 +6104,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // (which lives in playerState.uiState), this is component state — so it works from MENUS
     // (title screen intro video) as well as during gameplay and pause.
     const [actionMovie, setActionMovie] = useState<{ url: string; loop: boolean; blockInput: boolean; onEndActions?: VNUIAction[]; trimStart?: number; trimEnd?: number } | null>(null);
+    // Screen ITEM elements (pickup mode): once-taken records. While a game is running they live in
+    // playerState.pickedUpItems ('uiitem:' prefix — saved/loaded with the game); on menus with no
+    // game running, a session-only set stands in.
+    const [menuItemPickups, setMenuItemPickups] = useState<Set<VNID>>(new Set());
     // New-game transition: fade the title out to black, load the scene, then fade in.
     const [gameStartFade, setGameStartFade] = useState<'none' | 'toBlack' | 'fromBlack'>('none');
     const [settings, setSettings] = useState<GameSettings>(() => {
@@ -6127,6 +6286,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const musicAudioRef = useRef<HTMLAudioElement>(new Audio());
     const ambientNoiseAudioRef = useRef<HTMLAudioElement>(new Audio());
     const menuMusicUrlRef = useRef<string | null>(null);
+    /** While a HUD screen's music has taken over the music channel mid-game (Show Screen /
+     *  Toggle Screen with screen music), this holds the interrupted scene track so it can
+     *  resume exactly where it left off when the screen closes. Null = no takeover. */
+    const hudMusicTakeoverRef = useRef<{ url: string | null; time: number; wasPlaying: boolean } | null>(null);
     const menuAmbientUrlRef = useRef<string | null>(null);
     const audioFadeInterval = useRef<number | null>(null);
     const ambientFadeInterval = useRef<number | null>(null);
@@ -6292,7 +6455,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const dnTransitionRef = useRef<number>(0.4);
     /** Register/replace a timer. Shared by the Start Timer command AND the Start Timer button action. */
     const startTimer = (cfg: { timerId?: string; variableId?: VNID; mode?: 'countdown' | 'stopwatch'; duration?: number; from?: number; interval?: number; loop?: boolean; onComplete?: VNUIAction[] }): string => {
-        const key = (cfg.timerId || '').trim() || 'default';
+        // Case-insensitive key: "MyTimer" and "mytimer" are the same timer, so a Stop Timer
+        // typed with different casing (often in a different scene) still finds it.
+        const key = (cfg.timerId || '').trim().toLowerCase() || 'default';
         const mode: 'countdown' | 'stopwatch' = cfg.mode === 'stopwatch' ? 'stopwatch' : 'countdown';
         const intervalSec = Math.max(0.05, cfg.interval ?? 1);
         const startVal = mode === 'countdown' ? (cfg.duration ?? 0) : (cfg.from ?? 0);
@@ -6303,7 +6468,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     };
     /** Stop a timer; if it was the one pausing the story, resume the story (no onComplete). */
     const stopTimer = (timerId?: string) => {
-        const key = (timerId || '').trim() || 'default';
+        const key = (timerId || '').trim().toLowerCase() || 'default';
         timersRef.current.delete(key);
         if (blockingTimerRef.current?.key === key) { const r = blockingTimerRef.current.resume; blockingTimerRef.current = null; try { r(); } catch { /* no-op */ } }
     };
@@ -7582,8 +7747,76 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // --- Audio Management ---
     useEffect(() => {
         if (playerState?.mode === 'playing') {
+            // Mid-game, a screen shown over the scene (Show Screen command / Toggle Screen —
+            // the HUD stack) may carry its own music. It takes over the music channel; when
+            // the screen closes, the interrupted scene track resumes where it left off.
+            const audio = musicAudioRef.current;
+            if (!audio) return;
+            const topHudId = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+            const hudMusic = topHudId ? project.uiScreens[topHudId]?.music : null;
+            const hudUrl = hudMusic?.audioId ? assetResolver(hudMusic.audioId, 'audio') : null;
+
+            if (hudUrl) {
+                const norm = (v: string | null) => { if (!v) return null; try { return new URL(v, window.location.href).href; } catch { return v; } };
+                if (norm(audio.src || null) !== norm(hudUrl)) {
+                    if (!hudMusicTakeoverRef.current) {
+                        hudMusicTakeoverRef.current = { url: audio.src || null, time: audio.currentTime || 0, wasPlaying: !audio.paused };
+                    }
+                    const playHud = () => {
+                        if (!hudMusicTakeoverRef.current) return; // screen already closed again
+                        audio.src = hudUrl;
+                        audio.load();
+                        audio.loop = true;
+                        audio.play().then(() => {
+                            fadeAudio(audio, (hudMusic!.volume ?? 1) * settings.musicVolume, 0.5);
+                        }).catch(e => console.error('Screen music play failed:', e));
+                    };
+                    // The swap must NOT ride on a fade callback: fadeAudio cancels the previous
+                    // fade's onComplete when anything else fades this element (e.g. a Play Music
+                    // command that was still buffering) — the dip is cosmetic, the timer is real.
+                    if (!audio.paused) {
+                        fadeAudio(audio, 0, 0.35);
+                        window.setTimeout(playHud, 360);
+                    } else {
+                        playHud();
+                    }
+                } else if (audio.paused) {
+                    audio.play().then(() => fadeAudio(audio, (hudMusic!.volume ?? 1) * settings.musicVolume, 0.5)).catch(() => {});
+                }
+            } else if (hudMusicTakeoverRef.current) {
+                // The music-bearing screen closed — hand the channel back to the scene.
+                // Same rule as above: restore on a timer, never on a cancellable fade callback.
+                const saved = hudMusicTakeoverRef.current;
+                hudMusicTakeoverRef.current = null;
+                const restore = () => {
+                    audio.pause();
+                    const ms = playerStateRef.current?.musicState;
+                    if (saved.url && ms?.audioId) {
+                        audio.src = saved.url;
+                        audio.load();
+                        audio.loop = ms.loop;
+                        try { audio.currentTime = saved.time; } catch { /* seek after load may need metadata; resume from 0 then */ }
+                        if (saved.wasPlaying) {
+                            audio.play().then(() => {
+                                fadeAudio(audio, typeof ms.volume === 'number' ? ms.volume : settings.musicVolume, 0.5);
+                            }).catch(e => console.error('Scene music resume failed:', e));
+                        }
+                    } else {
+                        audio.src = '';
+                    }
+                };
+                if (!audio.paused) {
+                    fadeAudio(audio, 0, 0.3);
+                    window.setTimeout(restore, 310);
+                } else {
+                    restore();
+                }
+            }
             return;
         }
+        // Leaving gameplay (quit/load/menu) clears any takeover bookkeeping — the menu logic
+        // below owns the channel from here.
+        hudMusicTakeoverRef.current = null;
 
         const audio = musicAudioRef.current;
         const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
@@ -7645,15 +7878,73 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             menuMusicUrlRef.current = newAudioUrl;
         }
 
-    }, [screenStack, playerState?.mode, project.uiScreens, assetResolver, settings.musicVolume, fadeAudio]);
-    
+    }, [screenStack, hudStack, playerState?.mode, project.uiScreens, assetResolver, settings.musicVolume, fadeAudio]);
+
     useEffect(() => {
         if (!musicAudioRef.current) return;
+        // While a HUD screen's music owns the channel, its own play/fade set the volume —
+        // don't stomp it with menu-screen/scene math.
+        if (hudMusicTakeoverRef.current) return;
         const safeVol = Number.isFinite(settings.musicVolume) ? settings.musicVolume : 0.8;
         const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
         const screenVol = activeScreen?.music?.volume ?? 1;
-        musicAudioRef.current.volume = Math.max(0, Math.min(1, screenVol * safeVol));
-    }, [settings.musicVolume, screenStack, project.uiScreens]);
+        // When the SCENE's music is what's playing (no menu screen supplying its own track),
+        // honor the Play Music command's authored volume — otherwise closing a screen (which
+        // re-runs this effect) resets a 30%-volume track back to full. Menu screens with their
+        // own music keep the plain settings volume, scaled by the screen's music volume.
+        const commandVol = (!activeScreen?.music?.audioId && typeof playerState?.musicState?.volume === 'number')
+            ? playerState.musicState.volume : safeVol;
+        musicAudioRef.current.volume = Math.max(0, Math.min(1, screenVol * commandVol));
+    }, [settings.musicVolume, screenStack, project.uiScreens, playerState?.musicState?.volume]);
+
+    // ── Scene asset pre-warm ────────────────────────────────────────────────────────────
+    // In BUILT games sprites/backgrounds are files fetched on demand — an entrance animation
+    // that starts the instant Show Character runs can play out over a still-loading image,
+    // so the sprite pops in late with no visible transition (test play never showed this:
+    // the editor already holds every asset in memory). Warm the current scene's character
+    // art and backgrounds as soon as the scene starts, so by the time a command shows them
+    // the browser already has the decoded file. Held in a ref so the browser can't evict
+    // them mid-scene; harmless (cache hits) in the editor.
+    const prewarmedImagesRef = useRef<HTMLImageElement[]>([]);
+    useEffect(() => {
+        if (!playerState || playerState.mode !== 'playing') return;
+        const urls = new Set<string>();
+        const addDeep = (node: any, depth: number) => {
+            if (!node || depth > 6) return;
+            if (Array.isArray(node)) { node.forEach(n => addDeep(n, depth + 1)); return; }
+            if (typeof node === 'object') {
+                for (const [k, v] of Object.entries(node)) {
+                    if (k === 'imageUrl' && typeof v === 'string' && v) urls.add(v);
+                    else if (v && typeof v === 'object') addDeep(v, depth + 1);
+                }
+            }
+        };
+        for (const cmd of (playerState.currentCommands || []) as any[]) {
+            switch (cmd?.type) {
+                case 'ShowCharacter': {
+                    const ch = cmd.characterId ? (project.characters as any)?.[cmd.characterId] : null;
+                    if (ch) addDeep(ch, 0);
+                    break;
+                }
+                case 'SetBackground': {
+                    const bg = cmd.backgroundId ? (project.backgrounds as any)?.[cmd.backgroundId] : null;
+                    if (bg?.imageUrl) urls.add(bg.imageUrl);
+                    break;
+                }
+                case 'ShowImage': {
+                    const im = cmd.imageId ? ((project.images as any)?.[cmd.imageId] || (project.backgrounds as any)?.[cmd.imageId]) : null;
+                    if (im?.imageUrl) urls.add(im.imageUrl);
+                    break;
+                }
+                default: break;
+            }
+        }
+        prewarmedImagesRef.current = [...urls].slice(0, 150).map(u => {
+            const im = new Image();
+            im.src = u;
+            return im;
+        });
+    }, [playerState?.currentSceneId, playerState?.mode, project]);
 
     // Ambient Noise Management
     useEffect(() => {
@@ -7808,7 +8099,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     audio.loop = musicState.loop;
                     audio.currentTime = musicState.currentTime;
                     audio.play().then(() => {
-                        fadeAudio(audio, settings.musicVolume, 0.5);
+                        fadeAudio(audio, typeof musicState.volume === 'number' ? musicState.volume : settings.musicVolume, 0.5);
                     }).catch(e => console.error("Failed to resume music on load:", e));
                 }
             }
@@ -7833,6 +8124,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         if (currentAudioId === previousAudioId) return;
         lastSyncedMusicIdRef.current = currentAudioId;
 
+        // A HUD screen's music owns the channel right now (Show Screen / Toggle Screen with
+        // screen music). Don't stomp it — instead refresh the takeover bookmark so the NEW
+        // scene track starts when the screen closes. (Without this, a Play Music command
+        // whose state lands just after the screen opens yanked the channel back mid-screen.)
+        if (hudMusicTakeoverRef.current) {
+            const bookmarkedUrl = currentAudioId ? assetResolver(currentAudioId, 'audio') : null;
+            hudMusicTakeoverRef.current = { url: bookmarkedUrl, time: 0, wasPlaying: !!musicState.isPlaying };
+            return;
+        }
+
         if (!currentAudioId) {
             // Music was cleared — stop playback
             audio.pause();
@@ -7849,7 +8150,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         audio.currentTime = musicState.currentTime || 0;
         if (musicState.isPlaying) {
             audio.play().then(() => {
-                fadeAudio(audio, settings.musicVolume, 0.3);
+                fadeAudio(audio, typeof musicState.volume === 'number' ? musicState.volume : settings.musicVolume, 0.3);
             }).catch(e => console.error('[Music Sync] Failed to play restored music:', e));
         }
     }, [playerState?.musicState?.audioId, playerState?.mode, isJustLoaded, assetResolver, fadeAudio, settings.musicVolume]);
@@ -8843,7 +9144,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             ...(p.stageState.hotSpotOverlays || []).filter(h => h.commandId !== cmd.id),
                             { id: cmd.id, commandId: cmd.id, name: cmd.name, x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height,
                               shape: cmd.shape, trigger: cmd.trigger, actions: cmd.actions, conditions: cmd.conditions, acceptedTag: cmd.acceptedTag,
-                              highlightColor: cmd.highlightColor, visible: cmd.visible, advanceOnTrigger: cmd.advanceOnTrigger, layer: cmd.layer },
+                              highlightColor: cmd.highlightColor, visible: cmd.visible, visibleOpacity: cmd.visibleOpacity, advanceOnTrigger: cmd.advanceOnTrigger, layer: cmd.layer },
                         ] } } : p);
                         return;
                     }
@@ -9835,6 +10136,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     shape: cmd.shape, trigger: cmd.trigger, actions: cmd.actions,
                                     conditions: cmd.conditions, acceptedTag: cmd.acceptedTag,
                                     highlightColor: cmd.highlightColor, visible: cmd.visible,
+                                    visibleOpacity: cmd.visibleOpacity,
                                     advanceOnTrigger: cmd.advanceOnTrigger,
                                     layer: cmd.layer,
                                 },
@@ -10078,6 +10380,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // when there's no scene jump (or no current scene) it runs immediately, exactly as before.
         const willJumpScene = allActions.some(a => a.type === UIActionType.JumpToScene);
         const runSelection = () => {
+        // Set when a Jump-to-label lands in a DIFFERENT scene — the old scene's screens,
+        // effects and audio then need the same teardown a scene jump does (done after the
+        // state update below; the updater itself must stay side-effect free).
+        let crossSceneLabelCleanup = false;
         updatePlayerState(p => {
             if (!p) return null;
             let newState = { ...p };
@@ -10177,34 +10483,44 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             });
 
             if (labelAction) {
-                // JumpToLabel - go to a specific label within the current scene
+                // JumpToLabel — the label can live in ANY scene, not just the current one. When the
+                // choice also carries a Jump To Scene, that scene is searched first.
                 const targetLabel = labelAction.targetLabel;
-                const targetSceneId = newState.currentSceneId;
-                const targetScene = project.scenes[targetSceneId];
-                
-                if (targetScene) {
-                    const labelIndex = targetScene.commands.findIndex((cmd) => 
-                        cmd.type === CommandType.Label && (cmd as LabelCommand).labelId === targetLabel
-                    );
-                    
-                    if (labelIndex !== -1) {
-                        runtimeDebugLog(`[CHOICE] JumpToLabel: Jumping to label "${targetLabel}" at index ${labelIndex}`);
-                        newState.currentSceneId = targetSceneId;
-                        newState.currentCommands = targetScene.commands;
-                        newState.currentIndex = labelIndex;
-                        // Clear overlays when jumping to label
+                const preferredSceneId = jumpAction?.targetSceneId || newState.currentSceneId;
+                const found = findLabelAcrossScenes(project, targetLabel, preferredSceneId);
+
+                if (found) {
+                    runtimeDebugLog(`[CHOICE] JumpToLabel: Jumping to label "${targetLabel}" at index ${found.index} in scene "${found.scene.name}"`);
+                    const isCrossScene = found.sceneId !== newState.currentSceneId;
+                    newState.currentSceneId = found.sceneId;
+                    newState.currentCommands = found.scene.commands;
+                    newState.currentIndex = found.index;
+                    if (isCrossScene) {
+                        // A label in another scene = a scene jump: clean slate, no leaked
+                        // assets or audio from the scene we left (same as the branch below).
+                        crossSceneLabelCleanup = true;
+                        newState.stageState = {
+                            backgroundUrl: null,
+                            characters: {},
+                            textOverlays: [],
+                            imageOverlays: [],
+                            buttonOverlays: [],
+                            movieOverlays: [],
+                            screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] },
+                            particleEffects: {},
+                        };
+                        newState.musicState = { audioId: null, isPlaying: false, loop: false, currentTime: 0 };
+                    } else {
+                        // Same-scene label: keep the stage, just clear overlays
                         newState.stageState = {
                             ...newState.stageState,
                             buttonOverlays: [],
                             imageOverlays: [],
                             textOverlays: []
                         };
-                    } else {
-                        runtimeDebugWarn(`[CHOICE] JumpToLabel failed: Label "${targetLabel}" not found in scene "${targetScene.name}"`);
-                        newState.currentIndex = newState.currentIndex + 1;
                     }
                 } else {
-                    console.error(`[CHOICE] Scene not found for JumpToLabel: ${targetSceneId}`);
+                    runtimeDebugWarn(`[CHOICE] JumpToLabel failed: Label "${targetLabel}" not found in any scene`);
                     newState.currentIndex = newState.currentIndex + 1;
                 }
             } else if (jumpAction) {
@@ -10243,6 +10559,31 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
             return newState;
         });
+
+        if (crossSceneLabelCleanup) {
+            // Same teardown as Jump To Scene: close screens, kill visual effects, silence audio.
+            setScreenStack([]);
+            setHudStack([]);
+            activeEffectTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
+            activeEffectTimeoutsRef.current = [];
+            activeFlashRef.current = null;
+            setFlashTrigger(0);
+            activeLightningRef.current = null;
+            setLightningStorm(null);
+            activeFireworksRef.current = null;
+            setFlashlight(null);
+            setSpotlights({});
+            activeShakeRef.current = null;
+            commandSchedulerRef.current.reset();
+            variableStoreRef.current = null;
+            stopAllSfx();
+            const jumpAudio = musicAudioRef.current;
+            if (jumpAudio) {
+                jumpAudio.pause();
+                jumpAudio.currentTime = 0;
+                jumpAudio.src = '';
+            }
+        }
 
         // Run every non-inline action through the shared UI-action pipeline (same as buttons), so
         // choices support the full action set (Call Common Event, Go To Screen, Play Sound, toggles,
@@ -10544,6 +10885,23 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const visible = action.type === UIActionType.ShowElement;
                 setElementVisibility(prev => (prev[targetId] === visible ? prev : { ...prev, [targetId]: visible }));
             }
+        } else if (action.type === UIActionType.SaveSlotsNextPage || action.type === UIActionType.SaveSlotsPrevPage) {
+            // Custom Next/Previous page buttons for the save/load slot grid. Delivered via a DOM
+            // event because the grid's page state lives inside the grid component.
+            const pageAction = action as SaveSlotsPageAction;
+            let pageTargetId = pageAction.targetElementId || null;
+            if (pageTargetId) {
+                // Forgiveness: the Save and Load screens each have their OWN grid element with
+                // near-identical names, so authors easily target the other screen's grid — which
+                // is never mounted when their button is clicked, making the button look dead.
+                // If the chosen grid isn't on any open screen, page whatever grid IS open.
+                const openScreenIds = [...screenStack, ...hudStack];
+                const targetVisible = openScreenIds.some(sid => (project.uiScreens[sid] as any)?.elements?.[pageTargetId!]);
+                if (!targetVisible) pageTargetId = null;
+            }
+            window.dispatchEvent(new CustomEvent(SLOT_GRID_PAGE_EVENT, {
+                detail: { targetElementId: pageTargetId, delta: action.type === UIActionType.SaveSlotsNextPage ? 1 : -1 },
+            }));
         } else if (action.type === UIActionType.ToggleScreen) {
             // Toggle a screen open/closed (e.g. an inventory overlay). During gameplay it
             // lives on the HUD stack (so it overlays the scene); otherwise the screen stack.
@@ -10603,43 +10961,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 return;
             }
 
-            // Handle music transition when going to screen
+            // Screen music is handled reactively by the Audio Management effect (it watches the
+            // HUD stack), which ALSO resumes the interrupted scene track when the screen closes —
+            // the old inline fade here started screen music but never gave the scene its music back.
             if (playerState && playerState.mode === 'playing') {
-                const screenMusicInfo = targetScreen.music;
-                const hasMusicChange = screenMusicInfo && screenMusicInfo.audioId;
-                
-                if (hasMusicChange) {
-                    const audio = musicAudioRef.current;
-                    const newMusicUrl = screenMusicInfo.audioId ? assetResolver(screenMusicInfo.audioId, 'audio') : null;
-                    const currentMusic = audio.src;
-                    const normalize = (value: string | null): string | null => {
-                        if (!value) return null;
-                        try {
-                            return new URL(value, window.location.href).href;
-                        } catch (e) {
-                            return value;
-                        }
-                    };
-                    const currentNormalized = currentMusic ? normalize(currentMusic) : null;
-                    const newNormalized = normalize(newMusicUrl);
-                    
-                    // Only transition if music is different
-                    if (currentNormalized !== newNormalized && newMusicUrl) {
-                        // Fade out current music
-                        fadeAudio(audio, 0, 0.5, () => {
-                            // Load and play new music
-                            audio.src = newMusicUrl;
-                            audio.load();
-                            audio.loop = true;
-                            audio.play().then(() => {
-                                fadeAudio(audio, settings.musicVolume, 0.5);
-                            }).catch(e => {
-                                console.error('Screen music play failed:', e);
-                            });
-                        });
-                    }
-                }
-                
                 setHudStack(s => {
                     // Mark the departing screen as closing so its transitionOut plays under the new screen.
                     // Skip only when transitionOut is explicitly 'none'. The departing screen STAYS in
@@ -11448,36 +11773,53 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 targetSceneName: project.scenes[targetSceneId]?.name
             });
             
-            // Find the label in the target scene's commands
-            const targetScene = project.scenes[targetSceneId];
-            if (!targetScene) {
-                runtimeDebugWarn('JumpToLabel failed: Target scene not found');
+            // Find the label — preferring the current scene, but searching EVERY scene so a
+            // hotspot can jump to a label that lives in a different scene.
+            const found = findLabelAcrossScenes(project, targetLabel, targetSceneId);
+            if (!found) {
+                runtimeDebugWarn(`JumpToLabel failed: Label "${targetLabel}" not found in any scene`);
                 return;
             }
-            
-            // Log all labels in the target scene
-            const allLabels = targetScene.commands
-                .filter(cmd => cmd.type === CommandType.Label)
-                .map(cmd => (cmd as LabelCommand).labelId);
-            runtimeDebugLog('JumpToLabel: Available labels in target scene:', allLabels);
-            
-            const labelIndex = targetScene.commands.findIndex((cmd) => 
-                cmd.type === CommandType.Label && (cmd as LabelCommand).labelId === targetLabel
-            );
-            
-            if (labelIndex === -1) {
-                runtimeDebugWarn(`JumpToLabel failed: Label "${targetLabel}" not found in scene "${targetScene.name}"`);
-                runtimeDebugWarn('Looking for label:', targetLabel);
-                runtimeDebugWarn('Available labels:', allLabels);
-                return;
-            }
-            
-            runtimeDebugLog(`JumpToLabel: Jumping to label "${targetLabel}" at index ${labelIndex} in scene "${targetScene.name}"`);
-            runtimeDebugLog('JumpToLabel: Label command at that index:', targetScene.commands[labelIndex]);
+            const resolvedSceneId = found.sceneId;
+            const resolvedScene = found.scene;
+            const labelIndex = found.index;
+
+            runtimeDebugLog(`JumpToLabel: Jumping to label "${targetLabel}" at index ${labelIndex} in scene "${resolvedScene.name}"`);
 
             const performJumpToLabel = () => {
-                // Close any open HUD screens
+                // A label in ANOTHER scene must behave like a scene jump: tear down everything
+                // the old scene left behind (screens/hotspots, visual effects, music, sounds) —
+                // otherwise the previous scene's assets and audio leak into the new one. A label
+                // in the SAME scene keeps the stage/music exactly as before (loops, menus).
+                const isCrossScene = resolvedSceneId !== playerState.currentSceneId;
+
+                // Close any open HUD screens; a cross-scene jump also closes menu screens
+                // (this is what left the old screen's hotspot visible after the jump).
                 setHudStack([]);
+                if (isCrossScene) {
+                    setScreenStack([]);
+                    // Clear all active effect timeouts and visual effects (same as Jump To Scene)
+                    activeEffectTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
+                    activeEffectTimeoutsRef.current = [];
+                    activeFlashRef.current = null;
+                    setFlashTrigger(0);
+                    activeLightningRef.current = null;
+                    setLightningStorm(null);
+                    activeFireworksRef.current = null;
+                    setFlashlight(null);
+                    setSpotlights({});
+                    activeShakeRef.current = null;
+                    commandSchedulerRef.current.reset();
+                    variableStoreRef.current = null;
+                    // The old scene's audio must not follow us into the new scene.
+                    stopAllSfx();
+                    const audio = musicAudioRef.current;
+                    if (audio) {
+                        audio.pause();
+                        audio.currentTime = 0;
+                        audio.src = '';
+                    }
+                }
 
                 // Jump to the label by updating the current index and clearing overlays
                 // Also switch back to the target scene if we've moved to a different scene
@@ -11485,29 +11827,36 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     updatePlayerState(p => {
                         if (!p) return null;
                         runtimeDebugLog('JumpToLabel: Setting new state - currentIndex from', p.currentIndex, 'to', labelIndex);
-                        runtimeDebugLog('JumpToLabel: BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
-                        runtimeDebugLog('JumpToLabel: uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
-                        runtimeDebugLog('JumpToLabel: dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
                         const mergedVariables = mergeDirtyUiVariables(p.variables);
-                        runtimeDebugLog('JumpToLabel: AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
                         return {
                             ...p,
-                            currentSceneId: targetSceneId,
-                            currentCommands: targetScene.commands,
+                            currentSceneId: resolvedSceneId,
+                            currentCommands: resolvedScene.commands,
                             currentIndex: labelIndex,
                             variables: mergedVariables, // Merge UI variables into game variables
-                            stageState: {
+                            stageState: isCrossScene ? {
+                                backgroundUrl: null,
+                                characters: {},
+                                textOverlays: [],
+                                imageOverlays: [],
+                                buttonOverlays: [],
+                                movieOverlays: [],
+                                screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] },
+                                particleEffects: {},
+                            } : {
                                 ...p.stageState,
                                 buttonOverlays: [],
                                 imageOverlays: [],
                                 textOverlays: []
                             },
+                            ...(isCrossScene ? { musicState: { audioId: null, isPlaying: false, loop: false, currentTime: 0 } } : {}),
                             uiState: {
                                 ...p.uiState,
                                 dialogue: null,
                                 choices: null,
                                 isWaitingForInput: false,
                                 screenSceneId: null, // Clear the stored scene ID after jumping
+                                ...(isCrossScene ? { textInput: null, movieUrl: null, flash: null, showHistory: false } : {}),
                             }
                         };
                     });
@@ -14434,6 +14783,26 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         </>
     };
 
+    // Merged view of taken pickup-Item elements (game record + menu session record).
+    const pickedItemElementIds = useMemo(() => {
+        const s = new Set<VNID>(menuItemPickups);
+        for (const id of playerState?.pickedUpItems || []) {
+            if (typeof id === 'string' && id.startsWith('uiitem:')) s.add(id.slice(7) as VNID);
+        }
+        return s;
+    }, [menuItemPickups, playerState?.pickedUpItems]);
+    const handleUiItemPickup = (elementId: VNID, itemId: VNID, quantity: number, once: boolean) => {
+        // Same give path as the Give Item action (count variable clamped, persistence rules intact).
+        handleUIAction({ type: UIActionType.GiveItem, itemId, quantity } as any);
+        if (once) {
+            if (playerStateRef.current) {
+                updatePlayerState(p => p ? { ...p, pickedUpItems: [...(p.pickedUpItems || []), `uiitem:${elementId}`] } : p);
+            } else {
+                setMenuItemPickups(prev => { const n = new Set(prev); n.add(elementId); return n; });
+            }
+        }
+    };
+
     const currentScreenId = (!playerState || playerState.mode === 'paused')
         ? (screenStack.length > 0 ? screenStack[screenStack.length - 1] : null)
         : null;
@@ -14590,7 +14959,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             <div className="fixed inset-0 bg-black z-[9000] flex flex-col items-center justify-center text-white p-8 text-center">
                 <h2 className="text-2xl text-red-500 font-bold mb-4">Playback Error</h2>
                 <p className="max-w-md">Could not start the game because no valid Title Screen is set. Please ensure a Title Screen exists and is configured in the Project Settings.</p>
-                <button onClick={handleClose} className="mt-8 bg-[var(--bg-tertiary)] hover:bg-[var(--accent-purple)] px-6 py-2 rounded-lg font-bold">
+                {/* Theme vars don't exist in built games — fall back to real colors so this
+                    error screen's button isn't invisible outside the editor. */}
+                <button onClick={handleClose} className="mt-8 bg-[var(--bg-tertiary,#334155)] hover:bg-[var(--accent-purple,#8b5cf6)] px-6 py-2 rounded-lg font-bold">
                     Return to Editor
                 </button>
             </div>
@@ -14600,6 +14971,141 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     return (
         <div className="fixed inset-0 bg-black z-[9000] flex items-center justify-center">
             <style>{`
+                /* ── Built-game parity CSS ──────────────────────────────────────────────
+                   The character/overlay transition classes and their keyframes used to live
+                   ONLY in the editor's index.html and the gameBundler HTML template — two
+                   hand-synced copies outside the engine. A build made with a stale template
+                   silently lost character transitions. The engine now carries its own copy,
+                   so every built game has them regardless of template vintage. Duplicate
+                   definitions in index.html/template are identical and harmless. */
+                @keyframes shake {
+                    0%, 100% { transform: translate(0, 0); }
+                    25% { transform: translate(var(--shake-intensity-x, 5px), var(--shake-intensity-y, 5px)); }
+                    50% { transform: translate(calc(-1 * var(--shake-intensity-x, 5px)), calc(-1 * var(--shake-intensity-y, 5px))); }
+                    75% { transform: translate(var(--shake-intensity-x, 5px), calc(-1 * var(--shake-intensity-y, 5px))); }
+                }
+                @keyframes dissolve-in { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+                @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes credit-bg-fade-in { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes iris-in {
+                    from { clip-path: circle(0%); }
+                    to { clip-path: circle(150%); }
+                }
+                @keyframes iris-out {
+                    from { clip-path: circle(150%); }
+                    to { clip-path: circle(0%); }
+                }
+                @keyframes wipe-right {
+                    from { clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%); }
+                    to { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+                }
+                @keyframes wipe-out-right {
+                    from { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+                    to { clip-path: polygon(100% 0, 100% 0, 100% 100%, 100% 100%); }
+                }
+                @keyframes slide-in-left {
+                    from { transform: translateX(var(--slide-start, -100%)) translateY(var(--slide-start-y, 0%)); }
+                    to { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+                }
+                @keyframes slide-in-right {
+                    from { transform: translateX(var(--slide-start, 100%)) translateY(var(--slide-start-y, 0%)); }
+                    to { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+                }
+                @keyframes slide-out-left {
+                    from { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+                    to { transform: translateX(var(--slide-start, -100%)) translateY(var(--slide-start-y, 0%)); }
+                }
+                @keyframes slide-out-right {
+                    from { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+                    to { transform: translateX(var(--slide-start, 100%)) translateY(var(--slide-start-y, 0%)); }
+                }
+                @keyframes slide {
+                    from {
+                        transform: translate3d(calc(-50% + var(--slide-start-px, var(--slide-start-x, 0%))), var(--slide-start-py, var(--slide-start-y, 0%)), 0);
+                    }
+                    to {
+                        transform: translate3d(calc(-50% + var(--slide-end-px, var(--slide-end-x, 0%))), var(--slide-end-py, var(--slide-end-y, 0%)), 0);
+                    }
+                }
+                @keyframes flash-anim {
+                    0%, 100% { opacity: 0; }
+                    50% { opacity: 0.9; }
+                }
+                @keyframes vnCharGlitchJitter {
+                    0%   { transform: translate3d(0, 0, 0); }
+                    37%  { transform: translate3d(0, 0, 0); }
+                    40%  { transform: translate3d(calc(var(--char-glitch-px, 4px) * -1), 1px, 0) skewX(-1.5deg); }
+                    45%  { transform: translate3d(var(--char-glitch-px, 4px), -1px, 0) skewX(1deg); }
+                    50%  { transform: translate3d(0, 0, 0) skewX(0deg); }
+                    71%  { transform: translate3d(0, 0, 0); }
+                    74%  { transform: translate3d(calc(var(--char-glitch-px, 4px) * 0.7), 2px, 0); }
+                    79%  { transform: translate3d(0, 0, 0); }
+                    100% { transform: translate3d(0, 0, 0); }
+                }
+                @keyframes vnCharShake {
+                    0%, 100% { transform: translate(0, 0); }
+                    10% { transform: translate(calc(-1 * var(--char-shake-px, 2px)), calc(-1 * var(--char-shake-px, 2px))); }
+                    20% { transform: translate(var(--char-shake-px, 2px), 0); }
+                    30% { transform: translate(calc(-1 * var(--char-shake-px, 2px)), var(--char-shake-px, 2px)); }
+                    40% { transform: translate(var(--char-shake-px, 2px), calc(-1 * var(--char-shake-px, 2px))); }
+                    50% { transform: translate(calc(-1 * var(--char-shake-px, 2px)), 0); }
+                    60% { transform: translate(var(--char-shake-px, 2px), var(--char-shake-px, 2px)); }
+                    70% { transform: translate(0, calc(-1 * var(--char-shake-px, 2px))); }
+                    80% { transform: translate(calc(-1 * var(--char-shake-px, 2px)), var(--char-shake-px, 2px)); }
+                    90% { transform: translate(var(--char-shake-px, 2px), 0); }
+                }
+                @keyframes vnCharBounce {
+                    0%, 100% { transform: translateY(0); }
+                    30% { transform: translateY(var(--char-bounce-h, -8px)); }
+                    50% { transform: translateY(0); }
+                    70% { transform: translateY(calc(var(--char-bounce-h, -8px) / 2)); }
+                }
+                @keyframes vnCharFloat {
+                    0%, 100% { transform: translateY(0); }
+                    50% { transform: translateY(var(--char-float-h, -10px)); }
+                }
+                @keyframes vnCharPulse {
+                    0%, 100% { transform: scale(1); }
+                    50% { transform: scale(var(--char-pulse-scale, 1.05)); }
+                }
+                @keyframes vnCharGlow {
+                    0%, 100% { filter: drop-shadow(0 0 var(--char-glow-size, 8px) var(--char-glow-color, #FFFFFF)); }
+                    50% { filter: drop-shadow(0 0 var(--char-glow-size-max, 14px) var(--char-glow-color, #FFFFFF)); }
+                }
+                @keyframes vnCharBreathing {
+                    0%, 100% { transform: scaleY(1); }
+                    50% { transform: scaleY(var(--char-breathe-scale, 1.02)); }
+                }
+                @keyframes vnCharFlicker {
+                    0% { opacity: 1; }
+                    5% { opacity: 0.2; }
+                    10% { opacity: 1; }
+                    15% { opacity: 0.5; }
+                    20% { opacity: 1; }
+                    80% { opacity: 1; }
+                    85% { opacity: 0.3; }
+                    90% { opacity: 1; }
+                }
+                .shake { animation: shake 0.2s ease-in-out infinite; }
+                .transition-base {
+                    animation-duration: 1s;
+                    animation-fill-mode: forwards;
+                }
+                .transition-fast { animation-duration: 0.5s; }
+                .transition-dissolve { animation-name: dissolve-in; }
+                .transition-dissolve-out { animation-name: fade-out; }
+                .transition-fade-out { animation-name: fade-out; }
+                .transition-iris-in { animation-name: iris-in; }
+                .transition-iris-out { animation-name: iris-out; }
+                .transition-wipe-right { animation-name: wipe-right; }
+                .transition-wipe-out-right { animation-name: wipe-out-right; }
+                .transition-slide-in-right { animation-name: slide-in-right; }
+                .transition-slide-in-left { animation-name: slide-in-left; }
+                .transition-slide-out-left { animation-name: slide-out-left; }
+                .transition-slide-out-right { animation-name: slide-out-right; }
+                .transition-slide { animation-name: slide; }
+                /* ── end built-game parity CSS ── */
                 @keyframes elementTransitionfade {
                     from { opacity: 0; }
                     to { opacity: 1; }
@@ -14994,6 +15500,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             selectedItemId={playerState?.selectedItemId}
                             selectedElementId={playerState?.selectedElementId}
                             onSelectItem={selectItem}
+                            pickedItemElementIds={pickedItemElementIds}
+                            onItemPickup={handleUiItemPickup}
                         />
                     ));
                 })()}
@@ -15045,6 +15553,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             selectedItemId={playerState?.selectedItemId}
                             selectedElementId={playerState?.selectedElementId}
                             onSelectItem={selectItem}
+                            pickedItemElementIds={pickedItemElementIds}
+                            onItemPickup={handleUiItemPickup}
                         />
                     ));
                 })()}

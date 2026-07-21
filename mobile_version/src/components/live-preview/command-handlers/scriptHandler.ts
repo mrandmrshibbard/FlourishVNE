@@ -135,7 +135,7 @@ export const handleRunScript = async (
         } else if (audio.paused) {
             startPlayback();
         }
-        musicStateUpdate = { audioId, loop: !!loop, currentTime: 0, isPlaying: true };
+        musicStateUpdate = { audioId, loop: !!loop, currentTime: 0, isPlaying: true, volume: (typeof volume === 'number') ? volume : undefined };
     };
 
     // Execute a script (recursively for script-to-script), sharing the accumulators.

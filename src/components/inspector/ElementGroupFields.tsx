@@ -37,6 +37,7 @@ import ConditionsEditor from '../ui/ConditionsEditor';
 import CollapsibleSection from '../ui/CollapsibleSection';
 import { InspectorGroupId, GROUP_ORDER } from './inspectorGroups';
 import { LayerControl, ParallaxDepthControl } from './LayerControl';
+import { SlotDesignField } from './SaveSlotDesigner';
 
 export type UpdateElement = (updates: Partial<VNUIElement>) => void;
 
@@ -85,6 +86,7 @@ export function getElementGroups(element: VNUIElement): InspectorGroupId[] {
         case UIElementType.Checkbox: set.add('logic'); break;
         case UIElementType.Meter: set.add('media'); break;
         case UIElementType.Timer: set.add('logic'); break;
+        case UIElementType.Item: set.add('logic'); set.add('audio'); break;
         default: break;
     }
     return GROUP_ORDER.filter(g => set.has(g));
@@ -489,7 +491,6 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                 const el = element as UISaveSlotGridElement;
                 return {
                     content: <>
-                        <FormField label={t('elementInspector.slotCount')}><TextInput type="number" value={el.slotCount} onChange={e => updateElement({ slotCount: parseInt(e.target.value) || 1 })} /></FormField>
                         <FormField label="Slot layout">
                             <Select value={el.slotLayout || 'grid'} onChange={e => {
                                 if (e.target.value === 'free') {
@@ -503,11 +504,33 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                 <option value="free">Free placement</option>
                             </Select>
                         </FormField>
-                        {el.slotLayout === 'free' && <>
+                        {el.slotLayout === 'free' ? <>
+                            <FormField label={t('elementInspector.slotCount')}><TextInput type="number" min={1} value={el.slotCount} onChange={e => updateElement({ slotCount: parseInt(e.target.value) || 1 })} /></FormField>
                             <p className="text-[10px] text-slate-400 -mt-1 mb-1">Drag each slot box on the canvas to position and size it. Slots without a box are hidden, and pagination is off.</p>
                             <button onClick={() => updateElement({ slotRects: gridSeedRects(el, el.slotCount, 2) })} className="text-xs px-2 py-1 mb-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200">Re-arrange as grid</button>
-                        </>}
+                        </> : (() => {
+                            const perPage = Math.max(1, el.slotsPerPage ?? 4);
+                            const pages = Math.max(1, Math.ceil(el.slotCount / perPage));
+                            return <>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <FormField label={t('elementInspector.slotsPerPage', 'Slots per page')}>
+                                        <TextInput type="number" min={1} max={24} value={perPage} onChange={e => { const v = Math.max(1, Math.min(24, parseInt(e.target.value) || 1)); updateElement({ slotsPerPage: v, slotCount: v * pages }); }} />
+                                    </FormField>
+                                    <FormField label={t('elementInspector.pageCount', 'Number of pages')}>
+                                        <TextInput type="number" min={1} max={99} value={pages} onChange={e => { const v = Math.max(1, Math.min(99, parseInt(e.target.value) || 1)); updateElement({ slotCount: perPage * v }); }} />
+                                    </FormField>
+                                </div>
+                                <FormField label={t('elementInspector.slotColumns', 'Columns')}>
+                                    <Select value={String(el.slotColumns ?? 0)} onChange={e => { const v = parseInt(e.target.value); updateElement({ slotColumns: v > 0 ? v : undefined }); }}>
+                                        <option value="0">{t('elementInspector.columnsAuto', 'Automatic')}</option>
+                                        {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={String(n)}>{n}</option>)}
+                                    </Select>
+                                </FormField>
+                                <p className="text-[10px] text-slate-400">{t('elementInspector.totalSlotsHint', 'Total slots:')} {el.slotCount}</p>
+                            </>;
+                        })()}
                         <FormField label={t('elementInspector.emptySlotText')}><TextInput value={el.emptySlotText} onChange={e => updateElement({ emptySlotText: e.target.value })} /></FormField>
+                        <SlotDesignField element={el} project={project} updateElement={updateElement as any} />
                         <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.infoBar')}</h4>
                         <div className="flex items-center gap-4 my-1">
                             <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
@@ -528,6 +551,17 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.navigationButtons')}</h4>
                         <FormField label={t('elementInspector.prevButtonText')}><TextInput value={el.prevButtonText ?? '◀ Prev'} onChange={e => updateElement({ prevButtonText: e.target.value })} /></FormField>
                         <FormField label={t('elementInspector.nextButtonText')}><TextInput value={el.nextButtonText ?? 'Next ▶'} onChange={e => updateElement({ nextButtonText: e.target.value })} /></FormField>
+                        <div className="flex items-center gap-4 my-1">
+                            <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                                <input type="checkbox" checked={el.hideNavButtons === true} onChange={e => updateElement({ hideNavButtons: e.target.checked })} className="accent-purple-500" />
+                                {t('elementInspector.hideNavButtons', 'Hide the built-in arrows')}
+                            </label>
+                            <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                                <input type="checkbox" checked={el.hidePageIndicator === true} onChange={e => updateElement({ hidePageIndicator: e.target.checked })} className="accent-purple-500" />
+                                {t('elementInspector.hidePageIndicator', 'Hide the page number')}
+                            </label>
+                        </div>
+                        <p className="text-[10px] text-slate-400">{t('elementInspector.customNavHint', 'Tip: add your own Button elements with the "Save/Load Slots: next/previous page" actions for fully custom arrows. They work on both the Save and Load screens.')}</p>
                     </>,
                     appearance: <>
                         <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.fontStyle')}</h4>
@@ -1714,6 +1748,63 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         </div>
                     ),
                     logic: <UIActionsListEditor actions={el.actions || []} project={project} onChange={acts => updateElement({ actions: acts } as any)} label={t('elementInspector.timerActions', 'When the timer elapses, run')} />,
+                };
+            }
+            case UIElementType.Item: {
+                const el = element as any;
+                const items = Object.values(project.items || {}) as any[];
+                const mode = el.mode || 'display';
+                return {
+                    content: (
+                        <div className="flex flex-col gap-2">
+                            <FormField label={t('elementInspector.itemWhich', 'Item')}>
+                                <Select value={el.itemId || ''} onChange={e => updateElement({ itemId: (e.target.value || null) } as any)}>
+                                    <option value="">{t('elementInspector.itemSelect', 'Pick an item…')}</option>
+                                    {items.map((it: any) => <option key={it.id} value={it.id}>{it.name}</option>)}
+                                </Select>
+                            </FormField>
+                            {items.length === 0 && <p className="text-[11px] text-amber-400">{t('elementInspector.itemNone', 'No items yet — create them in the Systems tab first.')}</p>}
+                            <FormField label={t('elementInspector.itemMode', 'What it does')}>
+                                <Select value={mode} onChange={e => updateElement({ mode: e.target.value } as any)}>
+                                    <option value="display">{t('elementInspector.itemModeDisplay', 'Display — show something the player owns')}</option>
+                                    <option value="pickup">{t('elementInspector.itemModePickup', 'Pickup — click to take it')}</option>
+                                </Select>
+                            </FormField>
+                            <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
+                                <input type="checkbox" checked={!!el.showName} onChange={e => updateElement({ showName: e.target.checked } as any)} />
+                                {t('elementInspector.itemShowName', "Show the item's name")}
+                            </label>
+                            <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
+                                <input type="checkbox" checked={!!el.showCount} onChange={e => updateElement({ showCount: e.target.checked } as any)} />
+                                {t('elementInspector.itemShowCount', 'Show how many the player has (×N)')}
+                            </label>
+                            {mode === 'display' && (
+                                <>
+                                    <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
+                                        <input type="checkbox" checked={!!el.onlyWhileOwned} onChange={e => updateElement({ onlyWhileOwned: e.target.checked } as any)} />
+                                        {t('elementInspector.itemOnlyOwned', 'Only show while the player has it')}
+                                    </label>
+                                    <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
+                                        <input type="checkbox" checked={!!el.draggable} onChange={e => updateElement({ draggable: e.target.checked } as any)} />
+                                        {t('elementInspector.itemDraggable', 'Players can drag it onto hot spots')}
+                                    </label>
+                                    {el.draggable && <p className="text-[11px] text-[var(--text-muted)]">{t('elementInspector.itemDragHint', "A hot spot accepts it when its accept tag matches the item's drag tag (set on the item, in Systems). Dropping uses the item — its use effect runs.")}</p>}
+                                </>
+                            )}
+                            {mode === 'pickup' && (
+                                <>
+                                    <FormField label={t('elementInspector.itemPickupQty', 'How many the click gives')}>
+                                        <TextInput type="number" min={1} step={1} value={el.pickupQuantity ?? 1} onChange={e => updateElement({ pickupQuantity: Math.max(1, parseInt(e.target.value) || 1) } as any)} />
+                                    </FormField>
+                                    <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
+                                        <input type="checkbox" checked={el.pickupOnce ?? true} onChange={e => updateElement({ pickupOnce: e.target.checked } as any)} />
+                                        {t('elementInspector.itemPickupOnce', 'Once taken, it stays gone (saved with the game)')}
+                                    </label>
+                                </>
+                            )}
+                        </div>
+                    ),
+                    logic: <UIActionsListEditor actions={el.actions || []} project={project} onChange={acts => updateElement({ actions: acts } as any)} label={mode === 'pickup' ? t('elementInspector.itemPickupActions', 'When picked up, also run') : t('elementInspector.itemClickActions', 'When clicked, run')} />,
                 };
             }
             case UIElementType.Custom: {

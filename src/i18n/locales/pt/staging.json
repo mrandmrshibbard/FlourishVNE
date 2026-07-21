@@ -24,5 +24,10 @@
   "lightMarkerTitle": "{{type}} #{{n}} — arraste para posicionar",
   "lightCandle": "vela",
   "lightStar": "estrela",
-  "lightChristmas": "natal"
+  "lightChristmas": "natal",
+  "chromeShow": "Mostrar botões do canvas",
+  "chromeHide": "Esconder botões do canvas (eles podem cobrir a arte que você está alinhando)",
+  "zoomIn": "Aproximar (Ctrl+rolagem)",
+  "zoomOut": "Afastar (Ctrl+rolagem)",
+  "zoomReset": "Voltar ao ajuste"
 }

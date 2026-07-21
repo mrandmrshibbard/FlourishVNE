@@ -219,6 +219,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
             <div className="template-gallery__search">
               <input
                 type="text"
+                autoFocus
                 placeholder={t('gallery.searchPlaceholder')}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}

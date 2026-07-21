@@ -9,7 +9,7 @@ import ScreenInspector from './menu-editor/ScreenInspector';
 import UIElementInspector from './menu-editor/UIElementInspector';
 import { HotSpotProperties, InteractiveElementProperties } from './interactive-elements/InteractiveElementInspectors';
 import { isHotSpotElement, isInteractiveElement } from '../utils/interactiveElements';
-import { VNUIElement } from '../features/ui/types';
+import { VNUIElement, UIElementType } from '../features/ui/types';
 
 /**
  * The Properties Inspector content, extracted verbatim from VisualNovelEditor.renderInspector so the
@@ -103,7 +103,11 @@ const InspectorPanel: React.FC<InspectorPanelProps> = ({
                         />
                     );
                 }
-                if (isInteractiveElement(selectedElement)) {
+                // Item elements stay in their OWN inspector even when draggable — it already
+                // carries the item picker + drag settings. Routing them into the generic
+                // interactive panel made the properties window vanish: its legacy converter
+                // has no Item case and returned null.
+                if (isInteractiveElement(selectedElement) && selectedElement.type !== UIElementType.Item) {
                     return (
                         <InteractiveElementProperties
                             element={selectedElement}

@@ -55,6 +55,9 @@ export function defaultActionForType(type: UIActionType, project: VNProject): VN
             return { ...base, fadeDuration: 1 };
         case UIActionType.StopSound:
             return { ...base, audioId: null, fadeDuration: 0 };
+        case UIActionType.SaveSlotsNextPage:
+        case UIActionType.SaveSlotsPrevPage:
+            return { ...base, targetElementId: null };
         case UIActionType.PlayVideo:
             return { ...base, videoId: firstKey(project.videos), loop: false, blockInput: false, onEndActions: [] };
         case UIActionType.CycleLayerAsset: {
@@ -106,6 +109,19 @@ export function defaultActionForType(type: UIActionType, project: VNProject): VN
     }
 }
 
+/** Every timer id used anywhere in the project (Start/Stop Timer commands AND actions, any scene,
+ *  any screen, common events, …). Powers the Stop-Timer id autocomplete so authors PICK the id
+ *  they used instead of retyping it — timers are global, and a typo was the main way "stop from
+ *  another scene" silently failed. */
+export function collectTimerIds(project: VNProject): string[] {
+    const ids = new Set<string>();
+    for (const m of JSON.stringify(project).matchAll(/"timerId"\s*:\s*"([^"]*)"/g)) {
+        const id = m[1].trim();
+        if (id) ids.add(id);
+    }
+    return [...ids].sort((a, b) => a.localeCompare(b));
+}
+
 /** One-line detail shown on a collapsed action row (the bound target's name), shared by both editors. */
 export function actionSummaryDetail(action: VNUIAction, project: VNProject): string {
     const a = action as any;
@@ -125,6 +141,15 @@ export function actionSummaryDetail(action: VNUIAction, project: VNProject): str
             return a.targetLabel || '';
         case UIActionType.OpenPhoneApp:
             return a.appId || '';
+        case UIActionType.SaveSlotsNextPage:
+        case UIActionType.SaveSlotsPrevPage: {
+            if (!a.targetElementId) return '';
+            for (const screen of Object.values(project.uiScreens || {}) as any[]) {
+                const gridEl = screen?.elements?.[a.targetElementId];
+                if (gridEl) return gridEl.name || '';
+            }
+            return '';
+        }
         case UIActionType.ShowMap:
             return ((project as any).maps?.[a.mapId] as any)?.name || '';
         case UIActionType.ShowMiniGame:

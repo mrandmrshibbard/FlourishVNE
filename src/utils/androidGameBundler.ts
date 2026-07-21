@@ -403,10 +403,15 @@ export async function buildAndroidGame(
 
   onProgress({ step: 'prepare', progress: 8, message: 'Preparing Android build...' });
 
-  const { generateStandaloneHTML, collectAllAssets, buildLeanProject, dataURLToBlob, resolveProjectAssets, streamManagedAssets } =
+  const { generateStandaloneHTML, collectAllAssets, buildLeanProject, dataURLToBlob, resolveProjectAssets, streamManagedAssets, pruneUnusedAssets } =
     await import('./gameBundler');
 
   const wwwRoot = 'app/src/main/assets/www';
+
+  // Leave unused library assets out of the APK (same pruning as the web build).
+  const prunedResult = pruneUnusedAssets(project);
+  if (prunedResult.pruned > 0) console.log(`[Android Build] Skipped ${prunedResult.pruned} unused asset(s)`);
+  project = prunedResult.project;
 
   // Stream file-backed media straight into the APK www/assets (no base64 re-inline), then resolve rest.
   const streamedFiles: Record<string, ArrayBuffer> = {};

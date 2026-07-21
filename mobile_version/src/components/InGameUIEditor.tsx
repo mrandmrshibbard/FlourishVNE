@@ -425,18 +425,22 @@ const ChoiceButtonsPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
     const borderPadding = (ui as any).choiceBorderPadding ?? 8;
     const hasCustomImage = bgUrl || bgVideoUrl || borderUrl;
 
+    // Mirrors the engine's renderButton + vertical layout exactly (full-width buttons in the
+    // configured rect, horizontal padding doubled, fixed height when set, frosted default look,
+    // full-opacity text, 12px gaps) — the preview and test play must be the same picture.
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-[4%]">
+        <div className="w-full h-full flex flex-col items-center justify-center" style={{ gap: 'calc(var(--font-scale,1) * 12px)' }}>
             {['A', 'B', 'C'].map(label => (
-                <div key={label} className="w-[80%]"
+                <div key={label} className="w-full"
                      style={borderUrl
                          ? { ...buildImageBackgroundStyle(borderUrl, sizeMode, slice), padding: `calc(var(--font-scale,1) * ${borderPadding}px)`, borderRadius: `calc(var(--font-scale,1) * ${br}px)` }
                          : {}}>
-                    <div className="w-full" style={{
+                    <div className="w-full flex flex-col items-center justify-center" style={{
                         position: 'relative', overflow: 'hidden',
                         textAlign: (ui.choiceTextFont?.align || 'center') as any,
                         borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
-                        padding: `calc(var(--font-scale,1) * ${pad}px)`,
+                        padding: `calc(var(--font-scale,1) * ${pad}px) calc(var(--font-scale,1) * ${pad * 2}px)`,
+                        ...(ui.choiceButtonHeight ? { height: `calc(var(--font-scale,1) * ${ui.choiceButtonHeight}px)` } : {}),
                         ...(bgUrl
                             ? { ...buildImageBackgroundStyle(bgUrl, sizeMode, slice), backgroundColor: bgColor }
                             : !hasCustomImage
@@ -444,11 +448,13 @@ const ChoiceButtonsPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
                                     backgroundColor: bgColor,
                                     border: '1px solid rgba(148,163,184,0.3)',
                                     boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
+                                    backdropFilter: 'blur(6px)',
+                                    WebkitBackdropFilter: 'blur(6px)',
                                   }
                                 : {}),
                     }}>
                         {!testPlaying && bgVideoUrl && <TrimmedVideo key={`cho-${label}-${bgVideoUrl}-${vReload}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={bgVideoUrl} autoPlay loop muted playsInline trimStart={bgMedia.trimStart} trimEnd={bgMedia.trimEnd} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} />}
-                        <span style={{ ...fontToStyle(ui.choiceTextFont), position: 'relative', zIndex: 1 }} className="opacity-90">
+                        <span style={{ ...fontToStyle(ui.choiceTextFont), position: 'relative', zIndex: 1 }}>
                             <GradientText style={extractTextGradientStyle(ui.choiceTextFont)}>{`${t('inGameUi.sampleChoice')} ${label}`}</GradientText>
                         </span>
                     </div>

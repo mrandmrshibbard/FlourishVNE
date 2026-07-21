@@ -28,6 +28,7 @@ import AssetSelector from '../ui/AssetSelector';
 import ActionEditor from '../menu-editor/ActionEditor';
 import ActionCard from '../menu-editor/ActionCard';
 import ConditionsEditor from '../ui/ConditionsEditor';
+import { collectTimerIds } from '../../utils/actionMeta';
 import SearchableSelect from '../ui/SearchableSelect';
 import UIActionsListEditor from '../ui/UIActionsListEditor';
 import { OrientationFields, TransitionFields, PositionInputs, CharacterVisualEffectsEditor, VarFollowSelect } from './fields';
@@ -2173,7 +2174,17 @@ const ShowHotSpotGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
                     <span className="text-xs text-[var(--text-secondary)]">{t('hotspot.drawDuringPlay')}</span>
                 </label>
                 {cmd.visible && (
-                    <FormField label={t('shared.color')}><ColorInput value={cmd.highlightColor || 'rgba(99,102,241,0.35)'} onChange={val => updateCommand({ highlightColor: val } as any)} /></FormField>
+                    <>
+                        <FormField label={t('shared.color')}><ColorInput value={cmd.highlightColor || 'rgba(99,102,241,0.35)'} onChange={val => updateCommand({ highlightColor: val } as any)} /></FormField>
+                        <FormField label={`${t('hotspot.visibleOpacity', 'See-through (opacity)')}: ${Math.round((cmd.visibleOpacity ?? 1) * 100)}%`}>
+                            <input
+                                type="range" min={0} max={100} step={5}
+                                value={Math.round((cmd.visibleOpacity ?? 1) * 100)}
+                                onChange={e => updateCommand({ visibleOpacity: Math.max(0, Math.min(100, parseInt(e.target.value) || 0)) / 100 } as any)}
+                                className="w-full accent-[var(--accent-lavender)]"
+                            />
+                        </FormField>
+                    </>
                 )}
             </>;
         case 'logic':
@@ -2711,9 +2722,16 @@ const TimerGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand; upda
     const c = command as any;
     const numberVars = (Object.values(project.variables || {}) as any[]).filter(v => v.type === 'number');
     if (command.type === CommandType.StopTimer) {
-        return <FormField label={t('timer.idStop', 'Timer to stop (blank = default)')}>
-            <TextInput value={c.timerId || ''} onChange={e => updateCommand({ timerId: e.target.value } as any)} placeholder="default" />
-        </FormField>;
+        const knownTimerIds = collectTimerIds(project);
+        return <>
+            <FormField label={t('timer.idStop', 'Timer to stop (blank = default)')}>
+                <TextInput value={c.timerId || ''} onChange={e => updateCommand({ timerId: e.target.value } as any)} placeholder="default" list="flourish-timer-ids" />
+            </FormField>
+            <datalist id="flourish-timer-ids">
+                {knownTimerIds.map(id => <option key={id} value={id} />)}
+            </datalist>
+            <p className="text-[10px] -mt-1" style={{ color: 'var(--text-muted)' }}>{t('timer.idStopHint', 'Timers are global — this stops the timer no matter which scene started it. Pick from the ids you already used to avoid typos.')}</p>
+        </>;
     }
     const mode = c.mode === 'stopwatch' ? 'stopwatch' : 'countdown';
     return <>
@@ -2739,8 +2757,11 @@ const TimerGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand; upda
             </>}
         <div className="grid grid-cols-2 gap-1">
             <FormField label={t('timer.interval', 'Tick every (seconds)')}><TextInput type="number" min="0.1" step="0.1" value={c.interval ?? 1} onChange={e => updateCommand({ interval: parseFloat(e.target.value) || 1 } as any)} /></FormField>
-            <FormField label={t('timer.id', 'Timer id (for Stop Timer)')}><TextInput value={c.timerId || ''} onChange={e => updateCommand({ timerId: e.target.value } as any)} placeholder="default" /></FormField>
+            <FormField label={t('timer.id', 'Timer id (for Stop Timer)')}><TextInput value={c.timerId || ''} onChange={e => updateCommand({ timerId: e.target.value } as any)} placeholder="default" list="flourish-timer-ids" /></FormField>
         </div>
+        <datalist id="flourish-timer-ids">
+            {collectTimerIds(project).map(id => <option key={id} value={id} />)}
+        </datalist>
         <label className="flex items-center gap-1 mt-1">
             <input type="checkbox" checked={!!c.loop} onChange={e => updateCommand({ loop: e.target.checked } as any)} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
             <span className="text-sm">{t('timer.loop', 'Loop (restart when it finishes)')}</span>

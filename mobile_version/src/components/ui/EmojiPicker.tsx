@@ -233,6 +233,7 @@ export const EmojiPicker: React.FC<{
                             ref={searchRef}
                             value={search}
                             onChange={e => setSearch(e.target.value)}
+                            autoFocus
                             placeholder={t('emoji.search', 'Search — “angry”, “key”, “money”…')}
                             className="flex-grow min-w-0 bg-[var(--bg-primary)] text-white px-2 py-1 rounded-md border border-[var(--border-default)] text-xs outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                         />

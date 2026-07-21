@@ -116,12 +116,16 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         };
     }, [isOpen]);
 
-    // Focus input when opened
+    // Focus input when opened. MUST also wait for `coords`: the dropdown (and the input) only
+    // renders once the position effect has measured the trigger, which happens a render AFTER
+    // isOpen flips — an [isOpen]-only effect fired while inputRef was still null, so the search
+    // box never actually received focus.
+    const coordsReady = !!coords;
     useEffect(() => {
-        if (isOpen && inputRef.current) {
+        if (isOpen && coordsReady && inputRef.current) {
             inputRef.current.focus();
         }
-    }, [isOpen]);
+    }, [isOpen, coordsReady]);
 
     // Scroll highlighted item into view
     useEffect(() => {

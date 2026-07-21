@@ -344,6 +344,18 @@ export const HotSpotProperties: React.FC<{
                 </label>
             </div>
 
+            {(spot.visible ?? false) && (
+                <label className="block">
+                    <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.visibleOpacity', 'See-through (opacity)')}: {Math.round((spot.visibleOpacity ?? 1) * 100)}%</span>
+                    <input
+                        type="range" min={0} max={100} step={5}
+                        value={Math.round((spot.visibleOpacity ?? 1) * 100)}
+                        onChange={e => onUpdate({ visibleOpacity: Math.max(0, Math.min(100, parseInt(e.target.value) || 0)) / 100 })}
+                        className="w-full accent-[var(--accent-lavender)]"
+                    />
+                </label>
+            )}
+
             <div>
                 <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.positionSize')}</span>
                 <div className="grid grid-cols-4 gap-1 mt-0.5">
@@ -455,11 +467,6 @@ export const InteractiveElementProperties: React.FC<{
 }> = ({ element: typedElement, project, targetableElements, dragTagOptions = [], onUpdate: typedOnUpdate, onDelete }) => {
     const { t } = useTranslation('ui');
     const element = toLegacyHotZoneElement(typedElement);
-    if (!element) return null;
-    // Existing JSX produces Partial<VNHotZoneElement> patches; translate at the
-    // boundary so the external API stays typed.
-    const onUpdate = (patch: Partial<VNHotZoneElement>) =>
-        typedOnUpdate(hotZoneElementPatchToTyped(patch, typedElement));
     const hotZoneElements = useMemo(() => {
         const out: Record<VNID, { id: VNID; name: string }> = {};
         for (const el of targetableElements) out[el.id] = el;
@@ -471,6 +478,14 @@ export const InteractiveElementProperties: React.FC<{
         [project.images, project.backgrounds]
     );
     const audioAssets = useMemo(() => Object.values(project.audio), [project.audio]);
+
+    // Missing-element return must stay BELOW every hook — an early return between hooks
+    // changes the hook count across renders and crashes React ("Rendered fewer hooks").
+    if (!element) return null;
+    // Existing JSX produces Partial<VNHotZoneElement> patches; translate at the
+    // boundary so the external API stays typed.
+    const onUpdate = (patch: Partial<VNHotZoneElement>) =>
+        typedOnUpdate(hotZoneElementPatchToTyped(patch, typedElement));
     const targetable = targetableElements;
 
     const elType = element.elementType || 'image';

@@ -84,9 +84,26 @@ export const HotSpotOverlay: React.FC<{
  *  text-input / image map / draggable image) into the legacy
  *  `VNHotZoneElement` shape that InteractiveElementOverlay's body renders.
  *  Kept private to this module so the component has a typed external API. */
-function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
+function toLegacyHotZoneElement(el: VNUIElement, items?: Record<string, any>): VNHotZoneElement | null {
     const anyEl = el as any;
     switch (el.type) {
+        case UIElementType.Item: {
+            // Draggable ITEM element → image-shaped draggable wearing the item's icon (mirrors the
+            // runtime adapter in utils/interactiveElements.ts — keep the two in sync).
+            const item = anyEl.itemId ? items?.[anyEl.itemId] : undefined;
+            const iconIsVideo = item?.icon?.type === 'video';
+            return {
+                id: el.id, name: el.name,
+                elementType: iconIsVideo ? 'video' : 'image',
+                imageId: (!iconIsVideo ? (item?.icon?.id ?? '') : '') as VNID,
+                videoId: iconIsVideo ? item?.icon?.id : undefined,
+                x: el.x, y: el.y, width: el.width, height: el.height,
+                draggable: anyEl.draggable, snapBack: anyEl.snapBack ?? true,
+                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
+                conditions: el.conditions, actions: anyEl.actions,
+                clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
+            };
+        }
         case UIElementType.draggableImageElement: {
             const m = el as UIdraggableImageElementElement;
             return {
@@ -323,7 +340,7 @@ export const InteractiveElementOverlay: React.FC<{
     onContextMenu?: (e: React.MouseEvent) => void;
     zIndex?: number;
 }> = ({ element: typedElement, project, isSelected, parentSize, onSelect, onUpdate, onRegionUpdate, selectedRegionIdx, onSelectRegion, onContextMenu, zIndex }) => {
-    const element = toLegacyHotZoneElement(typedElement);
+    const element = toLegacyHotZoneElement(typedElement, project.items);
     if (!element) return null;
     const imageUrl = project.images[element.imageId]?.imageUrl ||
                      project.backgrounds[element.imageId]?.imageUrl;

@@ -216,6 +216,7 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
             </svg>
             <input
               type="text"
+              autoFocus
               placeholder={t('localizationPanel.searchPlaceholder')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}

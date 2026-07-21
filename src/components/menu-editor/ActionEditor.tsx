@@ -14,7 +14,7 @@ import { actionLabel, defaultActionForType } from '../../utils/actionMeta';
  *  (Intentionally excludes PlayAnimation / ChangeImage, which are interactive-element-only.) */
 const MENU_ACTION_TYPES: UIActionType[] = [
     UIActionType.None, UIActionType.StartNewGame, UIActionType.ContinueGame, UIActionType.GoToScreen,
-    UIActionType.LoadGame, UIActionType.SaveGame, UIActionType.DeleteSave, UIActionType.ReturnToGame, UIActionType.ReturnToPreviousScreen,
+    UIActionType.LoadGame, UIActionType.SaveGame, UIActionType.DeleteSave, UIActionType.SaveSlotsNextPage, UIActionType.SaveSlotsPrevPage, UIActionType.ReturnToGame, UIActionType.ReturnToPreviousScreen,
     UIActionType.QuitToTitle, UIActionType.ExitGame, UIActionType.JumpToScene, UIActionType.JumpToLabel,
     UIActionType.SetVariable, UIActionType.ResetVariable, UIActionType.PlaySound, UIActionType.StopSound, UIActionType.PlayMusic, UIActionType.StopMusic, UIActionType.PlayVideo, UIActionType.CycleLayerAsset, UIActionType.ToggleScreen, UIActionType.OpenURL,
     UIActionType.ShowElement, UIActionType.HideElement,

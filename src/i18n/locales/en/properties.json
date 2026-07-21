@@ -721,6 +721,7 @@
     "advanceOnClick": "Advance dialogue on click",
     "advanceOnClickHint": "Otherwise the click is consumed",
     "drawDuringPlay": "Draw the spot during play",
+    "visibleOpacity": "See-through (opacity)",
     "visibleOutline": "Visible outline",
     "actions": "Actions",
     "targetToHide": "Target Hot Spot to Hide",

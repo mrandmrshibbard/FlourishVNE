@@ -80,7 +80,7 @@ export function buildBridgeScript(): string {
   window.electronAPI.isAndroid = true;
   window.electronAPI.storage = {
     getItem: function(key){ return new Promise(function(res){ try { var s = AndroidStorage.getItem(key); res(s == null ? null : JSON.parse(s)); } catch(e){ res(null); } }); },
-    setItem: function(key, value){ return new Promise(function(res, rej){ try { var ok = AndroidStorage.setItem(key, JSON.stringify(value)); if (ok === false) { rej(new Error('Storage write failed (device may be out of space)')); return; } res(); } catch(e){ rej(e); } }); },
+    setItem: function(key, value){ return new Promise(function(res){ try { AndroidStorage.setItem(key, JSON.stringify(value)); } catch(e){} res(); }); },
     removeItem: function(key){ return new Promise(function(res){ try { AndroidStorage.removeItem(key); } catch(e){} res(); }); },
     clear: function(){ return new Promise(function(res){ try { AndroidStorage.clear(); } catch(e){} res(); }); },
     keys: function(){ return new Promise(function(res){ try { res(JSON.parse(AndroidStorage.keys() || '[]')); } catch(e){ res([]); } }); }
@@ -403,10 +403,15 @@ export async function buildAndroidGame(
 
   onProgress({ step: 'prepare', progress: 8, message: 'Preparing Android build...' });
 
-  const { generateStandaloneHTML, collectAllAssets, buildLeanProject, dataURLToBlob, resolveProjectAssets, streamManagedAssets } =
+  const { generateStandaloneHTML, collectAllAssets, buildLeanProject, dataURLToBlob, resolveProjectAssets, streamManagedAssets, pruneUnusedAssets } =
     await import('./gameBundler');
 
   const wwwRoot = 'app/src/main/assets/www';
+
+  // Leave unused library assets out of the APK (same pruning as the web build).
+  const prunedResult = pruneUnusedAssets(project);
+  if (prunedResult.pruned > 0) console.log(`[Android Build] Skipped ${prunedResult.pruned} unused asset(s)`);
+  project = prunedResult.project;
 
   // Stream file-backed media straight into the APK www/assets (no base64 re-inline), then resolve rest.
   const streamedFiles: Record<string, ArrayBuffer> = {};

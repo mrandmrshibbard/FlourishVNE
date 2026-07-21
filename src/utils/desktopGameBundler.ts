@@ -39,7 +39,11 @@ export async function buildDesktopGame(
   onProgress({ step: 'generate', progress: 20, message: 'Generating game files...' });
 
   // Stream file-backed media straight to disk files (no base64 re-inline) + resolve the rest.
-  const { resolveProjectAssets, streamManagedAssets } = await import('./gameBundler');
+  const { resolveProjectAssets, streamManagedAssets, pruneUnusedAssets } = await import('./gameBundler');
+  // Leave unused library assets out of the desktop build (same pruning as the web build).
+  const prunedResult = pruneUnusedAssets(project);
+  if (prunedResult.pruned > 0) console.log(`[Desktop Build] Skipped ${prunedResult.pruned} unused asset(s)`);
+  project = prunedResult.project;
   const gameFiles: Record<string, string | ArrayBuffer> = {};
   const streamedProject = await streamManagedAssets(project, (rel, bytes) => {
     gameFiles[rel] = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;

@@ -214,6 +214,15 @@ export async function buildStandaloneGame(
 ): Promise<Blob> {
   const zip = new JSZip();
 
+  // Step 0: Leave unused library assets behind — anything no command/screen/character/item
+  // references stays out of the build entirely (both the streamed and data-URL paths below
+  // only see the pruned project).
+  const pruneResult = pruneUnusedAssets(project);
+  if (pruneResult.pruned > 0) {
+    console.log(`[Build] Skipped ${pruneResult.pruned} unused asset(s):`, pruneResult.prunedNames.slice(0, 20).join(', '));
+  }
+  project = pruneResult.project;
+
   // Step 0a: Stream file-backed (flourish-asset://) media straight into the zip's assets/ folder
   // (no base64 re-inline → handles huge projects + guarantees every asset incl. fonts is bundled).
   const streamedProject = await streamManagedAssets(project, (rel, bytes) => { zip.file(rel, bytes); });
@@ -925,6 +934,41 @@ function getMinimalGameEngine(): string {
  * Collects all asset URLs from the project
  * Returns a map of filename -> data URL
  */
+/**
+ * Drop library assets nothing in the game references — unused uploads used to ship in EVERY
+ * build (a project with abandoned test images/audio carried all of them forever).
+ *
+ * CONSERVATIVE by design: an asset is kept when its id appears ANYWHERE in the project JSON
+ * outside the four asset libraries themselves (commands, screens, characters, items, UI chrome,
+ * plugin storage, …all of it). Only assets whose id appears in no other corner of the project
+ * are pruned — when in doubt, ship it. Operates on a shallow clone; never touches the caller's
+ * project. Characters and fonts are never pruned (structural, small, and name-referenced).
+ */
+export function pruneUnusedAssets(project: VNProject): { project: VNProject; pruned: number; prunedNames: string[] } {
+  const collections = ['backgrounds', 'images', 'audio', 'videos'] as const;
+  const skeleton: any = { ...project };
+  for (const c of collections) skeleton[c] = {};
+  const corpus = JSON.stringify(skeleton);
+
+  const out: any = { ...project };
+  let pruned = 0;
+  const prunedNames: string[] = [];
+  for (const c of collections) {
+    const src = (project as any)[c] || {};
+    const kept: Record<string, unknown> = {};
+    for (const [id, asset] of Object.entries(src)) {
+      if (corpus.includes(`"${id}"`)) {
+        kept[id] = asset;
+      } else {
+        pruned++;
+        prunedNames.push((asset as any)?.name || id);
+      }
+    }
+    out[c] = kept;
+  }
+  return { project: out as VNProject, pruned, prunedNames };
+}
+
 export function collectAllAssets(project: VNProject): Record<string, string> {
   const assets: Record<string, string> = {};
   let assetCounter = 0;

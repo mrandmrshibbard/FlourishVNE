@@ -1,7 +1,7 @@
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 // FIX: UIActionType is exported from shared types.
-import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UITimerElement, UICustomElement, DropdownOption } from '../features/ui/types';
+import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UITimerElement, UIItemElement, UICustomElement, DropdownOption } from '../features/ui/types';
 import { UIActionType } from '../types/shared';
 
 const generateId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}`;
@@ -314,6 +314,17 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
                 durationSeconds: 3,
                 showCountdown: false,
                 loop: false,
+                actions: [],
+            };
+            return el;
+        }
+        case UIElementType.Item: {
+            const firstItemId = Object.keys(project.items || {})[0] as VNID | undefined;
+            const el: UIItemElement = {
+                ...base, name: 'Item', type,
+                width: 10, height: 14,
+                itemId: firstItemId ?? null,
+                mode: 'display',
                 actions: [],
             };
             return el;

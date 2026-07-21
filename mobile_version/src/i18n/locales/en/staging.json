@@ -33,5 +33,10 @@
   "lightMarkerTitle": "{{type}} #{{n}} — drag to position",
   "lightCandle": "candle",
   "lightStar": "star",
-  "lightChristmas": "christmas"
+  "lightChristmas": "christmas",
+  "chromeShow": "Show canvas buttons",
+  "chromeHide": "Hide canvas buttons (they can cover art you are aligning)",
+  "zoomIn": "Zoom in (Ctrl+scroll)",
+  "zoomOut": "Zoom out (Ctrl+scroll)",
+  "zoomReset": "Back to fit"
 }

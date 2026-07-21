@@ -20,6 +20,7 @@ import { createUIElement, createCustomUIElement } from '../../utils/uiElementFac
 import { pluginManager } from '../../features/plugins/PluginManagerService';
 import { useExtensionUIElementTypes } from '../ExtensionPanelsHost';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../../utils/styleUtils';
+import { isSlotDesignActive, slotPartVisible, formatSlotText, SAMPLE_SLOT_SAVE, SAMPLE_SLOT_SCREENSHOT } from '../../utils/slotDesign';
 import { GradientText } from '../ui/GradientText';
 import { PlusIcon, SparklesIcon } from '../icons';
 import CharacterCreatorWizard, { UnifiedWizardResult } from './CharacterCreatorWizard';
@@ -98,6 +99,28 @@ const InvSlotInner: React.FC<{ inv: UIInventoryGridElement, project: VNProject, 
 };
 
 /** Static preview of a single slot, matching the in-game look (empty save card / CG thumb / item slot). */
+/** Canvas preview of an author-designed save slot (mirrors the engine's renderDesignedSlot,
+ *  with sample screenshot/save data standing in for a real save). */
+const DesignedSlotPreview: React.FC<{ el: UISaveSlotGridElement, project: VNProject, slotNumber: number }> = ({ el, project, slotNumber }) => {
+    const design = el.slotDesign!;
+    const imgUrl = (id?: string | null) => id ? ((project.images[id] as any)?.imageUrl || (project.backgrounds?.[id] as any)?.imageUrl || null) : null;
+    const bg = design.background;
+    const bgImg = bg?.type === 'image' ? imgUrl(bg.assetId) : null;
+    return (
+        <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', backgroundColor: bg?.type === 'color' ? bg.value : (el.slotBackgroundColor || '#1e293b') }}>
+            {bgImg && <img src={bgImg} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+            {(design.parts || []).filter(p => slotPartVisible(p, true)).map(p => {
+                const box: React.CSSProperties = { position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, width: `${p.width}%`, height: `${p.height}%`, borderRadius: p.borderRadius, overflow: 'hidden' };
+                if (p.partType === 'screenshot') return <img key={p.id} src={SAMPLE_SLOT_SCREENSHOT} alt="" style={{ ...box, objectFit: p.objectFit || 'cover' }} />;
+                if (p.partType === 'image') { const u = imgUrl(p.asset?.id); return u ? <img key={p.id} src={u} alt="" style={{ ...box, objectFit: p.objectFit || 'contain' }} /> : null; }
+                const fs = p.font ? fontSettingsToStyle(p.font) : { color: el.slotTextColor || '#e2e8f0', fontSize: 11 };
+                const align = (fs as React.CSSProperties).textAlign;
+                return <div key={p.id} style={{ ...box, ...fs, display: 'flex', alignItems: 'center', justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start', whiteSpace: 'pre-wrap' }}>{formatSlotText(p.text || '', slotNumber, SAMPLE_SLOT_SAVE)}</div>;
+            })}
+        </div>
+    );
+};
+
 const FreeSlotPreview: React.FC<{ element: UISaveSlotGridElement | UICGGalleryElement | UIInventoryGridElement, index: number, ring: boolean, project: VNProject }> = ({ element, index, ring, project }) => {
     const ringShadow = ring ? '0 0 0 1px rgba(56,189,248,0.7)' : undefined;
     if (element.type === UIElementType.Inventory) {
@@ -120,6 +143,13 @@ const FreeSlotPreview: React.FC<{ element: UISaveSlotGridElement | UICGGalleryEl
         const emptyStyle = el.emptySlotFont
             ? fontSettingsToStyle(el.emptySlotFont)
             : { color: el.emptySlotTextColor || '#a0aec0', fontSize: baseFont.fontSize, fontFamily: baseFont.fontFamily };
+        if (isSlotDesignActive(el.slotDesign)) {
+            return (
+                <div style={{ width: '100%', height: '100%', border: `2px solid ${slotBorderColor}`, borderRadius: 8, overflow: 'hidden', boxShadow: ringShadow }}>
+                    <DesignedSlotPreview el={el} project={project} slotNumber={index + 1} />
+                </div>
+            );
+        }
         return (
             <div style={{ width: '100%', height: '100%', backgroundColor: slotBgColor, border: `2px solid ${slotBorderColor}`, borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: ringShadow }}>
                 <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0 }}>
@@ -470,17 +500,22 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             const pageIndicatorStyle: React.CSSProperties = slotEl.pageIndicatorFont
                 ? fontSettingsToStyle(slotEl.pageIndicatorFont)
                 : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize };
-            const totalPages = Math.max(1, Math.ceil(slotEl.slotCount / 4));
+            const previewPerPage = Math.max(1, slotEl.slotsPerPage ?? 4);
+            const previewColumns = Math.max(1, slotEl.slotColumns ?? (previewPerPage <= 4 ? 2 : Math.ceil(Math.sqrt(previewPerPage))));
+            const totalPages = Math.max(1, Math.ceil(slotEl.slotCount / previewPerPage));
             const prevLabel = slotEl.prevButtonText ?? t('menuEditor.prev');
             const nextLabel = slotEl.nextButtonText ?? t('menuEditor.next');
             return (
                 <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflow: 'hidden' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3%', padding: '2%', flex: '1 1 0', minHeight: 0, boxSizing: 'border-box', overflow: 'hidden' }}>
-                        {Array.from({ length: Math.min(slotEl.slotCount, 4) }).map((_, i) => (
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${previewColumns}, 1fr)`, gap: '3%', padding: '2%', flex: '1 1 0', minHeight: 0, boxSizing: 'border-box', overflow: 'hidden' }}>
+                        {Array.from({ length: Math.min(slotEl.slotCount, previewPerPage) }).map((_, i) => (
                             <div
                                 key={i}
                                 style={{ backgroundColor: slotBgColor, borderColor: slotBorderColor, borderWidth: 2, borderStyle: 'solid', borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
                             >
+                                {isSlotDesignActive(slotEl.slotDesign) ? (
+                                    <DesignedSlotPreview el={slotEl} project={project} slotNumber={i + 1} />
+                                ) : <>
                                 <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0, overflow: 'hidden' }}>
                                     <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: emptySlotJustify, padding: '0 8%' }}>
                                         <span style={{ ...emptySlotStyle, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{slotEl.emptySlotText}</span>
@@ -492,14 +527,15 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                                 {!slotEl.hideInfoBar && (
                                     <div style={{ flex: '0 0 auto', padding: '4px 8px 6px', backgroundColor: 'rgba(0,0,0,0.35)' }} />
                                 )}
+                                </>}
                             </div>
                         ))}
                     </div>
-                    {totalPages > 1 && (
+                    {totalPages > 1 && !(slotEl.hideNavButtons && slotEl.hidePageIndicator) && (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', padding: '0.5rem 0', flexShrink: 0 }}>
-                            <span style={{ ...navBtnStyle, opacity: 0.3 }}>{prevLabel}</span>
-                            <span style={pageIndicatorStyle}>{t('menuEditor.page', { total: totalPages })}</span>
-                            <span style={navBtnStyle}>{nextLabel}</span>
+                            {!slotEl.hideNavButtons && <span style={{ ...navBtnStyle, opacity: 0.3 }}>{prevLabel}</span>}
+                            {!slotEl.hidePageIndicator && <span style={pageIndicatorStyle}>{t('menuEditor.page', { total: totalPages })}</span>}
+                            {!slotEl.hideNavButtons && <span style={navBtnStyle}>{nextLabel}</span>}
                         </div>
                     )}
                 </div>
@@ -782,6 +818,26 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             const tm = element as any;
             return <div className="w-full h-full flex items-center justify-center gap-1 rounded border border-dashed" style={{ borderColor: 'rgba(251,191,36,0.6)', background: 'rgba(245,158,11,0.12)', color: '#fcd34d', fontSize: 10, fontWeight: 600 }}>⏱ {tm.durationSeconds ?? 3}s{tm.loop ? ' ↻' : ''}</div>;
         }
+        case UIElementType.Item: {
+            const itemEl = element as any;
+            const item = itemEl.itemId ? project.items?.[itemEl.itemId] : undefined;
+            const icon = item?.icon;
+            const iconUrl = icon
+                ? (icon.type === 'video'
+                    ? ((project.videos[icon.id] as any)?.videoUrl || null)
+                    : ((project.images[icon.id] as any)?.imageUrl || (project.backgrounds[icon.id] as any)?.imageUrl || null))
+                : null;
+            return (
+                <div className="w-full h-full flex flex-col items-center justify-center relative">
+                    {iconUrl
+                        ? <img src={iconUrl} alt="" draggable={false} className="pointer-events-none" style={{ width: '100%', height: itemEl.showName ? '78%' : '100%', objectFit: 'contain' }} />
+                        : <div className="w-full flex-1 flex items-center justify-center text-2xl border-2 border-dashed border-[var(--bg-tertiary)] rounded select-none">🎒</div>}
+                    {itemEl.showName && <span className="text-xs text-white truncate w-full text-center" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>{item?.name ?? '—'}</span>}
+                    {itemEl.showCount && <span className="absolute top-0 right-0 bg-black/70 text-white text-[10px] px-1 rounded-bl">×1</span>}
+                    {itemEl.mode === 'pickup' && <span className="absolute bottom-0 left-0 bg-emerald-600/80 text-white text-[9px] px-1 rounded-tr pointer-events-none">pickup</span>}
+                </div>
+            );
+        }
         case UIElementType.Customizer: {
             const cz = element as UICustomizerElement;
             const czChar = cz.characterId ? project.characters[cz.characterId] : null;
@@ -865,6 +921,15 @@ const MenuEditor: React.FC<{
     
     // Clipboard for copy/cut/paste (persists across renders via ref)
     const clipboardRef = useRef<{ elements: VNUIElement[]; isCut: boolean }>({ elements: [], isCut: false });
+
+    // Selection can outlive its elements: undo/redo removes elements WITHOUT going through any
+    // handler that clears the selection (e.g. undoing a paste leaves the pasted ids selected).
+    // Prune dead ids so the properties panel and selection chrome never point at nothing.
+    useEffect(() => {
+        if (!screen || selectedElementIds.length === 0) return;
+        const alive = selectedElementIds.filter(id => !!screen.elements[id]);
+        if (alive.length !== selectedElementIds.length) setSelectedElementIds(alive);
+    }, [screen, selectedElementIds, setSelectedElementIds]);
 
     // Which individual free-placement slot is focused (shows resize handles), as `${elementId}:${index}`.
     const [freeSlotFocus, setFreeSlotFocus] = useState<string | null>(null);
@@ -1552,6 +1617,7 @@ const MenuEditor: React.FC<{
                     <button onClick={() => handleAddElement(UIElementType.Inventory)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Inventory</button>
                     <button onClick={() => handleAddElement(UIElementType.Meter)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Meter</button>
                     <button onClick={() => handleAddElement(UIElementType.Timer)} title="Runs actions after a delay when this screen opens" className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Timer</button>
+                    <button onClick={() => handleAddElement(UIElementType.Item)} title="Show a registry item: a draggable showcase of something the player owns, or a click-to-take pickup" className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Item</button>
                     {extensionUIElementTypes.map(({ def }) => (
                         <button key={def.type} onClick={() => handleAddCustomElement(def)} title={`From extension: ${def.type}`} className="bg-violet-700 hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-violet-400/30"><PlusIcon /> {def.icon ? def.icon + ' ' : ''}{def.displayName}</button>
                     ))}

@@ -222,6 +222,7 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                         type="text"
                         value={variableSearch}
                         onChange={e => setVariableSearch(e.target.value)}
+                        autoFocus
                         placeholder={t('list.searchPlaceholder', 'Search variables…')}
                         className="w-full bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded px-2 py-1 text-sm text-white outline-none focus:ring-1 focus:ring-sky-500"
                     />
@@ -510,7 +511,6 @@ const VariableItem: React.FC<VariableItemProps> = ({
         }
     };
 
-    const bandCount = variable.bands?.length ?? 0;
     const scope: VNVariableScope = variable.scope || 'global';
     const scopeColors: Record<VNVariableScope, { bg: string; border: string; text: string; label: string }> = {
         local: { bg: 'bg-emerald-600/20', border: 'border-emerald-500/50', text: 'text-emerald-400', label: 'Local' },
@@ -532,9 +532,12 @@ const VariableItem: React.FC<VariableItemProps> = ({
                     : 'hover:bg-[var(--bg-secondary)]'
             }`}
         >
-            {/* The author's own icon/colour if they gave one — recognised by shape, not read. */}
+            {/* The author's own icon/colour if they gave one — recognised by shape, not read.
+                Doubles as the row's TYPE indicator (glyph + hover tooltip), so the list needs
+                no separate type badge. */}
             <div
                 className={`w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 text-sm border ${variable.icon || variable.color ? '' : `${sc.bg} ${sc.border}`}`}
+                title={t(`types.${variable.type}`)}
                 style={variable.icon || variable.color ? {
                     background: `color-mix(in srgb, ${variable.color ?? 'var(--accent-sky)'} 22%, transparent)`,
                     border: `1px solid color-mix(in srgb, ${variable.color ?? 'var(--accent-sky)'} 50%, transparent)`,
@@ -555,46 +558,36 @@ const VariableItem: React.FC<VariableItemProps> = ({
                         {/* Full name, wrapping to two lines — a single truncated line made
                             "halloway_door" / "halloway_key" / "halloway_safe" all read "hallo…"
                             (user report). Clamped at 2 lines; the hover title has the rest. */}
+                        {/* Keep the row to the essentials: name + scope + type. Bands, description
+                            and usage details live in the inspector after clicking (the hover title
+                            still carries the description for a quick peek). */}
                         <span
                             className="text-sm block leading-tight"
-                            title={variable.name}
+                            title={variable.description ? `${variable.name} — ${variable.description}` : variable.name}
                             style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden', wordBreak: 'break-word' }}
                         >
                             {variable.name}
                         </span>
-                        {/* Bands are the headline fact about a variable once it has them. */}
-                        {bandCount > 0 && (
-                            <span className="block text-[10px] text-[var(--text-muted)]">
-                                {t('bands.rowSummary', '{{count}} named steps', { count: bandCount })}
-                            </span>
-                        )}
-                        {variable.description && (
-                            <span className="block text-[10px] text-[var(--text-muted)] truncate">{variable.description}</span>
-                        )}
                     </>
                 )}
             </div>
 
             <div className="flex items-center gap-1 flex-shrink-0">
-                {/* How much of the story leans on this — the single most useful thing to know at a glance. */}
-                <span
-                    className="text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1"
-                    style={{
-                        background: 'var(--bg-tertiary)',
-                        color: hasProblem ? 'var(--accent-yellow)' : 'var(--text-muted)',
-                    }}
-                    title={usageCount === 0
-                        ? t('xray.rowNone', 'Nothing uses this yet')
-                        : t('xray.rowCount', 'Used in {{count}} places', { count: usageCount })}
-                >
-                    {hasProblem && <span>⚠</span>}
-                    {usageCount}
-                </span>
+                {/* Health warnings still surface at a glance, but ONLY when something's wrong —
+                    the always-on usage-count badge moved into the inspector (X-ray). */}
+                {hasProblem && (
+                    <span
+                        className="text-[10px] px-1 py-0.5 rounded"
+                        style={{ background: 'var(--bg-tertiary)', color: 'var(--accent-yellow)' }}
+                        title={usageCount === 0
+                            ? t('xray.rowNone', 'Nothing uses this yet')
+                            : t('xray.rowCount', 'Used in {{count}} places', { count: usageCount })}
+                    >
+                        ⚠
+                    </span>
+                )}
                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${sc.bg} ${sc.text} border ${sc.border}`}>
                     {t(`scopes.${scope}`)}
-                </span>
-                <span className="text-xs text-[var(--text-secondary)] px-2 py-1 bg-[var(--bg-tertiary)] rounded">
-                    {t(`types.${variable.type}`)}
                 </span>
 
                 <button

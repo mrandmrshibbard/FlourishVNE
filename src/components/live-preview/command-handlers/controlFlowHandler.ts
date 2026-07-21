@@ -87,6 +87,15 @@ export function handleJumpToLabel(
     if (sceneId === playerState.currentSceneId) continue;
     const idx = scene.commands.findIndex(matchesLabel);
     if (idx === -1) continue;
+    // The old scene's audio must not leak into the new scene: silence sound effects and
+    // stop the music track (the reactive music sync pauses the element when audioId clears).
+    context.stopAllSfx();
+    const audio = context.musicAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.src = '';
+    }
     return {
       advance: false,
       updates: {
@@ -94,6 +103,7 @@ export function handleJumpToLabel(
         currentCommands: scene.commands,
         currentIndex: idx,
         commandStack: [],
+        musicState: { audioId: null, isPlaying: false, loop: false, currentTime: 0 },
         // Clear stage state for the new scene (mirrors handleJump).
         stageState: {
           backgroundUrl: null,

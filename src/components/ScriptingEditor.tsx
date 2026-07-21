@@ -456,6 +456,7 @@ const ScriptingEditor: React.FC<{ project: VNProject }> = ({ project }) => {
                                 type="text"
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
+                                autoFocus
                                 placeholder="Filter by key or value..."
                                 className="w-full pl-7 pr-2 py-1 rounded text-xs outline-none"
                                 style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}

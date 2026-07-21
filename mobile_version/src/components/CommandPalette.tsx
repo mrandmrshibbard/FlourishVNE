@@ -121,6 +121,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
                 <input
                     value={search}
                     onChange={e => setSearch(e.target.value)}
+                    autoFocus
                     placeholder={t('searchCommands', { defaultValue: 'Search commands…' })}
                     className="w-full text-xs px-2 py-1 rounded bg-[var(--bg-primary)] border border-[var(--border-subtle)] text-[var(--text-primary)] outline-none focus:border-[var(--accent-cyan)]"
                 />

@@ -71,7 +71,7 @@ const buildCheckboxValues = (variable?: VNVariable): { checkedValue: string | nu
 };
 
 const useElementDefaults = (
-    element: VNUIElement,
+    element: VNUIElement | undefined,
     project: VNProject,
     updateElement: (updates: Partial<VNUIElement>) => void
 ) => {
@@ -178,7 +178,10 @@ const UIElementInspector: React.FC<{
     const screen = project.uiScreens[screenId];
     const element = screen?.elements[elementId];
 
-    if (!element) return <Panel title={t('elementInspector.propsTitle')}>{t('elementInspector.notFound')}</Panel>;
+    // NOTE: the missing-element return must stay BELOW every hook. The selection can outlive
+    // the element (undoing a paste removes the element but not the selection); an early return
+    // up here changed the hook count between renders and crashed the whole app to a blank
+    // screen ("Rendered fewer hooks than expected").
 
     const updateElement = React.useCallback((updates: Partial<VNUIElement>) => {
         console.log('[UIElementInspector] Updating element:', elementId, 'with updates:', updates);
@@ -187,7 +190,7 @@ const UIElementInspector: React.FC<{
     }, [dispatch, element, elementId, screenId]);
 
     useElementDefaults(element, project, updateElement);
-    
+
     const handleDelete = () => {
         dispatch({ type: 'DELETE_UI_ELEMENT', payload: { screenId, elementId } });
         setSelectedElementId(null);
@@ -196,7 +199,7 @@ const UIElementInspector: React.FC<{
     // "Manage in Systems" — resolves where this element's data lives: an inventory grid's
     // bound list (or the player inventory), or the stat behind a meter's variable.
     const systemsLink = React.useMemo((): { label: string; sel: { system: 'items' | 'inventory' | 'stats'; id?: VNID } } | null => {
-        if (!onOpenSystems) return null;
+        if (!element || !onOpenSystems) return null;
         if (element.type === UIElementType.Inventory) {
             const collectionId = (element as any).collectionId as VNID | undefined;
             return { label: collectionId ? 'Manage this item list in Systems →' : 'Manage items in Systems →', sel: { system: 'inventory', id: collectionId } };
@@ -210,6 +213,8 @@ const UIElementInspector: React.FC<{
         }
         return null;
     }, [element, onOpenSystems, project.stats]);
+
+    if (!element) return <Panel title={t('elementInspector.propsTitle')}>{t('elementInspector.notFound')}</Panel>;
 
     return (
         <Panel title={`Properties: ${element.type}`} className="w-96 flex-shrink-0">

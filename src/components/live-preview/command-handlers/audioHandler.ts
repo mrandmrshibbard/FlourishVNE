@@ -43,21 +43,28 @@ export function handlePlayMusic(
           audioId: command.audioId,
           loop: command.loop,
           isPlaying: true,
+          volume: command.volume,
         },
       },
     };
   }
-  
+
   // Update state BEFORE starting playback
   const musicState = {
     audioId: command.audioId,
     loop: command.loop,
     currentTime: 0,
     isPlaying: true,
+    volume: command.volume,
   };
   
   // Start playback asynchronously
   const startPlayback = () => {
+    // The load may have been superseded while buffering (e.g. a Show Screen's own music took
+    // the channel right after this command) — never act on an element holding a different track.
+    try {
+      if (new URL(audio.src, window.location.href).href !== new URL(url, window.location.href).href) return;
+    } catch { if (audio.src !== url) return; }
     console.log('[PlayMusic] Starting playback');
     audio.loop = command.loop;
     audio.volume = 0; // Start at 0 for fade-in

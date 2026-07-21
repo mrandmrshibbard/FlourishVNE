@@ -90,4 +90,53 @@ describe('engine inline CSS integrity', () => {
             expect(content.includes('@keyframes vnCharShake'), `vnCharShake missing from ${name}`).toBe(true);
         }
     });
+
+    /* ── Built-game self-sufficiency ─────────────────────────────────────────────────────────
+       PARITY HARD RULE: what a user sees in test play MUST appear in built games on every
+       platform. Test play runs inside the editor page (index.html supplies extra CSS); built
+       games only get the gameBundler template + the engine itself. Templates go stale — a
+       build made with an old template shipped characters that popped in with the transition
+       class set but no animation. The engine therefore carries its OWN copy of every
+       game-facing class and keyframe, and these tests make that a compile-time contract. */
+    describe('built-game self-sufficiency', () => {
+        const cssAll = blocks.join('\n');
+        const engineKeyframes = new Set([...cssAll.matchAll(/@keyframes\s+([\w-]+)/g)].map(m => m[1]));
+        const engineClasses = new Set([...cssAll.matchAll(/\.([a-zA-Z][\w-]{2,})\s*[{,]/g)].map(m => m[1]));
+
+        it('every transition class transitionUtils can return is defined in the ENGINE inline CSS', () => {
+            const utilsSrc = fs.readFileSync(path.join(__dirname, '..', 'live-preview', 'systems', 'transitionUtils.ts'), 'utf8');
+            const classNames = new Set([...utilsSrc.matchAll(/'(transition-[\w-]+)'/g)].map(m => m[1]));
+            expect(classNames.size, 'transitionUtils class extraction rotted').toBeGreaterThan(5);
+            classNames.add('transition-base'); // applied alongside the mapped class at every call site
+            for (const cls of classNames) {
+                expect(engineClasses.has(cls), `.${cls} is used by transitionUtils but not defined in engine inline CSS — built games with a stale template lose this transition`).toBe(true);
+            }
+        });
+
+        it('every literal animation name the engine references resolves to ENGINE-inline keyframes', () => {
+            const used = new Set<string>();
+            // quoted / template-literal starts: animation: 'name …' | animationName: `name …` | .animation = `name …`
+            for (const m of src.matchAll(/animation(?:Name)?:\s*['"`]([A-Za-z][\w-]{3,})/g)) used.add(m[1]);
+            for (const m of src.matchAll(/\.animation\s*=\s*['"`]([A-Za-z][\w-]{3,})/g)) used.add(m[1]);
+            expect(used.size, 'animation-name extraction rotted').toBeGreaterThan(10);
+            // Dynamic-suffix families asserted explicitly elsewhere (elementTransition*/screenTransition*).
+            const dynamicFamilies = ['elementTransition', 'screenTransition'];
+            for (const name of used) {
+                if (dynamicFamilies.some(p => name.startsWith(p))) continue;
+                if (name.endsWith('-')) continue; // dynamic suffix follows (e.g. vn-lightning-${n}) — variants asserted below
+                if (name === 'none' || name === 'inherit') continue;
+                expect(engineKeyframes.has(name), `animation "${name}" is referenced but has no ENGINE-inline @keyframes — built games with a stale template lose it`).toBe(true);
+            }
+            // The lightning flash picks vn-lightning-{1..3} at runtime: all variants must exist.
+            for (const n of [1, 2, 3]) {
+                expect(engineKeyframes.has(`vn-lightning-${n}`), `missing @keyframes vn-lightning-${n}`).toBe(true);
+            }
+        });
+
+        it('the character keyframes are ENGINE-inline (not just in index.html/template)', () => {
+            for (const kf of ['vnCharShake', 'vnCharBounce', 'vnCharFloat', 'vnCharPulse', 'vnCharGlow', 'vnCharBreathing', 'vnCharFlicker', 'vnCharGlitchJitter']) {
+                expect(engineKeyframes.has(kf), `@keyframes ${kf} missing from engine inline CSS`).toBe(true);
+            }
+        });
+    });
 });

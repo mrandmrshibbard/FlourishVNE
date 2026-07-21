@@ -36,6 +36,7 @@ const ELEMENT_TYPE_LABEL: Record<string, string> = {
     [UIElementType.Meter]: 'MTR',
     [UIElementType.Customizer]: 'CUS',
     [UIElementType.Timer]: 'TMR',
+    [UIElementType.Item]: 'ITM',
 };
 
 /** Interactive elements (hot spots, draggables) get an amber badge so they stand out in the tree. */
