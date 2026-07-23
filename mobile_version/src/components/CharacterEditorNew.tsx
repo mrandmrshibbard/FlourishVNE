@@ -18,7 +18,9 @@ import { useInlineRename } from '../hooks/useInlineRename';
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import { VNID } from '../types';
-import { VNCharacter, VNCharacterExpression, VNCharacterLayer, VNLayerAsset, VNCharacterTextbox } from '../features/character/types';
+import { VNCharacter, VNCharacterExpression, VNCharacterLayer, VNCharacterPose, VNLayerAsset, VNCharacterTextbox } from '../features/character/types';
+import { assetArtForPose, assetHasPoseArt, characterBaseArtForPose } from '../features/character/poseArt';
+import MatchPoseArtModal from './character-poses/MatchPoseArtModal';
 import { fileToBase64 } from '../utils/file';
 import { ingestUpload, resolveFieldUrl } from '../utils/assetStore';
 import { PlusIcon, TrashIcon, UploadIcon, PencilIcon } from './icons';
@@ -42,12 +44,29 @@ const AppearanceLayerCard: React.FC<{
     layer: VNCharacterLayer;
     activeAssetId: VNID | null;
     onPick: (assetId: VNID | null) => void;
-}> = ({ characterId, layer, activeAssetId, onPick }) => {
+    /** When set, thumbnails show THIS pose's art and uploads target the pose (null = Default). */
+    activePoseId?: VNID | null;
+}> = ({ characterId, layer, activeAssetId, onPick, activePoseId }) => {
     const { t } = useTranslation('characters');
     const { project, dispatch } = useProject();
     const toast = useToast();
     const [isRenaming, setIsRenaming] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    // Per-asset pose-art upload: remembers which asset the hidden input is uploading for.
+    const poseArtInputRef = useRef<HTMLInputElement>(null);
+    const poseArtTargetRef = useRef<VNID | null>(null);
+    const handlePoseArtUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        const assetId = poseArtTargetRef.current;
+        if (!file || !assetId || !activePoseId) return;
+        const isVideo = file.type.startsWith('video/');
+        // Fresh id per upload: replacing art must produce a NEW file/URL. Reusing the old id keeps
+        // the old URL, and the browser's image cache then shows the previous bytes (stale art).
+        const url = await ingestUpload(project.id, 'characters', `${characterId}-pose-${activePoseId}-${assetId}-${Math.random().toString(36).substring(2, 9)}` as any, file);
+        dispatch({ type: 'SET_ASSET_POSE_ART', payload: { characterId, layerId: layer.id, assetId, poseId: activePoseId, art: isVideo ? { videoUrl: url, isVideo: true, loop: true } : { imageUrl: url } } });
+        if (poseArtInputRef.current) poseArtInputRef.current.value = '';
+        poseArtTargetRef.current = null;
+    };
 
     const { inputProps: renameProps } = useInlineRename(layer.name, (newName) => {
         if (newName.trim()) dispatch({ type: 'UPDATE_CHARACTER_LAYER', payload: { characterId, layerId: layer.id, name: newName.trim() } });
@@ -60,9 +79,16 @@ const AppearanceLayerCard: React.FC<{
         const isVideo = file.type.startsWith('video/');
         const id = `asset-${Math.random().toString(36).substring(2, 9)}`;
         const url = await ingestUpload(project.id, 'characters', id as any, file);
+        // WYSIWYG pose scoping: with a pose ACTIVE, the new piece's art belongs to that pose only —
+        // otherwise it would silently appear in EVERY pose (Brad's "other pose's sprite showing
+        // through" bug). With no pose active it's normal default art shared by all poses.
+        const art = isVideo ? { videoUrl: url, isVideo: true, loop: true } : { imageUrl: url };
         dispatch({
             type: 'ADD_LAYER_ASSET',
-            payload: { characterId, layerId: layer.id, id, name: file.name.split('.')[0], ...(isVideo ? { videoUrl: url, isVideo: true, loop: true } : { imageUrl: url }) },
+            payload: {
+                characterId, layerId: layer.id, id, name: file.name.split('.')[0],
+                ...(activePoseId ? { poseArt: { [activePoseId]: art } } : art),
+            },
         });
         // Instant feedback: show the freshly-uploaded asset on the current expression.
         onPick(id as any);
@@ -143,13 +169,43 @@ const AppearanceLayerCard: React.FC<{
                 <div className={tile(!activeAssetId)} onClick={() => onPick(null)} title={t('editor.none')}>
                     <div className="w-full h-full flex items-center justify-center text-[10px] text-center px-1" style={{ color: 'var(--text-muted)', background: 'var(--bg-tertiary)' }}>{t('editor.none')}</div>
                 </div>
-                {assets.map(asset => (
+                {assets.map(asset => {
+                    const art = assetArtForPose(asset, activePoseId || undefined);
+                    const missingPoseArt = !!activePoseId && !assetHasPoseArt(asset, activePoseId);
+                    // A piece with pose-only art has nothing to fall back on elsewhere — say so.
+                    const hasDefaultArt = !!(asset.imageUrl || asset.videoUrl);
+                    return (
                     <div key={asset.id} className={`group ${tile(activeAssetId === asset.id)}`} onClick={() => onPick(asset.id)} title={asset.name}>
-                        {asset.videoUrl ? (
-                            <video src={resolveFieldUrl(project.id, asset.videoUrl) || undefined} muted loop playsInline className="w-full h-full object-contain bg-slate-800" />
-                        ) : asset.imageUrl ? (
-                            <img src={resolveFieldUrl(project.id, asset.imageUrl) || undefined} alt={asset.name} className="w-full h-full object-contain bg-slate-800" />
+                        {art.videoUrl ? (
+                            <video src={resolveFieldUrl(project.id, art.videoUrl) || undefined} muted loop playsInline className="w-full h-full object-contain bg-slate-800" />
+                        ) : art.imageUrl ? (
+                            <img src={resolveFieldUrl(project.id, art.imageUrl) || undefined} alt={asset.name} className="w-full h-full object-contain bg-slate-800" />
                         ) : <div className="w-full h-full bg-slate-800" />}
+                        {/* Pose-art controls (only while editing a pose): upload art for THIS piece in
+                            this pose, and a warning badge when the piece has none yet. */}
+                        {activePoseId && (
+                            missingPoseArt ? (
+                                <button
+                                    onClick={e => { e.stopPropagation(); poseArtTargetRef.current = asset.id; poseArtInputRef.current?.click(); }}
+                                    title={hasDefaultArt
+                                        ? t('poses.usesDefaultArt', 'No art for this pose yet — the normal art will show. Click to upload this piece for this pose.')
+                                        : t('poses.noArtHere', 'This piece has no art for this pose, so it won’t show here. Click to upload art for this pose.')}
+                                    className="absolute bottom-4 right-0.5 px-1 py-0.5 rounded text-[9px] font-bold text-black opacity-90 hover:opacity-100"
+                                    style={{ background: '#f59e0b' }}
+                                >
+                                    !
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={e => { e.stopPropagation(); if (confirm(t('poses.removePoseArtConfirm', 'Remove this piece’s art for this pose? The normal art will show instead.'))) dispatch({ type: 'SET_ASSET_POSE_ART', payload: { characterId, layerId: layer.id, assetId: asset.id, poseId: activePoseId, art: null } }); }}
+                                    title={t('poses.removePoseArt', 'This piece has its own art for this pose — click to remove it')}
+                                    className="absolute bottom-4 right-0.5 px-1 py-0.5 rounded text-[9px] font-bold text-white opacity-0 group-hover:opacity-90"
+                                    style={{ background: 'var(--accent-lavender)' }}
+                                >
+                                    ✓
+                                </button>
+                            )
+                        )}
                         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-1 py-0.5">
                             {/* Editable sprite name — rename freely after upload (id is unchanged, so
                                 expressions/customizer/variable refs keep working). */}
@@ -178,12 +234,14 @@ const AppearanceLayerCard: React.FC<{
                         )}
                         <button onClick={e => { e.stopPropagation(); handleDeleteAsset(asset.id, asset.name); }} className="absolute top-0.5 right-0.5 p-0.5 bg-red-600/80 hover:bg-red-500 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity"><TrashIcon className="w-2.5 h-2.5" /></button>
                     </div>
-                ))}
+                    );
+                })}
                 {/* Upload tile */}
                 <button onClick={() => fileInputRef.current?.click()} className="rounded-md aspect-square flex flex-col items-center justify-center gap-0.5 border-2 border-dashed transition-colors hover:border-[var(--accent-cyan)]/60" style={{ color: 'var(--text-muted)', borderColor: 'var(--border-subtle)' }}>
                     <UploadIcon /><span className="text-[9px]">{t('editor.upload')}</span>
                 </button>
                 <input type="file" ref={fileInputRef} onChange={handleUpload} accept="image/*,video/*" className="hidden" />
+                <input type="file" ref={poseArtInputRef} onChange={handlePoseArtUpload} accept="image/*,video/*" className="hidden" />
             </div>
         </div>
     );
@@ -211,6 +269,13 @@ const CharacterEditorNew: React.FC<{
     const [confirmDeleteExpr, setConfirmDeleteExpr] = useState<VNCharacterExpression | null>(null);
     const baseImageInputRef = useRef<HTMLInputElement>(null);
     const fontFileInputRef = useRef<HTMLInputElement>(null);
+    // ── Poses: which VIEW of the character the whole Appearance area is editing.
+    // null = the Default pose (the character's normal base/asset art).
+    const [activePoseId, setActivePoseId] = useState<VNID | null>(null);
+    const [renamingPoseId, setRenamingPoseId] = useState<VNID | null>(null);
+    const [confirmDeletePose, setConfirmDeletePose] = useState<VNCharacterPose | null>(null);
+    const [matchPoseOpen, setMatchPoseOpen] = useState(false);
+    const poseBaseInputRef = useRef<HTMLInputElement>(null);
 
     const expressionsArray = useMemo(
         () => character ? Object.values(character.expressions) as VNCharacterExpression[] : [],
@@ -220,6 +285,14 @@ const CharacterEditorNew: React.FC<{
         () => character ? Object.values(character.layers) as VNCharacterLayer[] : [],
         [character?.layers]
     );
+    const posesArray = useMemo(
+        () => character ? Object.values(character.poses || {}) as VNCharacterPose[] : [],
+        [character?.poses]
+    );
+    // Deleted pose / switched character → back to Default so the editor never shows a ghost pose.
+    useEffect(() => {
+        if (activePoseId && !character?.poses?.[activePoseId]) setActivePoseId(null);
+    }, [activePoseId, character?.poses]);
 
     useEffect(() => {
         if (character && !selectedExpressionId && expressionsArray.length > 0) {
@@ -248,7 +321,8 @@ const CharacterEditorNew: React.FC<{
         const file = event.target.files?.[0];
         if (!file) return;
         const isVideo = file.type.startsWith('video/');
-        const url = await ingestUpload(project.id, 'characters', `${character.id}-base` as any, file);
+        // Fresh id per upload — a reused id keeps the same URL and the image cache shows stale art.
+        const url = await ingestUpload(project.id, 'characters', `${character.id}-base-${Math.random().toString(36).substring(2, 9)}` as any, file);
         if (isVideo) updateCharacter({ baseVideoUrl: url, baseImageUrl: null, isBaseVideo: true, baseVideoLoop: true });
         else updateCharacter({ baseImageUrl: url, baseVideoUrl: null, isBaseVideo: false });
     };
@@ -295,23 +369,55 @@ const CharacterEditorNew: React.FC<{
         dispatch({ type: 'ADD_CHARACTER_LAYER', payload: { characterId: activeCharacterId, name: t('editor.newLayerName', { n: layersArray.length + 1 }) } });
     };
 
+    /* ── Pose handlers ── */
+    const handleAddPose = () => {
+        dispatch({ type: 'ADD_POSE', payload: { characterId: activeCharacterId, name: t('poses.newPoseName', 'Pose {{n}}', { n: posesArray.length + 1 }) } });
+    };
+    const handleCommitPoseRename = (poseId: VNID, name: string) => {
+        dispatch({ type: 'UPDATE_POSE', payload: { characterId: activeCharacterId, poseId, updates: { name } } });
+        setRenamingPoseId(null);
+    };
+    const handleConfirmDeletePose = () => {
+        if (!confirmDeletePose) return;
+        dispatch({ type: 'DELETE_POSE', payload: { characterId: activeCharacterId, poseId: confirmDeletePose.id } });
+        if (activePoseId === confirmDeletePose.id) setActivePoseId(null);
+        setConfirmDeletePose(null);
+    };
+    const handlePoseBaseUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file || !activePoseId) return;
+        const isVideo = file.type.startsWith('video/');
+        // Fresh id per upload — a reused id keeps the same URL and the image cache shows stale art
+        // (Brad hit this: delete a pose base, re-upload, the previously-uploaded art showed instead).
+        const url = await ingestUpload(project.id, 'characters', `${character.id}-pose-${activePoseId}-base-${Math.random().toString(36).substring(2, 9)}` as any, file);
+        dispatch({ type: 'UPDATE_POSE', payload: { characterId: activeCharacterId, poseId: activePoseId, updates: isVideo
+            ? { baseVideoUrl: url, baseImageUrl: null, isBaseVideo: true, baseVideoLoop: true }
+            : { baseImageUrl: url, baseVideoUrl: null, isBaseVideo: false } } });
+        if (poseBaseInputRef.current) poseBaseInputRef.current.value = '';
+    };
+    const activePose = activePoseId ? character.poses?.[activePoseId] : null;
+
     /* ── Shared preview ── */
 
+    // Pose-aware preview — composites through the SAME resolver the engine uses, in the pose
+    // being edited, so what the author sees here is exactly what plays.
+    const previewBaseArt = characterBaseArtForPose(character, activePoseId || undefined);
     const renderPreview = () => (
         <div className="flex-1 relative overflow-hidden" style={{ background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)' }}>
             <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'repeating-conic-gradient(#fff 0% 25%, transparent 0% 50%)', backgroundSize: '16px 16px' }} />
-            {character.baseVideoUrl ? (
-                <TrimmedVideo src={resolveFieldUrl(project.id, character.baseVideoUrl) || undefined} autoPlay muted loop={character.baseVideoLoop} trimStart={(character as any).baseVideoTrimStart} trimEnd={(character as any).baseVideoTrimEnd} playsInline className="absolute inset-0 w-full h-full object-contain" />
-            ) : character.baseImageUrl ? (
-                <img src={resolveFieldUrl(project.id, character.baseImageUrl) || undefined} alt="Base" className="absolute inset-0 w-full h-full object-contain" />
+            {previewBaseArt.videoUrl ? (
+                <TrimmedVideo src={resolveFieldUrl(project.id, previewBaseArt.videoUrl) || undefined} autoPlay muted loop={previewBaseArt.loop} trimStart={previewBaseArt.trimStart} trimEnd={previewBaseArt.trimEnd} playsInline className="absolute inset-0 w-full h-full object-contain" />
+            ) : previewBaseArt.imageUrl ? (
+                <img src={resolveFieldUrl(project.id, previewBaseArt.imageUrl) || undefined} alt="Base" className="absolute inset-0 w-full h-full object-contain" />
             ) : null}
             {selectedExpression && layersArray.map((layer: VNCharacterLayer) => {
                 const assetId = selectedExpression.layerConfiguration[layer.id];
                 if (!assetId) return null;
                 const asset = layer.assets[assetId];
                 if (!asset) return null;
-                if (asset.videoUrl) return <video key={layer.id} src={resolveFieldUrl(project.id, asset.videoUrl) || undefined} autoPlay muted loop={asset.loop} playsInline className="absolute inset-0 w-full h-full object-contain" />;
-                if (asset.imageUrl) return <img key={layer.id} src={resolveFieldUrl(project.id, asset.imageUrl) || undefined} alt={asset.name} className="absolute inset-0 w-full h-full object-contain" />;
+                const art = assetArtForPose(asset, activePoseId || undefined);
+                if (art.videoUrl) return <video key={layer.id} src={resolveFieldUrl(project.id, art.videoUrl) || undefined} autoPlay muted loop={art.loop} playsInline className="absolute inset-0 w-full h-full object-contain" />;
+                if (art.imageUrl) return <img key={layer.id} src={resolveFieldUrl(project.id, art.imageUrl) || undefined} alt={asset.name} className="absolute inset-0 w-full h-full object-contain" />;
                 return null;
             })}
             {!character.baseImageUrl && !character.baseVideoUrl && layersArray.length === 0 && (
@@ -465,36 +571,108 @@ const CharacterEditorNew: React.FC<{
                                     <PlusIcon className="w-3 h-3" /> {t('editor.add')}
                                 </button>
                             </div>
+                            {/* Pose chips — which VIEW of the character the whole area edits. Outfits and
+                                expressions are shared across poses; a pose only changes the pictures. */}
+                            <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                                <span className="text-[10px] font-bold uppercase tracking-wider mr-1" style={{ color: 'var(--text-muted)' }} title={t('poses.hint', 'Different stances or angles of this character — like facing sideways or crossing their arms. Outfits automatically carry over between poses.')}>{t('poses.title', 'Poses')}</span>
+                                <button
+                                    onClick={() => setActivePoseId(null)}
+                                    className={`px-2.5 py-1 rounded-full text-xs transition-colors ${!activePoseId ? 'bg-[var(--accent-lavender)]/20 ring-1 ring-[var(--accent-lavender)]/50 text-[var(--accent-lavender)]' : 'hover:bg-[var(--bg-tertiary)]'}`}
+                                    style={{ color: !activePoseId ? undefined : 'var(--text-secondary)' }}
+                                >
+                                    {t('poses.default', 'Default')}
+                                </button>
+                                {posesArray.map(pose => {
+                                    const selected = activePoseId === pose.id;
+                                    return (
+                                        <div
+                                            key={pose.id}
+                                            onClick={() => setActivePoseId(pose.id)}
+                                            className={`group flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full cursor-pointer text-xs transition-colors ${selected ? 'bg-[var(--accent-lavender)]/20 ring-1 ring-[var(--accent-lavender)]/50' : 'hover:bg-[var(--bg-tertiary)]'}`}
+                                            style={{ color: selected ? 'var(--accent-lavender)' : 'var(--text-secondary)' }}
+                                        >
+                                            {renamingPoseId === pose.id ? (
+                                                <input
+                                                    autoFocus
+                                                    defaultValue={pose.name}
+                                                    onClick={e => e.stopPropagation()}
+                                                    onBlur={e => handleCommitPoseRename(pose.id, e.target.value.trim() || pose.name)}
+                                                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenamingPoseId(null); }}
+                                                    className="bg-slate-900 text-white px-1.5 py-0.5 rounded text-xs outline-none ring-1 ring-[var(--accent-lavender)] w-24"
+                                                />
+                                            ) : (
+                                                <span className="truncate max-w-[10rem]">{pose.name}</span>
+                                            )}
+                                            <button onClick={e => { e.stopPropagation(); setRenamingPoseId(pose.id); }} className="p-0.5 text-slate-500 hover:text-[var(--accent-lavender)] opacity-0 group-hover:opacity-100 transition-opacity" title={t('editor.rename')}><PencilIcon className="w-2.5 h-2.5" /></button>
+                                            <button onClick={e => { e.stopPropagation(); setConfirmDeletePose(pose); }} className="p-0.5 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" title={t('editor.delete')}><TrashIcon className="w-2.5 h-2.5" /></button>
+                                        </div>
+                                    );
+                                })}
+                                <button onClick={handleAddPose} className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-[var(--accent-lavender)]/10 hover:bg-[var(--accent-lavender)]/20 text-[var(--accent-lavender)]" title={t('poses.addHint', 'Add another stance or angle of this character (e.g. side view, arms crossed)')}>
+                                    <PlusIcon className="w-3 h-3" /> {t('poses.add', 'Add pose')}
+                                </button>
+                                {activePoseId && (
+                                    <button onClick={() => setMatchPoseOpen(true)} className="flex items-center gap-1 px-2 py-1 rounded-full text-xs border hover:bg-[var(--bg-tertiary)]" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }} title={t('poses.matchByNameHint', 'Drop many files at once — they are matched to your pieces by file name')}>
+                                        <UploadIcon className="w-3 h-3" /> {t('poses.matchByName', 'Match art by file name')}
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
                         {/* Scrollable: base sprite + layers */}
                         <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                            {/* Base sprite */}
-                            <div className="flex items-center gap-2 rounded-lg border p-2" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-primary)' }}>
-                                {character.baseVideoUrl ? (
-                                    <video src={resolveFieldUrl(project.id, character.baseVideoUrl) || undefined} muted loop playsInline className="w-12 h-12 object-contain rounded-md bg-slate-700 flex-shrink-0" />
-                                ) : character.baseImageUrl ? (
-                                    <img src={resolveFieldUrl(project.id, character.baseImageUrl) || undefined} alt="Base" className="w-12 h-12 object-contain rounded-md bg-slate-700 flex-shrink-0" />
+                            {/* Base sprite — edits the ACTIVE pose's base when a pose is selected. */}
+                            <div className="flex items-center gap-2 rounded-lg border p-2" style={{ borderColor: activePoseId ? 'color-mix(in srgb, var(--accent-lavender) 45%, transparent)' : 'var(--border-subtle)', background: 'var(--bg-primary)' }}>
+                                {previewBaseArt.videoUrl ? (
+                                    <video src={resolveFieldUrl(project.id, previewBaseArt.videoUrl) || undefined} muted loop playsInline className="w-12 h-12 object-contain rounded-md bg-slate-700 flex-shrink-0" />
+                                ) : previewBaseArt.imageUrl ? (
+                                    <img src={resolveFieldUrl(project.id, previewBaseArt.imageUrl) || undefined} alt="Base" className="w-12 h-12 object-contain rounded-md bg-slate-700 flex-shrink-0" />
                                 ) : (
                                     <div className="w-12 h-12 rounded-md bg-slate-700/50 flex items-center justify-center flex-shrink-0" style={{ color: 'var(--text-muted)' }}><span className="text-lg">👤</span></div>
                                 )}
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{t('editor.baseSprite')}</p>
-                                    <p className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{t('editor.baseSpriteHint')}</p>
+                                    <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                                        {activePose ? t('poses.baseFor', 'Base sprite for "{{pose}}"', { pose: activePose.name }) : t('editor.baseSprite')}
+                                    </p>
+                                    <p className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>
+                                        {activePose
+                                            ? (activePose.baseImageUrl || activePose.baseVideoUrl
+                                                ? t('poses.baseOwnArt', 'This pose has its own base art.')
+                                                : t('poses.baseUsesDefault', 'No base art for this pose yet — the normal base shows.'))
+                                            : t('editor.baseSpriteHint')}
+                                    </p>
                                 </div>
                                 <div className="flex flex-col gap-1 flex-shrink-0">
-                                    <button onClick={() => baseImageInputRef.current?.click()} className="text-xs px-2 py-1 rounded-md flex items-center justify-center gap-1" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
-                                        <UploadIcon /> {(character.baseImageUrl || character.baseVideoUrl) ? t('editor.change') : t('editor.upload')}
-                                    </button>
-                                    {(character.baseImageUrl || character.baseVideoUrl) && (
-                                        <button onClick={() => updateCharacter({ baseImageUrl: null, baseVideoUrl: null, isBaseVideo: false })} className="text-xs px-2 py-0.5 rounded-md text-red-400 hover:bg-red-500/10">{t('editor.remove')}</button>
+                                    {activePoseId ? (
+                                        <>
+                                            <button onClick={() => poseBaseInputRef.current?.click()} className="text-xs px-2 py-1 rounded-md flex items-center justify-center gap-1" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
+                                                <UploadIcon /> {(activePose?.baseImageUrl || activePose?.baseVideoUrl) ? t('editor.change') : t('editor.upload')}
+                                            </button>
+                                            {(activePose?.baseImageUrl || activePose?.baseVideoUrl) && (
+                                                <button onClick={() => dispatch({ type: 'UPDATE_POSE', payload: { characterId: activeCharacterId, poseId: activePoseId, updates: { baseImageUrl: null, baseVideoUrl: null, isBaseVideo: false } } })} className="text-xs px-2 py-0.5 rounded-md text-red-400 hover:bg-red-500/10">{t('editor.remove')}</button>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <button onClick={() => baseImageInputRef.current?.click()} className="text-xs px-2 py-1 rounded-md flex items-center justify-center gap-1" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
+                                                <UploadIcon /> {(character.baseImageUrl || character.baseVideoUrl) ? t('editor.change') : t('editor.upload')}
+                                            </button>
+                                            {(character.baseImageUrl || character.baseVideoUrl) && (
+                                                <button onClick={() => updateCharacter({ baseImageUrl: null, baseVideoUrl: null, isBaseVideo: false })} className="text-xs px-2 py-0.5 rounded-md text-red-400 hover:bg-red-500/10">{t('editor.remove')}</button>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                                 <input type="file" ref={baseImageInputRef} onChange={handleBaseImageUpload} accept="image/*,video/*" className="hidden" />
+                                <input type="file" ref={poseBaseInputRef} onChange={handlePoseBaseUpload} accept="image/*,video/*" className="hidden" />
                             </div>
-                            {character.baseVideoUrl && (
+                            {!activePoseId && character.baseVideoUrl && (
                                 <VideoTrimFields className="mt-2" start={(character as any).baseVideoTrimStart} end={(character as any).baseVideoTrimEnd}
                                     onChange={patch => updateCharacter({ baseVideoTrimStart: patch.trimStart, baseVideoTrimEnd: patch.trimEnd } as any)} />
+                            )}
+                            {activePoseId && activePose?.baseVideoUrl && (
+                                <VideoTrimFields className="mt-2" start={activePose.baseVideoTrimStart} end={activePose.baseVideoTrimEnd}
+                                    onChange={patch => dispatch({ type: 'UPDATE_POSE', payload: { characterId: activeCharacterId, poseId: activePoseId, updates: { baseVideoTrimStart: patch.trimStart, baseVideoTrimEnd: patch.trimEnd } } })} />
                             )}
 
                             {/* Layers */}
@@ -526,6 +704,7 @@ const CharacterEditorNew: React.FC<{
                                             layer={layer}
                                             activeAssetId={selectedExpression.layerConfiguration[layer.id] || null}
                                             onPick={(assetId) => handleLayerAssetChange(layer.id, assetId)}
+                                            activePoseId={activePoseId}
                                         />
                                     ))}
                                 </div>
@@ -637,6 +816,16 @@ const CharacterEditorNew: React.FC<{
             <ConfirmationModal isOpen={!!confirmDeleteExpr} onClose={() => setConfirmDeleteExpr(null)} onConfirm={handleConfirmDeleteExpr} title={t('editor.deleteExpression')}>
                 {t('editor.deleteExpressionConfirm', { name: confirmDeleteExpr?.name })}
             </ConfirmationModal>
+            <ConfirmationModal isOpen={!!confirmDeletePose} onClose={() => setConfirmDeletePose(null)} onConfirm={handleConfirmDeletePose} title={t('poses.delete', 'Delete pose')}>
+                {t('poses.deleteConfirm', 'Delete the pose "{{name}}"? Art you added for this pose will be removed. Story commands that used it will show the Default pose.', { name: confirmDeletePose?.name })}
+            </ConfirmationModal>
+            {matchPoseOpen && activePoseId && character.poses?.[activePoseId] && (
+                <MatchPoseArtModal
+                    character={character}
+                    pose={character.poses[activePoseId]}
+                    onClose={() => setMatchPoseOpen(false)}
+                />
+            )}
         </div>
     );
 };

@@ -67,6 +67,7 @@ import { VNCondition } from '../types/shared';
 import { combineConditions } from '../utils/conditionLogic';
 import { VNFontSettings } from '../features/ui/types';
 import { VNCharacterLayer } from '../features/character/types';
+import { assetArtForPose, characterBaseArtForPose, resolvePoseId } from '../features/character/poseArt';
 import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { compareBand, isBandOperator, formatBandedValue, resolveBand } from '../features/variables/bands';
 import { EyeIcon, EyeSlashIcon, FilmIcon, VariablesIcon } from './icons';
@@ -466,12 +467,16 @@ const StagingArea: React.FC<{
                             else if ((prevChar as any)?.layerSelections && Object.prototype.hasOwnProperty.call((prevChar as any).layerSelections, layer.id)) sel[layer.id] = (prevChar as any).layerSelections[layer.id];
                             else sel[layer.id] = null;
                         });
+                        // Pose-aware art (mirrors the runtime): same asset ids, per-pose pictures.
+                        const showPoseId = resolvePoseId(charData, command.poseId);
                         const imageUrls: string[] = [];
-                        if (charData.baseImageUrl) imageUrls.push(charData.baseImageUrl);
+                        const showBase = characterBaseArtForPose(charData, showPoseId);
+                        if (showBase.imageUrl) imageUrls.push(showBase.imageUrl);
                         Object.values(charData.layers).forEach((layer: VNCharacterLayer) => {
                             const assetId = sel[layer.id];
                             const asset = assetId ? layer.assets[assetId] : null;
-                            if (asset?.imageUrl) imageUrls.push(asset.imageUrl);
+                            const art = asset ? assetArtForPose(asset, showPoseId) : null;
+                            if (art?.imageUrl) imageUrls.push(art.imageUrl);
                         });
                         // "Keep current position": if the character is already on stage and the command
                         // opts in, preview it at its existing position (mirrors the runtime handler) so the
@@ -479,7 +484,7 @@ const StagingArea: React.FC<{
                         const keptPosition = command.keepPosition && characters[command.characterId]
                             ? characters[command.characterId].position
                             : command.position;
-                        characters[command.characterId] = { charId: command.characterId, layer: command.layer, position: keptPosition, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY, contentBox: command.contentBox, layerSelections: sel };
+                        characters[command.characterId] = { charId: command.characterId, layer: command.layer, position: keptPosition, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY, contentBox: command.contentBox, layerSelections: sel, ...(showPoseId ? { poseId: showPoseId } : {}) } as any;
                     }
                     break;
                 case CommandType.HideCharacter:
@@ -511,14 +516,38 @@ const StagingArea: React.FC<{
                     if (cur && cData) {
                         const sel: Record<string, string | null> = { ...((cur as any).layerSelections || {}) };
                         (command.layers || []).forEach(({ layerId, assetId }) => { sel[layerId] = assetId || null; });
+                        // Rebuild in the character's CURRENT pose (mirrors the runtime handler).
+                        const curPoseId = resolvePoseId(cData, (cur as any).poseId);
                         const imageUrls: string[] = [];
-                        if (cData.baseImageUrl) imageUrls.push(cData.baseImageUrl);
+                        const layerBase = characterBaseArtForPose(cData, curPoseId);
+                        if (layerBase.imageUrl) imageUrls.push(layerBase.imageUrl);
                         Object.values(cData.layers).forEach((layer: VNCharacterLayer) => {
                             const aId = sel[layer.id];
                             const asset = aId ? layer.assets[aId] : null;
-                            if (asset?.imageUrl) imageUrls.push(asset.imageUrl);
+                            const art = asset ? assetArtForPose(asset, curPoseId) : null;
+                            if (art?.imageUrl) imageUrls.push(art.imageUrl);
                         });
                         characters[command.characterId] = { ...cur, imageUrls, layerSelections: sel };
+                    }
+                    break;
+                }
+                case CommandType.SetCharacterPose: {
+                    // Change Pose: same outfit/expression/position, new art (mirrors the runtime handler).
+                    const cur = characters[command.characterId];
+                    const cData = project.characters[command.characterId];
+                    if (cur && cData) {
+                        const newPoseId = resolvePoseId(cData, (command as any).poseId);
+                        const sel: Record<string, string | null> = { ...((cur as any).layerSelections || {}) };
+                        const imageUrls: string[] = [];
+                        const poseBase = characterBaseArtForPose(cData, newPoseId);
+                        if (poseBase.imageUrl) imageUrls.push(poseBase.imageUrl);
+                        Object.values(cData.layers).forEach((layer: VNCharacterLayer) => {
+                            const aId = sel[layer.id];
+                            const asset = aId ? layer.assets[aId] : null;
+                            const art = asset ? assetArtForPose(asset, newPoseId) : null;
+                            if (art?.imageUrl) imageUrls.push(art.imageUrl);
+                        });
+                        characters[command.characterId] = { ...cur, imageUrls, ...(newPoseId ? { poseId: newPoseId } : { poseId: undefined }) } as any;
                     }
                     break;
                 }

@@ -566,7 +566,8 @@
     "transDistanceAuto": "automático",
     "transDistanceHint": "A que distância começa, relativa ao seu próprio tamanho. 100% = uma largura completa do elemento.",
     "transOnReveal": "Repetir ao ser mostrado por uma ação",
-    "transOnRevealHint": "Quando uma ação Mostrar Elemento o revela, repete a entrada em vez de apenas desvanecer."
+    "transOnRevealHint": "Quando uma ação Mostrar Elemento o revela, repete a entrada em vez de apenas desvanecer.",
+    "previewPose": "Pose mostrada nesta prévia"
   },
   "cgWizard": {
     "title": "Assistente de galeria de CG",
@@ -1071,6 +1072,10 @@
     "url": "URL",
     "urlPlaceholder": "https://exemplo.com",
     "openNewTab": "Abrir em nova aba",
-    "runOnlyIf": "Executar somente se (opcional)"
+    "runOnlyIf": "Executar somente se (opcional)",
+    "timerResume": "Continuar de onde parou (se foi parado antes; precisa da variável)"
+  },
+  "character": {
+    "defaultPose": "Padrão (arte normal)"
   }
 }

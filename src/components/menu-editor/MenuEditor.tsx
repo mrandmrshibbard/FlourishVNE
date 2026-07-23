@@ -21,6 +21,7 @@ import { pluginManager } from '../../features/plugins/PluginManagerService';
 import { useExtensionUIElementTypes } from '../ExtensionPanelsHost';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../../utils/styleUtils';
 import { isSlotDesignActive, slotPartVisible, formatSlotText, SAMPLE_SLOT_SAVE, SAMPLE_SLOT_SCREENSHOT } from '../../utils/slotDesign';
+import { assetArtForPose, characterBaseArtForPose, resolvePoseId } from '../../features/character/poseArt';
 import { GradientText } from '../ui/GradientText';
 import { PlusIcon, SparklesIcon } from '../icons';
 import CharacterCreatorWizard, { UnifiedWizardResult } from './CharacterCreatorWizard';
@@ -279,17 +280,21 @@ const CustomizerSprite: React.FC<{ cz: UICustomizerElement, project: VNProject, 
     const czChar = cz.characterId ? project.characters[cz.characterId] : null;
     if (!czChar) return null;
     const czFallback = (cz.expressionId && czChar.expressions[cz.expressionId]) || Object.values(czChar.expressions)[0];
+    // Pose-aware art (mirrors the engine's Customizer preview): same asset ids, per-pose pictures.
+    const czPoseId = resolvePoseId(czChar, (cz as any).poseId);
     const imgs: string[] = []; const vids: string[] = []; let hasVid = false;
-    if (czChar.baseVideoUrl) { vids.push(czChar.baseVideoUrl); hasVid = true; }
-    else if (czChar.baseImageUrl) { imgs.push(czChar.baseImageUrl); }
+    const czBase = characterBaseArtForPose(czChar, czPoseId);
+    if (czBase.videoUrl) { vids.push(czBase.videoUrl); hasVid = true; }
+    else if (czBase.imageUrl) { imgs.push(czBase.imageUrl); }
     Object.entries(czChar.layers).forEach(([layerId, layer]: [string, any]) => {
         const cat = (cz.categories || []).find(c => c.layerId === layerId);
         let assetId: string | null = null;
         if (cat) assetId = String((project.variables[cat.variableId]?.defaultValue ?? '') || '') || null;
         if (!assetId && czFallback) assetId = czFallback.layerConfiguration[layerId] || null;
         const asset = assetId ? layer.assets[assetId] : null;
-        if (asset?.videoUrl) { vids.push(asset.videoUrl); hasVid = true; }
-        else if (asset?.imageUrl) { imgs.push(asset.imageUrl); }
+        const art = asset ? assetArtForPose(asset, czPoseId) : null;
+        if (art?.videoUrl) { vids.push(art.videoUrl); hasVid = true; }
+        else if (art?.imageUrl) { imgs.push(art.imageUrl); }
     });
     const op = bottom ? 'bottom' : 'center';
     return <div className="relative w-full h-full">
@@ -577,13 +582,15 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
              const videoTrims: Array<{ start?: number; end?: number }> = [];
              let hasVideo = false;
 
-             // Add base
-             if (char.baseVideoUrl) {
-                 videoUrls.push(char.baseVideoUrl);
-                 videoTrims.push({ start: (char as any).baseVideoTrimStart, end: (char as any).baseVideoTrimEnd });
+             // Add base (in the element's pose — mirrors the engine's CharacterPreview)
+             const cpPoseId = resolvePoseId(char, (charEl as any).poseId);
+             const cpBase = characterBaseArtForPose(char, cpPoseId);
+             if (cpBase.videoUrl) {
+                 videoUrls.push(cpBase.videoUrl);
+                 videoTrims.push({ start: cpBase.trimStart, end: cpBase.trimEnd });
                  hasVideo = true;
-             } else if (char.baseImageUrl) {
-                 imageUrls.push(char.baseImageUrl);
+             } else if (cpBase.imageUrl) {
+                 imageUrls.push(cpBase.imageUrl);
              }
 
              // Add layers from first expression (for preview purposes)
@@ -593,12 +600,13 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                      const layer = char.layers[layerId];
                      if (layer && assetId) {
                          const asset = layer.assets[assetId];
-                         if (asset?.videoUrl) {
-                             videoUrls.push(asset.videoUrl);
+                         const art = asset ? assetArtForPose(asset, cpPoseId) : null;
+                         if (art?.videoUrl) {
+                             videoUrls.push(art.videoUrl);
                              videoTrims.push({});
                              hasVideo = true;
-                         } else if (asset?.imageUrl) {
-                             imageUrls.push(asset.imageUrl);
+                         } else if (art?.imageUrl) {
+                             imageUrls.push(art.imageUrl);
                          }
                      }
                  });

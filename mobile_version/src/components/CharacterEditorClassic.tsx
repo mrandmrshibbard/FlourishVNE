@@ -279,7 +279,8 @@ const CharacterEditorClassic: React.FC<{
         const file = event.target.files?.[0];
         if (!file) return;
         const isVideo = file.type.startsWith('video/');
-        const url = await ingestUpload(project.id, 'characters', `${character.id}-base` as any, file);
+        // Fresh id per upload — a reused id keeps the same URL and the image cache shows stale art.
+        const url = await ingestUpload(project.id, 'characters', `${character.id}-base-${Math.random().toString(36).substring(2, 9)}` as any, file);
         if (isVideo) {
             updateCharacter({ baseVideoUrl: url, baseImageUrl: null, isBaseVideo: true, baseVideoLoop: true });
         } else {
@@ -621,6 +622,9 @@ const CharacterEditorClassic: React.FC<{
                     <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>
                         {t('editor.baseSpriteHint')}
                     </p>
+                    {Object.keys((character as any).poses || {}).length > 0 && (
+                        <p className="text-[10px] mb-2 text-amber-400/80">{t('poses.classicPointer', 'This character has poses — manage them in the New character editor (switch views at the top).')}</p>
+                    )}
                     <div className="flex items-center gap-2">
                         {character.baseVideoUrl ? (
                             <video src={resolveFieldUrl(project.id, character.baseVideoUrl) || undefined} muted loop playsInline className="w-14 h-14 object-contain rounded-md bg-slate-700" />

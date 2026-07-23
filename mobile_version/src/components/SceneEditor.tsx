@@ -86,6 +86,12 @@ const CommandItem: React.FC<{
                 const n = (slc.layers || []).length;
                 return `Set Layers: ${cn} (${n} ${n === 1 ? 'layer' : 'layers'})`;
             }
+            case CommandType.SetCharacterPose: {
+                const spc = command as import('../features/scene/types').SetCharacterPoseCommand;
+                const cn = project.characters[spc.characterId]?.name || 'N/A';
+                const pn = spc.poseId ? (project.characters[spc.characterId]?.poses?.[spc.poseId]?.name || 'N/A') : 'Default';
+                return `Change Pose: ${cn} → ${pn}`;
+            }
             case CommandType.Choice:
                 return `Choice: ${command.options.length} options`;
             case CommandType.PlayMusic:

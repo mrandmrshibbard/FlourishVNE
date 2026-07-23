@@ -230,6 +230,9 @@ export interface StageCharacterState {
     /** Resolved per-layer asset selection (layerId → assetId|null) used to build the composite.
      *  Lets `SetCharacterLayer` patch one layer mid-scene and rebuild without re-running ShowCharacter. */
     layerSelections?: Record<VNID, VNID | null>;
+    /** The pose currently shown (absent = Default). Persists in saves; Set Character Layer
+     *  and Change Pose keep/update it. Additive-optional. */
+    poseId?: VNID;
 }
 
 /** A live (reactive) conditional background candidate (from a live Set Background). */

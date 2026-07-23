@@ -28,6 +28,7 @@ import { PHONE_APPS, resolvePhoneApp, renderContactsRoster, fireAppButton, Phone
 import { collectToCameraRoll, phoneThreadKey, countPhoneThread } from './live-preview/command-handlers/phoneHandler';
 import { resolveVarNumber } from './live-preview/systems/resolveVarNumber';
 import { formatSlotText, isSlotDesignActive, slotPartVisible, SLOT_GRID_PAGE_EVENT } from '../utils/slotDesign';
+import { assetArtForPose, characterBaseArtForPose, resolvePoseId } from '../features/character/poseArt';
 import MiniGameFrame from './live-preview/minigames/MiniGameFrame';
 import type { PhoneAppId } from './live-preview/types/gameState';
 import { resolveFieldUrl } from '../utils/assetStore';
@@ -35,7 +36,7 @@ import { resolvePlayerCharacterId } from '../utils/playerCharacter';
 import { VNItem, VNItemCollection } from '../features/items/types';
 import {
     VNScene,
-    VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand, DialogueCommand,
+    VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand, SetCharacterPoseCommand, DialogueCommand,
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand,
     PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
     FlashScreenCommand, LightningCommand, FlashlightCommand, SpotlightCommand, FireworksCommand, PlaceLightsCommand, VNLight, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
@@ -121,6 +122,25 @@ const hexToRgbStr = (hex: string): string => {
 
 // LightsLayer (placed twinkling lights renderer) moved to ScreenOverlayEffects so the PlaceLights
 // command and the screen-attached 'lights' effect share one renderer — imported below.
+
+// ── Sprite image load tracking ──────────────────────────────────────────────────────────
+// In web-hosted builds (itch.io etc.) each character layer is its own network fetch, so on a
+// slow connection the pieces of one sprite can decode seconds apart — the character assembles
+// on screen bit by bit. This set records which image URLs have finished loading (success OR
+// failure — a broken file must never hide the rest of the sprite forever); the stage render
+// holds a sprite invisible until EVERY layer in its stack is here, so it always appears whole.
+const vnLoadedImages = new Set<string>();
+const vnWarmImage = (url: string): Promise<void> =>
+    new Promise(resolve => {
+        if (!url || vnLoadedImages.has(url) || url.startsWith('data:')) {
+            if (url) vnLoadedImages.add(url);
+            resolve();
+            return;
+        }
+        const img = new Image();
+        img.onload = img.onerror = () => { vnLoadedImages.add(url); resolve(); };
+        img.src = url;
+    });
 
 function isRuntimeDebugEnabled(): boolean {
     try {
@@ -237,6 +257,7 @@ import {
     handleShowCharacter,
     handleHideCharacter,
     handleSetCharacterLayer,
+    handleSetCharacterPose,
     handleSetBackground,
     handlePlayMusic,
     handleStopMusic,
@@ -4677,14 +4698,16 @@ const UIScreenRenderer: React.FC<{
                 let hasVideo = false;
                 let videoLoop = false;
 
-                // Add base image/video (managed refs → flourish-asset:// URLs)
-                if (character.baseVideoUrl) {
-                    videoUrls.push(resolveFieldUrl(project.id, character.baseVideoUrl) || character.baseVideoUrl);
-                    videoTrims.push({ start: (character as any).baseVideoTrimStart, end: (character as any).baseVideoTrimEnd });
+                // Add base image/video (managed refs → flourish-asset:// URLs), in the element's pose.
+                const previewPoseId = resolvePoseId(character, (el as any).poseId);
+                const previewBase = characterBaseArtForPose(character, previewPoseId);
+                if (previewBase.videoUrl) {
+                    videoUrls.push(resolveFieldUrl(project.id, previewBase.videoUrl) || previewBase.videoUrl);
+                    videoTrims.push({ start: previewBase.trimStart, end: previewBase.trimEnd });
                     hasVideo = true;
-                    videoLoop = !!character.baseVideoLoop;
-                } else if (character.baseImageUrl) {
-                    imageUrls.push(resolveFieldUrl(project.id, character.baseImageUrl) || character.baseImageUrl);
+                    videoLoop = !!previewBase.loop;
+                } else if (previewBase.imageUrl) {
+                    imageUrls.push(resolveFieldUrl(project.id, previewBase.imageUrl) || previewBase.imageUrl);
                 }
                 
                 // Get the default expression if specified
@@ -4731,13 +4754,14 @@ const UIScreenRenderer: React.FC<{
                     }
                     
                     if (asset) {
-                        if (asset.videoUrl) {
-                            videoUrls.push(resolveFieldUrl(project.id, asset.videoUrl) || asset.videoUrl);
+                        const art = assetArtForPose(asset, previewPoseId);
+                        if (art.videoUrl) {
+                            videoUrls.push(resolveFieldUrl(project.id, art.videoUrl) || art.videoUrl);
                             videoTrims.push({});
                             hasVideo = true;
-                            videoLoop = videoLoop || !!asset.loop;
-                        } else if (asset.imageUrl) {
-                            imageUrls.push(resolveFieldUrl(project.id, asset.imageUrl) || asset.imageUrl);
+                            videoLoop = videoLoop || !!art.loop;
+                        } else if (art.imageUrl) {
+                            imageUrls.push(resolveFieldUrl(project.id, art.imageUrl) || art.imageUrl);
                         }
                     }
                 });
@@ -4923,20 +4947,24 @@ const UIScreenRenderer: React.FC<{
                 if (!character) return null;
                 const fallbackExpr = (el.expressionId && character.expressions[el.expressionId]) || Object.values(character.expressions)[0] || null;
 
-                // Composite preview: base + each layer's chosen asset (category variable → else fallback expression).
+                // Composite preview: base + each layer's chosen asset (category variable → else fallback
+                // expression), rendered in the element's pose (e.g. the head-on dress-up view).
+                const czPoseId = resolvePoseId(character, (el as any).poseId);
                 const imageUrls: string[] = [];
                 const videoUrls: string[] = [];
                 let hasVideo = false, videoLoop = false;
-                if (character.baseVideoUrl) { videoUrls.push(resolveFieldUrl(project.id, character.baseVideoUrl) || character.baseVideoUrl); hasVideo = true; videoLoop = !!character.baseVideoLoop; }
-                else if (character.baseImageUrl) { imageUrls.push(resolveFieldUrl(project.id, character.baseImageUrl) || character.baseImageUrl); }
+                const czBase = characterBaseArtForPose(character, czPoseId);
+                if (czBase.videoUrl) { videoUrls.push(resolveFieldUrl(project.id, czBase.videoUrl) || czBase.videoUrl); hasVideo = true; videoLoop = !!czBase.loop; }
+                else if (czBase.imageUrl) { imageUrls.push(resolveFieldUrl(project.id, czBase.imageUrl) || czBase.imageUrl); }
                 Object.entries(character.layers).forEach(([layerId, layer]) => {
                     const cat = (el.categories || []).find(c => c.layerId === layerId);
                     let assetId: string | null = null;
                     if (cat) assetId = String(variables[cat.variableId] ?? '') || null;
                     if (!assetId && fallbackExpr) assetId = fallbackExpr.layerConfiguration[layerId] || null;
                     const asset = assetId ? layer.assets[assetId] : null;
-                    if (asset?.videoUrl) { videoUrls.push(resolveFieldUrl(project.id, asset.videoUrl) || asset.videoUrl); hasVideo = true; videoLoop = videoLoop || !!asset.loop; }
-                    else if (asset?.imageUrl) { imageUrls.push(resolveFieldUrl(project.id, asset.imageUrl) || asset.imageUrl); }
+                    const art = asset ? assetArtForPose(asset, czPoseId) : null;
+                    if (art?.videoUrl) { videoUrls.push(resolveFieldUrl(project.id, art.videoUrl) || art.videoUrl); hasVideo = true; videoLoop = videoLoop || !!art.loop; }
+                    else if (art?.imageUrl) { imageUrls.push(resolveFieldUrl(project.id, art.imageUrl) || art.imageUrl); }
                 });
 
                 const swatchSize = el.swatchSize ?? 48;
@@ -6454,7 +6482,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // Set Time of Day command; auto-advance leaves a small default so its 250ms steps blend smoothly).
     const dnTransitionRef = useRef<number>(0.4);
     /** Register/replace a timer. Shared by the Start Timer command AND the Start Timer button action. */
-    const startTimer = (cfg: { timerId?: string; variableId?: VNID; mode?: 'countdown' | 'stopwatch'; duration?: number; from?: number; interval?: number; loop?: boolean; onComplete?: VNUIAction[] }): string => {
+    const startTimer = (cfg: { timerId?: string; variableId?: VNID; mode?: 'countdown' | 'stopwatch'; duration?: number; from?: number; interval?: number; loop?: boolean; resume?: boolean; onComplete?: VNUIAction[] }): string => {
         // Case-insensitive key: "MyTimer" and "mytimer" are the same timer, so a Stop Timer
         // typed with different casing (often in a different scene) still finds it.
         const key = (cfg.timerId || '').trim().toLowerCase() || 'default';
@@ -6462,6 +6490,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const intervalSec = Math.max(0.05, cfg.interval ?? 1);
         const startVal = mode === 'countdown' ? (cfg.duration ?? 0) : (cfg.from ?? 0);
         const target = mode === 'countdown' ? 0 : (cfg.duration ?? 0); // stopwatch cap; 0 = run until stopped
+        if (cfg.resume) {
+            // Continue where it left off. Stop Timer deletes the runtime but the bound variable
+            // keeps the value it showed at that moment — that value is the resume point. Loop
+            // restarts still go back to the FULL start value (resetTo), not the resume point.
+            if (timersRef.current.has(key)) return key; // already ticking — leave it running
+            const varVal = cfg.variableId ? Number(mergeDirtyUiVariables(playerStateRef.current?.variables || {})[cfg.variableId]) : NaN;
+            const finished = mode === 'countdown' ? varVal <= 0 : (target > 0 && varVal >= target);
+            if (Number.isFinite(varVal) && !finished) {
+                timersRef.current.set(key, { variableId: cfg.variableId || undefined, mode, intervalSec, target, accMs: 0, value: varVal, resetTo: startVal, loop: !!cfg.loop, onComplete: cfg.onComplete });
+                return key;
+            }
+            // Nothing to resume (never ran, no variable, or already finished) — start fresh below.
+        }
         timersRef.current.set(key, { variableId: cfg.variableId || undefined, mode, intervalSec, target, accMs: 0, value: startVal, resetTo: startVal, loop: !!cfg.loop, onComplete: cfg.onComplete });
         if (cfg.variableId) updatePlayerState(p => p ? { ...p, variables: { ...p.variables, [cfg.variableId as string]: startVal } } : null);
         return key;
@@ -7665,13 +7706,43 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // it beats the leaving scene's Scene Settings pick. Custom transitions (author-made curtain
     // animations) play close → swap the scene while covered → open; built-ins keep the black
     // overlay CSS animations.
+    const stopAllSfx = useCallback(() => {
+        // Stop the current dialogue voice too (scene change / quit / load / skip-backward).
+        if (currentVoiceRef.current) {
+            try { currentVoiceRef.current.pause(); currentVoiceRef.current.currentTime = 0; currentVoiceRef.current.src = ''; } catch (e) {}
+            currentVoiceRef.current = null;
+        }
+        // Stop any WebAudio buffer sources
+        try {
+            sfxSourceNodesRef.current.forEach(src => {
+                try { src.stop(); } catch(e) {}
+            });
+        } catch (e) {}
+        sfxSourceNodesRef.current = [];
+        // Clear HTMLAudio fallbacks if any
+        sfxPoolRef.current.forEach(({ audio }) => { try { audio.pause(); audio.currentTime = 0; audio.src = ''; } catch (e) {} });
+        sfxPoolRef.current = [];
+        // Clear live (reactive) SFX too so loops don't survive a quit / return to title.
+        liveSfxRef.current.forEach(entry => { entry.audio = null; entry.lastMet = false; });
+        liveSfxRef.current.clear();
+        // Optionally clear buffer cache to free memory
+        sfxBufferCacheRef.current.clear();
+    }, []);
+
     const startSceneExitTransition = useCallback((currentSceneId: string, executeChange: () => void, override?: string) => {
+        // The old scene's sound effects (and dialogue voice) must not follow us into the next
+        // scene. EVERY scene change funnels through here — implicit end-of-scene fall-through,
+        // the Jump command, choice/hotspot jumps, and UI-action jumps — so one cleanup at the
+        // moment the scene actually swaps covers them all (sounds keep playing over the close
+        // half of the transition, then stop with the old scene). Music is deliberately
+        // untouched: cross-scene music continuity is a feature.
+        const applyChange = () => { stopAllSfx(); executeChange(); };
         const currentScene = project.scenes[currentSceneId];
         const resolved = resolveSceneTransition(override, currentScene, project.customTransitions);
         const shouldFade = hasRenderedSceneRef.current;
 
         if (resolved.kind === 'instant' || !shouldFade) {
-            executeChange();
+            applyChange();
             return;
         }
 
@@ -7700,7 +7771,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 });
             }
             const openPhase = () => {
-                executeChange();
+                applyChange();
                 if (hasOpen) {
                     playHalfSfx(def.open);
                     setCustomTransition({ def, phase: 'opening' });
@@ -7739,10 +7810,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         setSceneTransitionFading(true);
 
         setTimeout(() => {
-            executeChange();
+            applyChange();
             setSceneTransitionFading(false);
         }, duration * 1000);
-    }, [project.scenes, project.customTransitions, assetResolver, settings.sfxVolume]);
+    }, [project.scenes, project.customTransitions, assetResolver, settings.sfxVolume, stopAllSfx]);
 
     // --- Audio Management ---
     useEffect(() => {
@@ -7919,11 +7990,32 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
             }
         };
-        for (const cmd of (playerState.currentCommands || []) as any[]) {
+        // Scene commands PLUS the commands of any common event the scene calls directly —
+        // their Show Characters fetch just as late as the scene's own.
+        const commandLists: any[][] = [(playerState.currentCommands || []) as any[]];
+        for (const cmd of commandLists[0]) {
+            if (cmd?.type === 'CallCommonEvent' && cmd.commonEventId) {
+                const ev = (project.commonEvents || {})[cmd.commonEventId] as any;
+                if (ev?.commands) commandLists.push(ev.commands as any[]);
+            }
+        }
+        for (const cmds of commandLists) for (const cmd of cmds) {
             switch (cmd?.type) {
-                case 'ShowCharacter': {
+                // Every command that can put character art on stage — a scene that only SWAPS a
+                // layer or pose (character shown scenes ago) still needs that art warmed here.
+                case 'ShowCharacter':
+                case 'SetCharacterPose':
+                case 'SetCharacterLayer': {
                     const ch = cmd.characterId ? (project.characters as any)?.[cmd.characterId] : null;
                     if (ch) addDeep(ch, 0);
+                    // ⟨Player's Character⟩ commands resolve at runtime — warm whoever the player
+                    // variable currently points at (cheap: one more character walk).
+                    if (cmd.characterSource === 'player') {
+                        const varId = (project as any).ui?.playerCharacterVarId;
+                        const picked = varId ? String(playerState.variables?.[varId] ?? '') : '';
+                        const pc = picked ? (project.characters as any)?.[picked] : null;
+                        if (pc) addDeep(pc, 0);
+                    }
                     break;
                 }
                 case 'SetBackground': {
@@ -7939,12 +8031,38 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 default: break;
             }
         }
-        prewarmedImagesRef.current = [...urls].slice(0, 150).map(u => {
+        // Warm through the SAME URL resolution the renderer uses (identity on web; on desktop it
+        // maps managed refs to flourish-asset://) — warming a different string warms nothing.
+        // vnWarmImage also records completion so the stage's atomic sprite gate can pass.
+        prewarmedImagesRef.current = [...urls].slice(0, 400).map(u => {
+            const resolved = resolveFieldUrl(project.id, u) || u;
             const im = new Image();
-            im.src = u;
+            im.onload = im.onerror = () => { vnLoadedImages.add(resolved); };
+            im.src = resolved;
             return im;
         });
     }, [playerState?.currentSceneId, playerState?.mode, project]);
+
+    // ── Atomic sprite paint ─────────────────────────────────────────────────────────────
+    // The guarantee behind the pre-warm: a sprite stays INVISIBLE until every one of its layer
+    // images has finished loading, then appears whole. Pre-warming makes that wait ~zero in the
+    // common case; this makes "the character assembles piece by piece" impossible even on a cold
+    // cache or a slow host. The render below checks vnLoadedImages synchronously; this effect
+    // loads whatever is missing and re-renders when a character's stack completes.
+    const [, bumpSpriteEpoch] = useReducer((x: number) => x + 1, 0);
+    useEffect(() => {
+        const chars = playerState?.stageState?.characters;
+        if (!chars) return;
+        let alive = true;
+        Object.values(chars).forEach((c: any) => {
+            if (c?.isVideo || !c?.imageUrls?.length) return;
+            const missing = (c.imageUrls as string[]).filter(u => !vnLoadedImages.has(u));
+            if (missing.length) {
+                Promise.all(missing.map(vnWarmImage)).then(() => { if (alive) bumpSpriteEpoch(); });
+            }
+        });
+        return () => { alive = false; };
+    }, [playerState?.stageState?.characters]);
 
     // Ambient Noise Management
     useEffect(() => {
@@ -8154,29 +8272,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }).catch(e => console.error('[Music Sync] Failed to play restored music:', e));
         }
     }, [playerState?.musicState?.audioId, playerState?.mode, isJustLoaded, assetResolver, fadeAudio, settings.musicVolume]);
-
-    const stopAllSfx = useCallback(() => {
-        // Stop the current dialogue voice too (scene change / quit / load / skip-backward).
-        if (currentVoiceRef.current) {
-            try { currentVoiceRef.current.pause(); currentVoiceRef.current.currentTime = 0; currentVoiceRef.current.src = ''; } catch (e) {}
-            currentVoiceRef.current = null;
-        }
-        // Stop any WebAudio buffer sources
-        try {
-            sfxSourceNodesRef.current.forEach(src => {
-                try { src.stop(); } catch(e) {}
-            });
-        } catch (e) {}
-        sfxSourceNodesRef.current = [];
-        // Clear HTMLAudio fallbacks if any
-        sfxPoolRef.current.forEach(({ audio }) => { try { audio.pause(); audio.currentTime = 0; audio.src = ''; } catch (e) {} });
-        sfxPoolRef.current = [];
-        // Clear live (reactive) SFX too so loops don't survive a quit / return to title.
-        liveSfxRef.current.forEach(entry => { entry.audio = null; entry.lastMet = false; });
-        liveSfxRef.current.clear();
-        // Optionally clear buffer cache to free memory
-        sfxBufferCacheRef.current.clear();
-    }, []);
 
     /**
      * Stop sound effects on demand (the Stop Sound Effect command).
@@ -9007,6 +9102,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     // decoupled applier below (stage/ui/music/variables + stagePatch). Safe to bridge
                     // because none depend on the main loop's advance/index.
                     case 'SetCharacterLayer': result = handleSetCharacterLayer(cmd, hctx); break;
+                    case 'SetCharacterPose': result = handleSetCharacterPose(cmd, hctx); break;
                     case 'ShowText': result = handleShowText(cmd, hctx); break;
                     case 'HideText': result = handleHideText(cmd, hctx); break;
                     case 'HideImage': result = handleHideImage(cmd, hctx); break;
@@ -9440,6 +9536,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.SetCharacterLayer: {
                     const result = handleSetCharacterLayer(command as SetCharacterLayerCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.SetCharacterPose: {
+                    const result = handleSetCharacterPose(command as SetCharacterPoseCommand, commandContext);
                     applyResult(result);
                     break;
                 }
@@ -13675,10 +13776,22 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 </>
                             );
 
-                            // Wrap with filter/flicker effects
-                            let wrappedContent = hasContentEffect
-                                ? <div className="w-full h-full relative" style={contentEffectStyle}>{spriteContent}</div>
-                                : spriteContent;
+                            // Atomic paint: hold the whole sprite (layers + tint/glitch mask copies)
+                            // invisible until every layer image has loaded, so it can never appear
+                            // piece by piece on a slow host. Videos stream on their own; ghosts and
+                            // already-warm art pass instantly. visibility (not display) keeps layout
+                            // and lets the entrance animation run — art joins it whole. The wrapper
+                            // div is UNCONDITIONAL so flipping ready only changes a style — a
+                            // conditional wrapper would remount every <img> and refetch the art.
+                            const spriteReady = !!char.isVideo || !char.imageUrls?.length
+                                || char.imageUrls.every(u => vnLoadedImages.has(u));
+
+                            // Wrap with filter/flicker effects (+ the atomic-paint hold)
+                            let wrappedContent = (
+                                <div className="w-full h-full relative" style={{ ...contentEffectStyle, ...(spriteReady ? {} : { visibility: 'hidden' as const }) }}>
+                                    {spriteContent}
+                                </div>
+                            );
 
                             // Wrap with transform-based effects (each in its own div to avoid conflicts)
                             // Reverse so the first listed effect is outermost
@@ -13932,7 +14045,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }> = ({ command, hasBgs, hasMedia, onFinish }) => {
         const contentRef = useRef<HTMLDivElement>(null);
         const containerRef = useRef<HTMLDivElement>(null);
-        const [animStyle, setAnimStyle] = useState<React.CSSProperties>({});
+        // Start INVISIBLE: the scroll animation can only be applied after a layout pass measures
+        // the content, so for a frame or two the credits would otherwise sit unanimated at the
+        // top of the screen (the "credits flash at the top before the roll starts" bug).
+        // visibility (not display) keeps layout so the measurement still works.
+        const [animStyle, setAnimStyle] = useState<React.CSSProperties>({ visibility: 'hidden' });
         const finishedRef = useRef(false);
 
         useEffect(() => {
@@ -14656,7 +14773,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             {activeFlashRef.current && <div 
                 key={activeFlashRef.current.key}
                 className="absolute inset-0 z-50 pointer-events-none" 
-                style={{ backgroundColor: activeFlashRef.current.color, animation: `flash-anim ${activeFlashRef.current.duration}s ease-in-out` }}
+                style={{ backgroundColor: activeFlashRef.current.color, opacity: 0, animation: `flash-anim ${activeFlashRef.current.duration}s ease-in-out forwards` }}
                 onAnimationEnd={(e) => {
                     // Only handle this animation event, not bubbled events from children
                     if (e.target === e.currentTarget) {

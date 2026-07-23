@@ -41,6 +41,18 @@ export interface VNTextboxTheme extends VNCharacterTextbox {
     name: string;
 }
 
+/** Art override for one layer asset in one pose. All fields optional; an entry with neither
+ *  image nor video counts as absent — everything falls back to the asset's default art.
+ *  Additive-optional (older projects have none). */
+export interface VNPoseArt {
+    imageUrl?: string;
+    videoUrl?: string;
+    isVideo?: boolean;
+    loop?: boolean;
+    trimStart?: number;
+    trimEnd?: number;
+}
+
 export interface VNLayerAsset {
     id: VNID;
     name: string;
@@ -52,6 +64,10 @@ export interface VNLayerAsset {
     /** Default video clip (seconds) for this layer asset — one long video, many expressions. */
     trimStart?: number;
     trimEnd?: number;
+    /** Per-POSE art for this same asset (poseId → art). One "Red Dress" asset can look
+     *  head-on in one pose and 3/4-turned in another — the asset ID never changes, so a
+     *  player's dress-up choice carries across poses automatically. Additive-optional. */
+    poseArt?: Record<VNID, VNPoseArt>;
 }
 export interface VNCharacterLayer {
     id: VNID;
@@ -62,6 +78,21 @@ export interface VNCharacterExpression {
     id: VNID;
     name: string;
     layerConfiguration: Record<VNID, VNID | null>; // layerId -> assetId
+}
+/** An ADDITIONAL view of the character — any stance or angle the author wants (side view,
+ *  sitting, arms crossed, chibi…). The character's existing base fields ARE the "Default"
+ *  pose; a pose only stores what differs (its own base art; per-asset art lives in
+ *  VNLayerAsset.poseArt). Expressions and outfit selections are pose-agnostic and carry
+ *  over automatically. Additive-optional. */
+export interface VNCharacterPose {
+    id: VNID;
+    name: string;
+    baseImageUrl?: string | null;
+    baseVideoUrl?: string | null;
+    isBaseVideo?: boolean;
+    baseVideoLoop?: boolean;
+    baseVideoTrimStart?: number;
+    baseVideoTrimEnd?: number;
 }
 export interface VNCharacter {
     id: VNID;
@@ -81,6 +112,10 @@ export interface VNCharacter {
     baseVideoTrimEnd?: number;
     layers: Record<VNID, VNCharacterLayer>;
     expressions: Record<VNID, VNCharacterExpression>;
+    /** Alternate views of this character (any number, any meaning). Absent = the character
+     *  has only its Default pose — nothing changes for existing projects. Additive-optional;
+     *  NEVER auto-initialized (absence keeps project JSON byte-identical). */
+    poses?: Record<VNID, VNCharacterPose>;
     /** Default text effect for this character's dialogue */
     textEffect?: VNDialogueTextEffect;
     /** Default voice audio clip ID for this character (can be overridden per-line) */

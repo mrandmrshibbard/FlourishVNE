@@ -437,7 +437,12 @@
     "colors": "Cores",
     "addColor": "+ Cor",
     "removeColor": "Remover cor",
-    "rimSize": "Espessura das linhas"
+    "rimSize": "Espessura das linhas",
+    "pose": "Pose",
+    "defaultPose": "Padrão (arte normal)",
+    "poseHint": "Como o personagem está posicionado ou virado. A roupa e a expressão passam automaticamente.",
+    "changePoseHint": "O personagem já precisa estar em cena. Roupa, expressão e posição ficam exatamente como estão — só a postura/ângulo muda.",
+    "noPoses": "Este personagem ainda não tem poses — adicione na aba Personagens (seção Poses)."
   },
   "button": {
     "buttonText": "Texto do Botão",
@@ -738,5 +743,9 @@
     "shopListBuy": "Lista da loja para comprar",
     "shopListSell": "Lista da loja para vender",
     "buySellHint": "Usa a moeda da lista + o preço do item. Não faz nada se o jogador não puder pagar / estiver fora de estoque / ele não possuir o item."
+  },
+  "timer": {
+    "resume": "Continuar de onde parou",
+    "resumeHint": "Se este timer foi parado antes, ele retoma do valor em que estava (precisa da variável numérica acima). Se nunca rodou ou já terminou, começa do zero."
   }
 }

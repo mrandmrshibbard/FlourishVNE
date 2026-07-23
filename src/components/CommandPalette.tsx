@@ -14,7 +14,7 @@ export const COMMAND_CATEGORIES = {
     'Characters': {
         color: 'bg-blue-500/20 border-blue-500 text-blue-300',
         headerColor: 'bg-blue-600/30 text-blue-200',
-        commands: [CommandType.ShowCharacter, CommandType.HideCharacter, CommandType.SetCharacterLayer, CommandType.MoveCharacter]
+        commands: [CommandType.ShowCharacter, CommandType.HideCharacter, CommandType.SetCharacterLayer, CommandType.SetCharacterPose, CommandType.MoveCharacter]
     },
     'Scenes': {
         color: 'bg-green-500/20 border-green-500 text-green-300',

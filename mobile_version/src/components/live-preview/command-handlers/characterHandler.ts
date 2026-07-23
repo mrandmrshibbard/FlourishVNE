@@ -1,5 +1,6 @@
-import { ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand } from '../../../features/scene/types';
+import { ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand, SetCharacterPoseCommand } from '../../../features/scene/types';
 import { VNCharacterLayer } from '../../../features/character/types';
+import { assetArtForPose, characterBaseArtForPose, resolvePoseId } from '../../../features/character/poseArt';
 import { VNID } from '../../../types';
 import { CommandContext, CommandResult } from './types';
 import { TweenManager } from '../systems/tweenManager';
@@ -7,11 +8,15 @@ import { resolveFieldUrl } from '../../../utils/assetStore';
 import { resolveCommandCharacterId } from '../../../utils/playerCharacter';
 
 /** Build the stacked image/video URLs for a character from a resolved per-layer asset selection
- *  (base first, then each layer in definition order). Shared by ShowCharacter + SetCharacterLayer. */
-function buildCharacterMedia(
+ *  (base first, then each layer in definition order). Shared by ShowCharacter + SetCharacterLayer
+ *  + SetCharacterPose. `poseId` (resolved via resolvePoseId) only changes WHICH ART each piece
+ *  uses — selection stays by asset id, so outfits carry across poses automatically. Absent
+ *  poseId = exactly today's output. Exported for tests. */
+export function buildCharacterMedia(
   charData: any,
   layerSelections: Record<VNID, VNID | null>,
   wrap: (u: string) => string,
+  poseId?: VNID,
 ): { imageUrls: string[]; videoUrls: string[]; videoTrims: Array<{ start?: number; end?: number }>; hasVideo: boolean; videoLoop: boolean } {
   const imageUrls: string[] = [];
   const videoUrls: string[] = [];
@@ -20,13 +25,15 @@ function buildCharacterMedia(
   const videoTrims: Array<{ start?: number; end?: number }> = [];
   let hasVideo = false;
   let videoLoop = false;
-  if (charData.baseVideoUrl) { videoUrls.push(wrap(charData.baseVideoUrl)); videoTrims.push({ start: charData.baseVideoTrimStart, end: charData.baseVideoTrimEnd }); hasVideo = true; videoLoop = !!charData.baseVideoLoop; }
-  else if (charData.baseImageUrl) { imageUrls.push(wrap(charData.baseImageUrl)); }
+  const base = characterBaseArtForPose(charData, poseId);
+  if (base.videoUrl) { videoUrls.push(wrap(base.videoUrl)); videoTrims.push({ start: base.trimStart, end: base.trimEnd }); hasVideo = true; videoLoop = !!base.loop; }
+  else if (base.imageUrl) { imageUrls.push(wrap(base.imageUrl)); }
   (Object.values(charData.layers) as VNCharacterLayer[]).forEach(layer => {
     const assetId = layerSelections[layer.id];
     const asset = assetId ? layer.assets[assetId] : null;
-    if (asset?.videoUrl) { videoUrls.push(wrap(asset.videoUrl)); videoTrims.push({}); hasVideo = true; videoLoop = videoLoop || !!asset.loop; }
-    else if (asset?.imageUrl) { imageUrls.push(wrap(asset.imageUrl)); }
+    const art = asset ? assetArtForPose(asset, poseId) : null;
+    if (art?.videoUrl) { videoUrls.push(wrap(art.videoUrl)); videoTrims.push({}); hasVideo = true; videoLoop = videoLoop || !!art.loop; }
+    else if (art?.imageUrl) { imageUrls.push(wrap(art.imageUrl)); }
   });
   return { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop };
 }
@@ -146,7 +153,9 @@ export function handleShowCharacter(
     }
   });
 
-  const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, layerSelections, wrap);
+  // Pose: only honored when the character defines it (unknown/deleted ids = Default pose).
+  const poseId = resolvePoseId(charData, command.poseId);
+  const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, layerSelections, wrap, poseId);
 
   // For slide transitions, use endPosition if specified, otherwise use position
   let finalPosition = command.endPosition || command.position;
@@ -164,7 +173,10 @@ export function handleShowCharacter(
   const hasShowTransitionFlag = requestedTransition && requestedTransition !== 'instant';
   const existingSameChar = currentCharacters[characterId];
   const isPoseChange = !!existingSameChar && !!hasShowTransitionFlag &&
-    (existingSameChar.imageUrls.join(',') !== imageUrls.join(',') || existingSameChar.expressionId !== command.expressionId);
+    (existingSameChar.imageUrls.join(',') !== imageUrls.join(',') || existingSameChar.expressionId !== command.expressionId
+      // A pose-only change on a VIDEO sprite can leave imageUrls identical (both empty) —
+      // compare the pose itself so it still crossfades. Inert for pose-less content.
+      || existingSameChar.poseId !== poseId);
 
   // "Keep current position": when the character is already on stage, an expression/pose change
   // leaves it exactly where it is instead of snapping to the command's (often default 'center')
@@ -216,6 +228,8 @@ export function handleShowCharacter(
     expressionId: command.expressionId,
     layerVariableBindings: finalBindings,
     layerSelections,
+    // Only stored when set — pose-less games' stage state (and saves) stay byte-identical.
+    ...(poseId ? { poseId } : {}),
     sourceCommandId: command.id,
     scale: command.scale,
     inverted: command.inverted,
@@ -388,7 +402,8 @@ export function handleSetCharacterLayer(
       if (!cur) return {};
       const selections: Record<VNID, VNID | null> = { ...(cur.layerSelections || {}) };
       (command.layers || []).forEach(({ layerId, assetId }) => { selections[layerId] = assetId || null; });
-      const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, selections, wrap);
+      // Rebuild in the character's CURRENT pose — a blush toggle mid-pose must not snap art back.
+      const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, selections, wrap, resolvePoseId(charData, cur.poseId));
       return {
         characters: {
           ...prev.characters,
@@ -401,6 +416,52 @@ export function handleSetCharacterLayer(
             videoLoop,
             layerSelections: selections,
             // Optional crossfade of the character to the new look; otherwise an instant swap.
+            transition: useTransition ? { type: command.transition!, duration: command.duration ?? 0.3, action: 'show' as const } : null,
+          },
+        },
+      };
+    },
+  };
+}
+
+/**
+ * Change Pose: switch a character already on stage to another pose (stance/angle). The outfit,
+ * expression, position, scale and effects all stay exactly as they are — only the ART changes,
+ * because layer selection is by asset id and ids are pose-agnostic.
+ */
+export function handleSetCharacterPose(
+  command: SetCharacterPoseCommand,
+  context: CommandContext
+): CommandResult {
+  const { project, playerState } = context;
+  const characterId = resolveCommandCharacterId(command as any, project, playerState.variables) || command.characterId;
+  const charData = characterId ? project.characters[characterId] : undefined;
+  const onStage = characterId ? playerState.stageState.characters[characterId] : undefined;
+  if (!charData || !onStage) {
+    // Character not on stage — nothing to change.
+    return { advance: true };
+  }
+  const wrap = (u: string): string => resolveFieldUrl(project.id, u) || u;
+  const useTransition = !!command.transition && command.transition !== 'instant';
+  const poseId = resolvePoseId(charData, command.poseId); // unknown/empty = back to Default
+
+  return {
+    advance: true,
+    stagePatch: (prev) => {
+      const cur = prev.characters[characterId];
+      if (!cur) return {};
+      const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, cur.layerSelections || {}, wrap, poseId);
+      return {
+        characters: {
+          ...prev.characters,
+          [characterId]: {
+            ...cur,
+            imageUrls,
+            videoUrls,
+            videoTrims,
+            isVideo: hasVideo,
+            videoLoop,
+            ...(poseId ? { poseId } : { poseId: undefined }),
             transition: useTransition ? { type: command.transition!, duration: command.duration ?? 0.3, action: 'show' as const } : null,
           },
         },

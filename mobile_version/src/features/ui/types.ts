@@ -915,6 +915,8 @@ export interface UISettingsToggleElement extends BaseUIElement {
 export interface UICharacterPreviewElement extends BaseUIElement {
     type: UIElementType.CharacterPreview;
     characterId: VNID;
+    /** Pose shown in this preview (absent = the character's Default pose). Additive-optional. */
+    poseId?: VNID;
     /** ⟨Player's Character⟩ targeting. When 'player', this element displays whichever character the
      *  player created (project.ui.playerCharacterVarId) and auto-detects that character's customizer
      *  outfit variables — no manual layerVariableMap needed. Absent/'fixed' = show `characterId`.
@@ -1243,6 +1245,8 @@ export interface UIMeterElement extends BaseUIElement {
  *  each category lets the player pick from that layer's assets, and the choice is stored in an
  *  auto-managed variable — so the look flows into scenes automatically (ShowCharacter reads the same
  *  variables). Additive: old projects keep their AssetCycler/CharacterPreview elements. */
+/* NOTE: UICustomizerElement.poseId / UICharacterPreviewElement.poseId — "Pose shown in this
+ * preview" — let a dress-up screen pin e.g. the head-on pose while the story shows others. */
 export interface UICustomizerCategory {
     layerId: VNID;        // the character layer this category customizes
     label?: string;       // shown above the picker (defaults to the layer name)
@@ -1260,6 +1264,8 @@ export interface UICustomizerOptionMeta {
 export interface UICustomizerElement extends BaseUIElement {
     type: UIElementType.Customizer;
     characterId: VNID;
+    /** Pose shown in the dress-up preview (absent = Default pose). Additive-optional. */
+    poseId?: VNID;
     expressionId?: VNID;          // fallback look for layers without a category/selection
     categories: UICustomizerCategory[];
     layout?: 'preview-left' | 'preview-right' | 'preview-top' | 'free';

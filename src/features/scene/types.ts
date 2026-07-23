@@ -48,6 +48,7 @@ export enum CommandType {
     ShowCharacter = 'ShowCharacter',
     HideCharacter = 'HideCharacter',
     SetCharacterLayer = 'SetCharacterLayer',
+    SetCharacterPose = 'SetCharacterPose',
     Choice = 'Choice',
     BranchStart = 'BranchStart',
     BranchElseIf = 'BranchElseIf',
@@ -287,6 +288,10 @@ export interface ShowCharacterCommand extends BaseCommand {
      *  Additive-optional. */
     characterSource?: 'fixed' | 'player';
     expressionId: VNID;
+    /** Which POSE (alternate stance/angle of the same character) to show. Absent/unknown =
+     *  the character's Default pose (its normal art). Outfit and expression selections are
+     *  pose-agnostic and carry over automatically. Additive-optional. */
+    poseId?: VNID;
     position: VNPosition;
     transition: VNTransition;
     duration: number; // in seconds
@@ -333,6 +338,20 @@ export interface SetCharacterLayerCommand extends BaseCommand {
     characterId: VNID;
     layers: Array<{ layerId: VNID; assetId: VNID | null }>; // null clears that layer
     transition?: VNTransition;  // optional crossfade of the character to the new look ('instant'/undefined = swap)
+    duration?: number;          // transition duration in seconds (default 0.3)
+}
+
+/** Change the POSE of a character already on stage — their outfit, expression and position
+ *  stay exactly as they are; only the art switches to the new pose's view. Player-facing
+ *  name: "Change Pose". */
+export interface SetCharacterPoseCommand extends BaseCommand {
+    type: CommandType.SetCharacterPose;
+    characterId: VNID;
+    /** ⟨Player's Character⟩ targeting, matching Show Character. Additive-optional. */
+    characterSource?: 'fixed' | 'player';
+    /** The pose to switch to. Absent/empty = back to the Default pose. */
+    poseId?: VNID;
+    transition?: VNTransition;  // optional crossfade ('instant'/undefined = swap)
     duration?: number;          // transition duration in seconds (default 0.3)
 }
 
@@ -402,6 +421,10 @@ export interface StartTimerCommand extends BaseCommand {
     interval?: number;
     /** Restart automatically when it finishes (countdown→duration, stopwatch→from). */
     loop?: boolean;
+    /** Continue where the timer left off: pick up from the bound variable's current value (what it
+     *  showed when Stop Timer ran) instead of starting over. Falls back to a fresh start when there
+     *  is nothing to resume (never ran, no variable, or already finished). Absent = start over. */
+    resume?: boolean;
     /** Actions run when the timer finishes (countdown hits 0 / stopwatch hits the cap). */
     onComplete?: VNUIAction[];
     /** Pause the STORY on this command until the timer finishes — but keep on-screen buttons/hot spots
@@ -1301,7 +1324,7 @@ export interface MoveCharacterCommand extends BaseCommand {
 }
 
 export type VNCommand =
-  | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand | SetCharacterLayerCommand
+  | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand | SetCharacterLayerCommand | SetCharacterPoseCommand
     | ChoiceCommand | BranchStartCommand | BranchElseIfCommand | BranchElseCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
   | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | StopMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand

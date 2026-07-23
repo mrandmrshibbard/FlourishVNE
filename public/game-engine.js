@@ -472,6 +472,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["ShowCharacter"] = "ShowCharacter";
     CommandType2["HideCharacter"] = "HideCharacter";
     CommandType2["SetCharacterLayer"] = "SetCharacterLayer";
+    CommandType2["SetCharacterPose"] = "SetCharacterPose";
     CommandType2["Choice"] = "Choice";
     CommandType2["BranchStart"] = "BranchStart";
     CommandType2["BranchElseIf"] = "BranchElseIf";
@@ -853,7 +854,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   };
   const generateId$7 = () => Math.random().toString(36).substring(2, 9);
   const characterReducer = (state, action) => {
-    var _a, _b;
+    var _a, _b, _c, _d, _e;
     switch (action.type) {
       case "ADD_CHARACTER": {
         const { name, color } = action.payload;
@@ -942,7 +943,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: remainingLayers, expressions: newExpressions } } };
       }
       case "ADD_LAYER_ASSET": {
-        const { characterId, layerId, name, imageUrl, videoUrl, isVideo, loop, autoplay } = action.payload;
+        const { characterId, layerId, name, imageUrl, videoUrl, isVideo, loop, autoplay, poseArt } = action.payload;
         const character = state.characters[characterId];
         if (!(character == null ? void 0 : character.layers[layerId])) return state;
         const newAssetId = action.payload.id || `asset-${generateId$7()}`;
@@ -953,7 +954,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           videoUrl,
           isVideo,
           loop,
-          autoplay
+          autoplay,
+          // Pose-scoped upload: art added while a pose is active belongs to THAT pose only.
+          ...poseArt ? { poseArt } : {}
         };
         const newAssets = { ...character.layers[layerId].assets, [newAssetId]: newAsset };
         const newLayers = { ...character.layers, [layerId]: { ...character.layers[layerId], assets: newAssets } };
@@ -1017,6 +1020,78 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           });
         }
         return { ...state, scenes: newScenes, characters: { ...state.characters, [characterId]: { ...character, expressions: remainingExpressions } } };
+      }
+      case "ADD_POSE": {
+        const { characterId, name } = action.payload;
+        const character = state.characters[characterId];
+        if (!character) return state;
+        const newPoseId = `pose-${generateId$7()}`;
+        const newPose = { id: newPoseId, name };
+        return { ...state, characters: { ...state.characters, [characterId]: { ...character, poses: { ...character.poses || {}, [newPoseId]: newPose } } } };
+      }
+      case "UPDATE_POSE": {
+        const { characterId, poseId, updates } = action.payload;
+        const character = state.characters[characterId];
+        const pose = (_c = character == null ? void 0 : character.poses) == null ? void 0 : _c[poseId];
+        if (!character || !pose) return state;
+        return { ...state, characters: { ...state.characters, [characterId]: { ...character, poses: { ...character.poses, [poseId]: { ...pose, ...updates } } } } };
+      }
+      case "DELETE_POSE": {
+        const { characterId, poseId } = action.payload;
+        const character = state.characters[characterId];
+        if (!((_d = character == null ? void 0 : character.poses) == null ? void 0 : _d[poseId])) return state;
+        const { [poseId]: _removed, ...remainingPoses } = character.poses;
+        const newLayers = {};
+        for (const [layerId, layer] of Object.entries(character.layers)) {
+          const newAssets = {};
+          for (const [assetId, asset] of Object.entries(layer.assets)) {
+            if (asset.poseArt && poseId in asset.poseArt) {
+              const { [poseId]: _art, ...restArt } = asset.poseArt;
+              newAssets[assetId] = Object.keys(restArt).length ? { ...asset, poseArt: restArt } : (() => {
+                const { poseArt: _pa, ...rest } = asset;
+                return rest;
+              })();
+            } else {
+              newAssets[assetId] = asset;
+            }
+          }
+          newLayers[layerId] = { ...layer, assets: newAssets };
+        }
+        const newScenes = JSON.parse(JSON.stringify(state.scenes));
+        for (const sceneId in newScenes) {
+          newScenes[sceneId].commands = newScenes[sceneId].commands.map((cmd) => {
+            if ((cmd.type === CommandType.ShowCharacter || cmd.type === CommandType.SetCharacterPose) && cmd.characterId === characterId && cmd.poseId === poseId) {
+              const { poseId: _p, ...rest } = cmd;
+              return rest;
+            }
+            return cmd;
+          });
+        }
+        const updatedChar = Object.keys(remainingPoses).length ? { ...character, poses: remainingPoses, layers: newLayers } : (() => {
+          const { poses: _po, ...rest } = character;
+          return { ...rest, layers: newLayers };
+        })();
+        return { ...state, characters: { ...state.characters, [characterId]: updatedChar }, scenes: newScenes };
+      }
+      case "SET_ASSET_POSE_ART": {
+        const { characterId, layerId, assetId, poseId, art } = action.payload;
+        const character = state.characters[characterId];
+        const asset = (_e = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _e.assets[assetId];
+        if (!character || !asset) return state;
+        let newAsset;
+        if (art === null) {
+          if (!asset.poseArt || !(poseId in asset.poseArt)) return state;
+          const { [poseId]: _art, ...restArt } = asset.poseArt;
+          newAsset = Object.keys(restArt).length ? { ...asset, poseArt: restArt } : (() => {
+            const { poseArt: _pa, ...rest } = asset;
+            return rest;
+          })();
+        } else {
+          newAsset = { ...asset, poseArt: { ...asset.poseArt || {}, [poseId]: art } };
+        }
+        const newAssets = { ...character.layers[layerId].assets, [assetId]: newAsset };
+        const newLayers = { ...character.layers, [layerId]: { ...character.layers[layerId], assets: newAssets } };
+        return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers } } };
       }
       case "REORDER_CHARACTERS": {
         const { characterIds } = action.payload;
@@ -4033,6 +4108,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const command = { type, characterId: firstCharId || "", layers: [], duration: 0.3 };
         return command;
       }
+      case CommandType.SetCharacterPose: {
+        const command = { type, characterId: firstCharId || "", transition: "fade", duration: 0.3 };
+        return command;
+      }
       case CommandType.Choice: {
         const command = {
           type,
@@ -5784,6 +5863,59 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   }
   const SLOT_GRID_PAGE_EVENT = "vn-saveslots-page";
   ({ timestamp: new Date(2026, 0, 15, 18, 42).getTime() });
+  function assetHasPoseArt(asset, poseId) {
+    var _a;
+    const art = (_a = asset.poseArt) == null ? void 0 : _a[poseId];
+    return !!art && !!(art.imageUrl || art.videoUrl);
+  }
+  function assetArtForPose(asset, poseId) {
+    if (poseId && assetHasPoseArt(asset, poseId)) {
+      const art = asset.poseArt[poseId];
+      return {
+        imageUrl: art.imageUrl,
+        videoUrl: art.videoUrl,
+        isVideo: art.isVideo,
+        loop: art.loop,
+        trimStart: art.trimStart,
+        trimEnd: art.trimEnd
+      };
+    }
+    return {
+      imageUrl: asset.imageUrl,
+      videoUrl: asset.videoUrl,
+      isVideo: asset.isVideo,
+      loop: asset.loop,
+      trimStart: asset.trimStart,
+      trimEnd: asset.trimEnd
+    };
+  }
+  function characterBaseArtForPose(char, poseId) {
+    var _a;
+    const pose = poseId ? (_a = char.poses) == null ? void 0 : _a[poseId] : void 0;
+    if (pose && (pose.baseImageUrl || pose.baseVideoUrl)) {
+      return {
+        imageUrl: pose.baseImageUrl,
+        videoUrl: pose.baseVideoUrl,
+        isVideo: pose.isBaseVideo,
+        loop: pose.baseVideoLoop,
+        trimStart: pose.baseVideoTrimStart,
+        trimEnd: pose.baseVideoTrimEnd
+      };
+    }
+    return {
+      imageUrl: char.baseImageUrl,
+      videoUrl: char.baseVideoUrl,
+      isVideo: char.isBaseVideo,
+      loop: char.baseVideoLoop,
+      trimStart: char.baseVideoTrimStart,
+      trimEnd: char.baseVideoTrimEnd
+    };
+  }
+  function resolvePoseId(char, poseId) {
+    var _a;
+    if (!poseId || !((_a = char == null ? void 0 : char.poses) == null ? void 0 : _a[poseId])) return void 0;
+    return poseId;
+  }
   const SAMPLE_MAX = 128;
   const SAMPLE_MIN_MS = 300;
   const GRID_COLS = 24;
@@ -10237,30 +10369,32 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
   }
   const TweenManager = new TweenManagerImpl();
-  function buildCharacterMedia(charData, layerSelections, wrap) {
+  function buildCharacterMedia(charData, layerSelections, wrap, poseId) {
     const imageUrls = [];
     const videoUrls = [];
     const videoTrims = [];
     let hasVideo = false;
     let videoLoop = false;
-    if (charData.baseVideoUrl) {
-      videoUrls.push(wrap(charData.baseVideoUrl));
-      videoTrims.push({ start: charData.baseVideoTrimStart, end: charData.baseVideoTrimEnd });
+    const base = characterBaseArtForPose(charData, poseId);
+    if (base.videoUrl) {
+      videoUrls.push(wrap(base.videoUrl));
+      videoTrims.push({ start: base.trimStart, end: base.trimEnd });
       hasVideo = true;
-      videoLoop = !!charData.baseVideoLoop;
-    } else if (charData.baseImageUrl) {
-      imageUrls.push(wrap(charData.baseImageUrl));
+      videoLoop = !!base.loop;
+    } else if (base.imageUrl) {
+      imageUrls.push(wrap(base.imageUrl));
     }
     Object.values(charData.layers).forEach((layer) => {
       const assetId = layerSelections[layer.id];
       const asset = assetId ? layer.assets[assetId] : null;
-      if (asset == null ? void 0 : asset.videoUrl) {
-        videoUrls.push(wrap(asset.videoUrl));
+      const art = asset ? assetArtForPose(asset, poseId) : null;
+      if (art == null ? void 0 : art.videoUrl) {
+        videoUrls.push(wrap(art.videoUrl));
         videoTrims.push({});
         hasVideo = true;
-        videoLoop = videoLoop || !!asset.loop;
-      } else if (asset == null ? void 0 : asset.imageUrl) {
-        imageUrls.push(wrap(asset.imageUrl));
+        videoLoop = videoLoop || !!art.loop;
+      } else if (art == null ? void 0 : art.imageUrl) {
+        imageUrls.push(wrap(art.imageUrl));
       }
     });
     return { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop };
@@ -10331,14 +10465,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         layerSelections[layer.id] = null;
       }
     });
-    const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, layerSelections, wrap);
+    const poseId = resolvePoseId(charData, command.poseId);
+    const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, layerSelections, wrap, poseId);
     let finalPosition = command.endPosition || command.position;
     const startPosition = command.startPosition;
     const requestedTransition = command.transition;
     const currentCharacters = playerState.stageState.characters;
     const hasShowTransitionFlag = requestedTransition && requestedTransition !== "instant";
     const existingSameChar = currentCharacters[characterId];
-    const isPoseChange = !!existingSameChar && !!hasShowTransitionFlag && (existingSameChar.imageUrls.join(",") !== imageUrls.join(",") || existingSameChar.expressionId !== command.expressionId);
+    const isPoseChange = !!existingSameChar && !!hasShowTransitionFlag && (existingSameChar.imageUrls.join(",") !== imageUrls.join(",") || existingSameChar.expressionId !== command.expressionId || existingSameChar.poseId !== poseId);
     if (command.keepPosition && existingSameChar) {
       finalPosition = existingSameChar.position;
     }
@@ -10384,6 +10519,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       expressionId: command.expressionId,
       layerVariableBindings: finalBindings,
       layerSelections,
+      // Only stored when set — pose-less games' stage state (and saves) stay byte-identical.
+      ...poseId ? { poseId } : {},
       sourceCommandId: command.id,
       scale: command.scale,
       inverted: command.inverted,
@@ -10511,7 +10648,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         (command.layers || []).forEach(({ layerId, assetId }) => {
           selections[layerId] = assetId || null;
         });
-        const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, selections, wrap);
+        const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, selections, wrap, resolvePoseId(charData, cur.poseId));
         return {
           characters: {
             ...prev.characters,
@@ -10524,6 +10661,41 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               videoLoop,
               layerSelections: selections,
               // Optional crossfade of the character to the new look; otherwise an instant swap.
+              transition: useTransition ? { type: command.transition, duration: command.duration ?? 0.3, action: "show" } : null
+            }
+          }
+        };
+      }
+    };
+  }
+  function handleSetCharacterPose(command, context) {
+    const { project, playerState } = context;
+    const characterId = resolveCommandCharacterId(command, project, playerState.variables) || command.characterId;
+    const charData = characterId ? project.characters[characterId] : void 0;
+    const onStage = characterId ? playerState.stageState.characters[characterId] : void 0;
+    if (!charData || !onStage) {
+      return { advance: true };
+    }
+    const wrap = (u) => resolveFieldUrl(project.id, u) || u;
+    const useTransition = !!command.transition && command.transition !== "instant";
+    const poseId = resolvePoseId(charData, command.poseId);
+    return {
+      advance: true,
+      stagePatch: (prev) => {
+        const cur = prev.characters[characterId];
+        if (!cur) return {};
+        const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, cur.layerSelections || {}, wrap, poseId);
+        return {
+          characters: {
+            ...prev.characters,
+            [characterId]: {
+              ...cur,
+              imageUrls,
+              videoUrls,
+              videoTrims,
+              isVideo: hasVideo,
+              videoLoop,
+              ...poseId ? { poseId } : { poseId: void 0 },
               transition: useTransition ? { type: command.transition, duration: command.duration ?? 0.3, action: "show" } : null
             }
           }
@@ -13347,6 +13519,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }, [width, height]);
     return /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: canvasRef, className: "absolute inset-0 w-full h-full pointer-events-none", style: { mixBlendMode: "screen" }, "aria-hidden": true });
   };
+  const vnLoadedImages = /* @__PURE__ */ new Set();
+  const vnWarmImage = (url) => new Promise((resolve) => {
+    if (!url || vnLoadedImages.has(url) || url.startsWith("data:")) {
+      if (url) vnLoadedImages.add(url);
+      resolve();
+      return;
+    }
+    const img = new Image();
+    img.onload = img.onerror = () => {
+      vnLoadedImages.add(url);
+      resolve();
+    };
+    img.src = url;
+  });
   function isRuntimeDebugEnabled() {
     try {
       return window.localStorage.getItem("flourish:runtimeDebug") === "1";
@@ -16978,13 +17164,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const videoTrims = [];
           let hasVideo = false;
           let videoLoop = false;
-          if (character.baseVideoUrl) {
-            videoUrls.push(resolveFieldUrl(project2.id, character.baseVideoUrl) || character.baseVideoUrl);
-            videoTrims.push({ start: character.baseVideoTrimStart, end: character.baseVideoTrimEnd });
+          const previewPoseId = resolvePoseId(character, el.poseId);
+          const previewBase = characterBaseArtForPose(character, previewPoseId);
+          if (previewBase.videoUrl) {
+            videoUrls.push(resolveFieldUrl(project2.id, previewBase.videoUrl) || previewBase.videoUrl);
+            videoTrims.push({ start: previewBase.trimStart, end: previewBase.trimEnd });
             hasVideo = true;
-            videoLoop = !!character.baseVideoLoop;
-          } else if (character.baseImageUrl) {
-            imageUrls.push(resolveFieldUrl(project2.id, character.baseImageUrl) || character.baseImageUrl);
+            videoLoop = !!previewBase.loop;
+          } else if (previewBase.imageUrl) {
+            imageUrls.push(resolveFieldUrl(project2.id, previewBase.imageUrl) || previewBase.imageUrl);
           }
           const defaultExpression = el.expressionId ? character.expressions[el.expressionId] : null;
           Object.entries(character.layers).forEach(([layerId, layer]) => {
@@ -17017,13 +17205,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               runtimeDebugLog(`[CharacterPreview] Layer ${layer.name} has no mapping and no default expression`);
             }
             if (asset) {
-              if (asset.videoUrl) {
-                videoUrls.push(resolveFieldUrl(project2.id, asset.videoUrl) || asset.videoUrl);
+              const art = assetArtForPose(asset, previewPoseId);
+              if (art.videoUrl) {
+                videoUrls.push(resolveFieldUrl(project2.id, art.videoUrl) || art.videoUrl);
                 videoTrims.push({});
                 hasVideo = true;
-                videoLoop = videoLoop || !!asset.loop;
-              } else if (asset.imageUrl) {
-                imageUrls.push(resolveFieldUrl(project2.id, asset.imageUrl) || asset.imageUrl);
+                videoLoop = videoLoop || !!art.loop;
+              } else if (art.imageUrl) {
+                imageUrls.push(resolveFieldUrl(project2.id, art.imageUrl) || art.imageUrl);
               }
             }
           });
@@ -17198,15 +17387,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const character = project2.characters[el.characterId];
           if (!character) return null;
           const fallbackExpr = el.expressionId && character.expressions[el.expressionId] || Object.values(character.expressions)[0] || null;
+          const czPoseId = resolvePoseId(character, el.poseId);
           const imageUrls = [];
           const videoUrls = [];
           let hasVideo = false, videoLoop = false;
-          if (character.baseVideoUrl) {
-            videoUrls.push(resolveFieldUrl(project2.id, character.baseVideoUrl) || character.baseVideoUrl);
+          const czBase = characterBaseArtForPose(character, czPoseId);
+          if (czBase.videoUrl) {
+            videoUrls.push(resolveFieldUrl(project2.id, czBase.videoUrl) || czBase.videoUrl);
             hasVideo = true;
-            videoLoop = !!character.baseVideoLoop;
-          } else if (character.baseImageUrl) {
-            imageUrls.push(resolveFieldUrl(project2.id, character.baseImageUrl) || character.baseImageUrl);
+            videoLoop = !!czBase.loop;
+          } else if (czBase.imageUrl) {
+            imageUrls.push(resolveFieldUrl(project2.id, czBase.imageUrl) || czBase.imageUrl);
           }
           Object.entries(character.layers).forEach(([layerId, layer]) => {
             const cat = (el.categories || []).find((c) => c.layerId === layerId);
@@ -17214,12 +17405,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             if (cat) assetId = String(variables2[cat.variableId] ?? "") || null;
             if (!assetId && fallbackExpr) assetId = fallbackExpr.layerConfiguration[layerId] || null;
             const asset = assetId ? layer.assets[assetId] : null;
-            if (asset == null ? void 0 : asset.videoUrl) {
-              videoUrls.push(resolveFieldUrl(project2.id, asset.videoUrl) || asset.videoUrl);
+            const art = asset ? assetArtForPose(asset, czPoseId) : null;
+            if (art == null ? void 0 : art.videoUrl) {
+              videoUrls.push(resolveFieldUrl(project2.id, art.videoUrl) || art.videoUrl);
               hasVideo = true;
-              videoLoop = videoLoop || !!asset.loop;
-            } else if (asset == null ? void 0 : asset.imageUrl) {
-              imageUrls.push(resolveFieldUrl(project2.id, asset.imageUrl) || asset.imageUrl);
+              videoLoop = videoLoop || !!art.loop;
+            } else if (art == null ? void 0 : art.imageUrl) {
+              imageUrls.push(resolveFieldUrl(project2.id, art.imageUrl) || art.imageUrl);
             }
           });
           const swatchSize = el.swatchSize ?? 48;
@@ -18126,7 +18318,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     );
   };
   const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false, startAt = null, startScreenId = null }) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z;
     const { project } = useProject();
     const toast = useToast();
     const notify = React2.useCallback((message, type = "info") => {
@@ -18429,11 +18621,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const backwardReplayRef = React2.useRef(null);
     const dnTransitionRef = React2.useRef(0.4);
     const startTimer = (cfg) => {
+      var _a2;
       const key = (cfg.timerId || "").trim().toLowerCase() || "default";
       const mode = cfg.mode === "stopwatch" ? "stopwatch" : "countdown";
       const intervalSec = Math.max(0.05, cfg.interval ?? 1);
       const startVal = mode === "countdown" ? cfg.duration ?? 0 : cfg.from ?? 0;
       const target = mode === "countdown" ? 0 : cfg.duration ?? 0;
+      if (cfg.resume) {
+        if (timersRef.current.has(key)) return key;
+        const varVal = cfg.variableId ? Number(mergeDirtyUiVariables(((_a2 = playerStateRef.current) == null ? void 0 : _a2.variables) || {})[cfg.variableId]) : NaN;
+        const finished = mode === "countdown" ? varVal <= 0 : target > 0 && varVal >= target;
+        if (Number.isFinite(varVal) && !finished) {
+          timersRef.current.set(key, { variableId: cfg.variableId || void 0, mode, intervalSec, target, accMs: 0, value: varVal, resetTo: startVal, loop: !!cfg.loop, onComplete: cfg.onComplete });
+          return key;
+        }
+      }
       timersRef.current.set(key, { variableId: cfg.variableId || void 0, mode, intervalSec, target, accMs: 0, value: startVal, resetTo: startVal, loop: !!cfg.loop, onComplete: cfg.onComplete });
       if (cfg.variableId) updatePlayerState((p) => p ? { ...p, variables: { ...p.variables, [cfg.variableId]: startVal } } : null);
       return key;
@@ -19489,12 +19691,52 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       console.error("Scene navigation exceeded max attempts - possible circular fallback");
       return targetSceneId;
     }, [project.scenes, evaluateConditions2]);
+    const stopAllSfx = React2.useCallback(() => {
+      if (currentVoiceRef.current) {
+        try {
+          currentVoiceRef.current.pause();
+          currentVoiceRef.current.currentTime = 0;
+          currentVoiceRef.current.src = "";
+        } catch (e) {
+        }
+        currentVoiceRef.current = null;
+      }
+      try {
+        sfxSourceNodesRef.current.forEach((src) => {
+          try {
+            src.stop();
+          } catch (e) {
+          }
+        });
+      } catch (e) {
+      }
+      sfxSourceNodesRef.current = [];
+      sfxPoolRef.current.forEach(({ audio }) => {
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.src = "";
+        } catch (e) {
+        }
+      });
+      sfxPoolRef.current = [];
+      liveSfxRef.current.forEach((entry) => {
+        entry.audio = null;
+        entry.lastMet = false;
+      });
+      liveSfxRef.current.clear();
+      sfxBufferCacheRef.current.clear();
+    }, []);
     const startSceneExitTransition = React2.useCallback((currentSceneId, executeChange, override) => {
+      const applyChange = () => {
+        stopAllSfx();
+        executeChange();
+      };
       const currentScene = project.scenes[currentSceneId];
       const resolved = resolveSceneTransition(override, currentScene, project.customTransitions);
       const shouldFade = hasRenderedSceneRef.current;
       if (resolved.kind === "instant" || !shouldFade) {
-        executeChange();
+        applyChange();
         return;
       }
       if (resolved.kind === "custom") {
@@ -19523,7 +19765,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           });
         }
         const openPhase = () => {
-          executeChange();
+          applyChange();
           if (hasOpen) {
             playHalfSfx(def.open);
             setCustomTransition({ def, phase: "opening" });
@@ -19555,10 +19797,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       setSceneTransitionDuration(duration);
       setSceneTransitionFading(true);
       setTimeout(() => {
-        executeChange();
+        applyChange();
         setSceneTransitionFading(false);
       }, duration * 1e3);
-    }, [project.scenes, project.customTransitions, assetResolver, settings.sfxVolume]);
+    }, [project.scenes, project.customTransitions, assetResolver, settings.sfxVolume, stopAllSfx]);
     React2.useEffect(() => {
       var _a2;
       if ((playerState == null ? void 0 : playerState.mode) === "playing") {
@@ -19699,7 +19941,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }, [settings.musicVolume, screenStack, project.uiScreens, (_g = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _g.volume]);
     const prewarmedImagesRef = React2.useRef([]);
     React2.useEffect(() => {
-      var _a2, _b2, _c2, _d2;
+      var _a2, _b2, _c2, _d2, _e2, _f2, _g2;
       if (!playerState || playerState.mode !== "playing") return;
       const urls = /* @__PURE__ */ new Set();
       const addDeep = (node, depth) => {
@@ -19715,31 +19957,72 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         }
       };
-      for (const cmd of playerState.currentCommands || []) {
+      const commandLists = [playerState.currentCommands || []];
+      for (const cmd of commandLists[0]) {
+        if ((cmd == null ? void 0 : cmd.type) === "CallCommonEvent" && cmd.commonEventId) {
+          const ev = (project.commonEvents || {})[cmd.commonEventId];
+          if (ev == null ? void 0 : ev.commands) commandLists.push(ev.commands);
+        }
+      }
+      for (const cmds of commandLists) for (const cmd of cmds) {
         switch (cmd == null ? void 0 : cmd.type) {
-          case "ShowCharacter": {
+          // Every command that can put character art on stage — a scene that only SWAPS a
+          // layer or pose (character shown scenes ago) still needs that art warmed here.
+          case "ShowCharacter":
+          case "SetCharacterPose":
+          case "SetCharacterLayer": {
             const ch = cmd.characterId ? (_a2 = project.characters) == null ? void 0 : _a2[cmd.characterId] : null;
             if (ch) addDeep(ch, 0);
+            if (cmd.characterSource === "player") {
+              const varId = (_b2 = project.ui) == null ? void 0 : _b2.playerCharacterVarId;
+              const picked = varId ? String(((_c2 = playerState.variables) == null ? void 0 : _c2[varId]) ?? "") : "";
+              const pc = picked ? (_d2 = project.characters) == null ? void 0 : _d2[picked] : null;
+              if (pc) addDeep(pc, 0);
+            }
             break;
           }
           case "SetBackground": {
-            const bg = cmd.backgroundId ? (_b2 = project.backgrounds) == null ? void 0 : _b2[cmd.backgroundId] : null;
+            const bg = cmd.backgroundId ? (_e2 = project.backgrounds) == null ? void 0 : _e2[cmd.backgroundId] : null;
             if (bg == null ? void 0 : bg.imageUrl) urls.add(bg.imageUrl);
             break;
           }
           case "ShowImage": {
-            const im = cmd.imageId ? ((_c2 = project.images) == null ? void 0 : _c2[cmd.imageId]) || ((_d2 = project.backgrounds) == null ? void 0 : _d2[cmd.imageId]) : null;
+            const im = cmd.imageId ? ((_f2 = project.images) == null ? void 0 : _f2[cmd.imageId]) || ((_g2 = project.backgrounds) == null ? void 0 : _g2[cmd.imageId]) : null;
             if (im == null ? void 0 : im.imageUrl) urls.add(im.imageUrl);
             break;
           }
         }
       }
-      prewarmedImagesRef.current = [...urls].slice(0, 150).map((u) => {
+      prewarmedImagesRef.current = [...urls].slice(0, 400).map((u) => {
+        const resolved = resolveFieldUrl(project.id, u) || u;
         const im = new Image();
-        im.src = u;
+        im.onload = im.onerror = () => {
+          vnLoadedImages.add(resolved);
+        };
+        im.src = resolved;
         return im;
       });
     }, [playerState == null ? void 0 : playerState.currentSceneId, playerState == null ? void 0 : playerState.mode, project]);
+    const [, bumpSpriteEpoch] = React2.useReducer((x) => x + 1, 0);
+    React2.useEffect(() => {
+      var _a2;
+      const chars = (_a2 = playerState == null ? void 0 : playerState.stageState) == null ? void 0 : _a2.characters;
+      if (!chars) return;
+      let alive = true;
+      Object.values(chars).forEach((c) => {
+        var _a3;
+        if ((c == null ? void 0 : c.isVideo) || !((_a3 = c == null ? void 0 : c.imageUrls) == null ? void 0 : _a3.length)) return;
+        const missing = c.imageUrls.filter((u) => !vnLoadedImages.has(u));
+        if (missing.length) {
+          Promise.all(missing.map(vnWarmImage)).then(() => {
+            if (alive) bumpSpriteEpoch();
+          });
+        }
+      });
+      return () => {
+        alive = false;
+      };
+    }, [(_h = playerState == null ? void 0 : playerState.stageState) == null ? void 0 : _h.characters]);
     React2.useEffect(() => {
       const audio = ambientNoiseAudioRef.current;
       const activeScreenId = screenStack.length > 0 ? screenStack[screenStack.length - 1] : hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
@@ -19906,43 +20189,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           fadeAudio(audio, typeof musicState.volume === "number" ? musicState.volume : settings.musicVolume, 0.3);
         }).catch((e) => console.error("[Music Sync] Failed to play restored music:", e));
       }
-    }, [(_h = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _h.audioId, playerState == null ? void 0 : playerState.mode, isJustLoaded, assetResolver, fadeAudio, settings.musicVolume]);
-    const stopAllSfx = React2.useCallback(() => {
-      if (currentVoiceRef.current) {
-        try {
-          currentVoiceRef.current.pause();
-          currentVoiceRef.current.currentTime = 0;
-          currentVoiceRef.current.src = "";
-        } catch (e) {
-        }
-        currentVoiceRef.current = null;
-      }
-      try {
-        sfxSourceNodesRef.current.forEach((src) => {
-          try {
-            src.stop();
-          } catch (e) {
-          }
-        });
-      } catch (e) {
-      }
-      sfxSourceNodesRef.current = [];
-      sfxPoolRef.current.forEach(({ audio }) => {
-        try {
-          audio.pause();
-          audio.currentTime = 0;
-          audio.src = "";
-        } catch (e) {
-        }
-      });
-      sfxPoolRef.current = [];
-      liveSfxRef.current.forEach((entry) => {
-        entry.audio = null;
-        entry.lastMet = false;
-      });
-      liveSfxRef.current.clear();
-      sfxBufferCacheRef.current.clear();
-    }, []);
+    }, [(_i = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _i.audioId, playerState == null ? void 0 : playerState.mode, isJustLoaded, assetResolver, fadeAudio, settings.musicVolume]);
     const stopSfx = React2.useCallback((audioId, fadeDuration) => {
       const fade = typeof fadeDuration === "number" && fadeDuration > 0 ? fadeDuration : 0;
       const matched = sfxPoolRef.current.filter((e) => !audioId || e.audioId === audioId);
@@ -20751,6 +20998,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             case "SetCharacterLayer":
               result = handleSetCharacterLayer(cmd, hctx);
               break;
+            case "SetCharacterPose":
+              result = handleSetCharacterPose(cmd, hctx);
+              break;
             case "ShowText":
               result = handleShowText(cmd, hctx);
               break;
@@ -21264,6 +21514,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             case CommandType.SetCharacterLayer: {
               const result = handleSetCharacterLayer(command, commandContext);
+              applyResult(result);
+              break;
+            }
+            case CommandType.SetCharacterPose: {
+              const result = handleSetCharacterPose(command, commandContext);
               applyResult(result);
               break;
             }
@@ -23849,7 +24104,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (!active) return;
       const id = window.setInterval(() => patchActiveCall((ac) => ac.phase === "active" ? { elapsedMs: ac.elapsedMs + 1e3 } : {}), 1e3);
       return () => window.clearInterval(id);
-    }, [(_j = (_i = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _i.activeCall) == null ? void 0 : _j.phase, playerState == null ? void 0 : playerState.mode]);
+    }, [(_k = (_j = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _j.activeCall) == null ? void 0 : _k.phase, playerState == null ? void 0 : playerState.mode]);
     const notifEntry = (ph, e) => {
       const list = ph.notifications || [];
       return [...list, { ...e, id: `nt-${Date.now()}-${list.length}`, order: list.length }];
@@ -24020,7 +24275,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           callTimeoutRef.current = window.setTimeout(() => resolveIncomingCall("missed"), callRingRemainingRef.current);
         }
       }
-    }, [playerState == null ? void 0 : playerState.mode, (_l = (_k = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _k.incomingCall) == null ? void 0 : _l.phase]);
+    }, [playerState == null ? void 0 : playerState.mode, (_m = (_l = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _l.incomingCall) == null ? void 0 : _m.phase]);
     const handleVariableChange = (variableId, value) => {
       runtimeDebugLog("[handleVariableChange] Called with:", { variableId, value, hasPlayerState: !!playerState });
       if (playerState) {
@@ -24578,7 +24833,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 const emphasisDim = project.ui.speakerEmphasisDim ?? 0.5;
                 const emphasisScale = project.ui.speakerEmphasisScale ?? 1.04;
                 return allChars.map((char) => {
-                  var _a4, _b3;
+                  var _a4, _b3, _c3;
                   let transitionClass = "";
                   let animationDuration = "1s";
                   let slideStyle = {};
@@ -24759,10 +25014,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   }
                   Object.assign(contentEffectStyle, filterVars);
                   if (dnSpriteTint && !char.isVideo) contentEffectStyle.isolation = "isolate";
-                  const hasContentEffect = combinedFilter || combinedFilterAnimation || flickerAnimation || !!dnSpriteTint && !char.isVideo;
+                  combinedFilter || combinedFilterAnimation || flickerAnimation || !!dnSpriteTint && !char.isVideo;
                   const spriteContent = /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
                     char.isVideo && char.videoUrls ? char.videoUrls.map((url, index) => {
-                      var _a5, _b4, _c3, _d3;
+                      var _a5, _b4, _c4, _d3;
                       return /* @__PURE__ */ jsxRuntime2.jsx(
                         TrimmedVideo,
                         {
@@ -24771,7 +25026,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                           muted: true,
                           loop: char.videoLoop,
                           trimStart: (_b4 = (_a5 = char.videoTrims) == null ? void 0 : _a5[index]) == null ? void 0 : _b4.start,
-                          trimEnd: (_d3 = (_c3 = char.videoTrims) == null ? void 0 : _c3[index]) == null ? void 0 : _d3.end,
+                          trimEnd: (_d3 = (_c4 = char.videoTrims) == null ? void 0 : _c4[index]) == null ? void 0 : _d3.end,
                           playsInline: true,
                           className: "absolute top-0 left-0 w-full h-full object-contain",
                           style: { zIndex: index }
@@ -24889,7 +25144,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       ) })
                     ] }) }) })
                   ] });
-                  let wrappedContent = hasContentEffect ? /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: contentEffectStyle, children: spriteContent }) : spriteContent;
+                  const spriteReady = !!char.isVideo || !((_b3 = char.imageUrls) == null ? void 0 : _b3.length) || char.imageUrls.every((u) => vnLoadedImages.has(u));
+                  let wrappedContent = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: { ...contentEffectStyle, ...spriteReady ? {} : { visibility: "hidden" } }, children: spriteContent });
                   for (let tIdx = transformEffects.length - 1; tIdx >= 0; tIdx--) {
                     wrappedContent = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: transformEffects[tIdx].style, children: wrappedContent });
                   }
@@ -24918,7 +25174,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     orientTransform = `${orientTransform} scale(${scaleX}, ${scaleY})`.trim();
                   }
                   orientTransform = orientTransform.trim();
-                  const slideOnInner = ((_b3 = char.transition) == null ? void 0 : _b3.type) === "slide" && !!orientTransform;
+                  const slideOnInner = ((_c3 = char.transition) == null ? void 0 : _c3.type) === "slide" && !!orientTransform;
                   let transformStr = positionStyle.transform || "";
                   if (!slideOnInner && orientTransform) {
                     transformStr = `${transformStr} ${orientTransform}`.trim();
@@ -25077,7 +25333,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const CreditScrollContent = ({ command, hasBgs, hasMedia, onFinish }) => {
       const contentRef = React2.useRef(null);
       const containerRef = React2.useRef(null);
-      const [animStyle, setAnimStyle] = React2.useState({});
+      const [animStyle, setAnimStyle] = React2.useState({ visibility: "hidden" });
       const finishedRef = React2.useRef(false);
       React2.useEffect(() => {
         finishedRef.current = false;
@@ -25745,7 +26001,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           "div",
           {
             className: "absolute inset-0 z-50 pointer-events-none",
-            style: { backgroundColor: activeFlashRef.current.color, animation: `flash-anim ${activeFlashRef.current.duration}s ease-in-out` },
+            style: { backgroundColor: activeFlashRef.current.color, opacity: 0, animation: `flash-anim ${activeFlashRef.current.duration}s ease-in-out forwards` },
             onAnimationEnd: (e) => {
               if (e.target === e.currentTarget) {
                 activeFlashRef.current = null;
@@ -26444,7 +26700,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     100% { background-position: 0% 0%; }
                 }
             ` }),
-      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, className: "relative overflow-hidden", style: { width: `min(100vw, calc(100vh * ${((_m = project.gameResolution) == null ? void 0 : _m.width) || 1920} / ${((_n = project.gameResolution) == null ? void 0 : _n.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_o = project.gameResolution) == null ? void 0 : _o.height) || 1080} / ${((_p = project.gameResolution) == null ? void 0 : _p.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_q = project.gameResolution) == null ? void 0 : _q.width) || 1920) : 1, ...screenGlitch ? { filter: "url(#vnfx-stage-glitch)" } : {} }, children: [
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, className: "relative overflow-hidden", style: { width: `min(100vw, calc(100vh * ${((_n = project.gameResolution) == null ? void 0 : _n.width) || 1920} / ${((_o = project.gameResolution) == null ? void 0 : _o.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_p = project.gameResolution) == null ? void 0 : _p.height) || 1080} / ${((_q = project.gameResolution) == null ? void 0 : _q.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_r = project.gameResolution) == null ? void 0 : _r.width) || 1920) : 1, ...screenGlitch ? { filter: "url(#vnfx-stage-glitch)" } : {} }, children: [
         screenGlitch && /* @__PURE__ */ jsxRuntime2.jsx(StageGlitchFilterDef, { effect: screenGlitch }),
         (playerState == null ? void 0 : playerState.mode) === "playing" ? renderStage() : null,
         (!playerState || playerState.mode === "paused") && (() => {
@@ -26643,7 +26899,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           );
         })()
       ] }),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_r = playerState.uiState.phone) == null ? void 0 : _r.open) && /* @__PURE__ */ jsxRuntime2.jsx(
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_s = playerState.uiState.phone) == null ? void 0 : _s.open) && /* @__PURE__ */ jsxRuntime2.jsx(
         PhonePanel,
         {
           ui: project.ui,
@@ -26762,7 +27018,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         ) });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_t = (_s = playerState.uiState.phone) == null ? void 0 : _s.notification) == null ? void 0 : _t.visible) && !playerState.uiState.phone.open && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_u = (_t = playerState.uiState.phone) == null ? void 0 : _t.notification) == null ? void 0 : _u.visible) && !playerState.uiState.phone.open && (() => {
         const n = playerState.uiState.phone.notification;
         const nchar = !n.senderId || n.senderId === "player" ? null : project.characters[n.senderId];
         const nurls = resolvePhonePortrait(n.portrait, nchar, assetResolver);
@@ -26790,7 +27046,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         );
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_v = (_u = playerState.uiState.phone) == null ? void 0 : _u.incomingCall) == null ? void 0 : _v.phase) === "ringing" && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_w = (_v = playerState.uiState.phone) == null ? void 0 : _v.incomingCall) == null ? void 0 : _w.phase) === "ringing" && (() => {
         const call = playerState.uiState.phone.incomingCall;
         const cchar = call.callerId === "player" ? null : project.characters[call.callerId];
         const curls = resolvePhonePortrait(call.portrait, cchar, assetResolver);
@@ -26836,7 +27092,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ] })
         ] });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_w = playerState.uiState.phone) == null ? void 0 : _w.outgoingCall) && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_x = playerState.uiState.phone) == null ? void 0 : _x.outgoingCall) && (() => {
         const oc = playerState.uiState.phone.outgoingCall;
         const contact = (project.ui.phoneContacts || []).find((c) => c.characterId === oc.contactId);
         const ochar = project.characters[oc.contactId];
@@ -26854,7 +27110,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ] })
         ] });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_x = playerState.uiState.phone) == null ? void 0 : _x.unread) && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_y = playerState.uiState.phone) == null ? void 0 : _y.unread) && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
         const bx = project.ui.phoneBadgeX ?? 95;
         const by = project.ui.phoneBadgeY ?? 4;
         const unreadCount = (playerState.uiState.phone.notifications || []).filter((e) => !e.read).length;
@@ -26975,7 +27231,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         /* @__PURE__ */ jsxRuntime2.jsx(
           "img",
           {
-            src: assetResolver(((_y = carriedItem.icon) == null ? void 0 : _y.id) || null, "image") || "",
+            src: assetResolver(((_z = carriedItem.icon) == null ? void 0 : _z.id) || null, "image") || "",
             alt: "",
             draggable: false,
             className: "fixed z-[10052] pointer-events-none select-none",
@@ -27134,7 +27390,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "3.8.1",
+    version: "3.8.4",
     /**
      * Check if the engine is ready
      */

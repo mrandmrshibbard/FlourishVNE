@@ -74,6 +74,7 @@
     "Wait": "Wait",
     "RunScript": "Run Script",
     "CallCommonEvent": "Call Common Event",
-    "Group": "Group"
+    "Group": "Group",
+    "SetCharacterPose": "Change Pose"
   }
 }

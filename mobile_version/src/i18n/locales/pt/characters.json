@@ -62,6 +62,37 @@
     "defaultVoice": "Voz Padrão",
     "defaultVoiceHint": "Clipe de áudio reproduzido automaticamente com cada linha de diálogo deste personagem (pode ser substituído por linha).",
     "voiceClip": "Clipe de Voz",
-    "voiceNone": "Nenhum"
+    "voiceNone": "Nenhum",
+    "cancel": "Cancelar"
+  },
+  "poses": {
+    "title": "Poses",
+    "hint": "Posturas ou ângulos diferentes deste personagem — como de lado ou de braços cruzados. As roupas passam automaticamente entre as poses.",
+    "add": "Adicionar pose",
+    "addHint": "Adicionar outra postura ou ângulo deste personagem (ex.: de lado, braços cruzados)",
+    "default": "Padrão",
+    "newPoseName": "Pose {{n}}",
+    "baseFor": "Sprite base de \"{{pose}}\"",
+    "baseOwnArt": "Esta pose tem sua própria arte base.",
+    "baseUsesDefault": "Ainda não há arte base para esta pose — a base normal aparece.",
+    "usesDefaultArt": "Ainda não há arte para esta pose — a arte normal aparece. Clique para enviar esta peça para esta pose.",
+    "removePoseArt": "Esta peça tem arte própria para esta pose — clique para remover",
+    "removePoseArtConfirm": "Remover a arte desta peça para esta pose? A arte normal aparecerá no lugar.",
+    "delete": "Excluir pose",
+    "deleteConfirm": "Excluir a pose \"{{name}}\"? A arte que você adicionou para esta pose será removida. Comandos da história que a usavam mostrarão a pose Padrão.",
+    "matchByName": "Combinar arte pelo nome do arquivo",
+    "matchByNameHint": "Solte vários arquivos de uma vez — eles são combinados com suas peças pelo nome do arquivo",
+    "matchTitle": "Combinar arte pelo nome do arquivo — \"{{pose}}\"",
+    "matchHint": "Solte a arte que você fez para esta pose. Os arquivos são combinados com suas peças pelo nome — confira as sugestões abaixo e corrija o que estiver errado.",
+    "matchDrop": "Solte os arquivos aqui, ou clique para escolhê-los",
+    "matchEmpty": "Nenhum arquivo ainda.",
+    "matchSkip": "Pular este arquivo",
+    "matchBase": "Sprite base desta pose",
+    "matchRemoveRow": "Remover desta lista",
+    "matchWorking": "Adicionando…",
+    "matchCommit": "Adicionar arte ({{n}})",
+    "matchDone": "Arte adicionada para {{n}} peça(s) em \"{{pose}}\".",
+    "classicPointer": "Este personagem tem poses — gerencie-as no Novo editor de personagens (troque a visualização no topo).",
+    "noArtHere": "Esta peça não tem arte para esta pose, então não aparece aqui. Clique para enviar a arte desta pose."
   }
 }

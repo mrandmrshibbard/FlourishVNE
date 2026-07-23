@@ -185,6 +185,9 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
     if (command.type === CommandType.SetCharacterLayer) {
         return <SetCharacterLayerGroup groupId={groupId} cmd={command as SetCharacterLayerCommand} updateCommand={updateCommand} project={project} t={t} />;
     }
+    if (command.type === CommandType.SetCharacterPose) {
+        return <SetCharacterPoseGroup groupId={groupId} cmd={command as import('../../features/scene/types').SetCharacterPoseCommand} updateCommand={updateCommand} project={project} t={t} />;
+    }
     if (command.type === CommandType.HideCharacter) {
         const c = command as HideCharacterCommand;
         if (groupId === 'content') {
@@ -950,6 +953,15 @@ const ShowCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowCharact
                         onChange={value => updateCommand({ expressionId: value } as any)}
                         placeholder={(!character || Object.keys(character.expressions).length === 0) ? t('shared.noExpressions') : t('shared.selectExpression')} />
                 </FormField>}
+                {!isPlayer && character && Object.keys(character.poses || {}).length > 0 && <>
+                    <FormField label={t('character.pose', 'Pose')}>
+                        <Select value={cmd.poseId ?? ''} onChange={e => updateCommand({ poseId: e.target.value || undefined } as any)}>
+                            <option value="">{t('character.defaultPose', 'Default (normal art)')}</option>
+                            {Object.values(character.poses || {}).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </Select>
+                    </FormField>
+                    <p className="text-[11px] text-[var(--text-muted)] -mt-1">{t('character.poseHint', 'How the character is standing or facing. Their outfit and expression carry over automatically.')}</p>
+                </>}
                 {!isPlayer && character && Object.keys(character.layers).length > 0 && (() => {
                     const ovValue = (layerId: string) => {
                         const ov = cmd.layerOverrides;
@@ -1009,6 +1021,40 @@ const ShowCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowCharact
         default:
             return null;
     }
+};
+
+/** "Change Pose" — switch a character already on stage to another stance/angle. Outfit,
+ *  expression and position stay; only the art changes. */
+const SetCharacterPoseGroup: React.FC<{ groupId: InspectorGroupId; cmd: import('../../features/scene/types').SetCharacterPoseCommand; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
+    const isPlayer = cmd.characterSource === 'player';
+    const character = project.characters[cmd.characterId];
+    if (groupId === 'content') {
+        const characterOptions = withPlayerCharacterOption(Object.values(project.characters).map((c: any) => ({ value: c.id, label: c.name })));
+        const poseCount = character ? Object.keys(character.poses || {}).length : 0;
+        return <>
+            <FormField label={t('shared.character')}>
+                <SearchableSelect options={characterOptions} value={characterSelectValue(cmd as any)}
+                    onChange={value => { if (value === PLAYER_CHARACTER_OPTION) { updateCommand({ characterSource: 'player' } as any); return; } updateCommand({ characterSource: 'fixed', characterId: value, poseId: undefined } as any); }}
+                    placeholder={Object.keys(project.characters).length === 0 ? t('shared.noCharacters') : t('shared.selectCharacter')} />
+            </FormField>
+            {!isPlayer && character && poseCount === 0 && (
+                <p className="text-[11px] text-amber-400">{t('character.noPoses', 'This character has no poses yet — add them in the Characters tab (Poses section).')}</p>
+            )}
+            {(isPlayer || poseCount > 0) && <>
+                <FormField label={t('character.pose', 'Pose')}>
+                    <Select value={cmd.poseId ?? ''} onChange={e => updateCommand({ poseId: e.target.value || undefined } as any)}>
+                        <option value="">{t('character.defaultPose', 'Default (normal art)')}</option>
+                        {!isPlayer && Object.values(character?.poses || {}).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </Select>
+                </FormField>
+                <p className="text-[11px] text-[var(--text-muted)] -mt-1">{t('character.changePoseHint', 'The character must already be on stage. Their outfit, expression and position stay exactly as they are — only the stance/angle changes.')}</p>
+            </>}
+        </>;
+    }
+    if (groupId === 'animation') {
+        return <TransitionFields transition={cmd.transition || 'instant'} duration={cmd.duration ?? 0.3} onUpdate={updateCommand as any} />;
+    }
+    return null;
 };
 
 const SetCharacterLayerGroup: React.FC<{ groupId: InspectorGroupId; cmd: SetCharacterLayerCommand; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
@@ -2765,6 +2811,10 @@ const TimerGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand; upda
         <label className="flex items-center gap-1 mt-1">
             <input type="checkbox" checked={!!c.loop} onChange={e => updateCommand({ loop: e.target.checked } as any)} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
             <span className="text-sm">{t('timer.loop', 'Loop (restart when it finishes)')}</span>
+        </label>
+        <label className="flex items-start gap-1 mt-1">
+            <input type="checkbox" checked={!!c.resume} onChange={e => updateCommand({ resume: e.target.checked || undefined } as any)} className="h-4 w-4 mt-0.5 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
+            <span className="text-sm">{t('timer.resume', 'Can Restart')}<br /><span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('timer.resumeHint', 'If this timer was stopped earlier, pick it back up from the value it showed (needs the number variable above). If it never ran or already finished, it starts over.')}</span></span>
         </label>
         <label className="flex items-start gap-1 mt-2">
             <input type="checkbox" checked={!!c.blockEngine} onChange={e => updateCommand({ blockEngine: e.target.checked || undefined } as any)} className="h-4 w-4 mt-0.5 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />

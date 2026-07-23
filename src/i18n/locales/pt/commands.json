@@ -59,6 +59,7 @@
     "Wait": "Esperar",
     "RunScript": "Executar Script",
     "CallCommonEvent": "Chamar Evento Comum",
-    "Group": "Grupo"
+    "Group": "Grupo",
+    "SetCharacterPose": "Mudar Pose"
   }
 }

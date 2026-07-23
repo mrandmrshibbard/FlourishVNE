@@ -1157,6 +1157,14 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                 {Object.values(project.characters).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </Select>
                         </FormField>
+                        {czChar && Object.keys((czChar as any).poses || {}).length > 0 && (
+                            <FormField label={t('elementInspector.previewPose', 'Pose shown in this preview')}>
+                                <Select value={(el as any).poseId || ''} onChange={e => updateElement({ poseId: e.target.value || undefined } as any)}>
+                                    <option value="">{t('character.defaultPose', 'Default (normal art)')}</option>
+                                    {Object.values((czChar as any).poses || {}).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </Select>
+                            </FormField>
+                        )}
                         {czChar && onOpenCharacters && (
                             <button onClick={() => onOpenCharacters(czChar.id)} className="w-full text-left text-xs px-2.5 py-2 rounded-lg bg-[var(--accent-lavender)]/10 hover:bg-[var(--accent-lavender)]/20 text-[var(--accent-lavender)] border border-[var(--accent-lavender)]/30 transition-colors">
                                 ✎ Add or edit this character's layers &amp; art →
@@ -1556,6 +1564,14 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                 <Select value={el.expressionId || ''} onChange={e => updateElement({ expressionId: e.target.value || undefined })}>
                                     <option value="">{t('elementInspector.none')}</option>
                                     {Object.values(character.expressions).map((expr: unknown) => { const ex = expr as any; return <option key={ex.id} value={ex.id}>{ex.name}</option>; })}
+                                </Select>
+                            </FormField>
+                        )}
+                        {character && Object.keys((character as any).poses || {}).length > 0 && (
+                            <FormField label={t('elementInspector.previewPose', 'Pose shown in this preview')}>
+                                <Select value={(el as any).poseId || ''} onChange={e => updateElement({ poseId: e.target.value || undefined } as any)}>
+                                    <option value="">{t('character.defaultPose', 'Default (normal art)')}</option>
+                                    {Object.values((character as any).poses || {}).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                                 </Select>
                             </FormField>
                         )}

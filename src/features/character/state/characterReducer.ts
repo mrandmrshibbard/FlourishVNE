@@ -1,7 +1,7 @@
 import { VNID } from '../../../types';
 import { VNProject } from '../../../types/project';
 import { VNCommand, CommandType } from '../../scene/types';
-import { VNCharacter, VNCharacterExpression, VNCharacterLayer, VNLayerAsset } from '../types';
+import { VNCharacter, VNCharacterExpression, VNCharacterLayer, VNCharacterPose, VNLayerAsset, VNPoseArt } from '../types';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
@@ -18,7 +18,11 @@ export type CharacterAction =
     | { type: 'ADD_EXPRESSION', payload: { characterId: VNID, name: string } }
     | { type: 'UPDATE_EXPRESSION', payload: { characterId: VNID, expressionId: VNID, updates: Partial<VNCharacterExpression> } }
     | { type: 'DELETE_EXPRESSION', payload: { characterId: VNID, expressionId: VNID } }
-    | { type: 'REORDER_CHARACTERS', payload: { characterIds: VNID[] } };
+    | { type: 'REORDER_CHARACTERS', payload: { characterIds: VNID[] } }
+    | { type: 'ADD_POSE', payload: { characterId: VNID, name: string } }
+    | { type: 'UPDATE_POSE', payload: { characterId: VNID, poseId: VNID, updates: Partial<VNCharacterPose> } }
+    | { type: 'DELETE_POSE', payload: { characterId: VNID, poseId: VNID } }
+    | { type: 'SET_ASSET_POSE_ART', payload: { characterId: VNID, layerId: VNID, assetId: VNID, poseId: VNID, art: VNPoseArt | null } };
 
 export const characterReducer = (state: VNProject, action: CharacterAction): VNProject => {
   switch (action.type) {
@@ -118,19 +122,21 @@ export const characterReducer = (state: VNProject, action: CharacterAction): VNP
     }
 
     case 'ADD_LAYER_ASSET': {
-        const { characterId, layerId, name, imageUrl, videoUrl, isVideo, loop, autoplay } = action.payload;
+        const { characterId, layerId, name, imageUrl, videoUrl, isVideo, loop, autoplay, poseArt } = action.payload;
         const character = state.characters[characterId];
         if (!character?.layers[layerId]) return state;
         // Honor a caller-supplied id so the file-store filename matches the asset (file-backed assets).
         const newAssetId = (action.payload as any).id || `asset-${generateId()}`;
-        const newAsset: VNLayerAsset = { 
-            id: newAssetId, 
-            name, 
-            imageUrl, 
-            videoUrl, 
-            isVideo, 
-            loop, 
-            autoplay 
+        const newAsset: VNLayerAsset = {
+            id: newAssetId,
+            name,
+            imageUrl,
+            videoUrl,
+            isVideo,
+            loop,
+            autoplay,
+            // Pose-scoped upload: art added while a pose is active belongs to THAT pose only.
+            ...(poseArt ? { poseArt } : {}),
         };
         const newAssets = { ...character.layers[layerId].assets, [newAssetId]: newAsset };
         const newLayers = { ...character.layers, [layerId]: { ...character.layers[layerId], assets: newAssets } };
@@ -204,6 +210,84 @@ export const characterReducer = (state: VNProject, action: CharacterAction): VNP
             });
         }
         return { ...state, scenes: newScenes, characters: { ...state.characters, [characterId]: { ...character, expressions: remainingExpressions } } };
+    }
+
+    case 'ADD_POSE': {
+        const { characterId, name } = action.payload;
+        const character = state.characters[characterId];
+        if (!character) return state;
+        const newPoseId = `pose-${generateId()}`;
+        const newPose: VNCharacterPose = { id: newPoseId, name };
+        return { ...state, characters: { ...state.characters, [characterId]: { ...character, poses: { ...(character.poses || {}), [newPoseId]: newPose } } } };
+    }
+
+    case 'UPDATE_POSE': {
+        const { characterId, poseId, updates } = action.payload;
+        const character = state.characters[characterId];
+        const pose = character?.poses?.[poseId];
+        if (!character || !pose) return state;
+        return { ...state, characters: { ...state.characters, [characterId]: { ...character, poses: { ...character.poses, [poseId]: { ...pose, ...updates } } } } };
+    }
+
+    case 'DELETE_POSE': {
+        const { characterId, poseId } = action.payload;
+        const character = state.characters[characterId];
+        if (!character?.poses?.[poseId]) return state;
+        const { [poseId]: _removed, ...remainingPoses } = character.poses;
+        // Strip this pose's art from every layer asset (drop empty poseArt keys entirely so
+        // untouched-project JSON stays minimal).
+        const newLayers: Record<VNID, VNCharacterLayer> = {};
+        for (const [layerId, layer] of Object.entries(character.layers)) {
+            const newAssets: Record<VNID, VNLayerAsset> = {};
+            for (const [assetId, asset] of Object.entries(layer.assets)) {
+                if (asset.poseArt && poseId in asset.poseArt) {
+                    const { [poseId]: _art, ...restArt } = asset.poseArt;
+                    newAssets[assetId] = Object.keys(restArt).length
+                        ? { ...asset, poseArt: restArt }
+                        : (() => { const { poseArt: _pa, ...rest } = asset; return rest as VNLayerAsset; })();
+                } else {
+                    newAssets[assetId] = asset;
+                }
+            }
+            newLayers[layerId] = { ...layer, assets: newAssets };
+        }
+        // Scene hygiene (mirrors DELETE_EXPRESSION): drop references to the deleted pose from
+        // Show Character and Change Pose commands. Runtime stays dangling-safe regardless.
+        const newScenes = JSON.parse(JSON.stringify(state.scenes));
+        for (const sceneId in newScenes) {
+            newScenes[sceneId].commands = newScenes[sceneId].commands.map((cmd: VNCommand) => {
+                if ((cmd.type === CommandType.ShowCharacter || cmd.type === CommandType.SetCharacterPose)
+                    && (cmd as any).characterId === characterId && (cmd as any).poseId === poseId) {
+                    const { poseId: _p, ...rest } = cmd as any;
+                    return rest;
+                }
+                return cmd;
+            });
+        }
+        const updatedChar: VNCharacter = Object.keys(remainingPoses).length
+            ? { ...character, poses: remainingPoses, layers: newLayers }
+            : (() => { const { poses: _po, ...rest } = character; return { ...rest, layers: newLayers } as VNCharacter; })();
+        return { ...state, characters: { ...state.characters, [characterId]: updatedChar }, scenes: newScenes };
+    }
+
+    case 'SET_ASSET_POSE_ART': {
+        const { characterId, layerId, assetId, poseId, art } = action.payload;
+        const character = state.characters[characterId];
+        const asset = character?.layers[layerId]?.assets[assetId];
+        if (!character || !asset) return state;
+        let newAsset: VNLayerAsset;
+        if (art === null) {
+            if (!asset.poseArt || !(poseId in asset.poseArt)) return state;
+            const { [poseId]: _art, ...restArt } = asset.poseArt;
+            newAsset = Object.keys(restArt).length
+                ? { ...asset, poseArt: restArt }
+                : (() => { const { poseArt: _pa, ...rest } = asset; return rest as VNLayerAsset; })();
+        } else {
+            newAsset = { ...asset, poseArt: { ...(asset.poseArt || {}), [poseId]: art } };
+        }
+        const newAssets = { ...character.layers[layerId].assets, [assetId]: newAsset };
+        const newLayers = { ...character.layers, [layerId]: { ...character.layers[layerId], assets: newAssets } };
+        return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers } } };
     }
 
     case 'REORDER_CHARACTERS': {

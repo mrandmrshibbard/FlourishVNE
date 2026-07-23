@@ -546,7 +546,16 @@ const PropertiesInspector: React.FC<{
                             placeholder={(!character || Object.keys(character.expressions).length === 0) ? t('shared.noExpressions') : t('shared.selectExpression')}
                         />
                     </FormField>}
-                    
+                    {!isPlayerChar && character && Object.keys(character.poses || {}).length > 0 && <>
+                        <FormField label={t('character.pose', 'Pose')}>
+                            <Select value={cmd.poseId ?? ''} onChange={e => updateCommand({ poseId: e.target.value || undefined } as any)}>
+                                <option value="">{t('character.defaultPose', 'Default (normal art)')}</option>
+                                {Object.values(character.poses || {}).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </Select>
+                        </FormField>
+                        <p className="text-[11px] text-[var(--text-muted)] -mt-1">{t('character.poseHint', 'How the character is standing or facing. Their outfit and expression carry over automatically.')}</p>
+                    </>}
+
                     <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
                         <input type="checkbox" checked={!!cmd.keepPosition} onChange={(e) => updateCommand({ keepPosition: e.target.checked || undefined } as any)} className="cursor-pointer" />
                         {t('character.keepPosition')}
