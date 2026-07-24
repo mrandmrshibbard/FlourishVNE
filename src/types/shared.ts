@@ -232,7 +232,7 @@ export interface BuySelectedItemAction extends BaseUIAction { type: UIActionType
 export interface SellSelectedItemAction extends BaseUIAction { type: UIActionType.SellSelectedItem; collectionId: VNID; }
 /** Start a timer from a button. `variableId` is optional (only to show it on a Meter / conditions);
  *  the timer runs regardless. For on-finish ACTIONS or pausing the story, use the Start Timer COMMAND. */
-export interface StartTimerAction extends BaseUIAction { type: UIActionType.StartTimer; timerId?: string; variableId?: VNID; mode?: 'countdown' | 'stopwatch'; duration: number; from?: number; interval?: number; loop?: boolean; onComplete?: VNUIAction[]; }
+export interface StartTimerAction extends BaseUIAction { type: UIActionType.StartTimer; timerId?: string; variableId?: VNID; mode?: 'countdown' | 'stopwatch'; duration: number; from?: number; interval?: number; loop?: boolean; resume?: boolean; keepAcrossGames?: boolean; rememberBetweenSessions?: boolean; onComplete?: VNUIAction[]; }
 export interface StopTimerAction extends BaseUIAction { type: UIActionType.StopTimer; timerId?: string; }
 /** Set/advance the day/night clock from a button. */
 export interface SetTimeOfDayAction extends BaseUIAction { type: UIActionType.SetTimeOfDay; mode: 'set' | 'advance'; hour?: number; hours?: number; transitionDuration?: number; }

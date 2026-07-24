@@ -4656,6 +4656,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           snapBack: anyEl.snapBack,
           snapToHotSpot: anyEl.snapToHotSpot,
           hideOnDrop: anyEl.hideOnDrop,
+          dragTag: anyEl.dragTag,
+          boundItemId: anyEl.boundItemId,
           conditions: m.conditions,
           actions: anyEl.actions,
           clickSoundId: anyEl.clickSoundId,
@@ -4684,6 +4686,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           snapBack: anyEl.snapBack,
           snapToHotSpot: anyEl.snapToHotSpot,
           hideOnDrop: anyEl.hideOnDrop,
+          // The drop pipeline matches by tag/bound item — dropping these here silently
+          // broke "drag a tagged image onto a tag-accepting hot spot" (only the Item
+          // case carried them; the inspector's own copies always did).
+          dragTag: anyEl.dragTag,
+          boundItemId: anyEl.boundItemId,
           conditions: img.conditions,
           actions: anyEl.actions,
           clickSoundId: anyEl.clickSoundId,
@@ -4707,6 +4714,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           snapBack: anyEl.snapBack,
           snapToHotSpot: anyEl.snapToHotSpot,
           hideOnDrop: anyEl.hideOnDrop,
+          dragTag: anyEl.dragTag,
+          boundItemId: anyEl.boundItemId,
           conditions: t.conditions,
           actions: anyEl.actions,
           clickSoundId: anyEl.clickSoundId,
@@ -4731,6 +4740,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           snapBack: anyEl.snapBack,
           snapToHotSpot: anyEl.snapToHotSpot,
           hideOnDrop: anyEl.hideOnDrop,
+          dragTag: anyEl.dragTag,
+          boundItemId: anyEl.boundItemId,
           conditions: b.conditions,
           actions: b.actions ?? anyEl.actions,
           clickSoundId: b.clickSoundId ?? null,
@@ -4758,6 +4769,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           snapBack: anyEl.snapBack,
           snapToHotSpot: anyEl.snapToHotSpot,
           hideOnDrop: anyEl.hideOnDrop,
+          dragTag: anyEl.dragTag,
+          boundItemId: anyEl.boundItemId,
           conditions: ti.conditions,
           actions: anyEl.actions,
           clickSoundId: anyEl.clickSoundId,
@@ -10724,15 +10737,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         parallaxDepth: command.parallaxDepth,
         layer: command.layer
       };
-      const existing = playerState.stageState.backgroundLayers || [];
       return {
         advance: true,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            backgroundLayers: [...existing.filter((l) => l.commandId !== command.id), layer]
-          }
-        }
+        // Surgical patch over the LATEST stage (stagePatch) — a full stale-stage copy here
+        // erased overlays added by commands chained in the same parallel (runAsync) run.
+        stagePatch: (prev) => ({
+          backgroundLayers: [...(prev.backgroundLayers || []).filter((l) => l.commandId !== command.id), layer]
+        })
       };
     }
     if (command.stack) {
@@ -10751,15 +10762,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         transition: command.transition,
         duration: command.duration
       };
-      const existing = playerState.stageState.backgroundStack || [];
       return {
         advance: true,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            backgroundStack: [...existing.filter((p) => p.commandId !== command.id), plane]
-          }
-        }
+        // Surgical patch over the LATEST stage (stagePatch) — a full stale-stage copy here
+        // erased overlays added by commands chained in the same parallel (runAsync) run.
+        stagePatch: (prev) => ({
+          backgroundStack: [...(prev.backgroundStack || []).filter((p) => p.commandId !== command.id), plane]
+        })
       };
     }
     if (command.backgroundColor) {
@@ -10767,15 +10776,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (command.transition === "instant" || !command.transition) {
         return {
           advance: true,
-          updates: {
-            stageState: {
-              ...playerState.stageState,
-              ...bgFx,
-              backgroundUrl: null,
-              backgroundIsVideo: false,
-              backgroundColor: command.backgroundColor
-            }
-          }
+          stagePatch: () => ({
+            ...bgFx,
+            backgroundUrl: null,
+            backgroundIsVideo: false,
+            backgroundColor: command.backgroundColor
+          })
         };
       }
       setPlayerState((p) => {
@@ -10937,15 +10943,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (command.transition === "instant" || !command.transition) {
       return {
         advance: true,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            ...bgFx,
-            backgroundUrl: newUrl,
-            backgroundIsVideo: isVideo,
-            backgroundLoop: command.loop ?? loop
-          }
-        }
+        // Surgical patch over the LATEST stage (stagePatch) — a full stale-stage copy here
+        // erased overlays added by commands chained in the same parallel (runAsync) run.
+        stagePatch: () => ({
+          ...bgFx,
+          backgroundUrl: newUrl,
+          backgroundIsVideo: isVideo,
+          backgroundLoop: command.loop ?? loop
+        })
       };
     }
     const preloadMedia = () => new Promise((resolve, reject) => {
@@ -11253,12 +11258,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const duration = (command.duration ?? 0.5) * 1e3 + 100;
       return {
         advance: false,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            textOverlays: updated
-          }
-        },
+        stagePatch: () => ({ textOverlays: updated }),
         delay: duration,
         callback: () => {
           setPlayerState(
@@ -11345,12 +11345,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const duration = (command.duration ?? 0.5) * 1e3 + 100;
       return {
         advance: false,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            imageOverlays: updated
-          }
-        },
+        stagePatch: () => ({ imageOverlays: updated }),
         delay: duration,
         callback: () => {
           setPlayerState(
@@ -11539,12 +11534,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const duration = (command.duration ?? 0.3) * 1e3 + 100;
       return {
         advance: false,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            buttonOverlays: updated
-          }
-        },
+        stagePatch: () => ({ buttonOverlays: updated }),
         delay: duration,
         callback: () => {
           setPlayerState(
@@ -12627,15 +12617,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return {
       advance: true,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          particleEffects: {
-            ...playerState.stageState.particleEffects || {},
-            [tag]: particleEntry
-          }
-        }
-      }
+      stagePatch: (prev) => ({
+        particleEffects: { ...prev.particleEffects || {}, [tag]: particleEntry }
+      })
     };
   }
   function handleStopParticles(command, context) {
@@ -12680,12 +12664,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       context.activeEffectTimeoutsRef.current.push(timeout);
       return {
         advance: true,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            particleEffects: currentEffects2
-          }
-        }
+        stagePatch: () => ({ particleEffects: currentEffects2 })
       };
     }
     const currentEffects = { ...playerState.stageState.particleEffects || {} };
@@ -12698,12 +12677,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return {
       advance: true,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          particleEffects: currentEffects
-        }
-      }
+      stagePatch: () => ({ particleEffects: currentEffects })
     };
   }
   const PRESET_COORDS = {
@@ -13585,6 +13559,28 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       localStorage.setItem(getPersistentVarsKey(projectId), JSON.stringify(vars));
     } catch (e) {
       console.error("Failed to save persistent variables:", e);
+    }
+  }
+  function getRememberedTimersKey(projectId) {
+    return `vn-timers-${projectId}`;
+  }
+  function loadRememberedTimers(projectId) {
+    try {
+      const raw = localStorage.getItem(getRememberedTimersKey(projectId));
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  }
+  function saveRememberedTimers(projectId, timers) {
+    var _a;
+    try {
+      if (typeof window !== "undefined" && ((_a = window.electronAPI) == null ? void 0 : _a.storage)) {
+        window.electronAPI.storage.setItem(getRememberedTimersKey(projectId), timers);
+      }
+      localStorage.setItem(getRememberedTimersKey(projectId), JSON.stringify(timers));
+    } catch (e) {
+      console.error("Failed to save timers:", e);
     }
   }
   function getInitialVariablesWithPersistent(projectVariables, projectId) {
@@ -16705,6 +16701,40 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const backgroundVideoRef = React2.useRef(null);
     const screenRootRef = React2.useRef(null);
     const screenSize = useStageSize(screenRootRef);
+    const [revealReady, setRevealReady] = React2.useState(false);
+    React2.useEffect(() => {
+      setRevealReady(false);
+      let alive = true;
+      const raf = requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (!alive) return;
+        const root = screenRootRef.current;
+        if (!root) {
+          setRevealReady(true);
+          return;
+        }
+        const urls = /* @__PURE__ */ new Set();
+        root.querySelectorAll("img").forEach((i) => {
+          const s = i.getAttribute("src");
+          if (s) urls.add(s);
+        });
+        root.querySelectorAll('[style*="background-image"]').forEach((el) => {
+          const m = (el.style.backgroundImage || "").match(/url\(["']?([^"')]+)/);
+          if (m) urls.add(m[1]);
+        });
+        const missing = [...urls].filter((u) => !u.startsWith("data:") && !vnLoadedImages.has(u));
+        if (!missing.length) {
+          setRevealReady(true);
+          return;
+        }
+        Promise.all(missing.map(vnWarmImage)).then(() => {
+          if (alive) setRevealReady(true);
+        });
+      }));
+      return () => {
+        alive = false;
+        cancelAnimationFrame(raf);
+      };
+    }, [screenId]);
     React2.useEffect(() => {
       return () => {
         if (backgroundVideoRef.current) {
@@ -17948,7 +17978,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ...isPassThrough && screen.hudAboveDialogue ? { zIndex: 45 } : {},
           // A pausing overlay (modal-style) sits ABOVE the dialogue box + backdrop so it
           // reads as a popup over a frozen, dimmed scene.
-          ...screen.pauseSceneWhileOpen ? { zIndex: 46 } : {}
+          ...screen.pauseSceneWhileOpen ? { zIndex: 46 } : {},
+          // Atomic reveal: everything on this screen appears in the same frame (see the
+          // gate effect above). Style-only flip — never a structural change (a remount
+          // would refetch every image).
+          ...revealReady ? {} : { visibility: "hidden" }
         },
         children: [
           !isPassThrough && getBackgroundElement(),
@@ -18465,6 +18499,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     React2.useEffect(() => {
       uiVariablesRef.current = uiVariables;
     }, [uiVariables]);
+    const menuVariablesRef = React2.useRef(menuVariables);
+    React2.useEffect(() => {
+      menuVariablesRef.current = menuVariables;
+    }, [menuVariables]);
     React2.useEffect(() => {
       const updatedVars = {};
       Object.values(project.variables).forEach((v) => {
@@ -18620,30 +18658,62 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const fastForwardTargetRef = React2.useRef(null);
     const backwardReplayRef = React2.useRef(null);
     const dnTransitionRef = React2.useRef(0.4);
+    const rememberedEntryOf = (t) => ({
+      value: t.value,
+      mode: t.mode,
+      intervalSec: t.intervalSec,
+      target: t.target,
+      resetTo: t.resetTo,
+      loop: t.loop,
+      variableId: t.variableId,
+      onComplete: t.onComplete,
+      keepAcrossGames: t.keepAcrossGames,
+      savedAt: Date.now()
+    });
     const startTimer = (cfg) => {
-      var _a2;
       const key = (cfg.timerId || "").trim().toLowerCase() || "default";
       const mode = cfg.mode === "stopwatch" ? "stopwatch" : "countdown";
       const intervalSec = Math.max(0.05, cfg.interval ?? 1);
       const startVal = mode === "countdown" ? cfg.duration ?? 0 : cfg.from ?? 0;
       const target = mode === "countdown" ? 0 : cfg.duration ?? 0;
+      const flags = { keepAcrossGames: cfg.keepAcrossGames || void 0, rememberBetweenSessions: cfg.rememberBetweenSessions || void 0 };
+      const persistIfRemembered = () => {
+        if (!cfg.rememberBetweenSessions) return;
+        const t = timersRef.current.get(key);
+        if (!t) return;
+        const map = loadRememberedTimers(project.id);
+        map[key] = rememberedEntryOf(t);
+        saveRememberedTimers(project.id, map);
+      };
       if (cfg.resume) {
         if (timersRef.current.has(key)) return key;
-        const varVal = cfg.variableId ? Number(mergeDirtyUiVariables(((_a2 = playerStateRef.current) == null ? void 0 : _a2.variables) || {})[cfg.variableId]) : NaN;
+        const varsNow = playerStateRef.current ? mergeDirtyUiVariables(playerStateRef.current.variables || {}) : menuVariablesRef.current;
+        const varVal = cfg.variableId ? Number(varsNow[cfg.variableId]) : NaN;
         const finished = mode === "countdown" ? varVal <= 0 : target > 0 && varVal >= target;
         if (Number.isFinite(varVal) && !finished) {
-          timersRef.current.set(key, { variableId: cfg.variableId || void 0, mode, intervalSec, target, accMs: 0, value: varVal, resetTo: startVal, loop: !!cfg.loop, onComplete: cfg.onComplete });
+          timersRef.current.set(key, { variableId: cfg.variableId || void 0, mode, intervalSec, target, accMs: 0, value: varVal, resetTo: startVal, loop: !!cfg.loop, ...flags, onComplete: cfg.onComplete });
+          persistIfRemembered();
           return key;
         }
       }
-      timersRef.current.set(key, { variableId: cfg.variableId || void 0, mode, intervalSec, target, accMs: 0, value: startVal, resetTo: startVal, loop: !!cfg.loop, onComplete: cfg.onComplete });
-      if (cfg.variableId) updatePlayerState((p) => p ? { ...p, variables: { ...p.variables, [cfg.variableId]: startVal } } : null);
+      timersRef.current.set(key, { variableId: cfg.variableId || void 0, mode, intervalSec, target, accMs: 0, value: startVal, resetTo: startVal, loop: !!cfg.loop, ...flags, onComplete: cfg.onComplete });
+      if (cfg.variableId) {
+        const vid = cfg.variableId;
+        if (playerStateRef.current) updatePlayerState((p) => p ? { ...p, variables: { ...p.variables, [vid]: startVal } } : null);
+        else setMenuVariables((m) => ({ ...m, [vid]: startVal }));
+      }
+      persistIfRemembered();
       return key;
     };
     const stopTimer = (timerId) => {
       var _a2;
       const key = (timerId || "").trim().toLowerCase() || "default";
       timersRef.current.delete(key);
+      const map = loadRememberedTimers(project.id);
+      if (key in map) {
+        delete map[key];
+        saveRememberedTimers(project.id, map);
+      }
       if (((_a2 = blockingTimerRef.current) == null ? void 0 : _a2.key) === key) {
         const r = blockingTimerRef.current.resume;
         blockingTimerRef.current = null;
@@ -18653,6 +18723,74 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
       }
     };
+    const clearTimersForGameBoundary = () => {
+      var _a2;
+      const blockedKey = (_a2 = blockingTimerRef.current) == null ? void 0 : _a2.key;
+      timersRef.current.forEach((t, k) => {
+        if (!t.keepAcrossGames || k === blockedKey) timersRef.current.delete(k);
+      });
+      blockingTimerRef.current = null;
+    };
+    const lastTimerFlushRef = React2.useRef(0);
+    const flushRememberedTimers = () => {
+      let any = false;
+      timersRef.current.forEach((t) => {
+        if (t.rememberBetweenSessions) any = true;
+      });
+      if (!any) return;
+      const map = loadRememberedTimers(project.id);
+      timersRef.current.forEach((t, k) => {
+        if (t.rememberBetweenSessions) map[k] = rememberedEntryOf(t);
+      });
+      saveRememberedTimers(project.id, map);
+    };
+    const flushRememberedTimersRef = React2.useRef(flushRememberedTimers);
+    flushRememberedTimersRef.current = flushRememberedTimers;
+    React2.useEffect(() => {
+      const map = loadRememberedTimers(project.id);
+      const keys = Object.keys(map);
+      if (!keys.length) return;
+      const seeds = {};
+      let mapChanged = false;
+      keys.forEach((k) => {
+        const e = map[k];
+        if (!e || typeof e.value !== "number") {
+          delete map[k];
+          mapChanged = true;
+          return;
+        }
+        const finished = e.mode === "countdown" ? e.value <= e.target : e.target > 0 && e.value >= e.target;
+        if (finished && !e.loop) {
+          delete map[k];
+          mapChanged = true;
+          return;
+        }
+        timersRef.current.set(k, {
+          variableId: e.variableId,
+          mode: e.mode === "stopwatch" ? "stopwatch" : "countdown",
+          intervalSec: Math.max(0.05, e.intervalSec || 1),
+          target: e.target || 0,
+          accMs: 0,
+          value: e.value,
+          resetTo: e.resetTo ?? e.value,
+          loop: !!e.loop,
+          keepAcrossGames: e.keepAcrossGames,
+          rememberBetweenSessions: true,
+          onComplete: e.onComplete
+        });
+        if (e.variableId) seeds[e.variableId] = e.value;
+      });
+      if (mapChanged) saveRememberedTimers(project.id, map);
+      if (Object.keys(seeds).length) setMenuVariables((m) => ({ ...m, ...seeds }));
+    }, []);
+    React2.useEffect(() => {
+      const flush = () => flushRememberedTimersRef.current();
+      window.addEventListener("beforeunload", flush);
+      return () => {
+        window.removeEventListener("beforeunload", flush);
+        flush();
+      };
+    }, []);
     const applyTimeOfDay = (mode, amount, transitionDuration) => {
       var _a2;
       const tv = (_a2 = project.dayNightCycle) == null ? void 0 : _a2.timeVariableId;
@@ -19199,8 +19337,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         customTransitionTimeoutsRef.current = [];
         setCustomTransition(null);
         setActionMovie(null);
-        timersRef.current.clear();
-        blockingTimerRef.current = null;
+        clearTimersForGameBoundary();
         fastForwardTargetRef.current = null;
         backwardReplayRef.current = null;
         setIsJustLoaded(true);
@@ -19311,8 +19448,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       customTransitionTimeoutsRef.current = [];
       setCustomTransition(null);
       setActionMovie(null);
-      timersRef.current.clear();
-      blockingTimerRef.current = null;
+      clearTimersForGameBoundary();
       fastForwardTargetRef.current = null;
       backwardReplayRef.current = null;
       if (hasOverride) {
@@ -20003,6 +20139,43 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return im;
       });
     }, [playerState == null ? void 0 : playerState.currentSceneId, playerState == null ? void 0 : playerState.mode, project]);
+    const screenPrewarmRef = React2.useRef([]);
+    React2.useEffect(() => {
+      const urls = /* @__PURE__ */ new Set();
+      const addRef = (ref) => {
+        if (!ref || typeof ref !== "object") return;
+        const id = ref.id || ref.assetId;
+        if (!id || typeof id !== "string") return;
+        if (ref.type === "image") {
+          const u = assetResolver(id, "image");
+          if (u) urls.add(u);
+        }
+      };
+      const walk = (node, depth) => {
+        if (!node || depth > 7) return;
+        if (Array.isArray(node)) {
+          node.forEach((n) => walk(n, depth + 1));
+          return;
+        }
+        if (typeof node === "object") {
+          addRef(node);
+          for (const [k, v] of Object.entries(node)) {
+            if (k === "imageUrl" && typeof v === "string" && v) urls.add(resolveFieldUrl(project.id, v) || v);
+            else if (v && typeof v === "object") walk(v, depth + 1);
+          }
+        }
+      };
+      walk(project.uiScreens, 0);
+      walk(project.items || {}, 0);
+      screenPrewarmRef.current = [...urls].filter((u) => !u.startsWith("data:")).slice(0, 600).map((u) => {
+        const im = new Image();
+        im.onload = im.onerror = () => {
+          vnLoadedImages.add(u);
+        };
+        im.src = u;
+        return im;
+      });
+    }, [project, assetResolver]);
     const [, bumpSpriteEpoch] = React2.useReducer((x) => x + 1, 0);
     React2.useEffect(() => {
       var _a2;
@@ -20645,7 +20818,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       return () => pluginManager.setRuntime(null);
     }, [updatePlayerState, notify]);
     React2.useEffect(() => {
-      var _a2;
       const scheduler = commandSchedulerRef.current;
       const diagnostics = runtimeDiagnosticsRef.current;
       if (!playerState || playerState.mode !== "playing") {
@@ -20660,8 +20832,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return;
       }
       if (hudStack.some((id) => {
-        var _a3;
-        return !((_a3 = project.uiScreens[id]) == null ? void 0 : _a3.hudNonBlocking);
+        var _a2;
+        return !((_a2 = project.uiScreens[id]) == null ? void 0 : _a2.hudNonBlocking);
       })) {
         return;
       }
@@ -20826,1477 +20998,1497 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         updatePlayerState((p) => p ? { ...p, currentIndex: target } : null);
         return;
       }
-      const conditionsMet = evaluateConditions2(command.conditions, getRuntimeVariables());
-      const isLiveReactive = !!command.liveConditions && (REACTIVE_VISUAL_TYPES.has(command.type) || REACTIVE_FX_TYPES.has(command.type) || command.type === CommandType.PlaySoundEffect);
-      runtimeDebugLog("[DEBUG] Command:", command.type, "Index:", playerState.currentIndex, "Conditions met:", conditionsMet, "live:", isLiveReactive, "Variables:", getRuntimeVariables());
-      if (!conditionsMet && !isLiveReactive) {
-        runtimeDebugLog("[DEBUG] Skipping command due to failed conditions");
-        updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
-        return;
-      }
-      {
-        const ffTarget = fastForwardTargetRef.current;
-        if (ffTarget != null) {
-          if (playerState.currentIndex >= ffTarget) {
-            fastForwardTargetRef.current = null;
-          } else if (!FF_VISUAL_TYPES.has(command.type)) {
-            updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
-            return;
-          }
-        }
-      }
-      const advance = () => {
-        runtimeDebugLog("[DEBUG advance()] Called from command:", command.type, "Current index:", playerState.currentIndex);
-        if (scheduler.alreadyAdvancedPast(playerState.currentIndex)) {
-          const last = scheduler.getLastProcessed();
-          if (last) {
-            runtimeDebugLog("[DEBUG advance()] Skipping - already advanced to", last.index);
-          }
+      const executeAtIndex = (command2, cmdIndex) => {
+        var _a2, _b2;
+        const chainIntoNext = () => {
+          const nextCmd = playerState.currentCommands[cmdIndex + 1];
+          if (!nextCmd) return;
+          if (nextCmd.type === CommandType.BranchStart || nextCmd.type === CommandType.BranchElseIf || nextCmd.type === CommandType.BranchElse || nextCmd.type === CommandType.BranchEnd) return;
+          const chainSig = { sceneId: playerState.currentSceneId, index: cmdIndex + 1, commandId: nextCmd.id };
+          if (!scheduler.shouldProcess(chainSig)) return;
+          scheduler.markProcessed(chainSig);
+          diagnostics.emit("command-start", { sceneId: chainSig.sceneId, commandId: chainSig.commandId, index: chainSig.index });
+          executeAtIndex(nextCmd, cmdIndex + 1);
+        };
+        const conditionsMet = evaluateConditions2(command2.conditions, getRuntimeVariables());
+        const isLiveReactive = !!command2.liveConditions && (REACTIVE_VISUAL_TYPES.has(command2.type) || REACTIVE_FX_TYPES.has(command2.type) || command2.type === CommandType.PlaySoundEffect);
+        runtimeDebugLog("[DEBUG] Command:", command2.type, "Index:", cmdIndex, "Conditions met:", conditionsMet, "live:", isLiveReactive, "Variables:", getRuntimeVariables());
+        if (!conditionsMet && !isLiveReactive) {
+          runtimeDebugLog("[DEBUG] Skipping command due to failed conditions");
+          updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+          if (((_a2 = command2.modifiers) == null ? void 0 : _a2.runAsync) === true) chainIntoNext();
           return;
         }
-        const nextIndex = playerState.currentIndex + 1;
-        if (nextIndex >= playerState.currentCommands.length) {
-          if (playerState.commandStack.length > 0) {
-            updatePlayerState((p) => {
-              if (!p || p.commandStack.length === 0) return p;
-              const frame = p.commandStack[p.commandStack.length - 1];
-              const newStack = p.commandStack.slice(0, -1);
-              let variables = p.variables;
-              if (frame.savedVariables || frame.clearedVariables) {
-                variables = { ...p.variables };
-                if (frame.savedVariables) Object.assign(variables, frame.savedVariables);
-                if (frame.clearedVariables) for (const k of frame.clearedVariables) delete variables[k];
-              }
-              return { ...p, currentSceneId: frame.sceneId, currentCommands: frame.commands, currentIndex: frame.index, commandStack: newStack, variables };
-            });
-          } else {
-            const sceneIds = Object.keys(project.scenes);
-            const currentSceneIndex = sceneIds.indexOf(playerState.currentSceneId);
-            if (currentSceneIndex !== -1 && currentSceneIndex < sceneIds.length - 1) {
-              const nextSceneId = navigateToScene(sceneIds[currentSceneIndex + 1], getRuntimeVariables());
-              const nextScene = project.scenes[nextSceneId];
-              if (nextScene) {
-                startSceneExitTransition(playerState.currentSceneId, () => {
-                  updatePlayerState((p) => p ? {
-                    ...p,
-                    currentSceneId: nextSceneId,
-                    currentCommands: nextScene.commands,
-                    currentIndex: 0,
-                    stageState: {
-                      backgroundUrl: null,
-                      characters: {},
-                      textOverlays: [],
-                      imageOverlays: [],
-                      buttonOverlays: [],
-                      movieOverlays: [],
-                      screen: {
-                        shake: { active: false, intensity: 0 },
-                        tint: "transparent",
-                        zoom: 1,
-                        panX: 0,
-                        panY: 0,
-                        transitionDuration: 0.5,
-                        overlayEffects: []
-                      },
-                      particleEffects: {}
-                    },
-                    uiState: {
-                      dialogue: null,
-                      choices: null,
-                      textInput: null,
-                      movieUrl: null,
-                      movieLoop: false,
-                      isWaitingForInput: false,
-                      isTransitioning: false,
-                      transitionElement: null,
-                      flash: null,
-                      showHistory: false,
-                      screenSceneId: null
-                    }
-                  } : null);
-                });
-                return;
-              }
+        {
+          const ffTarget = fastForwardTargetRef.current;
+          if (ffTarget != null) {
+            if (cmdIndex >= ffTarget) {
+              fastForwardTargetRef.current = null;
+            } else if (!FF_VISUAL_TYPES.has(command2.type)) {
+              updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+              return;
             }
-            const audio = musicAudioRef.current;
-            if (audio) {
-              audio.pause();
-              audio.currentTime = 0;
-              audio.src = "";
-            }
-            stopAllSfx();
-            updatePlayerState(null);
-            if (project.ui.titleScreenId) {
-              setScreenStack([project.ui.titleScreenId]);
-            }
-            scheduler.reset();
           }
-        } else {
-          updatePlayerState((p) => p ? { ...p, currentIndex: nextIndex } : null);
         }
-      };
-      const shouldRunAsync = ((_a2 = command.modifiers) == null ? void 0 : _a2.runAsync) === true;
-      const commandContext = {
-        project,
-        playerState,
-        assetResolver,
-        getAssetMetadata,
-        musicAudioRef,
-        fadeAudio,
-        playSound,
-        playVoice,
-        stopAllSfx,
-        stopSfx,
-        settings,
-        advance,
-        setPlayerState: updatePlayerState,
-        activeEffectTimeoutsRef,
-        evaluateConditions: evaluateConditions2,
-        notify,
-        isStandalone
-      };
-      commandContext.runCommand = async (type, params) => {
-        var _a3, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2;
-        try {
-          const base = createCommand(type, project, {});
-          if (!base) {
-            console.warn("[Script] runCommand: cannot build command", type);
+        const advance = () => {
+          runtimeDebugLog("[DEBUG advance()] Called from command:", command2.type, "Current index:", cmdIndex);
+          if (scheduler.alreadyAdvancedPast(cmdIndex)) {
+            const last = scheduler.getLastProcessed();
+            if (last) {
+              runtimeDebugLog("[DEBUG advance()] Skipping - already advanced to", last.index);
+            }
             return;
           }
-          const cmd = { ...base, ...params, id: `script-cmd-${Math.random().toString(36).slice(2, 9)}` };
-          const hctx = { ...commandContext, advance: () => {
-          } };
-          let result;
-          switch (type) {
-            case "ShowCharacter":
-              result = handleShowCharacter(cmd, hctx);
-              break;
-            case "HideCharacter":
-              result = handleHideCharacter(cmd, hctx);
-              break;
-            case "SetBackground":
-              result = await handleSetBackground(cmd, hctx);
-              break;
-            case "ShowImage":
-              result = handleShowImage(cmd, hctx);
-              break;
-            case "SpawnParticles":
-              result = handleSpawnParticles(cmd, hctx);
-              break;
-            case "StopParticles":
-              result = handleStopParticles(cmd, hctx);
-              break;
-            case "TweenElement":
-              result = handleTweenElement(cmd, hctx);
-              break;
-            case "MoveCharacter":
-              result = handleMoveCharacter(cmd, hctx);
-              break;
-            // Additional pure handlers (Phase A): each returns a CommandResult applied via the
-            // decoupled applier below (stage/ui/music/variables + stagePatch). Safe to bridge
-            // because none depend on the main loop's advance/index.
-            case "SetCharacterLayer":
-              result = handleSetCharacterLayer(cmd, hctx);
-              break;
-            case "SetCharacterPose":
-              result = handleSetCharacterPose(cmd, hctx);
-              break;
-            case "ShowText":
-              result = handleShowText(cmd, hctx);
-              break;
-            case "HideText":
-              result = handleHideText(cmd, hctx);
-              break;
-            case "HideImage":
-              result = handleHideImage(cmd, hctx);
-              break;
-            case "ShowButton":
-              result = handleShowButton(cmd, hctx);
-              break;
-            case "HideButton":
-              result = handleHideButton(cmd, hctx);
-              break;
-            case "ShowItem":
-              result = handleShowItem(cmd, hctx);
-              break;
-            case "PlayMusic":
-              result = handlePlayMusic(cmd, hctx);
-              break;
-            case "StopMusic":
-              result = handleStopMusic(cmd, hctx);
-              break;
-            case "PlaySoundEffect":
-              result = handlePlaySoundEffect(cmd, hctx);
-              break;
-            case "StopSoundEffect":
-              result = handleStopSoundEffect(cmd, hctx);
-              break;
-            case "ShowPhone":
-              result = handleShowPhone(cmd, hctx);
-              break;
-            case "HidePhone":
-              result = handleHidePhone(cmd, hctx);
-              break;
-            case "ShowPhoneText":
-              result = handleShowPhoneText(cmd, hctx);
-              break;
-            case "HidePhoneText":
-              result = handleHidePhoneText(cmd, hctx);
-              break;
-            case "GiveItem":
-            case "UseItem":
-            case "DestroyItem":
-              result = handleItemCommand(cmd, hctx);
-              break;
-            case "RestockCollection":
-              result = handleRestockCollectionCommand(cmd, hctx);
-              break;
-            case "BuyItem":
-              result = handleBuyItemCommand(cmd, hctx);
-              break;
-            case "SellItem":
-              result = handleSellItemCommand(cmd, hctx);
-              break;
-            case "PlaceLights":
-              result = { advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null }) };
-              break;
-            case "ClearLights":
-              result = { advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null }) };
-              break;
-            case "CreditRoll": {
-              setActiveCreditRoll(cmd);
-              result = handleCreditRoll(cmd, hctx);
-              break;
-            }
-            // Screen effects are INLINE in the main loop (component refs/state), so we replicate
-            // the exact same effect here (identical refs/render path) rather than touch the loop.
-            case "ShakeScreen": {
-              activeShakeRef.current = { intensity: resolveVarNumber((_a3 = playerStateRef.current) == null ? void 0 : _a3.variables, cmd.intensityVariableId, cmd.intensity, { min: 1, max: 10 }), duration: cmd.duration };
-              setShakeTrigger((prev) => prev + 1);
-              if (cmd.duration > 0) {
-                const tid = window.setTimeout(() => {
-                  activeShakeRef.current = null;
-                  setShakeTrigger((prev) => prev + 1);
-                  activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter((id) => id !== tid);
-                }, cmd.duration * 1e3);
-                activeEffectTimeoutsRef.current.push(tid);
+          const nextIndex = cmdIndex + 1;
+          if (nextIndex >= playerState.currentCommands.length) {
+            if (playerState.commandStack.length > 0) {
+              updatePlayerState((p) => {
+                if (!p || p.commandStack.length === 0) return p;
+                const frame = p.commandStack[p.commandStack.length - 1];
+                const newStack = p.commandStack.slice(0, -1);
+                let variables = p.variables;
+                if (frame.savedVariables || frame.clearedVariables) {
+                  variables = { ...p.variables };
+                  if (frame.savedVariables) Object.assign(variables, frame.savedVariables);
+                  if (frame.clearedVariables) for (const k of frame.clearedVariables) delete variables[k];
+                }
+                return { ...p, currentSceneId: frame.sceneId, currentCommands: frame.commands, currentIndex: frame.index, commandStack: newStack, variables };
+              });
+            } else {
+              const sceneIds = Object.keys(project.scenes);
+              const currentSceneIndex = sceneIds.indexOf(playerState.currentSceneId);
+              if (currentSceneIndex !== -1 && currentSceneIndex < sceneIds.length - 1) {
+                const nextSceneId = navigateToScene(sceneIds[currentSceneIndex + 1], getRuntimeVariables());
+                const nextScene = project.scenes[nextSceneId];
+                if (nextScene) {
+                  startSceneExitTransition(playerState.currentSceneId, () => {
+                    updatePlayerState((p) => p ? {
+                      ...p,
+                      currentSceneId: nextSceneId,
+                      currentCommands: nextScene.commands,
+                      currentIndex: 0,
+                      stageState: {
+                        backgroundUrl: null,
+                        characters: {},
+                        textOverlays: [],
+                        imageOverlays: [],
+                        buttonOverlays: [],
+                        movieOverlays: [],
+                        screen: {
+                          shake: { active: false, intensity: 0 },
+                          tint: "transparent",
+                          zoom: 1,
+                          panX: 0,
+                          panY: 0,
+                          transitionDuration: 0.5,
+                          overlayEffects: []
+                        },
+                        particleEffects: {}
+                      },
+                      uiState: {
+                        dialogue: null,
+                        choices: null,
+                        textInput: null,
+                        movieUrl: null,
+                        movieLoop: false,
+                        isWaitingForInput: false,
+                        isTransitioning: false,
+                        transitionElement: null,
+                        flash: null,
+                        showHistory: false,
+                        screenSceneId: null
+                      }
+                    } : null);
+                  });
+                  return;
+                }
               }
-              return;
-            }
-            case "FlashScreen": {
-              activeFlashRef.current = { color: cmd.color, duration: resolveVarNumber((_b2 = playerStateRef.current) == null ? void 0 : _b2.variables, cmd.durationVariableId, cmd.duration, { min: 0.05, max: 30 }), key: Date.now() };
-              setFlashTrigger((prev) => prev + 1);
-              return;
-            }
-            case "TintScreen": {
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, tintOpacity: cmd.opacity ?? 100, tintOpacityVariableId: cmd.opacityVariableId ?? null, transitionDuration: cmd.duration } } } : p);
-              return;
-            }
-            case "PanZoomScreen": {
-              const pzVars = (_c2 = playerStateRef.current) == null ? void 0 : _c2.variables;
-              const pzZoom = resolveVarNumber(pzVars, cmd.zoomVariableId, cmd.zoom, { min: 0.1, max: 5 });
-              const pzX = resolveVarNumber(pzVars, cmd.panXVariableId, cmd.panX, { min: -100, max: 100 });
-              const pzY = resolveVarNumber(pzVars, cmd.panYVariableId, cmd.panY, { min: -100, max: 100 });
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: pzZoom, panX: pzX, panY: pzY, transitionDuration: cmd.duration } } } : p);
-              return;
-            }
-            case "ResetScreenEffects": {
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: "transparent", tintOpacity: 100, tintOpacityVariableId: null, zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] } } } : p);
-              return;
-            }
-            // More inline-effect commands (refs/component state) — replicate the main loop's exact
-            // behaviour so the same render path runs, without touching the loop.
-            case "Flashlight": {
-              if (cmd.enabled) {
-                setFlashlight({
-                  radius: cmd.radius ?? 22,
-                  softness: cmd.softness ?? 0.6,
-                  darkness: cmd.darkness ?? 0.85,
-                  radiusVariableId: cmd.radiusVariableId ?? null,
-                  darknessVariableId: cmd.darknessVariableId ?? null,
-                  color: cmd.color || "#000000",
-                  toggleKey: cmd.toggleKey,
-                  affectsDialogue: cmd.affectsDialogue !== false,
-                  darkWhenOff: cmd.darkWhenOff === true,
-                  on: true
-                });
-                if (cmd.sfxId) playSound(cmd.sfxId);
-              } else {
-                setFlashlight(null);
+              const audio = musicAudioRef.current;
+              if (audio) {
+                audio.pause();
+                audio.currentTime = 0;
+                audio.src = "";
               }
-              return;
-            }
-            case "Spotlight": {
-              const sid = cmd.spotlightId || "main";
-              if (cmd.enabled) {
-                setSpotlights((prev) => ({ ...prev, [sid]: makeSpotlightState(cmd) }));
-                if (cmd.sfxId) playSound(cmd.sfxId);
-              } else {
-                setSpotlights((prev) => {
-                  const n = { ...prev };
-                  delete n[sid];
-                  return n;
-                });
+              stopAllSfx();
+              updatePlayerState(null);
+              if (project.ui.titleScreenId) {
+                setScreenStack([project.ui.titleScreenId]);
               }
+              scheduler.reset();
+            }
+          } else {
+            updatePlayerState((p) => p ? { ...p, currentIndex: nextIndex } : null);
+          }
+        };
+        const shouldRunAsync = ((_b2 = command2.modifiers) == null ? void 0 : _b2.runAsync) === true;
+        const commandContext = {
+          project,
+          playerState,
+          assetResolver,
+          getAssetMetadata,
+          musicAudioRef,
+          fadeAudio,
+          playSound,
+          playVoice,
+          stopAllSfx,
+          stopSfx,
+          settings,
+          advance,
+          setPlayerState: updatePlayerState,
+          activeEffectTimeoutsRef,
+          evaluateConditions: evaluateConditions2,
+          notify,
+          isStandalone
+        };
+        commandContext.runCommand = async (type, params) => {
+          var _a3, _b3, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2;
+          try {
+            const base = createCommand(type, project, {});
+            if (!base) {
+              console.warn("[Script] runCommand: cannot build command", type);
               return;
             }
-            case "Lightning": {
-              if (cmd.storm === "stop") {
-                setLightningStorm(null);
+            const cmd = { ...base, ...params, id: `script-cmd-${Math.random().toString(36).slice(2, 9)}` };
+            const hctx = { ...commandContext, advance: () => {
+            } };
+            let result;
+            switch (type) {
+              case "ShowCharacter":
+                result = handleShowCharacter(cmd, hctx);
+                break;
+              case "HideCharacter":
+                result = handleHideCharacter(cmd, hctx);
+                break;
+              case "SetBackground":
+                result = await handleSetBackground(cmd, hctx);
+                break;
+              case "ShowImage":
+                result = handleShowImage(cmd, hctx);
+                break;
+              case "SpawnParticles":
+                result = handleSpawnParticles(cmd, hctx);
+                break;
+              case "StopParticles":
+                result = handleStopParticles(cmd, hctx);
+                break;
+              case "TweenElement":
+                result = handleTweenElement(cmd, hctx);
+                break;
+              case "MoveCharacter":
+                result = handleMoveCharacter(cmd, hctx);
+                break;
+              // Additional pure handlers (Phase A): each returns a CommandResult applied via the
+              // decoupled applier below (stage/ui/music/variables + stagePatch). Safe to bridge
+              // because none depend on the main loop's advance/index.
+              case "SetCharacterLayer":
+                result = handleSetCharacterLayer(cmd, hctx);
+                break;
+              case "SetCharacterPose":
+                result = handleSetCharacterPose(cmd, hctx);
+                break;
+              case "ShowText":
+                result = handleShowText(cmd, hctx);
+                break;
+              case "HideText":
+                result = handleHideText(cmd, hctx);
+                break;
+              case "HideImage":
+                result = handleHideImage(cmd, hctx);
+                break;
+              case "ShowButton":
+                result = handleShowButton(cmd, hctx);
+                break;
+              case "HideButton":
+                result = handleHideButton(cmd, hctx);
+                break;
+              case "ShowItem":
+                result = handleShowItem(cmd, hctx);
+                break;
+              case "PlayMusic":
+                result = handlePlayMusic(cmd, hctx);
+                break;
+              case "StopMusic":
+                result = handleStopMusic(cmd, hctx);
+                break;
+              case "PlaySoundEffect":
+                result = handlePlaySoundEffect(cmd, hctx);
+                break;
+              case "StopSoundEffect":
+                result = handleStopSoundEffect(cmd, hctx);
+                break;
+              case "ShowPhone":
+                result = handleShowPhone(cmd, hctx);
+                break;
+              case "HidePhone":
+                result = handleHidePhone(cmd, hctx);
+                break;
+              case "ShowPhoneText":
+                result = handleShowPhoneText(cmd, hctx);
+                break;
+              case "HidePhoneText":
+                result = handleHidePhoneText(cmd, hctx);
+                break;
+              case "GiveItem":
+              case "UseItem":
+              case "DestroyItem":
+                result = handleItemCommand(cmd, hctx);
+                break;
+              case "RestockCollection":
+                result = handleRestockCollectionCommand(cmd, hctx);
+                break;
+              case "BuyItem":
+                result = handleBuyItemCommand(cmd, hctx);
+                break;
+              case "SellItem":
+                result = handleSellItemCommand(cmd, hctx);
+                break;
+              case "PlaceLights":
+                result = { advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null }) };
+                break;
+              case "ClearLights":
+                result = { advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null }) };
+                break;
+              case "CreditRoll": {
+                setActiveCreditRoll(cmd);
+                result = handleCreditRoll(cmd, hctx);
+                break;
+              }
+              // Screen effects are INLINE in the main loop (component refs/state), so we replicate
+              // the exact same effect here (identical refs/render path) rather than touch the loop.
+              case "ShakeScreen": {
+                activeShakeRef.current = { intensity: resolveVarNumber((_a3 = playerStateRef.current) == null ? void 0 : _a3.variables, cmd.intensityVariableId, cmd.intensity, { min: 1, max: 10 }), duration: cmd.duration };
+                setShakeTrigger((prev) => prev + 1);
+                if (cmd.duration > 0) {
+                  const tid = window.setTimeout(() => {
+                    activeShakeRef.current = null;
+                    setShakeTrigger((prev) => prev + 1);
+                    activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter((id) => id !== tid);
+                  }, cmd.duration * 1e3);
+                  activeEffectTimeoutsRef.current.push(tid);
+                }
                 return;
               }
-              if (cmd.storm === "continuous") {
-                setLightningStorm({
+              case "FlashScreen": {
+                activeFlashRef.current = { color: cmd.color, duration: resolveVarNumber((_b3 = playerStateRef.current) == null ? void 0 : _b3.variables, cmd.durationVariableId, cmd.duration, { min: 0.05, max: 30 }), key: Date.now() };
+                setFlashTrigger((prev) => prev + 1);
+                return;
+              }
+              case "TintScreen": {
+                updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, tintOpacity: cmd.opacity ?? 100, tintOpacityVariableId: cmd.opacityVariableId ?? null, transitionDuration: cmd.duration } } } : p);
+                return;
+              }
+              case "PanZoomScreen": {
+                const pzVars = (_c2 = playerStateRef.current) == null ? void 0 : _c2.variables;
+                const pzZoom = resolveVarNumber(pzVars, cmd.zoomVariableId, cmd.zoom, { min: 0.1, max: 5 });
+                const pzX = resolveVarNumber(pzVars, cmd.panXVariableId, cmd.panX, { min: -100, max: 100 });
+                const pzY = resolveVarNumber(pzVars, cmd.panYVariableId, cmd.panY, { min: -100, max: 100 });
+                updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: pzZoom, panX: pzX, panY: pzY, transitionDuration: cmd.duration } } } : p);
+                return;
+              }
+              case "ResetScreenEffects": {
+                updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: "transparent", tintOpacity: 100, tintOpacityVariableId: null, zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] } } } : p);
+                return;
+              }
+              // More inline-effect commands (refs/component state) — replicate the main loop's exact
+              // behaviour so the same render path runs, without touching the loop.
+              case "Flashlight": {
+                if (cmd.enabled) {
+                  setFlashlight({
+                    radius: cmd.radius ?? 22,
+                    softness: cmd.softness ?? 0.6,
+                    darkness: cmd.darkness ?? 0.85,
+                    radiusVariableId: cmd.radiusVariableId ?? null,
+                    darknessVariableId: cmd.darknessVariableId ?? null,
+                    color: cmd.color || "#000000",
+                    toggleKey: cmd.toggleKey,
+                    affectsDialogue: cmd.affectsDialogue !== false,
+                    darkWhenOff: cmd.darkWhenOff === true,
+                    on: true
+                  });
+                  if (cmd.sfxId) playSound(cmd.sfxId);
+                } else {
+                  setFlashlight(null);
+                }
+                return;
+              }
+              case "Spotlight": {
+                const sid = cmd.spotlightId || "main";
+                if (cmd.enabled) {
+                  setSpotlights((prev) => ({ ...prev, [sid]: makeSpotlightState(cmd) }));
+                  if (cmd.sfxId) playSound(cmd.sfxId);
+                } else {
+                  setSpotlights((prev) => {
+                    const n = { ...prev };
+                    delete n[sid];
+                    return n;
+                  });
+                }
+                return;
+              }
+              case "Lightning": {
+                if (cmd.storm === "stop") {
+                  setLightningStorm(null);
+                  return;
+                }
+                if (cmd.storm === "continuous") {
+                  setLightningStorm({
+                    color: cmd.color || "#EAF2FF",
+                    intensity: cmd.intensity ?? 0.9,
+                    intensityVariableId: cmd.intensityVariableId ?? null,
+                    duration: cmd.duration ?? 0.7,
+                    flashes: cmd.flashes ?? 2,
+                    affectsDialogue: cmd.affectsDialogue !== false,
+                    thunderSfxId: cmd.thunderSfxId ?? null,
+                    thunderDelay: cmd.thunderDelay ?? 0.6,
+                    thunderVolume: cmd.thunderVolume,
+                    intervalMin: Math.max(0.3, cmd.intervalMin ?? 2),
+                    intervalMax: Math.max(0.3, cmd.intervalMax ?? 8)
+                  });
+                  return;
+                }
+                activeLightningRef.current = {
                   color: cmd.color || "#EAF2FF",
-                  intensity: cmd.intensity ?? 0.9,
-                  intensityVariableId: cmd.intensityVariableId ?? null,
+                  intensity: resolveVarNumber((_d2 = playerStateRef.current) == null ? void 0 : _d2.variables, cmd.intensityVariableId, cmd.intensity ?? 0.9, { min: 0, max: 1 }),
                   duration: cmd.duration ?? 0.7,
                   flashes: cmd.flashes ?? 2,
                   affectsDialogue: cmd.affectsDialogue !== false,
-                  thunderSfxId: cmd.thunderSfxId ?? null,
-                  thunderDelay: cmd.thunderDelay ?? 0.6,
-                  thunderVolume: cmd.thunderVolume,
-                  intervalMin: Math.max(0.3, cmd.intervalMin ?? 2),
-                  intervalMax: Math.max(0.3, cmd.intervalMax ?? 8)
-                });
+                  key: Date.now()
+                };
+                setLightningTrigger((prev) => prev + 1);
+                if (cmd.thunderSfxId) {
+                  const tid = window.setTimeout(() => playSound(cmd.thunderSfxId, cmd.thunderVolume), Math.max(0, (cmd.thunderDelay ?? 0.6) * 1e3));
+                  activeEffectTimeoutsRef.current.push(tid);
+                }
                 return;
               }
-              activeLightningRef.current = {
-                color: cmd.color || "#EAF2FF",
-                intensity: resolveVarNumber((_d2 = playerStateRef.current) == null ? void 0 : _d2.variables, cmd.intensityVariableId, cmd.intensity ?? 0.9, { min: 0, max: 1 }),
-                duration: cmd.duration ?? 0.7,
-                flashes: cmd.flashes ?? 2,
-                affectsDialogue: cmd.affectsDialogue !== false,
-                key: Date.now()
-              };
-              setLightningTrigger((prev) => prev + 1);
-              if (cmd.thunderSfxId) {
-                const tid = window.setTimeout(() => playSound(cmd.thunderSfxId, cmd.thunderVolume), Math.max(0, (cmd.thunderDelay ?? 0.6) * 1e3));
-                activeEffectTimeoutsRef.current.push(tid);
-              }
-              return;
-            }
-            case "Fireworks": {
-              activeFireworksRef.current = {
-                colors: cmd.colors && cmd.colors.length ? cmd.colors : [],
-                intensity: resolveVarNumber((_e2 = playerStateRef.current) == null ? void 0 : _e2.variables, cmd.intensityVariableId, cmd.intensity ?? 1, { min: 0, max: 1 }),
-                bursts: Math.round(resolveVarNumber((_f2 = playerStateRef.current) == null ? void 0 : _f2.variables, cmd.burstsVariableId, Math.max(1, cmd.bursts ?? 3), { min: 1, max: 20 })),
-                duration: cmd.duration ?? 2.5,
-                burstHeight: resolveVarNumber((_g2 = playerStateRef.current) == null ? void 0 : _g2.variables, cmd.burstHeightVariableId, cmd.burstHeight ?? 0.7, { min: 0, max: 1 }),
-                affectsDialogue: cmd.affectsDialogue !== false,
-                sfxId: cmd.sfxId ?? null,
-                sfxVolume: cmd.sfxVolume,
-                sfxPerBurst: !!cmd.sfxPerBurst,
-                key: Date.now()
-              };
-              setFireworksTrigger((prev) => prev + 1);
-              if (cmd.sfxId && !cmd.sfxPerBurst) {
-                const tid = window.setTimeout(() => playSound(cmd.sfxId, cmd.sfxVolume), Math.max(0, (cmd.sfxDelay ?? 0.3) * 1e3));
-                activeEffectTimeoutsRef.current.push(tid);
-              }
-              return;
-            }
-            case "SetScreenOverlayEffect": {
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: cmd.effectType, intensity: cmd.intensity, intensityVariableId: cmd.intensityVariableId ?? null, variant: cmd.variant, color: cmd.color, params: cmd.params }) } } } : p);
-              const overlayDur = cmd.duration ?? 0;
-              if (overlayDur > 0) {
-                const effType = cmd.effectType;
-                const tid = window.setTimeout(() => {
-                  updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: effType, intensity: 0 }) } } } : p);
-                  activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter((id) => id !== tid);
-                }, overlayDur * 1e3);
-                activeEffectTimeoutsRef.current.push(tid);
-              }
-              return;
-            }
-            case "ShowHotSpot": {
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, hotSpotOverlays: [
-                ...(p.stageState.hotSpotOverlays || []).filter((h) => h.commandId !== cmd.id),
-                {
-                  id: cmd.id,
-                  commandId: cmd.id,
-                  name: cmd.name,
-                  x: cmd.x,
-                  y: cmd.y,
-                  width: cmd.width,
-                  height: cmd.height,
-                  shape: cmd.shape,
-                  trigger: cmd.trigger,
-                  actions: cmd.actions,
-                  conditions: cmd.conditions,
-                  acceptedTag: cmd.acceptedTag,
-                  highlightColor: cmd.highlightColor,
-                  visible: cmd.visible,
-                  visibleOpacity: cmd.visibleOpacity,
-                  advanceOnTrigger: cmd.advanceOnTrigger,
-                  layer: cmd.layer
+              case "Fireworks": {
+                activeFireworksRef.current = {
+                  colors: cmd.colors && cmd.colors.length ? cmd.colors : [],
+                  intensity: resolveVarNumber((_e2 = playerStateRef.current) == null ? void 0 : _e2.variables, cmd.intensityVariableId, cmd.intensity ?? 1, { min: 0, max: 1 }),
+                  bursts: Math.round(resolveVarNumber((_f2 = playerStateRef.current) == null ? void 0 : _f2.variables, cmd.burstsVariableId, Math.max(1, cmd.bursts ?? 3), { min: 1, max: 20 })),
+                  duration: cmd.duration ?? 2.5,
+                  burstHeight: resolveVarNumber((_g2 = playerStateRef.current) == null ? void 0 : _g2.variables, cmd.burstHeightVariableId, cmd.burstHeight ?? 0.7, { min: 0, max: 1 }),
+                  affectsDialogue: cmd.affectsDialogue !== false,
+                  sfxId: cmd.sfxId ?? null,
+                  sfxVolume: cmd.sfxVolume,
+                  sfxPerBurst: !!cmd.sfxPerBurst,
+                  key: Date.now()
+                };
+                setFireworksTrigger((prev) => prev + 1);
+                if (cmd.sfxId && !cmd.sfxPerBurst) {
+                  const tid = window.setTimeout(() => playSound(cmd.sfxId, cmd.sfxVolume), Math.max(0, (cmd.sfxDelay ?? 0.3) * 1e3));
+                  activeEffectTimeoutsRef.current.push(tid);
                 }
-              ] } } : p);
-              return;
-            }
-            case "HideHotSpot": {
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, hotSpotOverlays: (p.stageState.hotSpotOverlays || []).filter((h) => h.commandId !== cmd.targetCommandId) } } : p);
-              return;
-            }
-            // BLOCKING commands: show the UI (real handler), then PAUSE the script until the player
-            // responds. The input handlers resolve `scriptInputResolverRef` (set just below). When
-            // no script is awaiting, that ref is null, so normal playback is untouched.
-            case "Dialogue": {
-              const r = handleDialogue(cmd, hctx);
-              if ((_h2 = r.updates) == null ? void 0 : _h2.uiState) updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, ...r.updates.uiState } } : p);
-              return new Promise((resolve) => {
-                scriptInputResolverRef.current = { kind: "dialogue", resolve: () => resolve() };
-              });
-            }
-            case "Choice": {
-              const r = handleChoice(cmd, hctx);
-              if ((_i2 = r.updates) == null ? void 0 : _i2.uiState) updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, ...r.updates.uiState } } : p);
-              return new Promise((resolve) => {
-                scriptInputResolverRef.current = { kind: "choice", resolve: (idx) => resolve(typeof idx === "number" ? idx : 0) };
-              });
-            }
-            case "TextInput": {
-              const r = handleTextInput(cmd, hctx);
-              if ((_j2 = r.updates) == null ? void 0 : _j2.uiState) updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, ...r.updates.uiState } } : p);
-              return new Promise((resolve) => {
-                scriptInputResolverRef.current = { kind: "textInput", resolve: (val) => resolve(typeof val === "string" ? val : String(val ?? "")) };
-              });
-            }
-            // Movie playback (inline in the main loop — replicate here). Overlay = non-blocking;
-            // fullscreen + waitsForCompletion = AWAIT until the movie ends (resolved by the movie's
-            // onEnded/onClick guards) — the 'movie' resolver. Non-wait fullscreen = fire-and-forget.
-            case "PlayMovie": {
-              const movieUrl = assetResolver(cmd.videoId, "video");
-              const sTrim = resolveVideoTrim(cmd, project.videos[cmd.videoId]);
-              if (cmd.displayMode === "overlay") {
-                updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, movieOverlays: [
-                  ...p.stageState.movieOverlays || [],
-                  { url: movieUrl || "", loop: cmd.loop ?? false, trimStart: sTrim.start, trimEnd: sTrim.end, holdLastFrame: cmd.holdLastFrame ?? false, transition: cmd.transition, transitionDuration: cmd.transitionDuration, commandId: cmd.id, parallaxDepth: cmd.parallaxDepth, x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height, opacity: cmd.opacity, objectFit: cmd.objectFit }
+                return;
+              }
+              case "SetScreenOverlayEffect": {
+                updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: cmd.effectType, intensity: cmd.intensity, intensityVariableId: cmd.intensityVariableId ?? null, variant: cmd.variant, color: cmd.color, params: cmd.params }) } } } : p);
+                const overlayDur = cmd.duration ?? 0;
+                if (overlayDur > 0) {
+                  const effType = cmd.effectType;
+                  const tid = window.setTimeout(() => {
+                    updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: effType, intensity: 0 }) } } } : p);
+                    activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter((id) => id !== tid);
+                  }, overlayDur * 1e3);
+                  activeEffectTimeoutsRef.current.push(tid);
+                }
+                return;
+              }
+              case "ShowHotSpot": {
+                updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, hotSpotOverlays: [
+                  ...(p.stageState.hotSpotOverlays || []).filter((h) => h.commandId !== cmd.id),
+                  {
+                    id: cmd.id,
+                    commandId: cmd.id,
+                    name: cmd.name,
+                    x: cmd.x,
+                    y: cmd.y,
+                    width: cmd.width,
+                    height: cmd.height,
+                    shape: cmd.shape,
+                    trigger: cmd.trigger,
+                    actions: cmd.actions,
+                    conditions: cmd.conditions,
+                    acceptedTag: cmd.acceptedTag,
+                    highlightColor: cmd.highlightColor,
+                    visible: cmd.visible,
+                    visibleOpacity: cmd.visibleOpacity,
+                    advanceOnTrigger: cmd.advanceOnTrigger,
+                    layer: cmd.layer
+                  }
                 ] } } : p);
                 return;
               }
-              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl, movieLoop: cmd.loop ?? false, movieTrimStart: sTrim.start, movieTrimEnd: sTrim.end, movieHoldLastFrame: cmd.holdLastFrame ?? false, movieTransition: cmd.transition, movieTransitionDuration: cmd.transitionDuration, movieBlockInput: cmd.blockInput ?? false, movieExiting: false } } : p);
-              if (cmd.waitsForCompletion !== false && !(cmd.loop ?? false)) {
+              case "HideHotSpot": {
+                updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, hotSpotOverlays: (p.stageState.hotSpotOverlays || []).filter((h) => h.commandId !== cmd.targetCommandId) } } : p);
+                return;
+              }
+              // BLOCKING commands: show the UI (real handler), then PAUSE the script until the player
+              // responds. The input handlers resolve `scriptInputResolverRef` (set just below). When
+              // no script is awaiting, that ref is null, so normal playback is untouched.
+              case "Dialogue": {
+                const r = handleDialogue(cmd, hctx);
+                if ((_h2 = r.updates) == null ? void 0 : _h2.uiState) updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, ...r.updates.uiState } } : p);
                 return new Promise((resolve) => {
-                  scriptInputResolverRef.current = { kind: "movie", resolve: () => resolve() };
+                  scriptInputResolverRef.current = { kind: "dialogue", resolve: () => resolve() };
                 });
               }
-              return;
-            }
-            case "StopMovie": {
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, movieOverlays: [] }, uiState: { ...p.uiState, movieUrl: null, movieLoop: false } } : p);
-              return;
-            }
-            default:
-              console.warn("[Script] runCommand: unsupported command type", type);
-              return;
-          }
-          if (!result) return;
-          if (((_k2 = result.updates) == null ? void 0 : _k2.variables) && variableStoreRef.current) {
-            variableStoreRef.current.applyWrites(Object.entries(result.updates.variables).map(([variableId, value]) => ({ variableId, value, scope: "global", sourceCommandId: cmd.id })));
-          }
-          if (result.updates || result.stagePatch) {
-            updatePlayerState((p) => {
-              var _a4, _b3, _c3, _d3;
-              if (!p) return p;
-              let nextStage = ((_a4 = result.updates) == null ? void 0 : _a4.stageState) !== void 0 ? { ...p.stageState, ...result.updates.stageState } : void 0;
-              if (result.stagePatch) nextStage = { ...nextStage ?? p.stageState, ...result.stagePatch(p.stageState) };
-              const mergedVars = ((_b3 = result.updates) == null ? void 0 : _b3.variables) ? variableStoreRef.current ? variableStoreRef.current.snapshot().globals : { ...p.variables, ...result.updates.variables } : void 0;
-              return {
-                ...p,
-                ...nextStage !== void 0 ? { stageState: nextStage } : {},
-                ...mergedVars !== void 0 ? { variables: mergedVars } : {},
-                ...((_c3 = result.updates) == null ? void 0 : _c3.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {},
-                ...((_d3 = result.updates) == null ? void 0 : _d3.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {}
-              };
-            });
-          }
-          if (result.delay && result.callback) {
-            const tid = window.setTimeout(result.callback, result.delay);
-            activeEffectTimeoutsRef.current.push(tid);
-          } else if (result.callback) {
-            result.callback();
-          }
-        } catch (e) {
-          console.error("[Script] runCommand error:", e);
-        }
-      };
-      commandContext.runUIAction = (actionType, params) => {
-        var _a3;
-        try {
-          (_a3 = handleUIActionRef.current) == null ? void 0 : _a3.call(handleUIActionRef, { type: actionType, ...params || {} });
-        } catch (e) {
-          console.error("[Script] runUIAction error:", e);
-        }
-      };
-      let instantAdvance = true;
-      (async () => {
-        var _a3, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2;
-        try {
-          const applyResult = (result) => {
-            var _a4, _b3, _c3, _d3;
-            const variableStore2 = variableStoreRef.current;
-            const previousSceneId = playerState == null ? void 0 : playerState.currentSceneId;
-            if (((_a4 = result.updates) == null ? void 0 : _a4.variables) && variableStore2) {
-              const writes = Object.entries(result.updates.variables).map(([variableId, value]) => ({
-                variableId,
-                value,
-                scope: "global",
-                sourceCommandId: command.id
-              }));
-              variableStore2.applyWrites(writes);
-            }
-            if ((_b3 = result.updates) == null ? void 0 : _b3.variables) {
-              const prevVars = (playerState == null ? void 0 : playerState.variables) || {};
-              for (const [vid, val] of Object.entries(result.updates.variables)) {
-                if (prevVars[vid] !== val) {
-                  try {
-                    pluginManager.invokeHook("onVariableChange", vid, prevVars[vid], val);
-                  } catch {
-                  }
-                }
+              case "Choice": {
+                const r = handleChoice(cmd, hctx);
+                if ((_i2 = r.updates) == null ? void 0 : _i2.uiState) updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, ...r.updates.uiState } } : p);
+                return new Promise((resolve) => {
+                  scriptInputResolverRef.current = { kind: "choice", resolve: (idx) => resolve(typeof idx === "number" ? idx : 0) };
+                });
               }
+              case "TextInput": {
+                const r = handleTextInput(cmd, hctx);
+                if ((_j2 = r.updates) == null ? void 0 : _j2.uiState) updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, ...r.updates.uiState } } : p);
+                return new Promise((resolve) => {
+                  scriptInputResolverRef.current = { kind: "textInput", resolve: (val) => resolve(typeof val === "string" ? val : String(val ?? "")) };
+                });
+              }
+              // Movie playback (inline in the main loop — replicate here). Overlay = non-blocking;
+              // fullscreen + waitsForCompletion = AWAIT until the movie ends (resolved by the movie's
+              // onEnded/onClick guards) — the 'movie' resolver. Non-wait fullscreen = fire-and-forget.
+              case "PlayMovie": {
+                const movieUrl = assetResolver(cmd.videoId, "video");
+                const sTrim = resolveVideoTrim(cmd, project.videos[cmd.videoId]);
+                if (cmd.displayMode === "overlay") {
+                  updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, movieOverlays: [
+                    ...p.stageState.movieOverlays || [],
+                    { url: movieUrl || "", loop: cmd.loop ?? false, trimStart: sTrim.start, trimEnd: sTrim.end, holdLastFrame: cmd.holdLastFrame ?? false, transition: cmd.transition, transitionDuration: cmd.transitionDuration, commandId: cmd.id, parallaxDepth: cmd.parallaxDepth, x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height, opacity: cmd.opacity, objectFit: cmd.objectFit }
+                  ] } } : p);
+                  return;
+                }
+                updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl, movieLoop: cmd.loop ?? false, movieTrimStart: sTrim.start, movieTrimEnd: sTrim.end, movieHoldLastFrame: cmd.holdLastFrame ?? false, movieTransition: cmd.transition, movieTransitionDuration: cmd.transitionDuration, movieBlockInput: cmd.blockInput ?? false, movieExiting: false } } : p);
+                if (cmd.waitsForCompletion !== false && !(cmd.loop ?? false)) {
+                  return new Promise((resolve) => {
+                    scriptInputResolverRef.current = { kind: "movie", resolve: () => resolve() };
+                  });
+                }
+                return;
+              }
+              case "StopMovie": {
+                updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, movieOverlays: [] }, uiState: { ...p.uiState, movieUrl: null, movieLoop: false } } : p);
+                return;
+              }
+              default:
+                console.warn("[Script] runCommand: unsupported command type", type);
+                return;
+            }
+            if (!result) return;
+            if (((_k2 = result.updates) == null ? void 0 : _k2.variables) && variableStoreRef.current) {
+              variableStoreRef.current.applyWrites(Object.entries(result.updates.variables).map(([variableId, value]) => ({ variableId, value, scope: "global", sourceCommandId: cmd.id })));
             }
             if (result.updates || result.stagePatch) {
-              const isSceneChange = ((_c3 = result.updates) == null ? void 0 : _c3.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId;
               updatePlayerState((p) => {
-                var _a5, _b4, _c4, _d4, _e3, _f3, _g3, _h3, _i3, _j3;
-                if (!p) return null;
-                let mergedVariables = ((_a5 = result.updates) == null ? void 0 : _a5.variables) && variableStore2 ? variableStore2.snapshot().globals : { ...p.variables, ...((_b4 = result.updates) == null ? void 0 : _b4.variables) ?? {} };
-                if (isSceneChange) {
-                  const localDefaults = getLocalVariableDefaults(project.variables);
-                  mergedVariables = { ...mergedVariables, ...localDefaults };
-                  runtimeDebugLog("[Variable Scope] Reset local variables on scene change:", Object.keys(localDefaults));
-                }
-                let nextStage = ((_c4 = result.updates) == null ? void 0 : _c4.stageState) !== void 0 ? { ...p.stageState, ...result.updates.stageState } : void 0;
-                if (result.stagePatch) {
-                  nextStage = { ...nextStage ?? p.stageState, ...result.stagePatch(p.stageState) };
-                }
+                var _a4, _b4, _c3, _d3;
+                if (!p) return p;
+                let nextStage = ((_a4 = result.updates) == null ? void 0 : _a4.stageState) !== void 0 ? { ...p.stageState, ...result.updates.stageState } : void 0;
+                if (result.stagePatch) nextStage = { ...nextStage ?? p.stageState, ...result.stagePatch(p.stageState) };
+                const mergedVars = ((_b4 = result.updates) == null ? void 0 : _b4.variables) ? variableStoreRef.current ? variableStoreRef.current.snapshot().globals : { ...p.variables, ...result.updates.variables } : void 0;
                 return {
                   ...p,
-                  ...((_d4 = result.updates) == null ? void 0 : _d4.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
-                  ...((_e3 = result.updates) == null ? void 0 : _e3.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
-                  ...((_f3 = result.updates) == null ? void 0 : _f3.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
-                  ...((_g3 = result.updates) == null ? void 0 : _g3.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
-                  ...((_h3 = result.updates) == null ? void 0 : _h3.variables) !== void 0 || isSceneChange ? { variables: mergedVariables } : {},
                   ...nextStage !== void 0 ? { stageState: nextStage } : {},
-                  ...((_i3 = result.updates) == null ? void 0 : _i3.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {},
-                  ...((_j3 = result.updates) == null ? void 0 : _j3.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}
+                  ...mergedVars !== void 0 ? { variables: mergedVars } : {},
+                  ...((_c3 = result.updates) == null ? void 0 : _c3.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {},
+                  ...((_d3 = result.updates) == null ? void 0 : _d3.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {}
                 };
               });
-              if (((_d3 = result.updates) == null ? void 0 : _d3.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId) {
-                runtimeDebugLog("[Scene Cleanup] Scene changed from", previousSceneId, "to", result.updates.currentSceneId, "- clearing UI stacks");
-                setScreenStack([]);
-                setHudStack([]);
-                activeEffectTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
-                activeEffectTimeoutsRef.current = [];
-                activeFlashRef.current = null;
-                setFlashTrigger(0);
-                activeLightningRef.current = null;
-                setLightningStorm(null);
-                activeFireworksRef.current = null;
-                setFlashlight(null);
-                setSpotlights({});
-                activeShakeRef.current = null;
-                scheduler.reset();
-                variableStoreRef.current = null;
-                if (scriptInputResolverRef.current) {
-                  const r = scriptInputResolverRef.current;
-                  scriptInputResolverRef.current = null;
-                  r.resolve(void 0);
-                }
-              }
             }
-            instantAdvance = result.advance;
             if (result.delay && result.callback) {
-              const timeoutId = window.setTimeout(result.callback, result.delay);
-              activeEffectTimeoutsRef.current.push(timeoutId);
+              const tid = window.setTimeout(result.callback, result.delay);
+              activeEffectTimeoutsRef.current.push(tid);
             } else if (result.callback) {
               result.callback();
             }
-            diagnostics.emit("command-finish", {
-              commandId: command.id,
-              sceneId: playerState.currentSceneId,
-              index: playerState.currentIndex,
-              advance: result.advance
-            });
-          };
-          const hw = backwardReplayRef.current;
-          if (hw && (playerState.currentSceneId !== hw.sceneId || playerState.currentIndex >= hw.index)) {
-            backwardReplayRef.current = null;
+          } catch (e) {
+            console.error("[Script] runCommand error:", e);
           }
-          const replayingBackward = backwardReplayRef.current != null;
-          const savedInputKey = `${playerState.currentSceneId}:${playerState.currentIndex}`;
-          const savedInput = playerState.savedInputs[savedInputKey];
-          if (replayingBackward && savedInput && command.type === CommandType.Choice && savedInput.type === "choice") {
-            runtimeDebugLog("[BACKWARD REPLAY] Auto-replaying saved choice:", savedInput.choice.text);
-            handleChoiceSelect(savedInput.choice);
-            return;
-          }
-          if (replayingBackward && savedInput && command.type === CommandType.TextInput && savedInput.type === "textInput") {
-            runtimeDebugLog("[BACKWARD REPLAY] Auto-replaying saved text input:", savedInput.value);
-            const cmd = command;
-            updatePlayerState((p) => {
-              if (!p) return p;
-              const historyEntry = {
-                timestamp: Date.now(),
-                type: "textInput",
-                text: `Input: ${savedInput.value}`,
-                inputValue: savedInput.value,
-                variableId: cmd.variableId,
-                sceneId: p.currentSceneId,
-                commandIndex: p.currentIndex,
-                stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
-                variablesSnapshot: { ...p.variables },
-                musicSnapshot: { ...p.musicState }
-              };
-              const newHistory = [...p.history, historyEntry];
-              if (newHistory.length > 200) newHistory.splice(0, newHistory.length - 200);
-              return {
-                ...p,
-                currentIndex: p.currentIndex + 1,
-                variables: { ...p.variables, [cmd.variableId]: savedInput.value },
-                history: newHistory,
-                uiState: { ...p.uiState, isWaitingForInput: false, textInput: null }
-              };
-            });
-            return;
-          }
+        };
+        commandContext.runUIAction = (actionType, params) => {
+          var _a3;
           try {
-            pluginManager.invokeHook("onBeforeCommand", command);
-          } catch {
+            (_a3 = handleUIActionRef.current) == null ? void 0 : _a3.call(handleUIActionRef, { type: actionType, ...params || {} });
+          } catch (e) {
+            console.error("[Script] runUIAction error:", e);
           }
-          switch (command.type) {
-            case CommandType.Group: {
-              const result = handleGroup();
-              applyResult(result);
-              break;
-            }
-            case CommandType.BranchStart: {
-              const result = handleBranchStart();
-              applyResult(result);
-              break;
-            }
-            case CommandType.BranchElseIf: {
-              const result = handleBranchElseIf(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.BranchElse: {
-              const result = handleBranchElse(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.BranchEnd: {
-              const result = handleBranchEnd();
-              applyResult(result);
-              break;
-            }
-            case CommandType.Dialogue: {
-              const result = handleDialogue(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.SetBackground: {
-              const result = await handleSetBackground(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.ShowCharacter: {
-              const result = handleShowCharacter(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.HideCharacter: {
-              const result = handleHideCharacter(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.SetCharacterLayer: {
-              const result = handleSetCharacterLayer(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.SetCharacterPose: {
-              const result = handleSetCharacterPose(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.Choice: {
-              const result = handleChoice(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.SetVariable: {
-              const result = handleSetVariable(command, commandContext);
-              applyResult(result);
-              const setVarCmd = command;
-              const varDef = project.variables[setVarCmd.variableId];
-              if (varDef && varDef.scope === "persistent" && ((_a3 = result.updates) == null ? void 0 : _a3.variables)) {
-                const persistentSnapshot = {};
-                Object.values(project.variables).forEach((v) => {
-                  if ((v.scope || "global") === "persistent" && result.updates.variables[v.id] !== void 0) {
-                    persistentSnapshot[v.id] = result.updates.variables[v.id];
+        };
+        let instantAdvance = true;
+        (async () => {
+          var _a3, _b3, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2;
+          try {
+            const applyResult = (result) => {
+              var _a4, _b4, _c3, _d3;
+              const variableStore2 = variableStoreRef.current;
+              const previousSceneId = playerState == null ? void 0 : playerState.currentSceneId;
+              if (((_a4 = result.updates) == null ? void 0 : _a4.variables) && variableStore2) {
+                const writes = Object.entries(result.updates.variables).map(([variableId, value]) => ({
+                  variableId,
+                  value,
+                  scope: "global",
+                  sourceCommandId: command2.id
+                }));
+                variableStore2.applyWrites(writes);
+              }
+              if ((_b4 = result.updates) == null ? void 0 : _b4.variables) {
+                const prevVars = (playerState == null ? void 0 : playerState.variables) || {};
+                for (const [vid, val] of Object.entries(result.updates.variables)) {
+                  if (prevVars[vid] !== val) {
+                    try {
+                      pluginManager.invokeHook("onVariableChange", vid, prevVars[vid], val);
+                    } catch {
+                    }
                   }
+                }
+              }
+              if (result.updates || result.stagePatch) {
+                const isSceneChange = ((_c3 = result.updates) == null ? void 0 : _c3.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId;
+                updatePlayerState((p) => {
+                  var _a5, _b5, _c4, _d4, _e3, _f3, _g3, _h3, _i3, _j3;
+                  if (!p) return null;
+                  let mergedVariables = ((_a5 = result.updates) == null ? void 0 : _a5.variables) && variableStore2 ? variableStore2.snapshot().globals : { ...p.variables, ...((_b5 = result.updates) == null ? void 0 : _b5.variables) ?? {} };
+                  if (isSceneChange) {
+                    const localDefaults = getLocalVariableDefaults(project.variables);
+                    mergedVariables = { ...mergedVariables, ...localDefaults };
+                    runtimeDebugLog("[Variable Scope] Reset local variables on scene change:", Object.keys(localDefaults));
+                  }
+                  let nextStage = ((_c4 = result.updates) == null ? void 0 : _c4.stageState) !== void 0 ? { ...p.stageState, ...result.updates.stageState } : void 0;
+                  if (result.stagePatch) {
+                    nextStage = { ...nextStage ?? p.stageState, ...result.stagePatch(p.stageState) };
+                  }
+                  return {
+                    ...p,
+                    ...((_d4 = result.updates) == null ? void 0 : _d4.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
+                    ...((_e3 = result.updates) == null ? void 0 : _e3.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
+                    ...((_f3 = result.updates) == null ? void 0 : _f3.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
+                    ...((_g3 = result.updates) == null ? void 0 : _g3.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
+                    ...((_h3 = result.updates) == null ? void 0 : _h3.variables) !== void 0 || isSceneChange ? { variables: mergedVariables } : {},
+                    ...nextStage !== void 0 ? { stageState: nextStage } : {},
+                    ...((_i3 = result.updates) == null ? void 0 : _i3.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {},
+                    ...((_j3 = result.updates) == null ? void 0 : _j3.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}
+                  };
                 });
-                savePersistentVariables(project.id, { ...loadPersistentVariables(project.id), ...persistentSnapshot });
-                runtimeDebugLog("[Variable Scope] Saved persistent variable:", varDef.name);
+                if (((_d3 = result.updates) == null ? void 0 : _d3.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId) {
+                  runtimeDebugLog("[Scene Cleanup] Scene changed from", previousSceneId, "to", result.updates.currentSceneId, "- clearing UI stacks");
+                  setScreenStack([]);
+                  setHudStack([]);
+                  activeEffectTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
+                  activeEffectTimeoutsRef.current = [];
+                  activeFlashRef.current = null;
+                  setFlashTrigger(0);
+                  activeLightningRef.current = null;
+                  setLightningStorm(null);
+                  activeFireworksRef.current = null;
+                  setFlashlight(null);
+                  setSpotlights({});
+                  activeShakeRef.current = null;
+                  scheduler.reset();
+                  variableStoreRef.current = null;
+                  if (scriptInputResolverRef.current) {
+                    const r = scriptInputResolverRef.current;
+                    scriptInputResolverRef.current = null;
+                    r.resolve(void 0);
+                  }
+                }
               }
-              break;
-            }
-            case CommandType.TextInput: {
-              const result = handleTextInput(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.GiveItem:
-            case CommandType.UseItem:
-            case CommandType.DestroyItem: {
-              applyResult(handleItemCommand(command, commandContext));
-              break;
-            }
-            case CommandType.RestockCollection: {
-              applyResult(handleRestockCollectionCommand(command, commandContext));
-              break;
-            }
-            case CommandType.BuyItem: {
-              applyResult(handleBuyItemCommand(command, commandContext));
-              break;
-            }
-            case CommandType.SellItem: {
-              applyResult(handleSellItemCommand(command, commandContext));
-              break;
-            }
-            case CommandType.Jump: {
-              if (playerState.uiState.isSkipping) {
-                updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
+              instantAdvance = result.advance;
+              if (result.delay && result.callback) {
+                const timeoutId = window.setTimeout(result.callback, result.delay);
+                activeEffectTimeoutsRef.current.push(timeoutId);
+              } else if (result.callback) {
+                result.callback();
               }
-              startSceneExitTransition(playerState.currentSceneId, () => {
-                const result = handleJump(command, commandContext);
+              diagnostics.emit("command-finish", {
+                commandId: command2.id,
+                sceneId: playerState.currentSceneId,
+                index: cmdIndex,
+                advance: result.advance
+              });
+            };
+            const hw = backwardReplayRef.current;
+            if (hw && (playerState.currentSceneId !== hw.sceneId || cmdIndex >= hw.index)) {
+              backwardReplayRef.current = null;
+            }
+            const replayingBackward = backwardReplayRef.current != null;
+            const savedInputKey = `${playerState.currentSceneId}:${cmdIndex}`;
+            const savedInput = playerState.savedInputs[savedInputKey];
+            if (replayingBackward && savedInput && command2.type === CommandType.Choice && savedInput.type === "choice") {
+              runtimeDebugLog("[BACKWARD REPLAY] Auto-replaying saved choice:", savedInput.choice.text);
+              handleChoiceSelect(savedInput.choice);
+              return;
+            }
+            if (replayingBackward && savedInput && command2.type === CommandType.TextInput && savedInput.type === "textInput") {
+              runtimeDebugLog("[BACKWARD REPLAY] Auto-replaying saved text input:", savedInput.value);
+              const cmd = command2;
+              updatePlayerState((p) => {
+                if (!p) return p;
+                const historyEntry = {
+                  timestamp: Date.now(),
+                  type: "textInput",
+                  text: `Input: ${savedInput.value}`,
+                  inputValue: savedInput.value,
+                  variableId: cmd.variableId,
+                  sceneId: p.currentSceneId,
+                  commandIndex: p.currentIndex,
+                  stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
+                  variablesSnapshot: { ...p.variables },
+                  musicSnapshot: { ...p.musicState }
+                };
+                const newHistory = [...p.history, historyEntry];
+                if (newHistory.length > 200) newHistory.splice(0, newHistory.length - 200);
+                return {
+                  ...p,
+                  currentIndex: p.currentIndex + 1,
+                  variables: { ...p.variables, [cmd.variableId]: savedInput.value },
+                  history: newHistory,
+                  uiState: { ...p.uiState, isWaitingForInput: false, textInput: null }
+                };
+              });
+              return;
+            }
+            try {
+              pluginManager.invokeHook("onBeforeCommand", command2);
+            } catch {
+            }
+            switch (command2.type) {
+              case CommandType.Group: {
+                const result = handleGroup();
                 applyResult(result);
-              }, command.transition);
-              break;
-            }
-            case CommandType.PlayMusic: {
-              const result = handlePlayMusic(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.StopMusic: {
-              const result = handleStopMusic(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.PlaySoundEffect: {
-              const sfxCmd = command;
-              if (sfxCmd.liveConditions) {
-                liveSfxRef.current.set(sfxCmd.id, {
-                  audioId: sfxCmd.audioId,
-                  conditions: sfxCmd.conditions,
-                  loop: !!sfxCmd.loop,
-                  volume: sfxCmd.volume,
-                  audio: null,
-                  lastMet: false
-                });
-                setLiveSfxTick((t) => t + 1);
-                applyResult({ advance: true });
-              } else {
-                const result = handlePlaySoundEffect(sfxCmd, commandContext);
-                applyResult(result);
+                break;
               }
-              break;
-            }
-            case CommandType.StopSoundEffect: {
-              const result = handleStopSoundEffect(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.PlayMovie: {
-              const movieCmd = command;
-              const movieUrl = assetResolver(movieCmd.videoId, "video");
-              const isOverlay = movieCmd.displayMode === "overlay";
-              const shouldLoop = movieCmd.loop ?? false;
-              const holdLastFrame = movieCmd.holdLastFrame ?? false;
-              const movieTransition = movieCmd.transition;
-              const movieTransitionDuration = movieCmd.transitionDuration;
-              const movieTrim = resolveVideoTrim(movieCmd, project.videos[movieCmd.videoId]);
-              if (isOverlay) {
+              case CommandType.BranchStart: {
+                const result = handleBranchStart();
+                applyResult(result);
+                break;
+              }
+              case CommandType.BranchElseIf: {
+                const result = handleBranchElseIf(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.BranchElse: {
+                const result = handleBranchElse(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.BranchEnd: {
+                const result = handleBranchEnd();
+                applyResult(result);
+                break;
+              }
+              case CommandType.Dialogue: {
+                const result = handleDialogue(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.SetBackground: {
+                if (shouldRunAsync) {
+                  handleSetBackground(command2, commandContext).then((r) => applyResult(r)).catch((e) => console.error("[SetBackground async] failed:", e));
+                } else {
+                  const result = await handleSetBackground(command2, commandContext);
+                  applyResult(result);
+                }
+                break;
+              }
+              case CommandType.ShowCharacter: {
+                const result = handleShowCharacter(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.HideCharacter: {
+                const result = handleHideCharacter(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.SetCharacterLayer: {
+                const result = handleSetCharacterLayer(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.SetCharacterPose: {
+                const result = handleSetCharacterPose(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.Choice: {
+                const result = handleChoice(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.SetVariable: {
+                const result = handleSetVariable(command2, commandContext);
+                applyResult(result);
+                const setVarCmd = command2;
+                const varDef = project.variables[setVarCmd.variableId];
+                if (varDef && varDef.scope === "persistent" && ((_a3 = result.updates) == null ? void 0 : _a3.variables)) {
+                  const persistentSnapshot = {};
+                  Object.values(project.variables).forEach((v) => {
+                    if ((v.scope || "global") === "persistent" && result.updates.variables[v.id] !== void 0) {
+                      persistentSnapshot[v.id] = result.updates.variables[v.id];
+                    }
+                  });
+                  savePersistentVariables(project.id, { ...loadPersistentVariables(project.id), ...persistentSnapshot });
+                  runtimeDebugLog("[Variable Scope] Saved persistent variable:", varDef.name);
+                }
+                break;
+              }
+              case CommandType.TextInput: {
+                const result = handleTextInput(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.GiveItem:
+              case CommandType.UseItem:
+              case CommandType.DestroyItem: {
+                applyResult(handleItemCommand(command2, commandContext));
+                break;
+              }
+              case CommandType.RestockCollection: {
+                applyResult(handleRestockCollectionCommand(command2, commandContext));
+                break;
+              }
+              case CommandType.BuyItem: {
+                applyResult(handleBuyItemCommand(command2, commandContext));
+                break;
+              }
+              case CommandType.SellItem: {
+                applyResult(handleSellItemCommand(command2, commandContext));
+                break;
+              }
+              case CommandType.Jump: {
+                if (playerState.uiState.isSkipping) {
+                  updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
+                }
+                startSceneExitTransition(playerState.currentSceneId, () => {
+                  const result = handleJump(command2, commandContext);
+                  applyResult(result);
+                }, command2.transition);
+                break;
+              }
+              case CommandType.PlayMusic: {
+                const result = handlePlayMusic(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.StopMusic: {
+                const result = handleStopMusic(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.PlaySoundEffect: {
+                const sfxCmd = command2;
+                if (sfxCmd.liveConditions) {
+                  liveSfxRef.current.set(sfxCmd.id, {
+                    audioId: sfxCmd.audioId,
+                    conditions: sfxCmd.conditions,
+                    loop: !!sfxCmd.loop,
+                    volume: sfxCmd.volume,
+                    audio: null,
+                    lastMet: false
+                  });
+                  setLiveSfxTick((t) => t + 1);
+                  applyResult({ advance: true });
+                } else {
+                  const result = handlePlaySoundEffect(sfxCmd, commandContext);
+                  applyResult(result);
+                }
+                break;
+              }
+              case CommandType.StopSoundEffect: {
+                const result = handleStopSoundEffect(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.PlayMovie: {
+                const movieCmd = command2;
+                const movieUrl = assetResolver(movieCmd.videoId, "video");
+                const isOverlay = movieCmd.displayMode === "overlay";
+                const shouldLoop = movieCmd.loop ?? false;
+                const holdLastFrame = movieCmd.holdLastFrame ?? false;
+                const movieTransition = movieCmd.transition;
+                const movieTransitionDuration = movieCmd.transitionDuration;
+                const movieTrim = resolveVideoTrim(movieCmd, project.videos[movieCmd.videoId]);
+                if (isOverlay) {
+                  updatePlayerState((p) => {
+                    if (!p) return null;
+                    const existing = p.stageState.movieOverlays || [];
+                    return {
+                      ...p,
+                      stageState: {
+                        ...p.stageState,
+                        movieOverlays: [...existing, {
+                          url: movieUrl || "",
+                          loop: shouldLoop,
+                          trimStart: movieTrim.start,
+                          trimEnd: movieTrim.end,
+                          holdLastFrame,
+                          transition: movieTransition,
+                          transitionDuration: movieTransitionDuration,
+                          commandId: movieCmd.id,
+                          parallaxDepth: movieCmd.parallaxDepth,
+                          x: movieCmd.x,
+                          y: movieCmd.y,
+                          width: movieCmd.width,
+                          height: movieCmd.height,
+                          opacity: movieCmd.opacity,
+                          objectFit: movieCmd.objectFit
+                        }]
+                      }
+                    };
+                  });
+                } else {
+                  if (movieCmd.waitsForCompletion) {
+                    instantAdvance = false;
+                    updatePlayerState((p) => p ? {
+                      ...p,
+                      uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieBlockInput: movieCmd.blockInput ?? false, movieExiting: false }
+                    } : null);
+                  } else {
+                    updatePlayerState((p) => p ? {
+                      ...p,
+                      uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieBlockInput: movieCmd.blockInput ?? false, movieExiting: false }
+                    } : null);
+                  }
+                }
+                break;
+              }
+              case CommandType.StopMovie: {
                 updatePlayerState((p) => {
                   if (!p) return null;
-                  const existing = p.stageState.movieOverlays || [];
                   return {
                     ...p,
                     stageState: {
                       ...p.stageState,
-                      movieOverlays: [...existing, {
-                        url: movieUrl || "",
-                        loop: shouldLoop,
-                        trimStart: movieTrim.start,
-                        trimEnd: movieTrim.end,
-                        holdLastFrame,
-                        transition: movieTransition,
-                        transitionDuration: movieTransitionDuration,
-                        commandId: movieCmd.id,
-                        parallaxDepth: movieCmd.parallaxDepth,
-                        x: movieCmd.x,
-                        y: movieCmd.y,
-                        width: movieCmd.width,
-                        height: movieCmd.height,
-                        opacity: movieCmd.opacity,
-                        objectFit: movieCmd.objectFit
-                      }]
+                      movieOverlays: []
+                    },
+                    uiState: {
+                      ...p.uiState,
+                      movieUrl: null,
+                      movieLoop: false
                     }
                   };
                 });
-              } else {
-                if (movieCmd.waitsForCompletion) {
-                  instantAdvance = false;
-                  updatePlayerState((p) => p ? {
-                    ...p,
-                    uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieBlockInput: movieCmd.blockInput ?? false, movieExiting: false }
-                  } : null);
-                } else {
-                  updatePlayerState((p) => p ? {
-                    ...p,
-                    uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop, movieTrimStart: movieTrim.start, movieTrimEnd: movieTrim.end, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieBlockInput: movieCmd.blockInput ?? false, movieExiting: false }
-                  } : null);
-                }
-              }
-              break;
-            }
-            case CommandType.StopMovie: {
-              updatePlayerState((p) => {
-                if (!p) return null;
-                return {
-                  ...p,
-                  stageState: {
-                    ...p.stageState,
-                    movieOverlays: []
-                  },
-                  uiState: {
-                    ...p.uiState,
-                    movieUrl: null,
-                    movieLoop: false
-                  }
-                };
-              });
-              break;
-            }
-            case CommandType.Wait: {
-              instantAdvance = false;
-              const cmd = command;
-              const durationMs = (cmd.duration ?? 1) * 1e3;
-              if (cmd.waitForCondition) {
-                const conditionMet = () => {
-                  var _a4;
-                  return evaluateConditions2(cmd.waitConditions, mergeDirtyUiVariables(((_a4 = playerStateRef.current) == null ? void 0 : _a4.variables) ?? {}));
-                };
-                if (conditionMet()) {
-                  advance();
-                } else {
-                  const poll = () => {
-                    if (conditionMet()) {
-                      advance();
-                      return;
-                    }
-                    const tid2 = window.setTimeout(poll, 150);
-                    activeEffectTimeoutsRef.current.push(tid2);
-                  };
-                  const tid = window.setTimeout(poll, 150);
-                  activeEffectTimeoutsRef.current.push(tid);
-                }
-              } else if (cmd.waitForItems) {
-                const targets2 = Array.isArray(cmd.targetItemIds) ? cmd.targetItemIds.filter(Boolean) : [];
-                const mode = cmd.itemsMode === "any" ? "any" : "all";
-                const isCollected = (itemId) => {
-                  var _a4, _b3, _c3;
-                  const item = (_a4 = project.items) == null ? void 0 : _a4[itemId];
-                  if (!item) return true;
-                  const need = Math.max(1, Number(((_b3 = cmd.targetItemCounts) == null ? void 0 : _b3[itemId]) ?? 1) || 1);
-                  const c = Number(mergeDirtyUiVariables(((_c3 = playerStateRef.current) == null ? void 0 : _c3.variables) ?? {})[item.countVariableId] ?? 0);
-                  return c >= need;
-                };
-                const conditionMet = () => targets2.length === 0 ? true : mode === "any" ? targets2.some(isCollected) : targets2.every(isCollected);
-                if (conditionMet()) {
-                  advance();
-                } else {
-                  const poll = () => {
-                    if (conditionMet()) {
-                      advance();
-                      return;
-                    }
-                    const tid2 = window.setTimeout(poll, 150);
-                    activeEffectTimeoutsRef.current.push(tid2);
-                  };
-                  const tid = window.setTimeout(poll, 150);
-                  activeEffectTimeoutsRef.current.push(tid);
-                }
-              } else if (cmd.waitIndefinitelyForInput) {
-                let hasAdvanced = false;
-                const onUserAdvance = () => {
-                  if (hasAdvanced) return;
-                  hasAdvanced = true;
-                  advance();
-                  removeListeners();
-                };
-                const keyHandler = (e) => {
-                  if (e.key === " " || e.key === "Enter" || e.key === "Escape") {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onUserAdvance();
-                  }
-                };
-                const clickHandler = (e) => {
-                  var _a4, _b3;
-                  if ((_b3 = (_a4 = e.target) == null ? void 0 : _a4.closest) == null ? void 0 : _b3.call(_a4, "[data-vn-no-advance]")) return;
-                  if (stageRef.current && stageRef.current.contains(e.target)) {
-                    onUserAdvance();
-                  }
-                };
-                const removeListeners = () => {
-                  window.removeEventListener("keydown", keyHandler, true);
-                  window.removeEventListener("click", clickHandler, true);
-                };
-                window.addEventListener("keydown", keyHandler, true);
-                window.addEventListener("click", clickHandler, true);
-              } else if (cmd.waitForInput) {
-                let hasAdvanced = false;
-                let timeoutId = window.setTimeout(() => {
-                  if (!hasAdvanced) {
-                    hasAdvanced = true;
-                    advance();
-                  }
-                  removeListeners();
-                }, durationMs);
-                const onUserAdvance = () => {
-                  if (hasAdvanced) return;
-                  hasAdvanced = true;
-                  if (timeoutId) {
-                    clearTimeout(timeoutId);
-                    timeoutId = null;
-                  }
-                  advance();
-                  removeListeners();
-                };
-                const keyHandler = (e) => {
-                  if (e.key === " " || e.key === "Enter" || e.key === "Escape") {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onUserAdvance();
-                  }
-                };
-                const clickHandler = (e) => {
-                  var _a4, _b3;
-                  if ((_b3 = (_a4 = e.target) == null ? void 0 : _a4.closest) == null ? void 0 : _b3.call(_a4, "[data-vn-no-advance]")) return;
-                  if (stageRef.current && stageRef.current.contains(e.target)) {
-                    onUserAdvance();
-                  }
-                };
-                const removeListeners = () => {
-                  window.removeEventListener("keydown", keyHandler, true);
-                  window.removeEventListener("click", clickHandler, true);
-                };
-                window.addEventListener("keydown", keyHandler, true);
-                window.addEventListener("click", clickHandler, true);
-              } else {
-                setTimeout(() => advance(), durationMs);
-              }
-              break;
-            }
-            case CommandType.ShakeScreen: {
-              const cmd = command;
-              activeShakeRef.current = { intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity, { min: 1, max: 10 }), duration: cmd.duration };
-              setShakeTrigger((prev) => prev + 1);
-              if (cmd.duration > 0) {
-                const timeoutId = window.setTimeout(() => {
-                  activeShakeRef.current = null;
-                  setShakeTrigger((prev) => prev + 1);
-                  activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter((id) => id !== timeoutId);
-                }, cmd.duration * 1e3);
-                activeEffectTimeoutsRef.current.push(timeoutId);
-              }
-              break;
-            }
-            case CommandType.TintScreen: {
-              const cmd = command;
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, tintOpacity: cmd.opacity ?? 100, tintOpacityVariableId: cmd.opacityVariableId ?? null, transitionDuration: cmd.duration } } } : null);
-              break;
-            }
-            case CommandType.PanZoomScreen: {
-              const cmd = command;
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: resolveVarNumber(p.variables, cmd.zoomVariableId, cmd.zoom, { min: 0.1, max: 5 }), panX: resolveVarNumber(p.variables, cmd.panXVariableId, cmd.panX, { min: -100, max: 100 }), panY: resolveVarNumber(p.variables, cmd.panYVariableId, cmd.panY, { min: -100, max: 100 }), transitionDuration: cmd.duration } } } : null);
-              break;
-            }
-            case CommandType.ResetScreenEffects: {
-              const cmd = command;
-              setLightningStorm(null);
-              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: "transparent", tintOpacity: 100, tintOpacityVariableId: null, zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] } } } : null);
-              break;
-            }
-            case CommandType.FlashScreen: {
-              const cmd = command;
-              activeFlashRef.current = { color: cmd.color, duration: resolveVarNumber(playerState.variables, cmd.durationVariableId, cmd.duration, { min: 0.05, max: 30 }), key: Date.now() };
-              setFlashTrigger((prev) => prev + 1);
-              break;
-            }
-            case CommandType.Lightning: {
-              const cmd = command;
-              if (cmd.storm === "stop") {
-                setLightningStorm(null);
                 break;
               }
-              if (cmd.storm === "continuous") {
-                setLightningStorm({
+              case CommandType.Wait: {
+                instantAdvance = false;
+                const cmd = command2;
+                const durationMs = (cmd.duration ?? 1) * 1e3;
+                if (cmd.waitForCondition) {
+                  const conditionMet = () => {
+                    var _a4;
+                    return evaluateConditions2(cmd.waitConditions, mergeDirtyUiVariables(((_a4 = playerStateRef.current) == null ? void 0 : _a4.variables) ?? {}));
+                  };
+                  if (conditionMet()) {
+                    advance();
+                  } else {
+                    const poll = () => {
+                      if (conditionMet()) {
+                        advance();
+                        return;
+                      }
+                      const tid2 = window.setTimeout(poll, 150);
+                      activeEffectTimeoutsRef.current.push(tid2);
+                    };
+                    const tid = window.setTimeout(poll, 150);
+                    activeEffectTimeoutsRef.current.push(tid);
+                  }
+                } else if (cmd.waitForItems) {
+                  const targets2 = Array.isArray(cmd.targetItemIds) ? cmd.targetItemIds.filter(Boolean) : [];
+                  const mode = cmd.itemsMode === "any" ? "any" : "all";
+                  const isCollected = (itemId) => {
+                    var _a4, _b4, _c3;
+                    const item = (_a4 = project.items) == null ? void 0 : _a4[itemId];
+                    if (!item) return true;
+                    const need = Math.max(1, Number(((_b4 = cmd.targetItemCounts) == null ? void 0 : _b4[itemId]) ?? 1) || 1);
+                    const c = Number(mergeDirtyUiVariables(((_c3 = playerStateRef.current) == null ? void 0 : _c3.variables) ?? {})[item.countVariableId] ?? 0);
+                    return c >= need;
+                  };
+                  const conditionMet = () => targets2.length === 0 ? true : mode === "any" ? targets2.some(isCollected) : targets2.every(isCollected);
+                  if (conditionMet()) {
+                    advance();
+                  } else {
+                    const poll = () => {
+                      if (conditionMet()) {
+                        advance();
+                        return;
+                      }
+                      const tid2 = window.setTimeout(poll, 150);
+                      activeEffectTimeoutsRef.current.push(tid2);
+                    };
+                    const tid = window.setTimeout(poll, 150);
+                    activeEffectTimeoutsRef.current.push(tid);
+                  }
+                } else if (cmd.waitIndefinitelyForInput) {
+                  let hasAdvanced = false;
+                  const onUserAdvance = () => {
+                    if (hasAdvanced) return;
+                    hasAdvanced = true;
+                    advance();
+                    removeListeners();
+                  };
+                  const keyHandler = (e) => {
+                    if (e.key === " " || e.key === "Enter" || e.key === "Escape") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onUserAdvance();
+                    }
+                  };
+                  const clickHandler = (e) => {
+                    var _a4, _b4;
+                    if ((_b4 = (_a4 = e.target) == null ? void 0 : _a4.closest) == null ? void 0 : _b4.call(_a4, "[data-vn-no-advance]")) return;
+                    if (stageRef.current && stageRef.current.contains(e.target)) {
+                      onUserAdvance();
+                    }
+                  };
+                  const removeListeners = () => {
+                    window.removeEventListener("keydown", keyHandler, true);
+                    window.removeEventListener("click", clickHandler, true);
+                  };
+                  window.addEventListener("keydown", keyHandler, true);
+                  window.addEventListener("click", clickHandler, true);
+                } else if (cmd.waitForInput) {
+                  let hasAdvanced = false;
+                  let timeoutId = window.setTimeout(() => {
+                    if (!hasAdvanced) {
+                      hasAdvanced = true;
+                      advance();
+                    }
+                    removeListeners();
+                  }, durationMs);
+                  const onUserAdvance = () => {
+                    if (hasAdvanced) return;
+                    hasAdvanced = true;
+                    if (timeoutId) {
+                      clearTimeout(timeoutId);
+                      timeoutId = null;
+                    }
+                    advance();
+                    removeListeners();
+                  };
+                  const keyHandler = (e) => {
+                    if (e.key === " " || e.key === "Enter" || e.key === "Escape") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onUserAdvance();
+                    }
+                  };
+                  const clickHandler = (e) => {
+                    var _a4, _b4;
+                    if ((_b4 = (_a4 = e.target) == null ? void 0 : _a4.closest) == null ? void 0 : _b4.call(_a4, "[data-vn-no-advance]")) return;
+                    if (stageRef.current && stageRef.current.contains(e.target)) {
+                      onUserAdvance();
+                    }
+                  };
+                  const removeListeners = () => {
+                    window.removeEventListener("keydown", keyHandler, true);
+                    window.removeEventListener("click", clickHandler, true);
+                  };
+                  window.addEventListener("keydown", keyHandler, true);
+                  window.addEventListener("click", clickHandler, true);
+                } else {
+                  setTimeout(() => advance(), durationMs);
+                }
+                break;
+              }
+              case CommandType.ShakeScreen: {
+                const cmd = command2;
+                activeShakeRef.current = { intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity, { min: 1, max: 10 }), duration: cmd.duration };
+                setShakeTrigger((prev) => prev + 1);
+                if (cmd.duration > 0) {
+                  const timeoutId = window.setTimeout(() => {
+                    activeShakeRef.current = null;
+                    setShakeTrigger((prev) => prev + 1);
+                    activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter((id) => id !== timeoutId);
+                  }, cmd.duration * 1e3);
+                  activeEffectTimeoutsRef.current.push(timeoutId);
+                }
+                break;
+              }
+              case CommandType.TintScreen: {
+                const cmd = command2;
+                updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, tintOpacity: cmd.opacity ?? 100, tintOpacityVariableId: cmd.opacityVariableId ?? null, transitionDuration: cmd.duration } } } : null);
+                break;
+              }
+              case CommandType.PanZoomScreen: {
+                const cmd = command2;
+                updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: resolveVarNumber(p.variables, cmd.zoomVariableId, cmd.zoom, { min: 0.1, max: 5 }), panX: resolveVarNumber(p.variables, cmd.panXVariableId, cmd.panX, { min: -100, max: 100 }), panY: resolveVarNumber(p.variables, cmd.panYVariableId, cmd.panY, { min: -100, max: 100 }), transitionDuration: cmd.duration } } } : null);
+                break;
+              }
+              case CommandType.ResetScreenEffects: {
+                const cmd = command2;
+                setLightningStorm(null);
+                updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: "transparent", tintOpacity: 100, tintOpacityVariableId: null, zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] } } } : null);
+                break;
+              }
+              case CommandType.FlashScreen: {
+                const cmd = command2;
+                activeFlashRef.current = { color: cmd.color, duration: resolveVarNumber(playerState.variables, cmd.durationVariableId, cmd.duration, { min: 0.05, max: 30 }), key: Date.now() };
+                setFlashTrigger((prev) => prev + 1);
+                break;
+              }
+              case CommandType.Lightning: {
+                const cmd = command2;
+                if (cmd.storm === "stop") {
+                  setLightningStorm(null);
+                  break;
+                }
+                if (cmd.storm === "continuous") {
+                  setLightningStorm({
+                    color: cmd.color || "#EAF2FF",
+                    intensity: cmd.intensity ?? 0.9,
+                    intensityVariableId: cmd.intensityVariableId ?? null,
+                    duration: cmd.duration ?? 0.7,
+                    flashes: cmd.flashes ?? 2,
+                    affectsDialogue: cmd.affectsDialogue !== false,
+                    thunderSfxId: cmd.thunderSfxId ?? null,
+                    thunderDelay: cmd.thunderDelay ?? 0.6,
+                    thunderVolume: cmd.thunderVolume,
+                    intervalMin: Math.max(0.3, cmd.intervalMin ?? 2),
+                    intervalMax: Math.max(0.3, cmd.intervalMax ?? 8)
+                  });
+                  break;
+                }
+                activeLightningRef.current = {
                   color: cmd.color || "#EAF2FF",
-                  intensity: cmd.intensity ?? 0.9,
-                  intensityVariableId: cmd.intensityVariableId ?? null,
+                  intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity ?? 0.9, { min: 0, max: 1 }),
                   duration: cmd.duration ?? 0.7,
                   flashes: cmd.flashes ?? 2,
                   affectsDialogue: cmd.affectsDialogue !== false,
-                  thunderSfxId: cmd.thunderSfxId ?? null,
-                  thunderDelay: cmd.thunderDelay ?? 0.6,
-                  thunderVolume: cmd.thunderVolume,
-                  intervalMin: Math.max(0.3, cmd.intervalMin ?? 2),
-                  intervalMax: Math.max(0.3, cmd.intervalMax ?? 8)
-                });
+                  key: Date.now()
+                };
+                setLightningTrigger((prev) => prev + 1);
+                if (cmd.thunderSfxId) {
+                  const tid = window.setTimeout(() => {
+                    playSound(cmd.thunderSfxId, cmd.thunderVolume);
+                  }, Math.max(0, (cmd.thunderDelay ?? 0.6) * 1e3));
+                  activeEffectTimeoutsRef.current.push(tid);
+                }
                 break;
               }
-              activeLightningRef.current = {
-                color: cmd.color || "#EAF2FF",
-                intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity ?? 0.9, { min: 0, max: 1 }),
-                duration: cmd.duration ?? 0.7,
-                flashes: cmd.flashes ?? 2,
-                affectsDialogue: cmd.affectsDialogue !== false,
-                key: Date.now()
-              };
-              setLightningTrigger((prev) => prev + 1);
-              if (cmd.thunderSfxId) {
-                const tid = window.setTimeout(() => {
-                  playSound(cmd.thunderSfxId, cmd.thunderVolume);
-                }, Math.max(0, (cmd.thunderDelay ?? 0.6) * 1e3));
-                activeEffectTimeoutsRef.current.push(tid);
-              }
-              break;
-            }
-            case CommandType.Fireworks: {
-              const cmd = command;
-              activeFireworksRef.current = {
-                colors: cmd.colors && cmd.colors.length ? cmd.colors : [],
-                intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity ?? 1, { min: 0, max: 1 }),
-                bursts: Math.round(resolveVarNumber(playerState.variables, cmd.burstsVariableId, Math.max(1, cmd.bursts ?? 3), { min: 1, max: 20 })),
-                duration: cmd.duration ?? 2.5,
-                burstHeight: resolveVarNumber(playerState.variables, cmd.burstHeightVariableId, cmd.burstHeight ?? 0.7, { min: 0, max: 1 }),
-                affectsDialogue: cmd.affectsDialogue !== false,
-                sfxId: cmd.sfxId ?? null,
-                sfxVolume: cmd.sfxVolume,
-                sfxPerBurst: !!cmd.sfxPerBurst,
-                key: Date.now()
-              };
-              setFireworksTrigger((prev) => prev + 1);
-              if (cmd.sfxId && !cmd.sfxPerBurst) {
-                const tid = window.setTimeout(() => {
-                  playSound(cmd.sfxId, cmd.sfxVolume);
-                }, Math.max(0, (cmd.sfxDelay ?? 0.3) * 1e3));
-                activeEffectTimeoutsRef.current.push(tid);
-              }
-              break;
-            }
-            case CommandType.PlaceLights: {
-              const cmd = command;
-              applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null, lightsConditions: cmd.liveConditions ? cmd.conditions ?? null : null }) });
-              break;
-            }
-            case CommandType.ClearLights: {
-              applyResult({ advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null, lightsConditions: null }) });
-              break;
-            }
-            case CommandType.ShowPhone: {
-              applyResult(handleShowPhone(command, commandContext));
-              break;
-            }
-            case CommandType.HidePhone: {
-              applyResult(handleHidePhone(command, commandContext));
-              break;
-            }
-            case CommandType.ShowPhoneText: {
-              applyResult(handleShowPhoneText(command, commandContext));
-              break;
-            }
-            case CommandType.HidePhoneText: {
-              applyResult(handleHidePhoneText(command, commandContext));
-              break;
-            }
-            case CommandType.PhoneIncomingText: {
-              const cmd = command;
-              const pausesForReply = cmd.presentation === "open" && !!(cmd.replies && cmd.replies.length > 0);
-              if (pausesForReply) instantAdvance = false;
-              startIncomingText(cmd);
-              break;
-            }
-            case CommandType.PhoneIncomingCall: {
-              const cmd = command;
-              if ((cmd.mode || "modal") === "modal") instantAdvance = false;
-              startIncomingCall(cmd);
-              break;
-            }
-            case CommandType.PhoneNotify: {
-              startPhoneNotify(command);
-              break;
-            }
-            case CommandType.ShowMap: {
-              const cmd = command;
-              if (!((_b2 = project.maps) == null ? void 0 : _b2[cmd.mapId])) {
-                runtimeDebugWarn(`[ShowMap] Map ${cmd.mapId} not found — skipping.`);
-                break;
-              }
-              instantAdvance = false;
-              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true, mapOverlay: { mapId: cmd.mapId, allowCancel: cmd.allowCancel, fromCommand: true } } } : null);
-              break;
-            }
-            case CommandType.ShowMiniGame: {
-              const cmd = command;
-              const game = (_c2 = project.miniGames) == null ? void 0 : _c2[cmd.gameId];
-              if (!game || !((_d2 = game.stages) == null ? void 0 : _d2.length)) {
-                runtimeDebugWarn(`[ShowMiniGame] Mini game ${cmd.gameId} ${game ? "has no stages" : "not found"} — skipping.`);
-                break;
-              }
-              instantAdvance = false;
-              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true, miniGameOverlay: { gameId: cmd.gameId, fromCommand: true } } } : null);
-              break;
-            }
-            case CommandType.StartPhoneCall: {
-              const cmd = command;
-              const contact = (project.ui.phoneContacts || []).find((c) => c.characterId === cmd.contactId);
-              const contactPick = !((_f2 = (_e2 = cmd.conversation) == null ? void 0 : _e2.lines) == null ? void 0 : _f2.length) && contact ? pickConversation(contact.callConversations, contact.callConversation, ((_g2 = playerStateRef.current) == null ? void 0 : _g2.variables) || {}, ((_i2 = (_h2 = playerStateRef.current) == null ? void 0 : _h2.uiState.phone) == null ? void 0 : _i2.playedConversations) || []) : null;
-              const conversation = ((_k2 = (_j2 = cmd.conversation) == null ? void 0 : _j2.lines) == null ? void 0 : _k2.length) ? cmd.conversation : contactPick == null ? void 0 : contactPick.conversation;
-              if (!((_l2 = conversation == null ? void 0 : conversation.lines) == null ? void 0 : _l2.length)) {
-                runtimeDebugWarn("[StartPhoneCall] No conversation on the command or the contact — skipping.");
-                break;
-              }
-              if ((_m2 = contactPick == null ? void 0 : contactPick.entry) == null ? void 0 : _m2.once) markConversationPlayed(contactPick.entry.id);
-              const blocking = cmd.blocking !== false;
-              if (blocking) instantAdvance = false;
-              startOutgoingTranscriptCall({ contactId: cmd.contactId, portrait: cmd.portrait ?? (contact == null ? void 0 : contact.avatar), conversation, dialingMs: cmd.dialingMs, blocking });
-              break;
-            }
-            case CommandType.Flashlight: {
-              const cmd = command;
-              if (cmd.enabled) {
-                setFlashlight({
-                  radius: cmd.radius ?? 22,
-                  softness: cmd.softness ?? 0.6,
-                  darkness: cmd.darkness ?? 0.85,
-                  radiusVariableId: cmd.radiusVariableId ?? null,
-                  darknessVariableId: cmd.darknessVariableId ?? null,
-                  color: cmd.color || "#000000",
-                  toggleKey: cmd.toggleKey,
+              case CommandType.Fireworks: {
+                const cmd = command2;
+                activeFireworksRef.current = {
+                  colors: cmd.colors && cmd.colors.length ? cmd.colors : [],
+                  intensity: resolveVarNumber(playerState.variables, cmd.intensityVariableId, cmd.intensity ?? 1, { min: 0, max: 1 }),
+                  bursts: Math.round(resolveVarNumber(playerState.variables, cmd.burstsVariableId, Math.max(1, cmd.bursts ?? 3), { min: 1, max: 20 })),
+                  duration: cmd.duration ?? 2.5,
+                  burstHeight: resolveVarNumber(playerState.variables, cmd.burstHeightVariableId, cmd.burstHeight ?? 0.7, { min: 0, max: 1 }),
                   affectsDialogue: cmd.affectsDialogue !== false,
-                  darkWhenOff: cmd.darkWhenOff === true,
-                  on: true,
-                  // Live Evaluation: keep the flashlight registered and show/hide it as
-                  // these conditions flip (renderer re-checks every render).
-                  conditions: cmd.liveConditions ? cmd.conditions ?? null : null
-                });
-                if (cmd.sfxId) playSound(cmd.sfxId);
-              } else {
-                setFlashlight(null);
-              }
-              break;
-            }
-            case CommandType.Spotlight: {
-              const cmd = command;
-              const sid = cmd.spotlightId || "main";
-              if (cmd.enabled) {
-                setSpotlights((prev) => ({ ...prev, [sid]: makeSpotlightState(cmd) }));
-                if (cmd.sfxId) playSound(cmd.sfxId);
-              } else {
-                setSpotlights((prev) => {
-                  const n = { ...prev };
-                  delete n[sid];
-                  return n;
-                });
-              }
-              break;
-            }
-            case CommandType.SetScreenOverlayEffect: {
-              const cmd = command;
-              updatePlayerState((p) => p ? {
-                ...p,
-                stageState: {
-                  ...p.stageState,
-                  screen: {
-                    ...p.stageState.screen,
-                    overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, {
-                      type: cmd.effectType,
-                      intensity: cmd.intensity,
-                      intensityVariableId: cmd.intensityVariableId ?? null,
-                      variant: cmd.variant,
-                      color: cmd.color,
-                      params: cmd.params,
-                      // Live Evaluation: the effect stays registered and renders only
-                      // while these conditions hold (re-checked every render).
-                      conditions: cmd.liveConditions ? cmd.conditions ?? void 0 : void 0
-                    })
-                  }
+                  sfxId: cmd.sfxId ?? null,
+                  sfxVolume: cmd.sfxVolume,
+                  sfxPerBurst: !!cmd.sfxPerBurst,
+                  key: Date.now()
+                };
+                setFireworksTrigger((prev) => prev + 1);
+                if (cmd.sfxId && !cmd.sfxPerBurst) {
+                  const tid = window.setTimeout(() => {
+                    playSound(cmd.sfxId, cmd.sfxVolume);
+                  }, Math.max(0, (cmd.sfxDelay ?? 0.3) * 1e3));
+                  activeEffectTimeoutsRef.current.push(tid);
                 }
-              } : null);
-              const effectDuration = cmd.duration ?? 0;
-              if (effectDuration > 0) {
-                const effectType = cmd.effectType;
-                const overlayTimeoutId = window.setTimeout(() => {
-                  updatePlayerState((p) => p ? {
-                    ...p,
-                    stageState: {
-                      ...p.stageState,
-                      screen: {
-                        ...p.stageState.screen,
-                        overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, {
-                          type: effectType,
-                          intensity: 0
-                        })
+                break;
+              }
+              case CommandType.PlaceLights: {
+                const cmd = command2;
+                applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null, lightsConditions: cmd.liveConditions ? cmd.conditions ?? null : null }) });
+                break;
+              }
+              case CommandType.ClearLights: {
+                applyResult({ advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null, lightsConditions: null }) });
+                break;
+              }
+              case CommandType.ShowPhone: {
+                applyResult(handleShowPhone(command2, commandContext));
+                break;
+              }
+              case CommandType.HidePhone: {
+                applyResult(handleHidePhone(command2, commandContext));
+                break;
+              }
+              case CommandType.ShowPhoneText: {
+                applyResult(handleShowPhoneText(command2, commandContext));
+                break;
+              }
+              case CommandType.HidePhoneText: {
+                applyResult(handleHidePhoneText(command2, commandContext));
+                break;
+              }
+              case CommandType.PhoneIncomingText: {
+                const cmd = command2;
+                const pausesForReply = cmd.presentation === "open" && !!(cmd.replies && cmd.replies.length > 0);
+                if (pausesForReply) instantAdvance = false;
+                startIncomingText(cmd);
+                break;
+              }
+              case CommandType.PhoneIncomingCall: {
+                const cmd = command2;
+                if ((cmd.mode || "modal") === "modal") instantAdvance = false;
+                startIncomingCall(cmd);
+                break;
+              }
+              case CommandType.PhoneNotify: {
+                startPhoneNotify(command2);
+                break;
+              }
+              case CommandType.ShowMap: {
+                const cmd = command2;
+                if (!((_b3 = project.maps) == null ? void 0 : _b3[cmd.mapId])) {
+                  runtimeDebugWarn(`[ShowMap] Map ${cmd.mapId} not found — skipping.`);
+                  break;
+                }
+                instantAdvance = false;
+                updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true, mapOverlay: { mapId: cmd.mapId, allowCancel: cmd.allowCancel, fromCommand: true } } } : null);
+                break;
+              }
+              case CommandType.ShowMiniGame: {
+                const cmd = command2;
+                const game = (_c2 = project.miniGames) == null ? void 0 : _c2[cmd.gameId];
+                if (!game || !((_d2 = game.stages) == null ? void 0 : _d2.length)) {
+                  runtimeDebugWarn(`[ShowMiniGame] Mini game ${cmd.gameId} ${game ? "has no stages" : "not found"} — skipping.`);
+                  break;
+                }
+                instantAdvance = false;
+                updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true, miniGameOverlay: { gameId: cmd.gameId, fromCommand: true } } } : null);
+                break;
+              }
+              case CommandType.StartPhoneCall: {
+                const cmd = command2;
+                const contact = (project.ui.phoneContacts || []).find((c) => c.characterId === cmd.contactId);
+                const contactPick = !((_f2 = (_e2 = cmd.conversation) == null ? void 0 : _e2.lines) == null ? void 0 : _f2.length) && contact ? pickConversation(contact.callConversations, contact.callConversation, ((_g2 = playerStateRef.current) == null ? void 0 : _g2.variables) || {}, ((_i2 = (_h2 = playerStateRef.current) == null ? void 0 : _h2.uiState.phone) == null ? void 0 : _i2.playedConversations) || []) : null;
+                const conversation = ((_k2 = (_j2 = cmd.conversation) == null ? void 0 : _j2.lines) == null ? void 0 : _k2.length) ? cmd.conversation : contactPick == null ? void 0 : contactPick.conversation;
+                if (!((_l2 = conversation == null ? void 0 : conversation.lines) == null ? void 0 : _l2.length)) {
+                  runtimeDebugWarn("[StartPhoneCall] No conversation on the command or the contact — skipping.");
+                  break;
+                }
+                if ((_m2 = contactPick == null ? void 0 : contactPick.entry) == null ? void 0 : _m2.once) markConversationPlayed(contactPick.entry.id);
+                const blocking = cmd.blocking !== false;
+                if (blocking) instantAdvance = false;
+                startOutgoingTranscriptCall({ contactId: cmd.contactId, portrait: cmd.portrait ?? (contact == null ? void 0 : contact.avatar), conversation, dialingMs: cmd.dialingMs, blocking });
+                break;
+              }
+              case CommandType.Flashlight: {
+                const cmd = command2;
+                if (cmd.enabled) {
+                  setFlashlight({
+                    radius: cmd.radius ?? 22,
+                    softness: cmd.softness ?? 0.6,
+                    darkness: cmd.darkness ?? 0.85,
+                    radiusVariableId: cmd.radiusVariableId ?? null,
+                    darknessVariableId: cmd.darknessVariableId ?? null,
+                    color: cmd.color || "#000000",
+                    toggleKey: cmd.toggleKey,
+                    affectsDialogue: cmd.affectsDialogue !== false,
+                    darkWhenOff: cmd.darkWhenOff === true,
+                    on: true,
+                    // Live Evaluation: keep the flashlight registered and show/hide it as
+                    // these conditions flip (renderer re-checks every render).
+                    conditions: cmd.liveConditions ? cmd.conditions ?? null : null
+                  });
+                  if (cmd.sfxId) playSound(cmd.sfxId);
+                } else {
+                  setFlashlight(null);
+                }
+                break;
+              }
+              case CommandType.Spotlight: {
+                const cmd = command2;
+                const sid = cmd.spotlightId || "main";
+                if (cmd.enabled) {
+                  setSpotlights((prev) => ({ ...prev, [sid]: makeSpotlightState(cmd) }));
+                  if (cmd.sfxId) playSound(cmd.sfxId);
+                } else {
+                  setSpotlights((prev) => {
+                    const n = { ...prev };
+                    delete n[sid];
+                    return n;
+                  });
+                }
+                break;
+              }
+              case CommandType.SetScreenOverlayEffect: {
+                const cmd = command2;
+                updatePlayerState((p) => p ? {
+                  ...p,
+                  stageState: {
+                    ...p.stageState,
+                    screen: {
+                      ...p.stageState.screen,
+                      overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, {
+                        type: cmd.effectType,
+                        intensity: cmd.intensity,
+                        intensityVariableId: cmd.intensityVariableId ?? null,
+                        variant: cmd.variant,
+                        color: cmd.color,
+                        params: cmd.params,
+                        // Live Evaluation: the effect stays registered and renders only
+                        // while these conditions hold (re-checked every render).
+                        conditions: cmd.liveConditions ? cmd.conditions ?? void 0 : void 0
+                      })
+                    }
+                  }
+                } : null);
+                const effectDuration = cmd.duration ?? 0;
+                if (effectDuration > 0) {
+                  const effectType = cmd.effectType;
+                  const overlayTimeoutId = window.setTimeout(() => {
+                    updatePlayerState((p) => p ? {
+                      ...p,
+                      stageState: {
+                        ...p.stageState,
+                        screen: {
+                          ...p.stageState.screen,
+                          overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, {
+                            type: effectType,
+                            intensity: 0
+                          })
+                        }
                       }
-                    }
-                  } : null);
-                  activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter((id) => id !== overlayTimeoutId);
-                }, effectDuration * 1e3);
-                activeEffectTimeoutsRef.current.push(overlayTimeoutId);
-              }
-              break;
-            }
-            case CommandType.ShowScreen: {
-              const cmd = command;
-              const screenToShow = project.uiScreens[cmd.screenId];
-              if (!(screenToShow == null ? void 0 : screenToShow.hudNonBlocking)) {
-                instantAdvance = false;
-              }
-              updatePlayerState((p) => p ? {
-                ...p,
-                uiState: {
-                  ...p.uiState,
-                  screenSceneId: p.currentSceneId
+                    } : null);
+                    activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter((id) => id !== overlayTimeoutId);
+                  }, effectDuration * 1e3);
+                  activeEffectTimeoutsRef.current.push(overlayTimeoutId);
                 }
-              } : null);
-              if (playerState && playerState.mode === "playing") {
-                setHudStack((s) => [...s, cmd.screenId]);
-              } else {
-                setScreenStack((s) => [...s, cmd.screenId]);
+                break;
               }
-              break;
-            }
-            case CommandType.HideScreen: {
-              const cmd = command;
-              if (cmd.all) {
-                setHudStack([]);
-                setScreenStack([]);
-              } else if (cmd.screenId) {
-                setHudStack((s) => s.filter((id) => id !== cmd.screenId));
-                setScreenStack((s) => s.filter((id) => id !== cmd.screenId));
-              } else if (hudStack.length > 0) {
-                setHudStack((s) => s.slice(0, -1));
-              } else if (screenStack.length > 0) {
-                setScreenStack((s) => s.slice(0, -1));
+              case CommandType.ShowScreen: {
+                const cmd = command2;
+                const screenToShow = project.uiScreens[cmd.screenId];
+                if (!(screenToShow == null ? void 0 : screenToShow.hudNonBlocking)) {
+                  instantAdvance = false;
+                }
+                updatePlayerState((p) => p ? {
+                  ...p,
+                  uiState: {
+                    ...p.uiState,
+                    screenSceneId: p.currentSceneId
+                  }
+                } : null);
+                if (playerState && playerState.mode === "playing") {
+                  setHudStack((s) => [...s, cmd.screenId]);
+                } else {
+                  setScreenStack((s) => [...s, cmd.screenId]);
+                }
+                break;
               }
-              break;
-            }
-            case CommandType.ShowText: {
-              const result = handleShowText(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.ShowImage: {
-              const result = handleShowImage(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.Label: {
-              const result = handleLabel(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.JumpToLabel: {
-              const result = handleJumpToLabel(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.HideText: {
-              const result = handleHideText(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.HideImage: {
-              const result = handleHideImage(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.ShowButton: {
-              const result = handleShowButton(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.HideButton: {
-              const result = handleHideButton(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.ShowItem: {
-              const result = handleShowItem(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.ShowHotSpot: {
-              const cmd = command;
-              updatePlayerState((p) => p ? {
-                ...p,
-                stageState: {
-                  ...p.stageState,
-                  hotSpotOverlays: [
-                    ...(p.stageState.hotSpotOverlays || []).filter((h) => h.commandId !== cmd.id),
-                    {
-                      id: cmd.id,
-                      commandId: cmd.id,
-                      name: cmd.name,
-                      x: cmd.x,
-                      y: cmd.y,
-                      width: cmd.width,
-                      height: cmd.height,
-                      shape: cmd.shape,
-                      trigger: cmd.trigger,
-                      actions: cmd.actions,
-                      conditions: cmd.conditions,
-                      acceptedTag: cmd.acceptedTag,
-                      highlightColor: cmd.highlightColor,
-                      visible: cmd.visible,
-                      visibleOpacity: cmd.visibleOpacity,
-                      advanceOnTrigger: cmd.advanceOnTrigger,
-                      layer: cmd.layer
-                    }
-                  ]
+              case CommandType.HideScreen: {
+                const cmd = command2;
+                if (cmd.all) {
+                  setHudStack([]);
+                  setScreenStack([]);
+                } else if (cmd.screenId) {
+                  setHudStack((s) => s.filter((id) => id !== cmd.screenId));
+                  setScreenStack((s) => s.filter((id) => id !== cmd.screenId));
+                } else if (hudStack.length > 0) {
+                  setHudStack((s) => s.slice(0, -1));
+                } else if (screenStack.length > 0) {
+                  setScreenStack((s) => s.slice(0, -1));
                 }
-              } : null);
-              break;
-            }
-            case CommandType.HideHotSpot: {
-              const cmd = command;
-              updatePlayerState((p) => p ? {
-                ...p,
-                stageState: {
-                  ...p.stageState,
-                  hotSpotOverlays: (p.stageState.hotSpotOverlays || []).filter((h) => h.commandId !== cmd.targetCommandId)
-                }
-              } : null);
-              break;
-            }
-            case CommandType.CreditRoll: {
-              const cmd = command;
-              setActiveCreditRoll(cmd);
-              const result = handleCreditRoll(cmd, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.RunScript: {
-              const runScriptCmd = command;
-              const waitForScript = runScriptCmd.waitForCompletion !== false;
-              if (waitForScript) {
-                const result = await handleRunScript(runScriptCmd, commandContext);
+                break;
+              }
+              case CommandType.ShowText: {
+                const result = handleShowText(command2, commandContext);
                 applyResult(result);
-              } else {
-                instantAdvance = true;
-                handleRunScript(runScriptCmd, commandContext).then((result) => {
-                  if (result.updates) applyResult({ advance: true, updates: result.updates });
-                }).catch((err) => console.error("[RunScript] background script error:", err));
+                break;
               }
-              break;
-            }
-            case CommandType.SpawnParticles: {
-              const result = handleSpawnParticles(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.StopParticles: {
-              const result = handleStopParticles(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.CallCommonEvent: {
-              const result = handleCallCommonEvent(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.TweenElement: {
-              const result = handleTweenElement(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.MoveCharacter: {
-              const result = handleMoveCharacter(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.StartTimer: {
-              const cmd = command;
-              const key = startTimer(cmd.blockEngine ? { ...cmd, loop: false } : cmd);
-              if (cmd.blockEngine) {
-                instantAdvance = false;
-                blockingTimerRef.current = { key, resume: advance };
+              case CommandType.ShowImage: {
+                const result = handleShowImage(command2, commandContext);
+                applyResult(result);
+                break;
               }
-              break;
-            }
-            case CommandType.StopTimer: {
-              stopTimer(command.timerId);
-              break;
-            }
-            case CommandType.SetTimeOfDay: {
-              const cmd = command;
-              applyTimeOfDay(cmd.mode, cmd.mode === "set" ? cmd.hour : cmd.hours, cmd.transitionDuration);
-              break;
-            }
-            default: {
-              const customDef = pluginManager.getCommand(command.type);
-              if (customDef) {
-                const ownerId = pluginManager.getCommandOwner(command.type);
-                const api2 = ownerId ? pluginManager.getApi(ownerId) : void 0;
-                if (api2) {
-                  try {
-                    const params = command.params || command.parameters || {};
-                    const ret = customDef.handler(params, api2);
-                    if (ret && typeof ret.then === "function") {
-                      ret.catch((e) => console.error(`[Custom command ${command.type}] handler error:`, e));
-                    } else if (ret && ret.advance === false) {
-                      instantAdvance = false;
+              case CommandType.Label: {
+                const result = handleLabel(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.JumpToLabel: {
+                const result = handleJumpToLabel(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.HideText: {
+                const result = handleHideText(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.HideImage: {
+                const result = handleHideImage(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.ShowButton: {
+                const result = handleShowButton(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.HideButton: {
+                const result = handleHideButton(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.ShowItem: {
+                const result = handleShowItem(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.ShowHotSpot: {
+                const cmd = command2;
+                updatePlayerState((p) => p ? {
+                  ...p,
+                  stageState: {
+                    ...p.stageState,
+                    hotSpotOverlays: [
+                      ...(p.stageState.hotSpotOverlays || []).filter((h) => h.commandId !== cmd.id),
+                      {
+                        id: cmd.id,
+                        commandId: cmd.id,
+                        name: cmd.name,
+                        x: cmd.x,
+                        y: cmd.y,
+                        width: cmd.width,
+                        height: cmd.height,
+                        shape: cmd.shape,
+                        trigger: cmd.trigger,
+                        actions: cmd.actions,
+                        conditions: cmd.conditions,
+                        acceptedTag: cmd.acceptedTag,
+                        highlightColor: cmd.highlightColor,
+                        visible: cmd.visible,
+                        visibleOpacity: cmd.visibleOpacity,
+                        advanceOnTrigger: cmd.advanceOnTrigger,
+                        layer: cmd.layer
+                      }
+                    ]
+                  }
+                } : null);
+                break;
+              }
+              case CommandType.HideHotSpot: {
+                const cmd = command2;
+                updatePlayerState((p) => p ? {
+                  ...p,
+                  stageState: {
+                    ...p.stageState,
+                    hotSpotOverlays: (p.stageState.hotSpotOverlays || []).filter((h) => h.commandId !== cmd.targetCommandId)
+                  }
+                } : null);
+                break;
+              }
+              case CommandType.CreditRoll: {
+                const cmd = command2;
+                setActiveCreditRoll(cmd);
+                const result = handleCreditRoll(cmd, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.RunScript: {
+                const runScriptCmd = command2;
+                const waitForScript = runScriptCmd.waitForCompletion !== false;
+                if (waitForScript) {
+                  const result = await handleRunScript(runScriptCmd, commandContext);
+                  applyResult(result);
+                } else {
+                  instantAdvance = true;
+                  handleRunScript(runScriptCmd, commandContext).then((result) => {
+                    if (result.updates) applyResult({ advance: true, updates: result.updates });
+                  }).catch((err) => console.error("[RunScript] background script error:", err));
+                }
+                break;
+              }
+              case CommandType.SpawnParticles: {
+                const result = handleSpawnParticles(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.StopParticles: {
+                const result = handleStopParticles(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.CallCommonEvent: {
+                const result = handleCallCommonEvent(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.TweenElement: {
+                const result = handleTweenElement(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.MoveCharacter: {
+                const result = handleMoveCharacter(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.StartTimer: {
+                const cmd = command2;
+                const key = startTimer(cmd.blockEngine ? { ...cmd, loop: false, keepAcrossGames: void 0, rememberBetweenSessions: void 0 } : cmd);
+                if (cmd.blockEngine) {
+                  instantAdvance = false;
+                  blockingTimerRef.current = { key, resume: advance };
+                }
+                break;
+              }
+              case CommandType.StopTimer: {
+                stopTimer(command2.timerId);
+                break;
+              }
+              case CommandType.SetTimeOfDay: {
+                const cmd = command2;
+                applyTimeOfDay(cmd.mode, cmd.mode === "set" ? cmd.hour : cmd.hours, cmd.transitionDuration);
+                break;
+              }
+              default: {
+                const customDef = pluginManager.getCommand(command2.type);
+                if (customDef) {
+                  const ownerId = pluginManager.getCommandOwner(command2.type);
+                  const api2 = ownerId ? pluginManager.getApi(ownerId) : void 0;
+                  if (api2) {
+                    try {
+                      const params = command2.params || command2.parameters || {};
+                      const ret = customDef.handler(params, api2);
+                      if (ret && typeof ret.then === "function") {
+                        ret.catch((e) => console.error(`[Custom command ${command2.type}] handler error:`, e));
+                      } else if (ret && ret.advance === false) {
+                        instantAdvance = false;
+                      }
+                    } catch (e) {
+                      console.error(`[Custom command ${command2.type}] handler error:`, e);
                     }
-                  } catch (e) {
-                    console.error(`[Custom command ${command.type}] handler error:`, e);
                   }
                 }
+                break;
               }
-              break;
             }
-          }
-          try {
-            pluginManager.invokeHook("onAfterCommand", command, null);
-          } catch {
-          }
-          runtimeDebugLog("[DEBUG] Command execution complete:", command.type, "| shouldRunAsync:", shouldRunAsync, "| instantAdvance:", instantAdvance);
-          if (shouldRunAsync) {
-            runtimeDebugLog("[DEBUG] Running async - advancing immediately");
+            try {
+              pluginManager.invokeHook("onAfterCommand", command2, null);
+            } catch {
+            }
+            runtimeDebugLog("[DEBUG] Command execution complete:", command2.type, "| shouldRunAsync:", shouldRunAsync, "| instantAdvance:", instantAdvance);
+            if (shouldRunAsync) {
+              runtimeDebugLog("[DEBUG] Running async - advancing immediately (same-frame flush)");
+              advance();
+              chainIntoNext();
+            } else if (instantAdvance) {
+              runtimeDebugLog("[DEBUG] Instant advance - advancing now");
+              advance();
+            } else {
+              runtimeDebugLog("[DEBUG] Waiting for command to handle advancement (callback/user input)");
+            }
+          } catch (error) {
+            console.error("[CRITICAL ERROR] Command execution failed:", {
+              commandType: command2.type,
+              commandId: command2.id,
+              index: cmdIndex,
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : void 0
+            });
             advance();
-          } else if (instantAdvance) {
-            runtimeDebugLog("[DEBUG] Instant advance - advancing now");
-            advance();
-          } else {
-            runtimeDebugLog("[DEBUG] Waiting for command to handle advancement (callback/user input)");
           }
-        } catch (error) {
-          console.error("[CRITICAL ERROR] Command execution failed:", {
-            commandType: command.type,
-            commandId: command.id,
-            index: playerState.currentIndex,
-            error: error instanceof Error ? error.message : String(error),
-            stack: error instanceof Error ? error.stack : void 0
-          });
-          advance();
-        }
-      })();
+        })();
+      };
+      executeAtIndex(command, playerState.currentIndex);
     }, [playerState, project, assetResolver, playSound, playVoice, evaluateConditions2, fadeAudio, settings.musicVolume, startNewGame, stopAndResetMusic, stopAllSfx, stopSfx, hudStack]);
     const handleDialogueAdvance = () => {
       var _a2, _b2, _c2;
@@ -22984,6 +23176,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const performQuit = () => {
           updatePlayerState(null);
           setHudStack([]);
+          clearTimersForGameBoundary();
           const resetVars = getInitialVariablesWithPersistent(project.variables, project.id);
           setUiVariables(resetVars);
           uiVariablesRef.current = resetVars;
@@ -23030,6 +23223,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           audio.src = "";
         }
         stopAllSfx();
+        flushRememberedTimersRef.current();
         if (isStandalone) {
           const electronAPI = window.electronAPI;
           if (electronAPI == null ? void 0 : electronAPI.quitApp) {
@@ -24444,9 +24638,29 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
           }
         });
-        toRemove.forEach((k) => timers.delete(k));
+        toRemove.forEach((k) => {
+          var _a2;
+          if ((_a2 = timers.get(k)) == null ? void 0 : _a2.rememberBetweenSessions) {
+            const map = loadRememberedTimers(project.id);
+            if (k in map) {
+              delete map[k];
+              saveRememberedTimers(project.id, map);
+            }
+          }
+          timers.delete(k);
+        });
         if (Object.keys(varWrites).length) {
-          updatePlayerState((p) => p ? { ...p, variables: { ...p.variables, ...varWrites } } : null);
+          if (playerStateRef.current) updatePlayerState((p) => p ? { ...p, variables: { ...p.variables, ...varWrites } } : null);
+          else setMenuVariables((m) => ({ ...m, ...varWrites }));
+        }
+        let anyRemembered = false;
+        timers.forEach((t) => {
+          if (t.rememberBetweenSessions) anyRemembered = true;
+        });
+        const now = Date.now();
+        if (anyRemembered && now - lastTimerFlushRef.current > 2e3) {
+          lastTimerFlushRef.current = now;
+          flushRememberedTimersRef.current();
         }
         if (toRun.length) {
           const run = handleUIActionRef.current;

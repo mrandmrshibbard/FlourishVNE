@@ -42,15 +42,13 @@ export async function handleSetBackground(
       parallaxDepth: command.parallaxDepth,
       layer: command.layer,
     };
-    const existing = playerState.stageState.backgroundLayers || [];
     return {
       advance: true,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          backgroundLayers: [...existing.filter(l => l.commandId !== command.id), layer],
-        },
-      },
+      // Surgical patch over the LATEST stage (stagePatch) — a full stale-stage copy here
+      // erased overlays added by commands chained in the same parallel (runAsync) run.
+      stagePatch: (prev) => ({
+        backgroundLayers: [...(prev.backgroundLayers || []).filter(l => l.commandId !== command.id), layer],
+      }),
     };
   }
 
@@ -73,15 +71,13 @@ export async function handleSetBackground(
       transition: command.transition,
       duration: command.duration,
     };
-    const existing = playerState.stageState.backgroundStack || [];
     return {
       advance: true,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          backgroundStack: [...existing.filter(p => p.commandId !== command.id), plane],
-        },
-      },
+      // Surgical patch over the LATEST stage (stagePatch) — a full stale-stage copy here
+      // erased overlays added by commands chained in the same parallel (runAsync) run.
+      stagePatch: (prev) => ({
+        backgroundStack: [...(prev.backgroundStack || []).filter(p => p.commandId !== command.id), plane],
+      }),
     };
   }
 
@@ -93,15 +89,12 @@ export async function handleSetBackground(
     if (command.transition === 'instant' || !command.transition) {
       return {
         advance: true,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            ...bgFx,
-            backgroundUrl: null,
-            backgroundIsVideo: false,
-            backgroundColor: command.backgroundColor,
-          },
-        },
+        stagePatch: () => ({
+          ...bgFx,
+          backgroundUrl: null,
+          backgroundIsVideo: false,
+          backgroundColor: command.backgroundColor,
+        }),
       };
     }
 
@@ -273,15 +266,14 @@ export async function handleSetBackground(
   if (command.transition === 'instant' || !command.transition) {
     return {
       advance: true,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          ...bgFx,
-          backgroundUrl: newUrl,
-          backgroundIsVideo: isVideo,
-          backgroundLoop: command.loop ?? loop,
-        },
-      },
+      // Surgical patch over the LATEST stage (stagePatch) — a full stale-stage copy here
+      // erased overlays added by commands chained in the same parallel (runAsync) run.
+      stagePatch: () => ({
+        ...bgFx,
+        backgroundUrl: newUrl,
+        backgroundIsVideo: isVideo,
+        backgroundLoop: command.loop ?? loop,
+      }),
     };
   }
 

@@ -746,6 +746,10 @@
   },
   "timer": {
     "resume": "Continuar de onde parou",
-    "resumeHint": "Se este timer foi parado antes, ele retoma do valor em que estava (precisa da variável numérica acima). Se nunca rodou ou já terminou, começa do zero."
+    "resumeHint": "Se este timer foi parado antes, ele retoma do valor em que estava (precisa da variável numérica acima). Se nunca rodou ou já terminou, começa do zero.",
+    "keepAcrossGames": "Continuar ao iniciar ou carregar um jogo",
+    "keepAcrossGamesHint": "Normalmente, iniciar um novo jogo ou carregar um save para todos os timers. Marque para este timer continuar rodando.",
+    "rememberSessions": "Lembrar entre sessões de jogo",
+    "rememberSessionsHint": "Guarda o progresso quando o jogador fecha o jogo — ele retoma de onde estava na próxima vez que abrir. Não conta enquanto o jogo está fechado."
   }
 }

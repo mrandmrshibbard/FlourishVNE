@@ -2816,8 +2816,20 @@ const TimerGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand; upda
             <input type="checkbox" checked={!!c.resume} onChange={e => updateCommand({ resume: e.target.checked || undefined } as any)} className="h-4 w-4 mt-0.5 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
             <span className="text-sm">{t('timer.resume', 'Can Restart')}<br /><span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('timer.resumeHint', 'If this timer was stopped earlier, pick it back up from the value it showed (needs the number variable above). If it never ran or already finished, it starts over.')}</span></span>
         </label>
+        {/* A story-pausing timer is tied to its story position — keeping/remembering it makes no
+            sense, so these two hide (and are cleared) while "Pause the story" is on. */}
+        {!c.blockEngine && <>
+            <label className="flex items-start gap-1 mt-1">
+                <input type="checkbox" checked={!!c.keepAcrossGames} onChange={e => updateCommand({ keepAcrossGames: e.target.checked || undefined } as any)} className="h-4 w-4 mt-0.5 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
+                <span className="text-sm">{t('timer.keepAcrossGames', 'Persist Playthroughs')}<br /><span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('timer.keepAcrossGamesHint', 'Normally, starting a new game or loading a save stops every running timer. Tick this to let this timer keep going right through.')}</span></span>
+            </label>
+            <label className="flex items-start gap-1 mt-1">
+                <input type="checkbox" checked={!!c.rememberBetweenSessions} onChange={e => updateCommand({ rememberBetweenSessions: e.target.checked || undefined } as any)} className="h-4 w-4 mt-0.5 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
+                <span className="text-sm">{t('timer.rememberSessions', 'Persist Game Reboot')}<br /><span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('timer.rememberSessionsHint', 'Keeps its progress when the player closes the game — it picks up from there next time they open it. It does not count while the game is closed.')}</span></span>
+            </label>
+        </>}
         <label className="flex items-start gap-1 mt-2">
-            <input type="checkbox" checked={!!c.blockEngine} onChange={e => updateCommand({ blockEngine: e.target.checked || undefined } as any)} className="h-4 w-4 mt-0.5 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
+            <input type="checkbox" checked={!!c.blockEngine} onChange={e => updateCommand({ blockEngine: e.target.checked || undefined, ...(e.target.checked ? { keepAcrossGames: undefined, rememberBetweenSessions: undefined } : {}) } as any)} className="h-4 w-4 mt-0.5 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
             <span className="text-sm">{t('timer.blockEngine', 'Pause the story until it finishes')}<br /><span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('timer.blockEngineHint', 'The story waits here, but on-screen buttons/hot spots stay clickable — place buttons for the player to beat the clock. A button that jumps scenes ends it; a Stop Timer button ends it early.')}</span></span>
         </label>
         <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{t('timer.tip', 'Tip: bind a Meter element to this variable for a visual bar, or write {VarName} in text.')}</p>

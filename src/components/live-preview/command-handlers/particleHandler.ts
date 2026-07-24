@@ -57,15 +57,9 @@ export function handleSpawnParticles(
 
     return {
         advance: true,
-        updates: {
-            stageState: {
-                ...playerState.stageState,
-                particleEffects: {
-                    ...(playerState.stageState.particleEffects || {}),
-                    [tag]: particleEntry,
-                },
-            },
-        },
+        stagePatch: (prev) => ({
+            particleEffects: { ...(prev.particleEffects || {}), [tag]: particleEntry },
+        }),
     };
 }
 
@@ -126,12 +120,7 @@ export function handleStopParticles(
 
         return {
             advance: true,
-            updates: {
-                stageState: {
-                    ...playerState.stageState,
-                    particleEffects: currentEffects,
-                },
-            },
+            stagePatch: () => ({ particleEffects: currentEffects }),
         };
     }
 
@@ -148,11 +137,6 @@ export function handleStopParticles(
 
     return {
         advance: true,
-        updates: {
-            stageState: {
-                ...playerState.stageState,
-                particleEffects: currentEffects,
-            },
-        },
+        stagePatch: () => ({ particleEffects: currentEffects }),
     };
 }

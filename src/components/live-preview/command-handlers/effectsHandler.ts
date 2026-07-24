@@ -43,16 +43,9 @@ export function handleTintScreen(
   
   return {
     advance: true,
-    updates: {
-      stageState: {
-        ...playerState.stageState,
-        screen: {
-          ...playerState.stageState.screen,
-          tint: command.color,
-          transitionDuration: command.duration,
-        },
-      },
-    },
+    stagePatch: (prev) => ({
+      screen: { ...prev.screen, tint: command.color, transitionDuration: command.duration },
+    }),
   };
 }
 
@@ -67,18 +60,9 @@ export function handlePanZoomScreen(
   
   return {
     advance: true,
-    updates: {
-      stageState: {
-        ...playerState.stageState,
-        screen: {
-          ...playerState.stageState.screen,
-          zoom: command.zoom,
-          panX: command.panX,
-          panY: command.panY,
-          transitionDuration: command.duration,
-        },
-      },
-    },
+    stagePatch: (prev) => ({
+      screen: { ...prev.screen, zoom: command.zoom, panX: command.panX, panY: command.panY, transitionDuration: command.duration },
+    }),
   };
 }
 
@@ -93,20 +77,9 @@ export function handleResetScreenEffects(
   
   return {
     advance: true,
-    updates: {
-      stageState: {
-        ...playerState.stageState,
-        screen: {
-          ...playerState.stageState.screen,
-          tint: 'transparent',
-          zoom: 1,
-          panX: 0,
-          panY: 0,
-          transitionDuration: command.duration,
-          overlayEffects: [],
-        },
-      },
-    },
+    stagePatch: (prev) => ({
+      screen: { ...prev.screen, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: command.duration, overlayEffects: [] },
+    }),
   };
 }
 
@@ -121,21 +94,18 @@ export function handleSetScreenOverlayEffect(
 
   return {
     advance: true,
-    updates: {
-      stageState: {
-        ...playerState.stageState,
-        screen: {
-          ...playerState.stageState.screen,
-          overlayEffects: upsertOverlayEffect(playerState.stageState.screen.overlayEffects, {
-            type: command.effectType,
-            intensity: command.intensity,
-            variant: command.variant,
-            color: command.color,
-            params: command.params,
-          }),
-        },
+    stagePatch: (prev) => ({
+      screen: {
+        ...prev.screen,
+        overlayEffects: upsertOverlayEffect(prev.screen.overlayEffects, {
+          type: command.effectType,
+          intensity: command.intensity,
+          variant: command.variant,
+          color: command.color,
+          params: command.params,
+        }),
       },
-    },
+    }),
   };
 }
 

@@ -455,6 +455,14 @@ const ActionFields: React.FC<{
                     <input type="checkbox" checked={!!a.resume} onChange={e => set({ resume: e.target.checked || undefined })} />
                     {t('actionEditor.timerResume', 'Can Restart (requires variable)')}
                 </label>
+                <label className={`flex items-center gap-1 ${variant === 'form' ? 'text-xs text-slate-300' : 'text-[10px] text-[var(--text-secondary)]'}`}>
+                    <input type="checkbox" checked={!!a.keepAcrossGames} onChange={e => set({ keepAcrossGames: e.target.checked || undefined })} />
+                    {t('actionEditor.timerKeepAcrossGames', 'Persist Playthroughs')}
+                </label>
+                <label className={`flex items-center gap-1 ${variant === 'form' ? 'text-xs text-slate-300' : 'text-[10px] text-[var(--text-secondary)]'}`}>
+                    <input type="checkbox" checked={!!a.rememberBetweenSessions} onChange={e => set({ rememberBetweenSessions: e.target.checked || undefined })} />
+                    {t('actionEditor.timerRememberSessions', 'Persist Game Reboot')}
+                </label>
                 {options?.renderActionList
                     ? <div className="mt-1">{options.renderActionList((a.onComplete as VNUIAction[]) || [], (acts) => set({ onComplete: acts }), t('actionEditor.timerOnComplete', 'When it finishes, run'))}</div>
                     : null}

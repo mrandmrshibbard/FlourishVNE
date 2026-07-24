@@ -111,6 +111,7 @@ function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { i
                 x: m.x, y: m.y, width: m.width, height: m.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
                 snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
+                dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: m.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
             };
@@ -130,6 +131,10 @@ function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { i
                 x: img.x, y: img.y, width: img.width, height: img.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
                 snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
+                // The drop pipeline matches by tag/bound item — dropping these here silently
+                // broke "drag a tagged image onto a tag-accepting hot spot" (only the Item
+                // case carried them; the inspector's own copies always did).
+                dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: img.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
             };
@@ -142,6 +147,7 @@ function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { i
                 x: t.x, y: t.y, width: t.width, height: t.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
                 snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
+                dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: t.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
             };
@@ -155,6 +161,7 @@ function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { i
                 x: b.x, y: b.y, width: b.width, height: b.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
                 snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
+                dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: b.conditions,
                 actions: b.actions ?? anyEl.actions,
                 clickSoundId: b.clickSoundId ?? null,
@@ -174,6 +181,7 @@ function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { i
                 x: ti.x, y: ti.y, width: ti.width, height: ti.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
                 snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
+                dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: ti.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
             };

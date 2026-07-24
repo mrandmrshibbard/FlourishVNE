@@ -425,6 +425,11 @@ export interface StartTimerCommand extends BaseCommand {
      *  showed when Stop Timer ran) instead of starting over. Falls back to a fresh start when there
      *  is nothing to resume (never ran, no variable, or already finished). Absent = start over. */
     resume?: boolean;
+    /** Keep running when a game starts or loads (normally every running timer stops then). */
+    keepAcrossGames?: boolean;
+    /** Save progress to the project's storage and resume automatically next play session.
+     *  NOT wall-clock — it only advances while the game is open. */
+    rememberBetweenSessions?: boolean;
     /** Actions run when the timer finishes (countdown hits 0 / stopwatch hits the cap). */
     onComplete?: VNUIAction[];
     /** Pause the STORY on this command until the timer finishes — but keep on-screen buttons/hot spots

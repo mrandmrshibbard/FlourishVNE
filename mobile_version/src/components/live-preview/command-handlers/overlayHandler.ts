@@ -102,12 +102,7 @@ export function handleHideText(
     
     return {
       advance: false,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          textOverlays: updated,
-        },
-      },
+      stagePatch: () => ({ textOverlays: updated }),
       delay: duration,
       callback: () => {
         setPlayerState((inner) =>
@@ -228,12 +223,7 @@ export function handleHideImage(
     
     return {
       advance: false,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          imageOverlays: updated,
-        },
-      },
+      stagePatch: () => ({ imageOverlays: updated }),
       delay: duration,
       callback: () => {
         setPlayerState((inner) =>
@@ -477,12 +467,7 @@ export function handleHideButton(
     
     return {
       advance: false,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          buttonOverlays: updated,
-        },
-      },
+      stagePatch: () => ({ buttonOverlays: updated }),
       delay: duration,
       callback: () => {
         setPlayerState((inner) =>

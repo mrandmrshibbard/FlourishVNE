@@ -216,6 +216,36 @@ function savePersistentVariables(projectId: string, vars: Record<string, string 
     }
 }
 
+// ── Remembered timers ("Remember between play sessions") ───────────────────────────────
+// A remembered timer's PROGRESS is stored here so it picks up where it was on the next
+// boot. NOT wall-clock: it only advances while the game is open. Same storage pair as
+// persistent variables (sync localStorage read; dual write). accMs is deliberately not
+// stored — sub-tick precision across sessions isn't worth the churn.
+type RememberedTimer = {
+    value: number; mode: 'countdown' | 'stopwatch'; intervalSec: number; target: number;
+    resetTo: number; loop: boolean; variableId?: VNID; onComplete?: VNUIAction[];
+    keepAcrossGames?: boolean; savedAt: number;
+};
+function getRememberedTimersKey(projectId: string): string {
+    return `vn-timers-${projectId}`;
+}
+function loadRememberedTimers(projectId: string): Record<string, RememberedTimer> {
+    try {
+        const raw = localStorage.getItem(getRememberedTimersKey(projectId));
+        return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+}
+function saveRememberedTimers(projectId: string, timers: Record<string, RememberedTimer>): void {
+    try {
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.storage) {
+            (window as any).electronAPI.storage.setItem(getRememberedTimersKey(projectId), timers);
+        }
+        localStorage.setItem(getRememberedTimersKey(projectId), JSON.stringify(timers));
+    } catch (e) {
+        console.error('Failed to save timers:', e);
+    }
+}
+
 /** Build initial variable state: defaults + persistent overrides from storage */
 function getInitialVariablesWithPersistent(
     projectVariables: Record<string, any>,
@@ -4140,6 +4170,37 @@ const UIScreenRenderer: React.FC<{
     const screenRootRef = React.useRef<HTMLDivElement>(null);
     const screenSize = useStageSize(screenRootRef);
 
+    // ── Atomic screen reveal ────────────────────────────────────────────────────────────
+    // On a web host every image on this screen (background, buttons, hidden-object pieces)
+    // is its own fetch — without a gate they pop in one by one, telegraphing exactly where
+    // the "findable" things sit. Hold the WHOLE screen invisible until every image it
+    // rendered has finished loading, then reveal everything at once. Videos stream on
+    // their own; data: URLs and anything already warmed pass instantly, so with the boot
+    // pre-warm this gate is a no-op in the common case. Failure never wedges the screen —
+    // a broken file counts as loaded.
+    const [revealReady, setRevealReady] = React.useState(false);
+    React.useEffect(() => {
+        setRevealReady(false);
+        let alive = true;
+        // Two frames: let the subtree mount, then inventory the images it ACTUALLY rendered
+        // (shape-independent — any element type's art is caught, present and future).
+        const raf = requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (!alive) return;
+            const root = screenRootRef.current;
+            if (!root) { setRevealReady(true); return; }
+            const urls = new Set<string>();
+            root.querySelectorAll('img').forEach(i => { const s = i.getAttribute('src'); if (s) urls.add(s); });
+            root.querySelectorAll<HTMLElement>('[style*="background-image"]').forEach(el => {
+                const m = (el.style.backgroundImage || '').match(/url\(["']?([^"')]+)/);
+                if (m) urls.add(m[1]);
+            });
+            const missing = [...urls].filter(u => !u.startsWith('data:') && !vnLoadedImages.has(u));
+            if (!missing.length) { setRevealReady(true); return; }
+            Promise.all(missing.map(vnWarmImage)).then(() => { if (alive) setRevealReady(true); });
+        }));
+        return () => { alive = false; cancelAnimationFrame(raf); };
+    }, [screenId]);
+
     // Cleanup video on unmount
     React.useEffect(() => {
         return () => {
@@ -5625,6 +5686,10 @@ const UIScreenRenderer: React.FC<{
                 // A pausing overlay (modal-style) sits ABOVE the dialogue box + backdrop so it
                 // reads as a popup over a frozen, dimmed scene.
                 ...(screen.pauseSceneWhileOpen ? { zIndex: 46 } : {}),
+                // Atomic reveal: everything on this screen appears in the same frame (see the
+                // gate effect above). Style-only flip — never a structural change (a remount
+                // would refetch every image).
+                ...(revealReady ? {} : { visibility: 'hidden' as const }),
             }}
         >
             {/* Pass-through (HUD) screens skip their opaque background so the scene shows through. */}
@@ -6263,6 +6328,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     useEffect(() => {
         uiVariablesRef.current = uiVariables;
     }, [uiVariables]);
+
+    // Ref mirror of menuVariables for synchronous reads in plain closures (startTimer's
+    // "continue where it left off" needs the CURRENT pre-game values, same pattern as
+    // uiVariablesRef above).
+    const menuVariablesRef = useRef<Record<VNID, string | number | boolean>>(menuVariables);
+    useEffect(() => {
+        menuVariablesRef.current = menuVariables;
+    }, [menuVariables]);
     
     // Sync menuVariables when project variables change
     useEffect(() => {
@@ -6461,7 +6534,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // not survive save/load (acceptable for v1). Keyed by timerId.
     // `value` is the timer's own source of truth (so it runs even with NO bound variable); `variableId`
     // (optional) just mirrors `value` for a Meter bar / conditions / {var} text.
-    type TimerRuntime = { variableId?: VNID; mode: 'countdown' | 'stopwatch'; intervalSec: number; target: number; accMs: number; value: number; resetTo: number; loop: boolean; onComplete?: VNUIAction[] };
+    type TimerRuntime = { variableId?: VNID; mode: 'countdown' | 'stopwatch'; intervalSec: number; target: number; accMs: number; value: number; resetTo: number; loop: boolean; keepAcrossGames?: boolean; rememberBetweenSessions?: boolean; onComplete?: VNUIAction[] };
     const timersRef = useRef<Map<string, TimerRuntime>>(new Map());
     // When a Start Timer command pauses the story (blockEngine), this holds the resume (advance) to call
     // when the timer finishes OR is stopped early by a button. Only one block at a time (the story is
@@ -6481,8 +6554,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // Seconds for the CSS transition the day/night color grade uses when the time changes (set by the
     // Set Time of Day command; auto-advance leaves a small default so its 250ms steps blend smoothly).
     const dnTransitionRef = useRef<number>(0.4);
+    /** Snapshot one running timer into the remembered-timers storage entry shape. */
+    const rememberedEntryOf = (t: TimerRuntime): RememberedTimer => ({
+        value: t.value, mode: t.mode, intervalSec: t.intervalSec, target: t.target,
+        resetTo: t.resetTo, loop: t.loop, variableId: t.variableId, onComplete: t.onComplete,
+        keepAcrossGames: t.keepAcrossGames, savedAt: Date.now(),
+    });
     /** Register/replace a timer. Shared by the Start Timer command AND the Start Timer button action. */
-    const startTimer = (cfg: { timerId?: string; variableId?: VNID; mode?: 'countdown' | 'stopwatch'; duration?: number; from?: number; interval?: number; loop?: boolean; resume?: boolean; onComplete?: VNUIAction[] }): string => {
+    const startTimer = (cfg: { timerId?: string; variableId?: VNID; mode?: 'countdown' | 'stopwatch'; duration?: number; from?: number; interval?: number; loop?: boolean; resume?: boolean; keepAcrossGames?: boolean; rememberBetweenSessions?: boolean; onComplete?: VNUIAction[] }): string => {
         // Case-insensitive key: "MyTimer" and "mytimer" are the same timer, so a Stop Timer
         // typed with different casing (often in a different scene) still finds it.
         const key = (cfg.timerId || '').trim().toLowerCase() || 'default';
@@ -6490,29 +6569,107 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const intervalSec = Math.max(0.05, cfg.interval ?? 1);
         const startVal = mode === 'countdown' ? (cfg.duration ?? 0) : (cfg.from ?? 0);
         const target = mode === 'countdown' ? 0 : (cfg.duration ?? 0); // stopwatch cap; 0 = run until stopped
+        const flags = { keepAcrossGames: cfg.keepAcrossGames || undefined, rememberBetweenSessions: cfg.rememberBetweenSessions || undefined };
+        const persistIfRemembered = () => {
+            if (!cfg.rememberBetweenSessions) return;
+            const t = timersRef.current.get(key);
+            if (!t) return;
+            const map = loadRememberedTimers(project.id);
+            map[key] = rememberedEntryOf(t);
+            saveRememberedTimers(project.id, map);
+        };
         if (cfg.resume) {
             // Continue where it left off. Stop Timer deletes the runtime but the bound variable
             // keeps the value it showed at that moment — that value is the resume point. Loop
             // restarts still go back to the FULL start value (resetTo), not the resume point.
+            // Pre-game the current values live in menuVariables, in-game in playerState.
             if (timersRef.current.has(key)) return key; // already ticking — leave it running
-            const varVal = cfg.variableId ? Number(mergeDirtyUiVariables(playerStateRef.current?.variables || {})[cfg.variableId]) : NaN;
+            const varsNow = playerStateRef.current ? mergeDirtyUiVariables(playerStateRef.current.variables || {}) : menuVariablesRef.current;
+            const varVal = cfg.variableId ? Number(varsNow[cfg.variableId]) : NaN;
             const finished = mode === 'countdown' ? varVal <= 0 : (target > 0 && varVal >= target);
             if (Number.isFinite(varVal) && !finished) {
-                timersRef.current.set(key, { variableId: cfg.variableId || undefined, mode, intervalSec, target, accMs: 0, value: varVal, resetTo: startVal, loop: !!cfg.loop, onComplete: cfg.onComplete });
+                timersRef.current.set(key, { variableId: cfg.variableId || undefined, mode, intervalSec, target, accMs: 0, value: varVal, resetTo: startVal, loop: !!cfg.loop, ...flags, onComplete: cfg.onComplete });
+                persistIfRemembered();
                 return key;
             }
             // Nothing to resume (never ran, no variable, or already finished) — start fresh below.
         }
-        timersRef.current.set(key, { variableId: cfg.variableId || undefined, mode, intervalSec, target, accMs: 0, value: startVal, resetTo: startVal, loop: !!cfg.loop, onComplete: cfg.onComplete });
-        if (cfg.variableId) updatePlayerState(p => p ? { ...p, variables: { ...p.variables, [cfg.variableId as string]: startVal } } : null);
+        timersRef.current.set(key, { variableId: cfg.variableId || undefined, mode, intervalSec, target, accMs: 0, value: startVal, resetTo: startVal, loop: !!cfg.loop, ...flags, onComplete: cfg.onComplete });
+        if (cfg.variableId) {
+            const vid = cfg.variableId;
+            // Pre-game there is no playerState — the menu store is what menu screens render from.
+            if (playerStateRef.current) updatePlayerState(p => p ? { ...p, variables: { ...p.variables, [vid]: startVal } } : null);
+            else setMenuVariables(m => ({ ...m, [vid]: startVal }));
+        }
+        persistIfRemembered();
         return key;
     };
     /** Stop a timer; if it was the one pausing the story, resume the story (no onComplete). */
     const stopTimer = (timerId?: string) => {
         const key = (timerId || '').trim().toLowerCase() || 'default';
         timersRef.current.delete(key);
+        // Stopping also forgets the stored between-sessions entry — even when the timer isn't
+        // currently running (a stale entry must not resurrect on the next boot).
+        const map = loadRememberedTimers(project.id);
+        if (key in map) { delete map[key]; saveRememberedTimers(project.id, map); }
         if (blockingTimerRef.current?.key === key) { const r = blockingTimerRef.current.resume; blockingTimerRef.current = null; try { r(); } catch { /* no-op */ } }
     };
+    /** Game-boundary wipe (new game / load / quit-to-title): every running timer stops EXCEPT
+     *  those marked "keep running when a game starts or loads". A story-blocking timer always
+     *  dies (its resume callback belongs to the old story position). Storage entries are NOT
+     *  touched — a remembered timer keeps its saved progress for the next boot regardless. */
+    const clearTimersForGameBoundary = () => {
+        const blockedKey = blockingTimerRef.current?.key;
+        timersRef.current.forEach((t, k) => {
+            if (!t.keepAcrossGames || k === blockedKey) timersRef.current.delete(k);
+        });
+        blockingTimerRef.current = null;
+    };
+    /** Write every running remembered timer's progress to storage (throttled from the tick;
+     *  called synchronously on unload/exit so at most a moment of progress is lost). */
+    const lastTimerFlushRef = useRef(0);
+    const flushRememberedTimers = () => {
+        let any = false;
+        timersRef.current.forEach(t => { if (t.rememberBetweenSessions) any = true; });
+        if (!any) return;
+        const map = loadRememberedTimers(project.id);
+        timersRef.current.forEach((t, k) => { if (t.rememberBetweenSessions) map[k] = rememberedEntryOf(t); });
+        saveRememberedTimers(project.id, map);
+    };
+    const flushRememberedTimersRef = useRef(flushRememberedTimers);
+    flushRememberedTimersRef.current = flushRememberedTimers;
+    // Boot restore: remembered timers pick up where they were when the game was last open —
+    // ticking right on the title screen. Stale finished (non-loop) entries are pruned.
+    useEffect(() => {
+        const map = loadRememberedTimers(project.id);
+        const keys = Object.keys(map);
+        if (!keys.length) return;
+        const seeds: Record<string, number> = {};
+        let mapChanged = false;
+        keys.forEach(k => {
+            const e = map[k];
+            if (!e || typeof e.value !== 'number') { delete map[k]; mapChanged = true; return; }
+            const finished = e.mode === 'countdown' ? e.value <= e.target : (e.target > 0 && e.value >= e.target);
+            if (finished && !e.loop) { delete map[k]; mapChanged = true; return; }
+            timersRef.current.set(k, {
+                variableId: e.variableId, mode: e.mode === 'stopwatch' ? 'stopwatch' : 'countdown',
+                intervalSec: Math.max(0.05, e.intervalSec || 1), target: e.target || 0, accMs: 0,
+                value: e.value, resetTo: e.resetTo ?? e.value, loop: !!e.loop,
+                keepAcrossGames: e.keepAcrossGames, rememberBetweenSessions: true, onComplete: e.onComplete,
+            });
+            if (e.variableId) seeds[e.variableId] = e.value;
+        });
+        if (mapChanged) saveRememberedTimers(project.id, map);
+        if (Object.keys(seeds).length) setMenuVariables(m => ({ ...m, ...seeds }));
+        // Mount-once by design (StrictMode double-run is idempotent: same entries re-registered).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    // Final flush when the window/app closes (same pattern as the coverage flush).
+    useEffect(() => {
+        const flush = () => flushRememberedTimersRef.current();
+        window.addEventListener('beforeunload', flush);
+        return () => { window.removeEventListener('beforeunload', flush); flush(); };
+    }, []);
     /** Set/advance the day/night clock (shared by the Set Time of Day command + button action). Writes
      *  the managed time variable (wrapped 0–24) and sets the grade's CSS transition duration. */
     const applyTimeOfDay = (mode: 'set' | 'advance', amount: number | undefined, transitionDuration?: number) => {
@@ -7125,7 +7282,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             setHudStack([]);
             setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
             customTransitionTimeoutsRef.current.forEach(t => window.clearTimeout(t)); customTransitionTimeoutsRef.current = []; setCustomTransition(null); setActionMovie(null); // cancel any in-flight custom scene transition (and its pending scene swap) + action-played video
-            timersRef.current.clear(); blockingTimerRef.current = null; fastForwardTargetRef.current = null; backwardReplayRef.current = null; // stop any running background timers / hot-reload fast-forward / rewind-replay window from a prior session
+            clearTimersForGameBoundary(); fastForwardTargetRef.current = null; backwardReplayRef.current = null; // stop background timers (except keep-across-games ones) / hot-reload fast-forward / rewind-replay window from a prior session
             setIsJustLoaded(true);
             // Re-arm a call that was ringing when the game was saved (ringtone + timeout restart).
             const savedCall = saveData.playerStateData.phone?.incomingCall;
@@ -7255,7 +7412,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         setHudStack([]);
         setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
             customTransitionTimeoutsRef.current.forEach(t => window.clearTimeout(t)); customTransitionTimeoutsRef.current = []; setCustomTransition(null); setActionMovie(null); // cancel any in-flight custom scene transition (and its pending scene swap) + action-played video
-        timersRef.current.clear(); blockingTimerRef.current = null; fastForwardTargetRef.current = null; backwardReplayRef.current = null; // stop any running background timers / hot-reload fast-forward / rewind-replay window from a prior session
+        clearTimersForGameBoundary(); fastForwardTargetRef.current = null; backwardReplayRef.current = null; // stop background timers (except keep-across-games ones) / hot-reload fast-forward / rewind-replay window from a prior session
         // "Play from here": fast-forward the scene's visual setup up to the chosen command
         // (same FF_VISUAL_TYPES machinery as the hot-reload's "Reload to line"). MUST be set
         // AFTER the teardown line above, which nulls the ref.
@@ -8042,6 +8199,42 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return im;
         });
     }, [playerState?.currentSceneId, playerState?.mode, project]);
+
+    // ── Screen art pre-warm ─────────────────────────────────────────────────────────────
+    // Warm EVERY UI screen's images (backgrounds, buttons, hidden-object pieces, items) once
+    // at boot, so opening any screen — hidden-object rooms navigated by arrows included —
+    // finds its art already loaded and the atomic screen reveal passes instantly. Bounded by
+    // the project's screen count; completions land in vnLoadedImages for the reveal gate.
+    const screenPrewarmRef = useRef<HTMLImageElement[]>([]);
+    useEffect(() => {
+        const urls = new Set<string>();
+        const addRef = (ref: any) => {
+            // Element art refs are {type:'image'|'video', id}; backgrounds use {type, assetId}.
+            if (!ref || typeof ref !== 'object') return;
+            const id = ref.id || ref.assetId;
+            if (!id || typeof id !== 'string') return;
+            if (ref.type === 'image') { const u = assetResolver(id, 'image'); if (u) urls.add(u); }
+        };
+        const walk = (node: any, depth: number) => {
+            if (!node || depth > 7) return;
+            if (Array.isArray(node)) { node.forEach(n => walk(n, depth + 1)); return; }
+            if (typeof node === 'object') {
+                addRef(node);
+                for (const [k, v] of Object.entries(node)) {
+                    if (k === 'imageUrl' && typeof v === 'string' && v) urls.add(resolveFieldUrl(project.id, v) || v);
+                    else if (v && typeof v === 'object') walk(v, depth + 1);
+                }
+            }
+        };
+        walk(project.uiScreens, 0);
+        walk(project.items || {}, 0);
+        screenPrewarmRef.current = [...urls].filter(u => !u.startsWith('data:')).slice(0, 600).map(u => {
+            const im = new Image();
+            im.onload = im.onerror = () => { vnLoadedImages.add(u); };
+            im.src = u;
+            return im;
+        });
+    }, [project, assetResolver]);
 
     // ── Atomic sprite paint ─────────────────────────────────────────────────────────────
     // The guarantee behind the pre-warm: a sprite stays INVISIBLE until every one of its layer
@@ -8920,6 +9113,27 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return;
         }
 
+        // ── Per-command executor ──────────────────────────────────────────────────
+        // Everything below runs ONE command. It is a function (not inline effect code)
+        // so a run of consecutive runAsync ("parallel") commands can CHAIN within the
+        // same task — their visuals commit together in one painted frame. `command` and
+        // `cmdIndex` shadow the effect-level values; chained commands re-check their own
+        // conditions and re-register with the scheduler exactly like an effect cycle.
+        const executeAtIndex = (command: VNCommand, cmdIndex: number): void => {
+        // Continue a parallel (runAsync) run into the next command WITHIN this task, so
+        // every member lands in the same painted frame. Branch markers are pre-handled by
+        // the effect and never chained; the scheduler mark stops the follow-up effect
+        // cycle from re-running the chained command.
+        const chainIntoNext = () => {
+            const nextCmd = playerState.currentCommands[cmdIndex + 1];
+            if (!nextCmd) return;
+            if (nextCmd.type === CommandType.BranchStart || nextCmd.type === CommandType.BranchElseIf || nextCmd.type === CommandType.BranchElse || nextCmd.type === CommandType.BranchEnd) return;
+            const chainSig = { sceneId: playerState.currentSceneId, index: cmdIndex + 1, commandId: nextCmd.id };
+            if (!scheduler.shouldProcess(chainSig)) return;
+            scheduler.markProcessed(chainSig);
+            diagnostics.emit('command-start', { sceneId: chainSig.sceneId, commandId: chainSig.commandId, index: chainSig.index });
+            executeAtIndex(nextCmd, cmdIndex + 1);
+        };
         // Check conditions for all other commands
     const conditionsMet = evaluateConditions(command.conditions, getRuntimeVariables());
     // Live commands are NEVER skipped on a false condition — they register/create their
@@ -8928,10 +9142,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // command reached while its condition is false would be skipped and never react.
     const isLiveReactive = !!(command as any).liveConditions
         && (REACTIVE_VISUAL_TYPES.has(command.type) || REACTIVE_FX_TYPES.has(command.type) || command.type === CommandType.PlaySoundEffect);
-    runtimeDebugLog('[DEBUG] Command:', command.type, 'Index:', playerState.currentIndex, 'Conditions met:', conditionsMet, 'live:', isLiveReactive, 'Variables:', getRuntimeVariables());
+    runtimeDebugLog('[DEBUG] Command:', command.type, 'Index:', cmdIndex, 'Conditions met:', conditionsMet, 'live:', isLiveReactive, 'Variables:', getRuntimeVariables());
         if (!conditionsMet && !isLiveReactive) {
             runtimeDebugLog('[DEBUG] Skipping command due to failed conditions');
             updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+            // A skipped member of a parallel run must not break the run's same-frame chain.
+            if (command.modifiers?.runAsync === true) chainIntoNext();
             return;
         }
 
@@ -8942,7 +9158,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         {
             const ffTarget = fastForwardTargetRef.current;
             if (ffTarget != null) {
-                if (playerState.currentIndex >= ffTarget) {
+                if (cmdIndex >= ffTarget) {
                     fastForwardTargetRef.current = null; // reached the edited line → process it normally
                 } else if (!FF_VISUAL_TYPES.has(command.type)) {
                     updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
@@ -8952,16 +9168,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         }
 
         const advance = () => {
-            runtimeDebugLog('[DEBUG advance()] Called from command:', command.type, 'Current index:', playerState.currentIndex);
+            runtimeDebugLog('[DEBUG advance()] Called from command:', command.type, 'Current index:', cmdIndex);
             // Guard: Don't advance if we've already moved past this command
-            if (scheduler.alreadyAdvancedPast(playerState.currentIndex)) {
+            if (scheduler.alreadyAdvancedPast(cmdIndex)) {
                 const last = scheduler.getLastProcessed();
                 if (last) {
                     runtimeDebugLog('[DEBUG advance()] Skipping - already advanced to', last.index);
                 }
                 return;
             }
-            const nextIndex = playerState.currentIndex + 1;
+            const nextIndex = cmdIndex + 1;
             if (nextIndex >= playerState.currentCommands.length) {
                 if (playerState.commandStack.length > 0) {
                     updatePlayerState(p => {
@@ -9430,7 +9646,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 diagnostics.emit('command-finish', {
                     commandId: command.id,
                     sceneId: playerState.currentSceneId,
-                    index: playerState.currentIndex,
+                    index: cmdIndex,
                     advance: result.advance,
                 });
             };
@@ -9442,11 +9658,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // reaching an answered Choice through story flow (e.g. an authored Jump To Label
             // loop back to the choice) must RE-PRESENT it, not silently re-pick the old option.
             const hw = backwardReplayRef.current;
-            if (hw && (playerState.currentSceneId !== hw.sceneId || playerState.currentIndex >= hw.index)) {
+            if (hw && (playerState.currentSceneId !== hw.sceneId || cmdIndex >= hw.index)) {
                 backwardReplayRef.current = null; // caught up (or navigated away) — window over
             }
             const replayingBackward = backwardReplayRef.current != null;
-            const savedInputKey = `${playerState.currentSceneId}:${playerState.currentIndex}`;
+            const savedInputKey = `${playerState.currentSceneId}:${cmdIndex}`;
             const savedInput = playerState.savedInputs[savedInputKey];
 
             if (replayingBackward && savedInput && command.type === CommandType.Choice && savedInput.type === 'choice') {
@@ -9520,8 +9736,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 }
                 case CommandType.SetBackground: {
-                    const result = await handleSetBackground(command as SetBackgroundCommand, commandContext);
-                    applyResult(result);
+                    if (shouldRunAsync) {
+                        // Parallel background: its handler awaits the media preload AND the whole
+                        // transition before returning — awaiting here would stall every chained
+                        // command behind the fade. Fire it and apply whenever it's ready; the
+                        // stack keeps executing this same frame. (Its own advance() call later is
+                        // a no-op via the scheduler guard — the async branch advances for it.)
+                        handleSetBackground(command as SetBackgroundCommand, commandContext)
+                            .then(r => applyResult(r))
+                            .catch(e => console.error('[SetBackground async] failed:', e));
+                    } else {
+                        const result = await handleSetBackground(command as SetBackgroundCommand, commandContext);
+                        applyResult(result);
+                    }
                     break;
                 }
                 case CommandType.ShowCharacter: {
@@ -10312,7 +10539,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     // Register the timer ALWAYS (the variable is optional — for a Meter/conditions). The
                     // countdown runs and fires onComplete regardless of whether a variable is bound.
                     // A blocking timer must end to resume the story, so loop is ignored while blocking.
-                    const key = startTimer(cmd.blockEngine ? { ...cmd, loop: false } : cmd);
+                    // A story-blocking timer can't outlive its story position — never keep/remember it.
+                    const key = startTimer(cmd.blockEngine ? { ...cmd, loop: false, keepAcrossGames: undefined, rememberBetweenSessions: undefined } : cmd);
                     if (cmd.blockEngine) {
                         // Pause the story here; on-screen buttons stay clickable. The tick (on finish) or a
                         // Stop Timer button resumes via blockingTimerRef; a scene jump clears it.
@@ -10333,21 +10561,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 default: {
                     // Custom command registered by a plugin (type = "pluginId.command").
-                    const customDef = pluginManager.getCommand(command.type as string);
+                    const customDef = pluginManager.getCommand((command as any).type as string);
                     if (customDef) {
-                        const ownerId = pluginManager.getCommandOwner(command.type as string);
+                        const ownerId = pluginManager.getCommandOwner((command as any).type as string);
                         const api = ownerId ? pluginManager.getApi(ownerId) : undefined;
                         if (api) {
                             try {
                                 const params = (command as any).params || (command as any).parameters || {};
                                 const ret = customDef.handler(params, api);
                                 if (ret && typeof (ret as any).then === 'function') {
-                                    (ret as Promise<any>).catch(e => console.error(`[Custom command ${command.type}] handler error:`, e));
+                                    (ret as Promise<any>).catch(e => console.error(`[Custom command ${(command as any).type}] handler error:`, e));
                                 } else if (ret && (ret as any).advance === false) {
                                     instantAdvance = false;
                                 }
                             } catch (e) {
-                                console.error(`[Custom command ${command.type}] handler error:`, e);
+                                console.error(`[Custom command ${(command as any).type}] handler error:`, e);
                             }
                         }
                     }
@@ -10361,9 +10589,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Handle command advancement based on async modifier
             runtimeDebugLog('[DEBUG] Command execution complete:', command.type, '| shouldRunAsync:', shouldRunAsync, '| instantAdvance:', instantAdvance);
             if (shouldRunAsync) {
-                // Run async: advance immediately, let command complete in background
-                runtimeDebugLog('[DEBUG] Running async - advancing immediately');
+                // Run async: advance immediately, let command complete in background.
+                // The advance is flushed SYNCHRONOUSLY (after a microtask hop out of React's
+                // effect phase) so the next stacked command executes in the SAME task — the
+                // whole run of parallel commands lands in ONE painted frame. A plain advance()
+                // costs a paint per command (the loop is a post-paint effect), which visibly
+                // staggered "simultaneous" commands one after another.
+                runtimeDebugLog('[DEBUG] Running async - advancing immediately (same-frame flush)');
                 advance();
+                // Chain the NEXT command in this same task: a run of consecutive parallel
+                // commands executes before the browser can paint, so all their visuals land
+                // in ONE frame (a plain advance costs a painted frame per command — the loop
+                // is a post-paint effect). Branch markers are pre-handled by the effect and
+                // are never chained; the scheduler mark stops the follow-up effect cycle from
+                // re-running the chained command.
+                chainIntoNext();
             } else if (instantAdvance) {
                 // Normal: advance only if command was instant
                 runtimeDebugLog('[DEBUG] Instant advance - advancing now');
@@ -10376,7 +10616,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 console.error('[CRITICAL ERROR] Command execution failed:', {
                     commandType: command.type,
                     commandId: command.id,
-                    index: playerState.currentIndex,
+                    index: cmdIndex,
                     error: error instanceof Error ? error.message : String(error),
                     stack: error instanceof Error ? error.stack : undefined
                 });
@@ -10384,6 +10624,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 advance();
             }
         })();
+        };
+        executeAtIndex(command, playerState.currentIndex);
     }, [playerState, project, assetResolver, playSound, playVoice, evaluateConditions, fadeAudio, settings.musicVolume, startNewGame, stopAndResetMusic, stopAllSfx, stopSfx, hudStack]);
 
     // --- Input & Action Handlers ---
@@ -11279,6 +11521,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 // Clear player state, uiVariables, and return to title screen
                 updatePlayerState(null);
                 setHudStack([]);
+                // The story's timers must not follow the player onto the title screen (they used
+                // to keep ticking invisibly here — with menu screens now rendering timer values,
+                // that leak would become visible). Keep-across-games timers carry on by design.
+                clearTimersForGameBoundary();
                 // Reset variables to defaults + persistent overrides when quitting to title
                 // This ensures CG unlock status (persistent vars) is still visible on menu screens
                 const resetVars = getInitialVariablesWithPersistent(project.variables, project.id);
@@ -11327,6 +11573,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const audio = musicAudioRef.current;
             if (audio) { audio.pause(); audio.currentTime = 0; audio.src = ''; }
             stopAllSfx();
+            // Remembered timers: last progress write before the app dies (quitApp may not fire beforeunload).
+            flushRememberedTimersRef.current();
             if (isStandalone) {
                 // A genuine built/exported game. Desktop (Electron): quit the whole app.
                 const electronAPI = (window as any).electronAPI;
@@ -12913,9 +13161,28 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     }
                 }
             });
-            toRemove.forEach(k => timers.delete(k));
+            // A finished (non-loop) remembered timer must also vanish from storage, or it would
+            // resurrect at its end value on the next boot. (Rare event — direct write is fine.)
+            toRemove.forEach(k => {
+                if (timers.get(k)?.rememberBetweenSessions) {
+                    const map = loadRememberedTimers(project.id);
+                    if (k in map) { delete map[k]; saveRememberedTimers(project.id, map); }
+                }
+                timers.delete(k);
+            });
             if (Object.keys(varWrites).length) {
-                updatePlayerState(p => p ? { ...p, variables: { ...p.variables, ...varWrites } } : null);
+                // Pre-game (title screen etc.) the menu store is what screens render from.
+                if (playerStateRef.current) updatePlayerState(p => p ? { ...p, variables: { ...p.variables, ...varWrites } } : null);
+                else setMenuVariables(m => ({ ...m, ...varWrites }));
+            }
+            // Throttled flush of remembered timers' progress (~2s) so closing the game loses at
+            // most a couple of seconds of a remembered timer.
+            let anyRemembered = false;
+            timers.forEach(t => { if (t.rememberBetweenSessions) anyRemembered = true; });
+            const now = Date.now();
+            if (anyRemembered && now - lastTimerFlushRef.current > 2000) {
+                lastTimerFlushRef.current = now;
+                flushRememberedTimersRef.current();
             }
             if (toRun.length) {
                 const run = handleUIActionRef.current;

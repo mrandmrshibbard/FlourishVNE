@@ -1073,7 +1073,9 @@
     "urlPlaceholder": "https://exemplo.com",
     "openNewTab": "Abrir em nova aba",
     "runOnlyIf": "Executar somente se (opcional)",
-    "timerResume": "Continuar de onde parou (se foi parado antes; precisa da variável)"
+    "timerResume": "Continuar de onde parou (se foi parado antes; precisa da variável)",
+    "timerKeepAcrossGames": "Continuar ao iniciar ou carregar um jogo",
+    "timerRememberSessions": "Lembrar entre sessões (retoma de onde estava quando o jogo reabre)"
   },
   "character": {
     "defaultPose": "Padrão (arte normal)"
