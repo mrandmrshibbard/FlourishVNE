@@ -983,6 +983,9 @@ export interface ShowItemCommand extends BaseCommand {
      *  item's Drag tag to match). On a successful drop the hot spot's actions fire + the icon is
      *  removed. A plain click still does giveOnClick. Additive-optional. No inventory required. */
     draggable?: boolean;
+    /** Mouse pointer while hovering: auto (normal) / hand / arrow (hide the hand) / custom image. */
+    hoverCursor?: 'auto' | 'hand' | 'arrow' | 'custom';
+    hoverCursorImage?: { type: 'image' | 'video'; id: VNID } | null;
     removeAfterPickup?: boolean;  // default true → the icon disappears on click
     pickUpOnce?: boolean;         // default true → remembered across scene revisits + saves
     actions?: VNUIAction[];       // extra on-click actions
@@ -1204,6 +1207,8 @@ export interface draggableImageElementRegion {
     tooltip?: string;
     /** Cursor on hover (default 'pointer') */
     cursor?: string;
+    /** Custom pointer image for this region (overrides `cursor`). Additive-optional. */
+    cursorImage?: { type: 'image'; id: VNID } | null;
     /** Highlight color on hover (CSS color, semi-transparent recommended) */
     highlightColor?: string;
     /** Only active when these conditions are met */
@@ -1224,6 +1229,9 @@ export interface ShowHotSpotCommand extends BaseCommand {
     trigger: 'click' | 'hover' | 'drag-drop';
     /** Actions fired when triggered (clicked, hovered, or dropped onto). */
     actions: VNUIAction[];
+    /** Mouse pointer while hovering: auto (normal) / hand / arrow (hide the hand) / custom image. */
+    hoverCursor?: 'auto' | 'hand' | 'arrow' | 'custom';
+    hoverCursorImage?: { type: 'image' | 'video'; id: VNID } | null;
     /** Only active when these conditions are met. */
     conditions?: VNCondition[];
     /** For drag-drop: only accept a dragged element carrying this tag (empty = accept any). */

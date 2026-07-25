@@ -420,6 +420,8 @@ export function handleShowItem(
     giveQuantity: command.quantity ?? 1,
     draggable: command.draggable,
     dragItemId: command.itemId,
+    hoverCursor: (command as any).hoverCursor,
+    hoverCursorImage: (command as any).hoverCursorImage,
     ...(command.liveConditions ? { conditions: command.conditions, live: true, liveTransition: command.liveTransition, liveTransitionDuration: command.liveTransitionDuration } : {}),
   };
 

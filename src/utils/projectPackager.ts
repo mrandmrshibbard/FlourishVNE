@@ -510,6 +510,49 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
             const singleCharFolder = charFolder.folder(charId);
             if (!singleCharFolder) continue;
 
+            // Pack ONE character-art URL (data: or fetchable ref) into `folder`, rewrite the
+            // field, and record it for the save-health check. Shared by base/pose/layer/pose-art
+            // fields — hand-copied per-field blocks silently dropping NEW art fields is exactly
+            // how pose art vanished from saves (broken sprites after reopen, 2026-07-23).
+            const packCharArt = async (
+                url: string | null | undefined,
+                folder: any,
+                filenameBase: string,
+                relPrefix: string,
+                assign: (rel: string) => void,
+                failureKey: string,
+            ): Promise<void> => {
+                if (!url || !folder) return;
+                if (url.startsWith('data:')) {
+                    const { blob, mimeType } = await dataUrlToBlob(url);
+                    const filename = `${filenameBase}.${mimeToExtension(mimeType)}`;
+                    folder.file(filename, blob);
+                    const rel = `${relPrefix}/${filename}`;
+                    assign(rel);
+                    addEmbedded('characters', rel);
+                } else {
+                    const fetched = await fetchUrlToBlob(url);
+                    if (fetched) {
+                        const { blob, mimeType } = fetched;
+                        const filename = `${filenameBase}.${mimeToExtension(mimeType)}`;
+                        folder.file(filename, blob);
+                        const rel = `${relPrefix}/${filename}`;
+                        assign(rel);
+                        addEmbedded('characters', rel);
+                    } else {
+                        addFailure(failureKey);
+                    }
+                }
+            };
+            // Video base sprite (was never packed — video-based characters broke on transfer).
+            await packCharArt((character as any).baseVideoUrl, singleCharFolder, 'base_video', `assets/characters/${charId}`, rel => { (character as any).baseVideoUrl = rel; }, `characters:${charId}:baseVideo`);
+            // Character Poses: each pose's own base art.
+            for (const poseId in ((character as any).poses || {})) {
+                const pose = (character as any).poses[poseId];
+                await packCharArt(pose.baseImageUrl, singleCharFolder, `pose_${poseId}_base`, `assets/characters/${charId}`, rel => { pose.baseImageUrl = rel; }, `characters:${charId}:pose:${poseId}:base`);
+                await packCharArt(pose.baseVideoUrl, singleCharFolder, `pose_${poseId}_base_video`, `assets/characters/${charId}`, rel => { pose.baseVideoUrl = rel; }, `characters:${charId}:pose:${poseId}:baseVideo`);
+            }
+
             if (character.baseImageUrl) {
                 if (character.baseImageUrl.startsWith('data:')) {
                     const { blob, mimeType } = await dataUrlToBlob(character.baseImageUrl);
@@ -581,6 +624,14 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
                                 addFailure(`characters:${charId}:${layerId}:${assetId}`);
                             }
                         }
+                    }
+                    // Layer-asset video art (was never packed).
+                    await packCharArt((asset as any).videoUrl, layerFolder, `${assetId}_video`, `assets/characters/${charId}/${layerId}`, rel => { (asset as any).videoUrl = rel; }, `characters:${charId}:${layerId}:${assetId}:video`);
+                    // Character Poses: this piece's per-pose pictures.
+                    for (const poseId in ((asset as any).poseArt || {})) {
+                        const art = (asset as any).poseArt[poseId];
+                        await packCharArt(art.imageUrl, layerFolder, `${assetId}_pose_${poseId}`, `assets/characters/${charId}/${layerId}`, rel => { art.imageUrl = rel; }, `characters:${charId}:${layerId}:${assetId}:pose:${poseId}`);
+                        await packCharArt(art.videoUrl, layerFolder, `${assetId}_pose_${poseId}_video`, `assets/characters/${charId}/${layerId}`, rel => { art.videoUrl = rel; }, `characters:${charId}:${layerId}:${assetId}:poseVideo:${poseId}`);
                     }
                 }
             }
@@ -687,6 +738,41 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
                     processedAssetIds.add(assetId);
                 } else {
                     addFailure(`ui:namebox`);
+                }
+            }
+        }
+    }
+
+    // Process custom mouse-pointer images (same rule as every ui.* art ref: pack or it
+    // ships broken — and reopening the project would lose the art).
+    {
+        const cursorSlots: any = (projectClone.ui as any).cursors;
+        for (const slotName of ['normal', 'hand', 'drag'] as const) {
+            const assetId = cursorSlots?.[slotName]?.image?.id;
+            if (!assetId || processedAssetIds.has(assetId)) continue;
+            const asset = projectClone.images[assetId] || projectClone.backgrounds[assetId];
+            const assetUrl = (asset as any)?.imageUrl;
+            if (!assetUrl) continue;
+            if (assetUrl.startsWith('data:')) {
+                const { blob, mimeType } = await dataUrlToBlob(assetUrl);
+                const filename = `cursor_${slotName}_${assetId}.${mimeToExtension(mimeType)}`;
+                assetFolder.folder('ui')?.file(filename, blob);
+                const embeddedPath = `assets/ui/${filename}`;
+                addEmbedded('ui', embeddedPath);
+                (asset as any).imageUrl = embeddedPath;
+                processedAssetIds.add(assetId);
+            } else {
+                const fetched = await fetchUrlToBlob(assetUrl);
+                if (fetched) {
+                    const { blob, mimeType } = fetched;
+                    const filename = `cursor_${slotName}_${assetId}.${mimeToExtension(mimeType)}`;
+                    assetFolder.folder('ui')?.file(filename, blob);
+                    const embeddedPath = `assets/ui/${filename}`;
+                    addEmbedded('ui', embeddedPath);
+                    (asset as any).imageUrl = embeddedPath;
+                    processedAssetIds.add(assetId);
+                } else {
+                    addFailure(`ui:cursor:${slotName}`);
                 }
             }
         }
@@ -1309,10 +1395,23 @@ export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array
 
     for (const char of Object.values(project.characters) as VNCharacter[]) {
         fields.push({ label: char.name || char.id, get: () => char.baseImageUrl, set: v => { char.baseImageUrl = v; } });
+        fields.push({ label: char.name || char.id, get: () => (char as any).baseVideoUrl, set: v => { (char as any).baseVideoUrl = v; } });
         fields.push({ label: `${char.name || char.id} font`, get: () => char.fontUrl, set: v => { char.fontUrl = v; } });
+        // Character Poses: pose bases + per-asset per-pose art. This list MUST mirror the
+        // save-side walk — an unhydrated field's file never reaches the asset store, and the
+        // sprite shows broken after reopening the project (Brad, 2026-07-23).
+        for (const pose of Object.values((char as any).poses || {}) as any[]) {
+            fields.push({ label: `${char.name || char.id} pose`, get: () => pose.baseImageUrl, set: v => { pose.baseImageUrl = v; } });
+            fields.push({ label: `${char.name || char.id} pose`, get: () => pose.baseVideoUrl, set: v => { pose.baseVideoUrl = v; } });
+        }
         for (const layer of Object.values(char.layers) as VNCharacterLayer[]) {
             for (const asset of Object.values(layer.assets) as VNLayerAsset[]) {
                 fields.push({ label: char.name || char.id, get: () => asset.imageUrl, set: v => { asset.imageUrl = v; } });
+                fields.push({ label: char.name || char.id, get: () => (asset as any).videoUrl, set: v => { (asset as any).videoUrl = v; } });
+                for (const art of Object.values((asset as any).poseArt || {}) as any[]) {
+                    fields.push({ label: `${char.name || char.id} pose art`, get: () => art.imageUrl, set: v => { art.imageUrl = v; } });
+                    fields.push({ label: `${char.name || char.id} pose art`, get: () => art.videoUrl, set: v => { art.videoUrl = v; } });
+                }
             }
         }
     }

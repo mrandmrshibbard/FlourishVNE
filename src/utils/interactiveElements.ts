@@ -66,6 +66,8 @@ function hotSpotElementToLegacy(el: UIHotSpotElement): VNHotSpot {
         highlightColor: el.highlightColor,
         visible: el.visible,
         visibleOpacity: el.visibleOpacity,
+        hoverCursor: (el as any).hoverCursor,
+        hoverCursorImage: (el as any).hoverCursorImage,
     };
 }
 
@@ -99,6 +101,7 @@ function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { i
                     : el.conditions,
                 actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
+                hoverCursor: anyEl.hoverCursor, hoverCursorImage: anyEl.hoverCursorImage,
             };
         }
         case UIElementType.draggableImageElement: {
@@ -114,6 +117,7 @@ function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { i
                 dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: m.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
+                hoverCursor: anyEl.hoverCursor, hoverCursorImage: anyEl.hoverCursorImage,
             };
         }
         case UIElementType.Image: {
@@ -137,6 +141,7 @@ function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { i
                 dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: img.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
+                hoverCursor: anyEl.hoverCursor, hoverCursorImage: anyEl.hoverCursorImage,
             };
         }
         case UIElementType.Text: {
@@ -150,6 +155,7 @@ function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { i
                 dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: t.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
+                hoverCursor: anyEl.hoverCursor, hoverCursorImage: anyEl.hoverCursorImage,
             };
         }
         case UIElementType.Button: {
@@ -164,6 +170,7 @@ function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { i
                 dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: b.conditions,
                 actions: b.actions ?? anyEl.actions,
+                hoverCursor: anyEl.hoverCursor, hoverCursorImage: anyEl.hoverCursorImage,
                 clickSoundId: b.clickSoundId ?? null,
                 hoverSoundId: b.hoverSoundId ?? null,
             };
@@ -184,6 +191,7 @@ function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { i
                 dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: ti.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
+                hoverCursor: anyEl.hoverCursor, hoverCursorImage: anyEl.hoverCursorImage,
             };
         }
         default:

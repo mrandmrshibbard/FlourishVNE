@@ -345,7 +345,25 @@
     "colorBackground": "Plano de fundo",
     "hoverColor": "Cor ao passar o mouse",
     "buttonColor": "Cor do botão",
-    "overlayColor": "Cor da sobreposição / fundo"
+    "overlayColor": "Cor da sobreposição / fundo",
+    "mousePointer": "Ponteiro do mouse",
+    "mousePointerHint": "Dê ao seu jogo ponteiros próprios. Ponteiros muito grandes podem não aparecer em todos os computadores — cerca de 32 px é o mais seguro.",
+    "cursorNone": "Nenhum — o ponteiro do próprio computador",
+    "cursorSize": "Tamanho (px)",
+    "cursorHot": "Ponto de clique",
+    "cursorHotTip": "Ponta superior esquerda (como uma seta)",
+    "cursorHotCenter": "Centro (como uma mira)",
+    "cursorNormal": "Ponteiro normal",
+    "cursorNormalHint": "Aparece onde nada de especial está acontecendo.",
+    "cursorHand": "Mãozinha (sobre coisas clicáveis)",
+    "cursorHandHint": "Aparece sobre botões, áreas clicáveis e escolhas.",
+    "cursorDrag": "Enquanto arrasta",
+    "cursorDragHint": "Aparece enquanto o jogador segura e arrasta um objeto.",
+    "cursorDialogue": "Quando a história espera um clique",
+    "cursorChoices": "Sobre os botões de escolha",
+    "cursorShowHand": "Mostrar a mãozinha",
+    "cursorKeepArrow": "Manter a seta normal",
+    "mousePointerDesc": "Cursores personalizados para o jogo inteiro"
   },
   "elementInspector": {
     "itemWhich": "Item",
@@ -1079,5 +1097,13 @@
   },
   "character": {
     "defaultPose": "Padrão (arte normal)"
+  },
+  "cursorSelect": {
+    "label": "Ponteiro do mouse ao passar por cima",
+    "auto": "Automático (comportamento normal)",
+    "hand": "Mostrar a mãozinha",
+    "arrow": "Manter a seta normal (não entregar o segredo)",
+    "custom": "Imagem personalizada…",
+    "image": "Imagem do ponteiro"
   }
 }

@@ -25,6 +25,7 @@ import { hasBands, sortedBands } from '../../features/variables/bands';
 import VariablePicker from '../variables/VariablePicker';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../../features/character/types';
 import { FormField, TextInput, Select, ColorInput, RangeInput } from '../ui/Form';
+import CursorSelect from '../ui/CursorSelect';
 import { pluginManager } from '../../features/plugins/PluginManagerService';
 import { TrashIcon } from '../icons';
 import FontEditor from '../ui/FontEditor';
@@ -389,10 +390,13 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             </FormField>
                         </div>
                     </>,
-                    audio: <div className="grid grid-cols-2 gap-2">
-                        <AssetSelector label={t('elementInspector.hoverSound')} assetType="audio" value={el.hoverSoundId} onChange={id => updateElement({ hoverSoundId: id })} />
-                        <AssetSelector label={t('elementInspector.clickSound')} assetType="audio" value={el.clickSoundId} onChange={id => updateElement({ clickSoundId: id })} />
-                    </div>,
+                    audio: <>
+                        <div className="grid grid-cols-2 gap-2">
+                            <AssetSelector label={t('elementInspector.hoverSound')} assetType="audio" value={el.hoverSoundId} onChange={id => updateElement({ hoverSoundId: id })} />
+                            <AssetSelector label={t('elementInspector.clickSound')} assetType="audio" value={el.clickSoundId} onChange={id => updateElement({ clickSoundId: id })} />
+                        </div>
+                        <CursorSelect value={{ hoverCursor: (el as any).hoverCursor, hoverCursorImage: (el as any).hoverCursorImage }} onChange={patch => updateElement(patch as any)} />
+                    </>,
                     logic: <>
                         <h4 className="font-bold mb-1 text-slate-400 text-xs">{t('elementInspector.primaryAction')}</h4>
                         <ActionEditor action={el.action} onActionChange={action => updateElement({ action })} />
@@ -1820,7 +1824,10 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             )}
                         </div>
                     ),
-                    logic: <UIActionsListEditor actions={el.actions || []} project={project} onChange={acts => updateElement({ actions: acts } as any)} label={mode === 'pickup' ? t('elementInspector.itemPickupActions', 'When picked up, also run') : t('elementInspector.itemClickActions', 'When clicked, run')} />,
+                    logic: <>
+                        <UIActionsListEditor actions={el.actions || []} project={project} onChange={acts => updateElement({ actions: acts } as any)} label={mode === 'pickup' ? t('elementInspector.itemPickupActions', 'When picked up, also run') : t('elementInspector.itemClickActions', 'When clicked, run')} />
+                        <CursorSelect value={{ hoverCursor: el.hoverCursor, hoverCursorImage: el.hoverCursorImage }} onChange={patch => updateElement(patch as any)} />
+                    </>,
                 };
             }
             case UIElementType.Custom: {

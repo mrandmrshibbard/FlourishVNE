@@ -124,7 +124,18 @@ export async function resolveProjectAssets(
       Object.values(layer.assets || {}).forEach(asset => {
         if (isFilePath(asset.imageUrl)) tasks.push({ obj: asset, key: 'imageUrl', url: asset.imageUrl });
         if (isFilePath((asset as any).videoUrl)) tasks.push({ obj: asset, key: 'videoUrl', url: (asset as any).videoUrl });
+        // Character Poses: a piece's per-pose pictures live in poseArt — miss these and
+        // pose art ships broken (exactly what happened on itch: refs with no packed file).
+        Object.values((asset as any).poseArt || {}).forEach((art: any) => {
+          if (isFilePath(art.imageUrl)) tasks.push({ obj: art, key: 'imageUrl', url: art.imageUrl });
+          if (isFilePath(art.videoUrl)) tasks.push({ obj: art, key: 'videoUrl', url: art.videoUrl });
+        });
       });
+    });
+    // Character Poses: each pose's own base sprite.
+    Object.values((char as any).poses || {}).forEach((pose: any) => {
+      if (isFilePath(pose.baseImageUrl)) tasks.push({ obj: pose, key: 'baseImageUrl', url: pose.baseImageUrl });
+      if (isFilePath(pose.baseVideoUrl)) tasks.push({ obj: pose, key: 'baseVideoUrl', url: pose.baseVideoUrl });
     });
   });
 
@@ -999,12 +1010,21 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
     addAsset(char.baseVideoUrl, `char_${char.id}`);
     addAsset(char.fontUrl, `char_${char.id}_font`);
     
-    // Collect layer assets
+    // Collect layer assets (incl. Character Poses per-pose art)
     Object.values(char.layers || {}).forEach(layer => {
       Object.values(layer.assets || {}).forEach(asset => {
         addAsset(asset.imageUrl, `char_${char.id}_layer`);
         addAsset(asset.videoUrl, `char_${char.id}_layer`);
+        Object.values((asset as any).poseArt || {}).forEach((art: any) => {
+          addAsset(art.imageUrl, `char_${char.id}_pose`);
+          addAsset(art.videoUrl, `char_${char.id}_pose`);
+        });
       });
+    });
+    // Character Poses: pose base sprites
+    Object.values((char as any).poses || {}).forEach((pose: any) => {
+      addAsset(pose.baseImageUrl, `char_${char.id}_pose`);
+      addAsset(pose.baseVideoUrl, `char_${char.id}_pose`);
     });
   });
 
@@ -1078,6 +1098,16 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
     const assetId = project.ui.nameboxImage.id;
     const bg = project.backgrounds?.[assetId] || project.images?.[assetId];
     if (bg) addAsset(bg.imageUrl, 'ui');
+  }
+
+  // Collect custom mouse-pointer images (Character Poses export-gap lesson: every new
+  // art field must be added to BOTH typed walks or it ships broken in built games).
+  const cursorSlots: any = (project.ui as any).cursors;
+  for (const slot of [cursorSlots?.normal, cursorSlots?.hand, cursorSlots?.drag]) {
+    const assetId = slot?.image?.id;
+    if (!assetId) continue;
+    const bg = project.images?.[assetId] || project.backgrounds?.[assetId];
+    if (bg) addAsset((bg as any).imageUrl, 'ui');
   }
 
   // Collect input box image

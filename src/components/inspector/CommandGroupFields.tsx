@@ -25,6 +25,7 @@ import type { PhonePortraitSource } from '../../features/ui/types';
 import { FormField, Select, TextInput, TextArea, ColorInput, RangeInput } from '../ui/Form';
 import { TrashIcon, XMarkIcon, PlusIcon, ChevronUpIcon, ChevronDownIcon } from '../icons';
 import AssetSelector from '../ui/AssetSelector';
+import CursorSelect from '../ui/CursorSelect';
 import ActionEditor from '../menu-editor/ActionEditor';
 import ActionCard from '../menu-editor/ActionCard';
 import ConditionsEditor from '../ui/ConditionsEditor';
@@ -722,6 +723,7 @@ const ShowItemGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowItemCommand;
                 {cmd.draggable && (
                     <p className="text-[10px] text-[var(--text-muted)] -mt-1">{t('showItem.draggableHint', 'The player presses and drags this item onto a drop-zone hot spot that accepts the item’s Drag tag (set the tag in Systems → Items). On a successful drop the hot spot’s actions fire and the icon is removed. No inventory needed.')}</p>
                 )}
+                <CursorSelect value={{ hoverCursor: (cmd as any).hoverCursor, hoverCursorImage: (cmd as any).hoverCursorImage }} onChange={patch => updateCommand(patch as any)} />
                 <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
                     <input type="checkbox" checked={cmd.removeAfterPickup !== false} onChange={e => updateCommand({ removeAfterPickup: e.target.checked } as any)} className="w-4 h-4" />
                     {t('showItem.removeAfterPickup')}
@@ -2190,6 +2192,7 @@ const ShowHotSpotGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
                         </Select>
                     </FormField>
                 </div>
+                <CursorSelect value={{ hoverCursor: (cmd as any).hoverCursor, hoverCursorImage: (cmd as any).hoverCursorImage }} onChange={patch => updateCommand(patch as any)} />
                 {cmd.trigger === 'drag-drop' && (
                     <FormField label={t('hotspot.acceptTag')}>
                         <TextInput list="flourish-hotspot-cmd-tags" value={cmd.acceptedTag || ''} onChange={e => updateCommand({ acceptedTag: e.target.value } as any)} placeholder={t('hotspot.acceptTagPlaceholder')} />

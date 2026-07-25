@@ -154,7 +154,8 @@ export interface ButtonOverlay {
     dragItemId?: VNID | null;
     /** Visible/clickable sub-region (inset fractions). For image buttons, restricts the in-game click
      *  hit-area to the visible art so transparent corners aren't clickable. Additive-optional. */
-    contentBox?: import('../../../types').VNContentBox;
+    contentBox?: import('../../../types').VNContentBox;    hoverCursor?: 'auto' | 'hand' | 'arrow' | 'custom';
+    hoverCursorImage?: { type: 'image' | 'video'; id: string } | null;
 }
 
 /** An interactive hot spot placed on the scene stage (from a ShowHotSpot command). */
@@ -180,7 +181,8 @@ export interface HotSpotOverlay {
     /** Stage stacking order (from the command's `layer`). When set, the spot uses the shared layer
      *  band (1 + layer*100) so items/images can sit above it; when undefined it keeps the legacy
      *  fixed z (above characters, below dialogue) for back-compat. */
-    layer?: number;
+    layer?: number;    hoverCursor?: 'auto' | 'hand' | 'arrow' | 'custom';
+    hoverCursorImage?: { type: 'image' | 'video'; id: string } | null;
 }
 
 export interface StageCharacterTransition {

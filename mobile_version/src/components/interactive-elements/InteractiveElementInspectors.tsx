@@ -11,6 +11,7 @@
  */
 import React, { useMemo } from 'react';
 import { ColorInput } from '../ui/Form';
+import CursorSelect from '../ui/CursorSelect';
 import { useTranslation } from 'react-i18next';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
@@ -62,6 +63,8 @@ function hotZoneElementPatchToTyped(
     if ('snapToHotSpot' in patch) out.snapToHotSpot = patch.snapToHotSpot;
     if ('hideOnDrop' in patch) out.hideOnDrop = patch.hideOnDrop;
     if ('dragTag' in patch) out.dragTag = patch.dragTag;
+    if ('hoverCursor' in patch) out.hoverCursor = patch.hoverCursor;
+    if ('hoverCursorImage' in patch) out.hoverCursorImage = patch.hoverCursorImage;
     if ('boundItemId' in patch) out.boundItemId = patch.boundItemId;
     if ('actions' in patch) out.actions = patch.actions;
     if ('clickSoundId' in patch) out.clickSoundId = patch.clickSoundId;
@@ -136,7 +139,7 @@ function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
                 draggableImageElementRegions: (el as any).draggableImageElementRegions,
                 x: el.x, y: el.y, width: el.width, height: el.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
-                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
+                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId, hoverCursor: anyEl.hoverCursor, hoverCursorImage: anyEl.hoverCursorImage,
                 conditions: el.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
             };
@@ -155,7 +158,7 @@ function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
                 videoTrimStart: anyEl.videoTrimStart, videoTrimEnd: anyEl.videoTrimEnd,
                 x: el.x, y: el.y, width: el.width, height: el.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
-                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
+                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId, hoverCursor: anyEl.hoverCursor, hoverCursorImage: anyEl.hoverCursorImage,
                 conditions: el.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
             };
@@ -166,7 +169,7 @@ function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
                 imageId: '' as VNID, text: (el as any).text, font: (el as any).font,
                 x: el.x, y: el.y, width: el.width, height: el.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
-                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
+                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId, hoverCursor: anyEl.hoverCursor, hoverCursorImage: anyEl.hoverCursorImage,
                 conditions: el.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
             };
@@ -179,7 +182,7 @@ function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
                 backgroundColor: (el as any).backgroundColor,
                 x: el.x, y: el.y, width: el.width, height: el.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
-                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
+                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId, hoverCursor: anyEl.hoverCursor, hoverCursorImage: anyEl.hoverCursorImage,
                 conditions: el.conditions,
                 actions: (el as any).actions ?? anyEl.actions,
                 clickSoundId: (el as any).clickSoundId ?? null,
@@ -198,7 +201,7 @@ function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
                 maxLength: (el as any).maxLength,
                 x: el.x, y: el.y, width: el.width, height: el.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
-                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
+                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId, hoverCursor: anyEl.hoverCursor, hoverCursorImage: anyEl.hoverCursorImage,
                 conditions: el.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
             };
@@ -278,6 +281,7 @@ export const HotSpotProperties: React.FC<{
                     </select>
                 </label>
             </div>
+            <CursorSelect value={{ hoverCursor: (spot as any).hoverCursor, hoverCursorImage: (spot as any).hoverCursorImage }} onChange={patch => onUpdate(patch as any)} />
 
             {spot.trigger === 'drag-drop' && (
                 <div className="space-y-2 rounded-md border border-[var(--border-subtle)] p-2 bg-[var(--bg-primary)]/40">
@@ -925,6 +929,8 @@ export const InteractiveElementProperties: React.FC<{
                         </datalist>
                     </>
                 )}
+                {/* Shown for EVERY interactive element (clickable or draggable) — not just draggables. */}
+                <CursorSelect value={{ hoverCursor: (element as any).hoverCursor, hoverCursorImage: (element as any).hoverCursorImage }} onChange={patch => onUpdate(patch as any)} />
             </div>
 
             <div>

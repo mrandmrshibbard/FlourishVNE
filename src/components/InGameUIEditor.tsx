@@ -58,7 +58,8 @@ export type InGameUIElement =
     | 'confirmDialogs'
     | 'phone'
     | 'textboxThemes'
-    | 'sceneTransitions';
+    | 'sceneTransitions'
+    | 'mousePointer';
 
 interface ElementConfig {
     id: InGameUIElement;
@@ -77,6 +78,7 @@ const ELEMENTS: ElementConfig[] = [
     { id: 'phone', label: 'Phone', icon: <ChatBubbleIcon className="w-4 h-4" />, description: 'In-game cellphone & messaging' },
     { id: 'textboxThemes', label: 'Textbox Themes', icon: <BookmarkSquareIcon className="w-4 h-4" />, description: 'Reusable per-character dialogue box designs' },
     { id: 'sceneTransitions', label: 'Scene Transitions', icon: <SparklesIcon className="w-4 h-4" />, description: 'Your own scene-change animations (closing + opening)' },
+    { id: 'mousePointer', label: 'Mouse Pointer', icon: <SparklesIcon className="w-4 h-4" />, description: 'Custom cursors for the whole game' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -1148,6 +1150,77 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
     const inputCls = propsInputCls;
 
     /* Dialogue Box properties */
+    if (element === 'mousePointer') {
+        const cursors: any = (ui as any).cursors || {};
+        // Write a slot patch; empty slots are REMOVED so untouched projects stay byte-identical.
+        const setSlot = (slot: 'normal' | 'hand' | 'drag', patch: any | null) => {
+            const next: any = { ...cursors };
+            const merged = patch === null ? null : { ...(next[slot] || {}), ...patch };
+            if (!merged || !merged.image) delete next[slot]; else next[slot] = merged;
+            if (!next.normal && !next.hand && !next.drag && !next.dialogueAdvance && !next.choices) {
+                onUpdate({ cursors: undefined } as any);
+            } else {
+                onUpdate({ cursors: next } as any);
+            }
+        };
+        const setBehavior = (key: 'dialogueAdvance' | 'choices', v: string) => {
+            const next: any = { ...cursors };
+            if (v === 'hand') delete next[key]; else next[key] = v;
+            if (!next.normal && !next.hand && !next.drag && !next.dialogueAdvance && !next.choices) onUpdate({ cursors: undefined } as any);
+            else onUpdate({ cursors: next } as any);
+        };
+        const imageOptions = [...Object.values(project.images || {}), ...Object.values(project.backgrounds || {})] as any[];
+        const slotEditor = (slot: 'normal' | 'hand' | 'drag', label: string, hint: string) => {
+            const sc: any = cursors[slot] || {};
+            return (
+                <div className="space-y-1.5 rounded-md border border-[var(--border-subtle)] p-2">
+                    <Field label={label}>
+                        <select className={inputCls} value={sc.image?.id || ''}
+                            onChange={e => setSlot(slot, e.target.value ? { image: { type: 'image', id: e.target.value } } : null)}>
+                            <option value="">{t('inGameUi.cursorNone', "None — the computer's own pointer")}</option>
+                            {imageOptions.map((a: any) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+                        </select>
+                    </Field>
+                    {sc.image && (
+                        <div className="grid grid-cols-2 gap-2">
+                            <NumInput label={t('inGameUi.cursorSize', 'Size (px)')} value={sc.size} fallback={32} min={8} max={128} onChange={v => setSlot(slot, { size: v })} />
+                            <Field label={t('inGameUi.cursorHot', 'Click point')}>
+                                <select className={inputCls} value={sc.hotPreset || 'tip'} onChange={e => setSlot(slot, { hotPreset: e.target.value })}>
+                                    <option value="tip">{t('inGameUi.cursorHotTip', 'Top-left tip (like an arrow)')}</option>
+                                    <option value="center">{t('inGameUi.cursorHotCenter', 'Center (like a crosshair)')}</option>
+                                </select>
+                            </Field>
+                        </div>
+                    )}
+                    <p className="text-[10px] text-[var(--text-muted)]">{hint}</p>
+                </div>
+            );
+        };
+        return (
+            <div className="p-3 space-y-2">
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 mb-1">{t('Mouse pointer')}</h4>
+                <p className="text-[10px] text-[var(--text-muted)]">{t('inGameUi.mousePointerHint', 'Give your game its own pointers. Very large pointers may not show on every computer — around 32 px is safest.')}</p>
+                {slotEditor('normal', t('inGameUi.cursorNormal', 'Normal pointer'), t('inGameUi.cursorNormalHint', 'Shown everywhere nothing special is happening.'))}
+                {slotEditor('hand', t('inGameUi.cursorHand', 'Hand (over clickable things)'), t('inGameUi.cursorHandHint', 'Shown over buttons, hot spots, choices — anything clickable.'))}
+                {slotEditor('drag', t('inGameUi.cursorDrag', 'While dragging'), t('inGameUi.cursorDragHint', 'Shown while the player holds and drags an object.'))}
+                <div className="grid grid-cols-1 gap-2 pt-1">
+                    <Field label={t('inGameUi.cursorDialogue', 'When the story is waiting for a click')}>
+                        <select className={inputCls} value={cursors.dialogueAdvance || 'hand'} onChange={e => setBehavior('dialogueAdvance', e.target.value)}>
+                            <option value="hand">{t('inGameUi.cursorShowHand', 'Show the hand')}</option>
+                            <option value="arrow">{t('inGameUi.cursorKeepArrow', 'Keep the plain arrow')}</option>
+                        </select>
+                    </Field>
+                    <Field label={t('inGameUi.cursorChoices', 'Over choice buttons')}>
+                        <select className={inputCls} value={cursors.choices || 'hand'} onChange={e => setBehavior('choices', e.target.value)}>
+                            <option value="hand">{t('inGameUi.cursorShowHand', 'Show the hand')}</option>
+                            <option value="arrow">{t('inGameUi.cursorKeepArrow', 'Keep the plain arrow')}</option>
+                        </select>
+                    </Field>
+                </div>
+            </div>
+        );
+    }
+
     if (element === 'dialogueBox') {
         return (
             <div className="p-3 space-y-2">

@@ -326,7 +326,9 @@
     "colorBackground": "Background",
     "hoverColor": "Hover Color",
     "buttonColor": "Button Color",
-    "overlayColor": "Overlay / Backdrop Color"
+    "overlayColor": "Overlay / Backdrop Color",
+    "mousePointer": "Mouse Pointer",
+    "mousePointerDesc": "Custom cursors for the whole game"
   },
   "elementInspector": {
     "propsTitle": "Properties",

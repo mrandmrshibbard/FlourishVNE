@@ -182,6 +182,17 @@ export interface VNProjectUI {
     /** The screen generated as THE player-character creator (Systems hub "Edit" link).
      *  Editor-only bookkeeping; nothing reads it at runtime. Additive-optional. */
     characterCreatorScreenId?: VNID | null;
+    /** Custom mouse pointers for the whole game (additive-optional; absent = the browser's
+     *  own cursors). `normal` replaces the plain arrow, `hand` shows over clickable things,
+     *  `drag` while grabbing/dragging. `dialogueAdvance`/`choices` pick which pointer the
+     *  story-click area and choice buttons use ('hand' default). */
+    cursors?: {
+        normal?: VNCursorSlot;
+        hand?: VNCursorSlot;
+        drag?: VNCursorSlot;
+        dialogueAdvance?: 'hand' | 'arrow';
+        choices?: 'hand' | 'arrow';
+    };
     dialogueBoxImage: UIAsset | null;
     dialogueBoxBorderImage: UIAsset | null;
     dialogueBorderPadding?: number; // px of border visible around the background (default 12)
@@ -610,6 +621,19 @@ export type UIAsset = {
     trimEnd?: number;
 }
 
+/** One custom mouse-pointer image slot (game-wide cursor set). Additive-optional: absent =
+ *  the browser's normal cursor. `size` is the drawn width in px (clamped ≤128 — browsers
+ *  ignore larger cursor images; 32 is the safe default). The click point ("hot spot") is the
+ *  pixel that actually clicks: preset 'tip' = top-left (like a normal arrow), 'center' for
+ *  crosshair-style pointers; hotX/hotY fine-tune in drawn pixels. */
+export interface VNCursorSlot {
+    image?: UIAsset | null;
+    size?: number;
+    hotPreset?: 'tip' | 'center';
+    hotX?: number;
+    hotY?: number;
+}
+
 export enum UIElementType {
     Button = 'Button',
     Text = 'Text',
@@ -728,6 +752,11 @@ interface BaseUIElement {
     clickSoundId?: VNID | null;
     /** Sound effect played when the element is hovered */
     hoverSoundId?: VNID | null;
+    /** Mouse pointer while hovering this element: 'auto' (normal behavior), 'hand',
+     *  'arrow' (suppress the hand — hidden-object secrecy), or 'custom' + an image.
+     *  Additive-optional; absent = today's behavior. */
+    hoverCursor?: 'auto' | 'hand' | 'arrow' | 'custom';
+    hoverCursorImage?: UIAsset | null;
 }
 
 export interface UIButtonElement extends BaseUIElement {
@@ -1137,6 +1166,8 @@ export interface UIHotSpotElement extends BaseUIElement {
     /** How solid the drawn spot looks when `visible` is on (0..1, default 1). Purely visual —
      *  the click/drop area is unaffected. */
     visibleOpacity?: number;
+    hoverCursor?: 'auto' | 'hand' | 'arrow' | 'custom';
+    hoverCursorImage?: UIAsset | null;
 }
 
 /** A registry item shown on a screen — the item's icon renders automatically (stays in sync when
@@ -1473,6 +1504,8 @@ export interface VNHotSpot {
     /** How solid the drawn spot looks when `visible` is on (0..1, default 1). Purely visual —
      *  the click/drop area is unaffected. */
     visibleOpacity?: number;
+    hoverCursor?: 'auto' | 'hand' | 'arrow' | 'custom';
+    hoverCursorImage?: UIAsset | null;
 }
 
 export type HotZoneElementType = 'image' | 'text' | 'button' | 'video' | 'textInput' | 'draggableImageElement';
@@ -1513,6 +1546,8 @@ export interface VNHotZoneElement {
     actions?: VNUIAction[]; // Actions on click (when not dragging)
     clickSoundId?: VNID | null;
     hoverSoundId?: VNID | null;
+    hoverCursor?: 'auto' | 'hand' | 'arrow' | 'custom';
+    hoverCursorImage?: UIAsset | null;
     hoverImageId?: VNID; // Hover state image (for draggableImageElement type, Ren'Py-style)
     draggableImageElementRegions?: draggableImageElementRegion[]; // Clickable regions (for draggableImageElement type)
 }

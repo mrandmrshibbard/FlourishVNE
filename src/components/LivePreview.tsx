@@ -58,6 +58,7 @@ import { VNVariable, VNSetVariableOperator, VNVariableScope } from '../features/
 import { ScreenOverlayEffects, runFireworksSim, deadPixelTile, LightsLayer } from './live-preview/ScreenOverlayEffects';
 import { ParticleSystem } from './live-preview/ParticleSystem';
 import { registerDropTarget, hitTestDropTarget } from './live-preview/dropTargetRegistry';
+import { buildCursorValue, buildSlotValue, collectCursorAssetRefs, resolveCursorAssetUrl } from '../utils/cursorStyle';
 import { AnimatedDialogueText, useRainbowTick } from './live-preview/AnimatedDialogueText';
 import { GlossaryTooltip } from './live-preview/GlossaryTooltip';
 import { compileGlossary } from '../utils/glossaryMatcher';
@@ -122,6 +123,20 @@ const hexToRgbStr = (hex: string): string => {
 
 // LightsLayer (placed twinkling lights renderer) moved to ScreenOverlayEffects so the PlaceLights
 // command and the screen-attached 'lights' effect share one renderer — imported below.
+
+// ── Custom mouse pointers ───────────────────────────────────────────────────────────────
+// Values are full CSS cursor strings ("url(data:...) x y, pointer") built once at boot by
+// cursorStyle.ts. Game-wide slots live in CSS vars on the play root; per-element customs
+// live here keyed by asset id (module map so deep components read it without prop drilling —
+// a cursorEpoch prop re-renders the memoized screen tree when values arrive).
+const vnCustomCursorValues: Record<string, string> = {};
+/** Cursor for an element's hover choice. 'auto'/absent → the site's normal value. */
+function vnCursorFor(hoverCursor?: string | null, imageId?: string | null, autoValue?: string): string | undefined {
+    if (hoverCursor === 'arrow') return 'var(--vn-cursor-normal, default)';
+    if (hoverCursor === 'hand') return 'var(--vn-cursor-hand, pointer)';
+    if (hoverCursor === 'custom' && imageId && vnCustomCursorValues[imageId]) return vnCustomCursorValues[imageId];
+    return autoValue;
+}
 
 // ── Sprite image load tracking ──────────────────────────────────────────────────────────
 // In web-hosted builds (itch.io etc.) each character layer is its own network fetch, so on a
@@ -774,7 +789,7 @@ const ButtonOverlayElement: React.FC<{
             padding: 0,
             border: 'none',
             background: 'transparent',
-            cursor: 'pointer',
+            cursor: 'var(--vn-cursor-hand, pointer)',
             lineHeight: 0,
             color: overlay.textColor,
             fontSize: `calc(var(--ovl-scale, 1) * ${bFontSize}px)`,
@@ -793,7 +808,7 @@ const ButtonOverlayElement: React.FC<{
             fontWeight: overlay.fontWeight,
             borderRadius: `calc(var(--ovl-scale, 1) * ${bBorderRadius}px)`,
             border: 'none',
-            cursor: 'pointer',
+            cursor: 'var(--vn-cursor-hand, pointer)',
             padding: 0,
             paddingLeft: btnPadX,
             paddingRight: btnPadX,
@@ -832,7 +847,7 @@ const ButtonOverlayElement: React.FC<{
         >
             <button
                 {...(hasCb ? {} : interactiveProps)}
-                style={{ ...buttonStyle, pointerEvents: hasCb ? 'none' : buttonStyle.pointerEvents, cursor: overlay.draggable ? (dragging ? 'grabbing' : 'grab') : buttonStyle.cursor }}
+                style={{ ...buttonStyle, pointerEvents: hasCb ? 'none' : buttonStyle.pointerEvents, cursor: overlay.draggable ? (dragging ? 'var(--vn-cursor-grabbing, grabbing)' : vnCursorFor((overlay as any).hoverCursor, (overlay as any).hoverCursorImage?.id, 'var(--vn-cursor-drag, grab)')) : vnCursorFor((overlay as any).hoverCursor, (overlay as any).hoverCursorImage?.id, buttonStyle.cursor as any) }}
             >
                 {/* Image drives the button size (width 100%, height auto = aspect-correct). */}
                 {displayImage && (
@@ -859,7 +874,7 @@ const ButtonOverlayElement: React.FC<{
                         left: `${cb.left * 100}%`, top: `${cb.top * 100}%`,
                         right: `${cb.right * 100}%`, bottom: `${cb.bottom * 100}%`,
                         pointerEvents: 'auto', zIndex: 2,
-                        cursor: overlay.draggable ? (dragging ? 'grabbing' : 'grab') : 'pointer',
+                        cursor: overlay.draggable ? (dragging ? 'var(--vn-cursor-grabbing, grabbing)' : vnCursorFor((overlay as any).hoverCursor, (overlay as any).hoverCursorImage?.id, 'var(--vn-cursor-drag, grab)')) : vnCursorFor((overlay as any).hoverCursor, (overlay as any).hoverCursorImage?.id, 'var(--vn-cursor-hand, pointer)'),
                     }}
                 />
             )}
@@ -903,7 +918,7 @@ const QuickMenuButtonEl: React.FC<{
                 onMouseLeave={() => setIsHovered(false)}
                 style={{
                     padding: 0, margin: 0, border: 'none', background: 'transparent', lineHeight: 0,
-                    cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1,
+                    cursor: disabled ? 'var(--vn-cursor-normal, default)' : 'var(--vn-cursor-hand, pointer)', opacity: disabled ? 0.4 : 1,
                     display: 'block',
                     ...artButtonStyle,
                 }}
@@ -1103,7 +1118,7 @@ const HotSpotOverlayElement: React.FC<{
         // drag-drop spots are pure drop zones (coordinate hit-test) — don't capture clicks,
         // so empty/drag clicks still reach the stage. click/hover spots capture.
         pointerEvents: overlay.trigger === 'drag-drop' ? 'none' : 'auto',
-        cursor: (overlay.trigger || 'click') === 'click' ? 'pointer' : 'default',
+        cursor: vnCursorFor((overlay as any).hoverCursor, (overlay as any).hoverCursorImage?.id, (overlay.trigger || 'click') === 'click' ? 'var(--vn-cursor-hand, pointer)' : 'var(--vn-cursor-normal, default)'),
         // Honor "Draw the spot during play" (overlay.visible) ONLY — an invisible spot is fully
         // invisible even in test-play. (Authors still see/position it on the scene editor canvas,
         // which always draws hot spots with a label.)
@@ -1995,7 +2010,7 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                     textAlign: (projectUI.choiceTextFont?.align || 'center') as any,
                     wordBreak: 'normal' as const,
                     overflowWrap: 'break-word' as const,
-                    cursor: 'pointer',
+                    cursor: (projectUI as any)?.cursors?.choices === 'arrow' ? 'var(--vn-cursor-normal, default)' : 'var(--vn-cursor-hand, pointer)',
                 }}
             >
                 {baseIsVideo && baseImg && (
@@ -2322,7 +2337,7 @@ const SaveSlotGridComponent: React.FC<{
             aria-label="Erase this save"
             title="Erase this save"
             onClick={(e) => { e.stopPropagation(); onAction({ type: UIActionType.DeleteSave, slotNumber: i + 1 } as VNUIAction); }}
-            style={{ position: 'absolute', top: '4px', right: '4px', zIndex: 11, width: '1.5em', height: '1.5em', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: baseFont.fontSize, lineHeight: 1, cursor: 'pointer', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
+            style={{ position: 'absolute', top: '4px', right: '4px', zIndex: 11, width: '1.5em', height: '1.5em', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: baseFont.fontSize, lineHeight: 1, cursor: 'var(--vn-cursor-hand, pointer)', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(220,38,38,0.92)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.55)'; }}
         >
@@ -2395,7 +2410,7 @@ const SaveSlotGridComponent: React.FC<{
                     backgroundColor: designBgColor || slotBgColor,
                     borderColor: slotBorderColor,
                     transition: 'border-color 0.15s',
-                    cursor: (!isSaveMode && !slotData) ? 'default' : 'pointer',
+                    cursor: (!isSaveMode && !slotData) ? 'var(--vn-cursor-normal, default)' : 'var(--vn-cursor-hand, pointer)',
                 } as React.CSSProperties}
                 onMouseEnter={(e) => {
                     if (!e.currentTarget.disabled) {
@@ -2666,7 +2681,7 @@ const ButtonElement: React.FC<{
         return (
             <div key={element.id} style={{ ...wrapperStyle, transform, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                 <button
-                    style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', padding: 0, border: 'none', background: 'transparent', position: 'relative', display: 'block', lineHeight: 0, cursor: interactive ? 'pointer' : 'default', pointerEvents: interactive ? 'auto' : 'none' }}
+                    style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', padding: 0, border: 'none', background: 'transparent', position: 'relative', display: 'block', lineHeight: 0, cursor: interactive ? vnCursorFor((element as any).hoverCursor, (element as any).hoverCursorImage?.id, 'var(--vn-cursor-hand, pointer)') : 'var(--vn-cursor-normal, default)', pointerEvents: interactive ? 'auto' : 'none' }}
                     className="transition-transform transform hover:scale-105"
                     onMouseEnter={() => { try { playSound(element.hoverSoundId); } catch(e) {} setIsHovered(true); }}
                     onMouseLeave={() => setIsHovered(false)}
@@ -2692,7 +2707,7 @@ const ButtonElement: React.FC<{
     return (
         <div key={element.id} style={{ ...wrapperStyle, transform }}>
             <button
-                style={{ width: '100%', height: '100%', position: 'relative', overflow, fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit', paddingLeft: `${element.paddingX ?? 0}%`, paddingRight: `${element.paddingX ?? 0}%`, boxSizing: 'border-box', ...(hasCb ? { pointerEvents: 'none' } : {}) }}
+                style={{ cursor: interactive ? vnCursorFor((element as any).hoverCursor, (element as any).hoverCursorImage?.id, 'var(--vn-cursor-hand, pointer)') : 'var(--vn-cursor-normal, default)', width: '100%', height: '100%', position: 'relative', overflow, fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit', paddingLeft: `${element.paddingX ?? 0}%`, paddingRight: `${element.paddingX ?? 0}%`, boxSizing: 'border-box', ...(hasCb ? { pointerEvents: 'none' } : {}) }}
                 className={`transition-transform transform hover:scale-105 flex items-center ${{ left: 'justify-start', center: 'justify-center', right: 'justify-end' }[element.font?.align || 'center']}`}
                 onMouseEnter={hasCb ? undefined : hoverEnter}
                 onMouseLeave={hasCb ? undefined : () => setIsHovered(false)}
@@ -2715,7 +2730,7 @@ const ButtonElement: React.FC<{
                     onMouseEnter={hoverEnter}
                     onMouseLeave={() => setIsHovered(false)}
                     onClick={handleClick}
-                    style={{ position: 'absolute', left: `${cb.left * 100}%`, top: `${cb.top * 100}%`, right: `${cb.right * 100}%`, bottom: `${cb.bottom * 100}%`, cursor: 'pointer', zIndex: 11 }}
+                    style={{ position: 'absolute', left: `${cb.left * 100}%`, top: `${cb.top * 100}%`, right: `${cb.right * 100}%`, bottom: `${cb.bottom * 100}%`, cursor: 'var(--vn-cursor-hand, pointer)', zIndex: 11 }}
                 />
             )}
         </div>
@@ -2954,7 +2969,7 @@ const AssetCyclerElement: React.FC<{
                         border: 'none',
                         color: el.arrowColor || '#a855f7',
                         fontSize: `calc(var(--font-scale, 1) * ${el.arrowSize || 24}px)`,
-                        cursor: 'pointer',
+                        cursor: 'var(--vn-cursor-hand, pointer)',
                         padding: '4px',
                         lineHeight: 1,
                         opacity: filteredAssetIds.length > 0 ? 1 : 0.3,
@@ -2987,7 +3002,7 @@ const AssetCyclerElement: React.FC<{
                         border: 'none',
                         color: el.arrowColor || '#a855f7',
                         fontSize: `calc(var(--font-scale, 1) * ${el.arrowSize || 24}px)`,
-                        cursor: 'pointer',
+                        cursor: 'var(--vn-cursor-hand, pointer)',
                         padding: '4px',
                         lineHeight: 1,
                         opacity: filteredAssetIds.length > 0 ? 1 : 0.3,
@@ -3122,7 +3137,7 @@ const CGGalleryGridElement: React.FC<{
                     borderRadius: `${element.thumbnailBorderRadius || 8}px`,
                     border: `2px solid ${element.thumbnailBorderColor || '#4D3273'}`,
                     backgroundColor: unlocked ? '#334155' : (element.lockedColor || '#1e293b'),
-                    cursor: unlocked ? 'pointer' : 'default',
+                    cursor: unlocked ? 'var(--vn-cursor-hand, pointer)' : 'var(--vn-cursor-normal, default)',
                     transition: 'transform 0.15s ease, border-color 0.15s ease',
                 }}
                 onClick={() => handleThumbnailClick(entry, idx)}
@@ -3368,7 +3383,7 @@ const InventoryGridElement: React.FC<{
                     const selected = selectEnabled && selectedItemId === it.id && selectedElementId === element.id;
                     return (
                         <div key={`slot-${i}`} className="relative flex flex-col items-center justify-center p-1"
-                            style={{ ...slotStyle, cursor: reorderEnabled ? 'grab' : (selectEnabled ? 'pointer' : undefined), touchAction: reorderEnabled ? 'none' : undefined, opacity: dragSlot === i ? 0.4 : 1, ...(selected ? { boxShadow: `0 0 0 2px ${selectedRing} inset`, border: `2px solid ${selectedRing}` } : {}) }}
+                            style={{ ...slotStyle, cursor: reorderEnabled ? 'var(--vn-cursor-drag, grab)' : (selectEnabled ? vnCursorFor((element as any).hoverCursor, (element as any).hoverCursorImage?.id, 'var(--vn-cursor-hand, pointer)') : undefined), touchAction: reorderEnabled ? 'none' : undefined, opacity: dragSlot === i ? 0.4 : 1, ...(selected ? { boxShadow: `0 0 0 2px ${selectedRing} inset`, border: `2px solid ${selectedRing}` } : {}) }}
                             onPointerDown={reorderEnabled ? (() => setDragSlot(i)) : undefined}
                             onPointerUp={reorderEnabled ? (() => { if (dragSlot != null && dragSlot !== i) swap(dragSlot, i); else setDragSlot(null); }) : undefined}
                             onClick={selectEnabled ? (() => { if (suppressClickRef.current) { suppressClickRef.current = false; return; } onSelectItem!(selected ? null : it.id, element.id); }) : undefined}>
@@ -3411,7 +3426,7 @@ const InventoryGridElement: React.FC<{
                                             color: element.useButtonTextColor || '#ffffff',
                                             fontSize: '9px',
                                             opacity: blocked ? 0.4 : 1,
-                                            cursor: blocked ? 'not-allowed' : 'pointer',
+                                            cursor: blocked ? 'not-allowed' : 'var(--vn-cursor-hand, pointer)',
                                             ...(element.useButtonFont ? fontSettingsToStyle(element.useButtonFont) : {}),
                                         }}>
                                         {label}
@@ -3740,7 +3755,7 @@ const HotZonedraggableImageElementRenderer: React.FC<{
                 if (region.conditions && region.conditions.length > 0 && !evaluateConditions(region.conditions, variables)) return null;
                 const regionStyle: React.CSSProperties = {
                     position: 'absolute',
-                    cursor: region.cursor || 'pointer',
+                    cursor: (region as any).cursorImage?.id && vnCustomCursorValues[(region as any).cursorImage.id] ? vnCustomCursorValues[(region as any).cursorImage.id] : region.cursor === 'pointer' ? 'var(--vn-cursor-hand, pointer)' : region.cursor === 'default' ? 'var(--vn-cursor-normal, default)' : (region.cursor || 'var(--vn-cursor-hand, pointer)'),
                     pointerEvents: 'auto',
                     zIndex: 2,
                 };
@@ -4026,7 +4041,7 @@ const InteractiveRuntime: React.FC<{
                             border: spot.visible ? `2px dashed ${spot.highlightColor || 'rgba(59, 130, 246, 0.5)'}` : 'none',
                             opacity: spot.visible ? (spot.visibleOpacity ?? 1) : undefined,
                             pointerEvents: spot.trigger === 'drag-drop' ? 'none' : 'auto',
-                            cursor: (spot.trigger || 'click') === 'click' ? 'pointer' : undefined,
+                            cursor: vnCursorFor((spot as any).hoverCursor, (spot as any).hoverCursorImage?.id, (spot.trigger || 'click') === 'click' ? 'var(--vn-cursor-hand, pointer)' : undefined),
                         }}
                         onClick={() => handleSpotClick(spot)}
                         onMouseEnter={() => handleSpotHover(spot)}
@@ -4064,7 +4079,7 @@ const InteractiveRuntime: React.FC<{
                         style={{
                             left: `${pos.x}%`, top: `${pos.y}%`,
                             width: `${el.width}%`, height: `${el.height}%`,
-                            cursor: el.draggable ? (isDragging ? 'grabbing' : 'grab') : (elType === 'textInput' ? 'text' : 'pointer'),
+                            cursor: el.draggable ? (isDragging ? 'var(--vn-cursor-grabbing, grabbing)' : vnCursorFor((el as any).hoverCursor, (el as any).hoverCursorImage?.id, 'var(--vn-cursor-drag, grab)')) : (elType === 'textInput' ? 'text' : vnCursorFor((el as any).hoverCursor, (el as any).hoverCursorImage?.id, 'var(--vn-cursor-hand, pointer)')),
                             zIndex: isDragging ? 50 : 10,
                             pointerEvents: isFadedOut ? 'none' : 'auto',
                             opacity: isFadedOut ? 0 : undefined,
@@ -4178,8 +4193,43 @@ const UIScreenRenderer: React.FC<{
     // their own; data: URLs and anything already warmed pass instantly, so with the boot
     // pre-warm this gate is a no-op in the common case. Failure never wedges the screen —
     // a broken file counts as loaded.
-    const [revealReady, setRevealReady] = React.useState(false);
+    // Synchronous fast-path: derive this screen's art urls from PROJECT DATA (same fields
+    // the boot pre-warm walks). If every one is already loaded, reveal with ZERO hidden
+    // frames — this also protects CLOSING screens: closing remounts the renderer, and a
+    // from-scratch gate blanked the screen for 2 frames mid-fade-out (the "flicker between
+    // the scene and the screen" bug). The post-mount DOM inventory below stays the
+    // authoritative gate for anything the sync walk can't see.
+    const screenArtLooksReady = (): boolean => {
+        try {
+            const urls: string[] = [];
+            const addRef = (ref: any) => {
+                if (ref && typeof ref === 'object' && (ref.id || ref.assetId) && ref.type === 'image') {
+                    const u = assetResolver(ref.id || ref.assetId, 'image');
+                    if (u) urls.push(u);
+                }
+            };
+            const walkNode = (node: any, d: number) => {
+                if (!node || d > 6) return;
+                if (Array.isArray(node)) { node.forEach(n => walkNode(n, d + 1)); return; }
+                if (typeof node === 'object') {
+                    addRef(node);
+                    for (const [k, v] of Object.entries(node)) {
+                        // Resolve refs exactly like the boot pre-warm did, or the set lookup misses.
+                        if (k === 'imageUrl' && typeof v === 'string' && v) urls.push(resolveFieldUrl(project.id, v) || v);
+                        else if (v && typeof v === 'object') walkNode(v, d + 1);
+                    }
+                }
+            };
+            walkNode(screen, 0);
+            return urls.every(u => u.startsWith('data:') || vnLoadedImages.has(u));
+        } catch { return false; }
+    };
+    const [revealReady, setRevealReady] = React.useState<boolean>(() => isClosing || screenArtLooksReady());
     React.useEffect(() => {
+        // A closing screen was JUST fully on screen — its art is loaded; gating it would
+        // blank it mid-fade-out. Reveal unconditionally.
+        if (isClosing) { setRevealReady(true); return; }
+        if (screenArtLooksReady()) { setRevealReady(true); return; }
         setRevealReady(false);
         let alive = true;
         // Two frames: let the subtree mount, then inventory the images it ACTUALLY rendered
@@ -4199,7 +4249,8 @@ const UIScreenRenderer: React.FC<{
             Promise.all(missing.map(vnWarmImage)).then(() => { if (alive) setRevealReady(true); });
         }));
         return () => { alive = false; cancelAnimationFrame(raf); };
-    }, [screenId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [screenId, isClosing]);
 
     // Cleanup video on unmount
     React.useEffect(() => {
@@ -4453,7 +4504,7 @@ const UIScreenRenderer: React.FC<{
                 return (
                     <div
                         key={el.id}
-                        style={{ ...style, cursor: clickable ? 'pointer' : style.cursor, ...(isPassThrough && clickable ? { pointerEvents: 'auto' as const } : {}) }}
+                        style={{ ...style, cursor: clickable ? vnCursorFor((element as any).hoverCursor, (element as any).hoverCursorImage?.id, 'var(--vn-cursor-hand, pointer)') : style.cursor, ...(isPassThrough && clickable ? { pointerEvents: 'auto' as const } : {}) }}
                         onClick={clickable ? handleItemClick : undefined}
                         className="flex flex-col items-center justify-center"
                         title={item.description || item.name}
@@ -4993,7 +5044,7 @@ const UIScreenRenderer: React.FC<{
                                 fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
                                 fontWeight: el.font?.weight || 'normal',
                                 fontStyle: el.font?.italic ? 'italic' : 'normal',
-                                cursor: 'pointer',
+                                cursor: 'var(--vn-cursor-hand, pointer)',
                                 userSelect: 'none'
                             }}
                         >
@@ -5138,7 +5189,7 @@ const UIScreenRenderer: React.FC<{
                         const cycle = (dir: number) => { const n = selectable.length; if (!n) return; const ni = (((idx < 0 ? 0 : idx) + dir) % n + n) % n; pick(selectable[ni].a.id); };
                         const cur = idx >= 0 ? selectable[idx] : selectable[0];
                         const arrowBtn = (dir: number, flip: boolean) => (
-                            <button onClick={() => cycle(dir)} style={{ flexShrink: 0, cursor: 'pointer', background: 'transparent', border: 'none', padding: 4 }}>
+                            <button onClick={() => cycle(dir)} style={{ flexShrink: 0, cursor: 'var(--vn-cursor-hand, pointer)', background: 'transparent', border: 'none', padding: 4 }}>
                                 {arrowUrl
                                     ? <img src={arrowUrl} alt="" style={{ width: arrowSize, height: arrowSize, objectFit: 'contain', transform: flip ? 'scaleX(-1)' : undefined }} />
                                     : <span style={{ fontSize: arrowSize, lineHeight: 1, color: arrowColor }}>{flip ? '◀' : '▶'}</span>}
@@ -5167,7 +5218,7 @@ const UIScreenRenderer: React.FC<{
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                 {opts.map(x => {
                                     const sel = current === x.a.id;
-                                    return <button key={x.a.id} disabled={x.locked} onClick={() => !x.locked && pick(x.a.id)} style={{ ...labelStyle, cursor: x.locked ? 'not-allowed' : 'pointer', opacity: x.locked ? 0.5 : 1, padding: '4px 10px', borderRadius: 6, background: sel ? selColor : buttonColor, color: buttonTextColor, border: 'none' }}>{x.a.name}{x.locked ? ' 🔒' : ''}</button>;
+                                    return <button key={x.a.id} disabled={x.locked} onClick={() => !x.locked && pick(x.a.id)} style={{ ...labelStyle, cursor: x.locked ? 'not-allowed' : 'var(--vn-cursor-hand, pointer)', opacity: x.locked ? 0.5 : 1, padding: '4px 10px', borderRadius: 6, background: sel ? selColor : buttonColor, color: buttonTextColor, border: 'none' }}>{x.a.name}{x.locked ? ' 🔒' : ''}</button>;
                                 })}
                             </div>
                         );
@@ -5179,7 +5230,7 @@ const UIScreenRenderer: React.FC<{
                                 const sel = current === x.a.id;
                                 return (
                                     <div key={x.a.id} onClick={() => !x.locked && pick(x.a.id)} title={x.a.name}
-                                        style={{ position: 'relative', width: swatchSize, height: swatchSize, flexShrink: 0, cursor: x.locked ? 'not-allowed' : 'pointer', opacity: x.locked ? 0.55 : 1, borderRadius: 6, overflow: 'hidden', background: 'rgba(0,0,0,0.3)', boxShadow: sel ? `0 0 0 3px ${selColor}` : 'inset 0 0 0 1px rgba(255,255,255,0.15)' }}>
+                                        style={{ position: 'relative', width: swatchSize, height: swatchSize, flexShrink: 0, cursor: x.locked ? 'not-allowed' : 'var(--vn-cursor-hand, pointer)', opacity: x.locked ? 0.55 : 1, borderRadius: 6, overflow: 'hidden', background: 'rgba(0,0,0,0.3)', boxShadow: sel ? `0 0 0 3px ${selColor}` : 'inset 0 0 0 1px rgba(255,255,255,0.15)' }}>
                                         {x.a.videoUrl ? <video src={x.swatchUrl || undefined} muted loop playsInline className="w-full h-full object-contain" /> : x.swatchUrl ? <img src={x.swatchUrl} alt={x.a.name} className="w-full h-full object-contain" /> : <div className="w-full h-full" />}
                                         {x.locked && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Math.min(swatchSize * 0.5, 22) }}>🔒</div>}
                                     </div>
@@ -5223,8 +5274,8 @@ const UIScreenRenderer: React.FC<{
                         })}
                         {(el.showRandomize || el.showReset) && (el.categories || []).length > 0 && (
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                                {el.showRandomize && <button onClick={randomizeLook} style={{ ...labelStyle, cursor: 'pointer', padding: '4px 12px', borderRadius: 6, background: buttonColor, color: buttonTextColor, border: 'none' }}>{el.randomizeLabel || 'Randomize'}</button>}
-                                {el.showReset && <button onClick={resetLook} style={{ ...labelStyle, cursor: 'pointer', padding: '4px 12px', borderRadius: 6, background: buttonColor, color: buttonTextColor, border: 'none' }}>{el.resetLabel || 'Reset'}</button>}
+                                {el.showRandomize && <button onClick={randomizeLook} style={{ ...labelStyle, cursor: 'var(--vn-cursor-hand, pointer)', padding: '4px 12px', borderRadius: 6, background: buttonColor, color: buttonTextColor, border: 'none' }}>{el.randomizeLabel || 'Randomize'}</button>}
+                                {el.showReset && <button onClick={resetLook} style={{ ...labelStyle, cursor: 'var(--vn-cursor-hand, pointer)', padding: '4px 12px', borderRadius: 6, background: buttonColor, color: buttonTextColor, border: 'none' }}>{el.resetLabel || 'Reset'}</button>}
                             </div>
                         )}
                     </div>
@@ -5688,8 +5739,11 @@ const UIScreenRenderer: React.FC<{
                 ...(screen.pauseSceneWhileOpen ? { zIndex: 46 } : {}),
                 // Atomic reveal: everything on this screen appears in the same frame (see the
                 // gate effect above). Style-only flip — never a structural change (a remount
-                // would refetch every image).
-                ...(revealReady ? {} : { visibility: 'hidden' as const }),
+                // would refetch every image). `animation: none` while hidden is load-bearing:
+                // without it the entrance transition PLAYS while the screen is still held
+                // invisible (slow hosts), and the screen pops in with no transition at all.
+                // Flipping animation none→<entrance> on reveal restarts it from frame one.
+                ...(revealReady ? {} : { visibility: 'hidden' as const, animation: 'none' }),
             }}
         >
             {/* Pass-through (HUD) screens skip their opaque background so the scene shows through. */}
@@ -5830,7 +5884,7 @@ const InGameConfirmDialog: React.FC<{
                     ...(isConfirm
                         ? { background: imgUrl ? 'transparent' : baseColor, border: 'none' }
                         : { backgroundColor: imgUrl ? 'transparent' : baseColor, border: imgUrl ? 'none' : '1px solid rgba(255,255,255,0.1)' }),
-                    cursor: 'pointer',
+                    cursor: 'var(--vn-cursor-hand, pointer)',
                     transition: 'background-color 0.15s, box-shadow 0.15s',
                     ...makeBtnImageStyle(imgUrl),
                     ...(posStyle || {}),
@@ -6078,7 +6132,7 @@ const PhonePanel: React.FC<{
                 const customIcon = b.iconImage ? assetResolver(b.iconImage.id, 'image') : null;
                 return (
                     <button key={b.id} onClick={() => fireAppButton(ctx, b)} title={b.label || ''}
-                        style={{ position: 'absolute', left: `${b.x ?? 8}%`, top: `${b.y ?? 12}%`, width: `${b.width ?? 14}%`, height: `${b.height ?? 14}%`, containerType: 'size', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1cqmin', background: 'transparent', border: 'none', cursor: 'pointer', color: ui.phoneButtonIconColor || '#cbd5e1', zIndex: 5 } as React.CSSProperties}>
+                        style={{ position: 'absolute', left: `${b.x ?? 8}%`, top: `${b.y ?? 12}%`, width: `${b.width ?? 14}%`, height: `${b.height ?? 14}%`, containerType: 'size', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1cqmin', background: 'transparent', border: 'none', cursor: 'var(--vn-cursor-hand, pointer)', color: ui.phoneButtonIconColor || '#cbd5e1', zIndex: 5 } as React.CSSProperties}>
                         {customIcon ? <img src={customIcon} alt="" style={{ width: '82cqmin', height: '82cqmin', objectFit: 'contain' }} /> : <span style={{ fontSize: '74cqmin', lineHeight: 1 }}>{(b.builtinIcon && PHONE_GLYPHS[b.builtinIcon]) || '●'}</span>}
                         {b.label && <span style={{ whiteSpace: 'nowrap', fontSize: '18cqmin', lineHeight: 1 }}>{b.label}</span>}
                     </button>
@@ -6090,7 +6144,7 @@ const PhonePanel: React.FC<{
                     {buttons.map(b => {
                         const customIcon = b.iconImage ? assetResolver(b.iconImage.id, 'image') : null;
                         return (
-                            <button key={b.id} onClick={() => fireAppButton(ctx, b)} title={b.label || ''} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '4px 2px', background: 'transparent', border: 'none', cursor: 'pointer', color: ui.phoneButtonIconColor || '#cbd5e1', fontSize: '0.7em' }}>
+                            <button key={b.id} onClick={() => fireAppButton(ctx, b)} title={b.label || ''} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '4px 2px', background: 'transparent', border: 'none', cursor: 'var(--vn-cursor-hand, pointer)', color: ui.phoneButtonIconColor || '#cbd5e1', fontSize: '0.7em' }}>
                                 {customIcon ? <img src={customIcon} alt="" style={{ width: '1.6em', height: '1.6em', objectFit: 'contain' }} /> : <PhoneGlyph name={b.builtinIcon} />}
                                 {b.label && <span style={{ whiteSpace: 'nowrap' }}>{b.label}</span>}
                             </button>
@@ -6104,7 +6158,7 @@ const PhonePanel: React.FC<{
                 during a live call — End Call is the only exit (calls are exclusive). */}
             {showHome && !phone.activeCall && (
                 <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: bezel * 0.6 }}>
-                    <button onClick={() => { playTap(); onAction({ type: isHome ? UIActionType.HidePhone : UIActionType.ShowPhone } as VNUIAction); }} aria-label="Home" title="Home" style={{ width: '1.5em', height: '1.5em', borderRadius: '9999px', border: `2px solid ${ui.phoneHomeButtonColor || 'rgba(255,255,255,0.28)'}`, background: 'transparent', cursor: 'pointer', flexShrink: 0 }} />
+                    <button onClick={() => { playTap(); onAction({ type: isHome ? UIActionType.HidePhone : UIActionType.ShowPhone } as VNUIAction); }} aria-label="Home" title="Home" style={{ width: '1.5em', height: '1.5em', borderRadius: '9999px', border: `2px solid ${ui.phoneHomeButtonColor || 'rgba(255,255,255,0.28)'}`, background: 'transparent', cursor: 'var(--vn-cursor-hand, pointer)', flexShrink: 0 }} />
                 </div>
             )}
         </div>
@@ -8200,6 +8254,46 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         });
     }, [playerState?.currentSceneId, playerState?.mode, project]);
 
+    // ── Custom mouse pointers: build the game's cursor set at boot ──────────────────────
+    // Game-wide slots become CSS vars on the play root (every converted site reads them
+    // with a keyword fallback, so a cursor-less project behaves exactly as today). Per-
+    // element custom images build into the module map; cursorEpoch re-renders the memoized
+    // screen tree once values exist.
+    const [cursorEpoch, setCursorEpoch] = useState(0);
+    useEffect(() => {
+        let alive = true;
+        const cur: any = (project.ui as any)?.cursors;
+        (async () => {
+            const root = playContainerRef.current;
+            const setVar = (name: string, v: string | null) => {
+                if (!root) return;
+                if (v) root.style.setProperty(name, v); else root.style.removeProperty(name);
+            };
+            const [normal, hand, drag] = await Promise.all([
+                buildSlotValue(project, cur?.normal, 'default'),
+                buildSlotValue(project, cur?.hand, 'pointer'),
+                buildSlotValue(project, cur?.drag, 'grab'),
+            ]);
+            if (!alive) return;
+            setVar('--vn-cursor-normal', normal);
+            setVar('--vn-cursor-hand', hand);
+            setVar('--vn-cursor-drag', drag);
+            setVar('--vn-cursor-grabbing', drag ? drag.replace(/, grab$/, ', grabbing') : null);
+            let changed = !!(normal || hand || drag);
+            for (const ref of collectCursorAssetRefs(project)) {
+                if (vnCustomCursorValues[ref.id]) continue;
+                const url = resolveCursorAssetUrl(project, ref);
+                if (!url) continue;
+                const v = await buildCursorValue(url, undefined, 'tip', undefined, undefined, 'pointer', ref.id);
+                if (!alive) return;
+                vnCustomCursorValues[ref.id] = v;
+                changed = true;
+            }
+            if (alive && changed) setCursorEpoch(e => e + 1);
+        })();
+        return () => { alive = false; };
+    }, [project]);
+
     // ── Screen art pre-warm ─────────────────────────────────────────────────────────────
     // Warm EVERY UI screen's images (backgrounds, buttons, hidden-object pieces, items) once
     // at boot, so opening any screen — hidden-object rooms navigated by arrows included —
@@ -8228,6 +8322,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         };
         walk(project.uiScreens, 0);
         walk(project.items || {}, 0);
+        // Custom scene transitions (authored curtains): their image/frame art must be warm
+        // BEFORE the first scene change, or on a web host the closing animation file is
+        // still downloading when it should be covering the screen — the swap happens on its
+        // timeout with no visible transition. (Videos stream on their own.)
+        Object.values((project as any).customTransitions || {}).forEach((def: any) => {
+            for (const half of [def?.close, def?.open]) {
+                if (!half) continue;
+                (half.frameIds || []).forEach((id: VNID) => { const u = assetResolver(id, 'image'); if (u) urls.add(u); });
+                if (half.assetId && !assetResolver(half.assetId, 'video')) {
+                    const u = assetResolver(half.assetId, 'image');
+                    if (u) urls.add(u);
+                }
+            }
+        });
         screenPrewarmRef.current = [...urls].filter(u => !u.startsWith('data:')).slice(0, 600).map(u => {
             const im = new Image();
             im.onload = im.onerror = () => { vnLoadedImages.add(u); };
@@ -9456,7 +9564,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             ...(p.stageState.hotSpotOverlays || []).filter(h => h.commandId !== cmd.id),
                             { id: cmd.id, commandId: cmd.id, name: cmd.name, x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height,
                               shape: cmd.shape, trigger: cmd.trigger, actions: cmd.actions, conditions: cmd.conditions, acceptedTag: cmd.acceptedTag,
-                              highlightColor: cmd.highlightColor, visible: cmd.visible, visibleOpacity: cmd.visibleOpacity, advanceOnTrigger: cmd.advanceOnTrigger, layer: cmd.layer },
+                              highlightColor: cmd.highlightColor, visible: cmd.visible, visibleOpacity: cmd.visibleOpacity, advanceOnTrigger: cmd.advanceOnTrigger, layer: cmd.layer, hoverCursor: (cmd as any).hoverCursor, hoverCursorImage: (cmd as any).hoverCursorImage },
                         ] } } : p);
                         return;
                     }
@@ -10467,6 +10575,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     visibleOpacity: cmd.visibleOpacity,
                                     advanceOnTrigger: cmd.advanceOnTrigger,
                                     layer: cmd.layer,
+                                    hoverCursor: (cmd as any).hoverCursor,
+                                    hoverCursorImage: (cmd as any).hoverCursorImage,
                                 },
                             ],
                         },
@@ -13526,7 +13636,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 onClick={handleStageClick}
                 onWheel={handleWheel}
                 style={{
-                    cursor: playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput ? 'pointer' : 'default',
+                    cursor: playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput ? (((project.ui as any)?.cursors?.dialogueAdvance === 'arrow') ? 'var(--vn-cursor-normal, default)' : 'var(--vn-cursor-hand, pointer)') : 'var(--vn-cursor-normal, default)',
                     // Overlay design-reference scale (stageW / 1280) — mirrors the editor's
                     // scaleFontSize/scaledBorderRadius so ShowButton/ShowText overlays render
                     // identically in the built game and on the scene canvas, at any stage size.
@@ -14499,7 +14609,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         return (
             <div
                 className="absolute inset-0 z-40 flex items-end justify-center overflow-hidden"
-                style={{ backgroundColor: command.backgroundColor || '#000000FF', cursor: command.allowSkip ? 'pointer' : 'default' }}
+                style={{ backgroundColor: command.backgroundColor || '#000000FF', cursor: command.allowSkip ? 'var(--vn-cursor-hand, pointer)' : 'var(--vn-cursor-normal, default)' }}
                 onClick={() => {
                     if (!command.allowSkip) return;
                     onFinish();
@@ -14631,7 +14741,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         ? 'bg-emerald-900/40 border-l-3 border-emerald-500/60 hover:bg-emerald-900/50'
                                         : 'bg-slate-800/50 hover:bg-slate-800/60'
                                 }`}
-                                style={{ cursor: onJumpTo ? 'pointer' : 'default' }}
+                                style={{ cursor: onJumpTo ? 'var(--vn-cursor-hand, pointer)' : 'var(--vn-cursor-normal, default)' }}
                                 onClick={() => onJumpTo?.(index)}
                             >
                                 <div className="flex items-start gap-3">
@@ -14878,7 +14988,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 disabled: !hasHistory, title: 'Skip Backward (Arrow Up)', label: 'Back',
                                 icon: <svg style={iconStyle} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>,
                                 pillClassName: pillBase,
-                                pillStyle: { ...commonPill, background: hasHistory ? qmBg : qmBgDisabled, border: defBorder, color: hasHistory ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)', cursor: hasHistory ? 'pointer' : 'default' },
+                                pillStyle: { ...commonPill, background: hasHistory ? qmBg : qmBgDisabled, border: defBorder, color: hasHistory ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)', cursor: hasHistory ? 'var(--vn-cursor-hand, pointer)' : 'var(--vn-cursor-normal, default)' },
                             },
                             {
                                 key: 'log', show: project.ui.quickMenuShowLog !== false,
@@ -15819,7 +15929,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 `width:100% + aspect-ratio + max-height` STRETCHED on wider-than-aspect screens,
                 which shifted every %-positioned element (e.g. the quick menu) on Android. At a
                 16:9 window this resolves to the same 1280x720 as before (desktop unchanged). */}
-            <div ref={playContainerRef} className="relative overflow-hidden" style={{ width: `min(100vw, calc(100vh * ${project.gameResolution?.width || 1920} / ${project.gameResolution?.height || 1080}))`, height: `min(100vh, calc(100vw * ${project.gameResolution?.height || 1080} / ${project.gameResolution?.width || 1920}))`, '--font-scale': playContainerSize.width > 0 ? playContainerSize.width / (project.gameResolution?.width || 1920) : 1, ...(screenGlitch ? { filter: 'url(#vnfx-stage-glitch)' } : {}) } as React.CSSProperties}>
+            <div ref={playContainerRef} data-vn-play-root className="relative overflow-hidden" style={{ cursor: 'var(--vn-cursor-normal, default)', width: `min(100vw, calc(100vh * ${project.gameResolution?.width || 1920} / ${project.gameResolution?.height || 1080}))`, height: `min(100vh, calc(100vw * ${project.gameResolution?.height || 1080} / ${project.gameResolution?.width || 1920}))`, '--font-scale': playContainerSize.width > 0 ? playContainerSize.width / (project.gameResolution?.width || 1920) : 1, ...(screenGlitch ? { filter: 'url(#vnfx-stage-glitch)' } : {}) } as React.CSSProperties}>
+                {/* Custom-pointer coverage for utility classes: every `.cursor-pointer` inside the
+                    game shows the author's hand pointer (one rule beats editing dozens of sites). */}
+                <style>{`[data-vn-play-root] .cursor-pointer { cursor: var(--vn-cursor-hand, pointer) !important; }`}</style>
                 {screenGlitch && <StageGlitchFilterDef effect={screenGlitch} />}
                 {playerState?.mode === 'playing' ? renderStage() : null}
                 
@@ -16168,7 +16281,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         updatePlayerState(p => (p && p.uiState.phone) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, ...(taps.length ? {} : { open: true, view: 'chat' }), notification: null, unread: false } } } : p);
                         taps.forEach(a => handleUIAction(a));
                     }}
-                        style={{ position: 'absolute', ...posStyle, zIndex: 65, cursor: 'pointer', minWidth: '40%', maxWidth: '72%', display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', borderRadius: 14, background: project.ui.phoneNotifColor || 'rgba(18,20,26,0.96)', color: project.ui.phoneNotifTextColor || '#fff', boxShadow: '0 8px 30px rgba(0,0,0,0.5)', animation: 'fade-in 0.25s ease-out', ...(project.ui.phoneNotifFont ? fontSettingsToStyle(project.ui.phoneNotifFont) : {}) }}>
+                        style={{ position: 'absolute', ...posStyle, zIndex: 65, cursor: 'var(--vn-cursor-hand, pointer)', minWidth: '40%', maxWidth: '72%', display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', borderRadius: 14, background: project.ui.phoneNotifColor || 'rgba(18,20,26,0.96)', color: project.ui.phoneNotifTextColor || '#fff', boxShadow: '0 8px 30px rgba(0,0,0,0.5)', animation: 'fade-in 0.25s ease-out', ...(project.ui.phoneNotifFont ? fontSettingsToStyle(project.ui.phoneNotifFont) : {}) }}>
                         {nurls.length > 0 ? <PhonePortrait urls={nurls} size="2.4em" />
                             : nIconImg ? <img src={nIconImg} alt="" style={{ width: '2.4em', height: '2.4em', objectFit: 'contain', flexShrink: 0 }} />
                             : n.icon ? <span style={{ fontSize: '1.6em', flexShrink: 0 }}>{PHONE_GLYPHS[n.icon] || '🔔'}</span> : null}
@@ -16191,7 +16304,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const declineImg = project.ui.phoneCallDeclineImage ? assetResolver(project.ui.phoneCallDeclineImage.id, 'image') : null;
                 const acceptGlyph = acceptImg ? null : (project.ui.phoneCallAcceptIcon && PHONE_GLYPHS[project.ui.phoneCallAcceptIcon]) || '📞';
                 const declineGlyph = declineImg ? null : (project.ui.phoneCallDeclineIcon && PHONE_GLYPHS[project.ui.phoneCallDeclineIcon]) || '⊘';
-                const callBtn = (color: string) => ({ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '0.85em' });
+                const callBtn = (color: string) => ({ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 6, background: 'transparent', border: 'none', cursor: 'var(--vn-cursor-hand, pointer)', color: '#fff', fontSize: '0.85em' });
                 const circle = (color: string) => ({ width: '3em', height: '3em', borderRadius: '9999px', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3em' });
                 const acceptBtn = <button onClick={() => resolveIncomingCall('accepted')} style={callBtn(project.ui.phoneCallAcceptColor || '#22c55e')}><span style={circle(project.ui.phoneCallAcceptColor || '#22c55e')}>{acceptImg ? <img src={acceptImg} alt="" style={{ width: '1.4em', height: '1.4em', objectFit: 'contain' }} /> : acceptGlyph}</span><span>{project.ui.phoneCallAcceptLabel || 'Accept'}</span></button>;
                 const declineBtn = <button onClick={() => resolveIncomingCall('declined')} style={callBtn(project.ui.phoneCallDeclineColor || '#ef4444')}><span style={circle(project.ui.phoneCallDeclineColor || '#ef4444')}>{declineImg ? <img src={declineImg} alt="" style={{ width: '1.4em', height: '1.4em', objectFit: 'contain' }} /> : declineGlyph}</span><span>{project.ui.phoneCallDeclineLabel || 'Decline'}</span></button>;
@@ -16240,7 +16353,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         </div>
                         <div style={{ textAlign: 'center', ...nameStyle }}>{contact?.displayName || ochar?.name || 'Unknown'}</div>
                         <div style={{ opacity: 0.7, fontSize: '0.9em' }}>Calling…</div>
-                        <button onClick={endOutgoingCall} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '0.85em', marginTop: 8 }}>
+                        <button onClick={endOutgoingCall} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', cursor: 'var(--vn-cursor-hand, pointer)', color: '#fff', fontSize: '0.85em', marginTop: 8 }}>
                             <span style={{ width: '3em', height: '3em', borderRadius: '9999px', background: project.ui.phoneCallDeclineColor || '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3em' }}>⊘</span>
                             <span>Hang up</span>
                         </button>
@@ -16255,7 +16368,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const badge = renderPhoneBadge(project.ui, unreadCount);
                 return (
                     <div onClick={() => updatePlayerState(p => (p && p.uiState.phone) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, open: true, view: 'chat', notification: null, unread: false } } } : p)}
-                        title="New message" style={{ position: 'absolute', left: `${bx}%`, top: `${by}%`, zIndex: 66, cursor: 'pointer' }}>
+                        title="New message" style={{ position: 'absolute', left: `${bx}%`, top: `${by}%`, zIndex: 66, cursor: 'var(--vn-cursor-hand, pointer)' }}>
                         {badge}
                     </div>
                 );
@@ -16387,7 +16500,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 <>
                     <div
                         className="absolute inset-0 z-[10050]"
-                        style={{ cursor: 'pointer' }}
+                        style={{ cursor: 'var(--vn-cursor-hand, pointer)' }}
                         onClick={e => resolveCarryClick(e.clientX, e.clientY)}
                         onContextMenu={e => { e.preventDefault(); setCarriedItemId(null); }}
                     />
