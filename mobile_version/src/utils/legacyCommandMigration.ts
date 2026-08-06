@@ -8,7 +8,7 @@
  *
  * Retired so far:
  *   - `ShowdraggableImageElement` / `HidedraggableImageElement` — the scene image-map overlay commands.
- *     Superseded by `ShowHotSpot` and by the screen-level Image Map element.
+ *     Superseded by `ShowHotSpot` and by the screen-level Interactive Image element.
  *     They were never a documented/kept feature; removing the data here means
  *     no dangling unknown-command entries survive a round-trip.
  *

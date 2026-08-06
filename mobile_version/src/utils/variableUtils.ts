@@ -5,6 +5,7 @@
  */
 
 import { VNSetVariableOperator } from '../features/variables/types';
+import type { VNCalcOperand, VNValueCalc } from '../types/shared';
 
 /**
  * Normalizes a set variable operator based on the variable type.
@@ -27,7 +28,7 @@ export const normalizeSetVariableOperator = (
         return 'set';
     }
 
-    if (operator === 'random' && variableType !== 'number') {
+    if ((operator === 'random' || operator === 'addRandom' || operator === 'subtractRandom') && variableType !== 'number') {
         console.warn(
             `[SetVariable] Operator "${operator}" is not valid for ${variableType} variable "${variableName}". Forcing operator to "set".`
         );
@@ -175,9 +176,28 @@ export const calculateVariableValue = (
             return finish(toNumeric(currentValue) - toNumeric(changeValStr));
 
         case 'random': {
+            // No authored range → roll within the VARIABLE's own min/max bounds (when set).
+            // The old 0..100 default then got CLAMPED into the bounds by finish(), which piled
+            // ~95% of rolls onto the max (user report: "almost always picks the max number").
+            const min = randomMin ?? boundMin ?? 0;
+            const max = randomMax ?? boundMax ?? 100;
+            return finish(Math.floor(Math.random() * (max - min + 1)) + min);
+        }
+
+        // Adjust the CURRENT value by a random amount in [randomMin, randomMax] — unlike
+        // 'random', which replaces the value outright (a user asked for random gains/losses).
+        case 'addRandom': {
             const min = randomMin ?? 0;
             const max = randomMax ?? 100;
-            return finish(Math.floor(Math.random() * (max - min + 1)) + min);
+            const amount = Math.floor(Math.random() * (max - min + 1)) + min;
+            return finish(toNumeric(currentValue) + amount);
+        }
+
+        case 'subtractRandom': {
+            const min = randomMin ?? 0;
+            const max = randomMax ?? 100;
+            const amount = Math.floor(Math.random() * (max - min + 1)) + min;
+            return finish(toNumeric(currentValue) - amount);
         }
 
         case 'set':
@@ -200,4 +220,83 @@ export const calculateVariableValue = (
             }
             return finish(coerceValueToType(changeValue, variableType, currentValue));
     }
+};
+
+/** Structural subset of both SetVariableCommand and SetVariableAction — the value fields. */
+export interface SetVariableValueSource {
+    value?: string | number | boolean;
+    valueSource?: 'variable' | 'calc';
+    valueVariableId?: string;
+    calc?: VNValueCalc;
+}
+
+type VariableValues = Record<string, string | number | boolean | undefined>;
+
+const resolveOperand = (operand: VNCalcOperand | undefined, variables: VariableValues): number => {
+    if (!operand) return NaN;
+    if (operand.source === 'variable') {
+        return operand.variableId !== undefined ? Number(variables[operand.variableId]) : NaN;
+    }
+    return typeof operand.value === 'number' ? operand.value : NaN;
+};
+
+/**
+ * Resolves a Set Variable's change value BEFORE calculateVariableValue is called, so the
+ * calculation semantics live in exactly one place while every execution site keeps its own
+ * (correct) source of current variable values.
+ *
+ * - Absent `valueSource` → returns `spec.value` unchanged: old projects never enter new code.
+ * - 'variable' → the referenced variable's current value; dangling id → falls back to `spec.value`.
+ * - 'calc' → folds the steps strictly LEFT TO RIGHT (no operator precedence — same rule the
+ *   condition list uses). Divide-by-zero and non-finite operands SKIP the step (keep the running
+ *   result) rather than poisoning it. Rounding applies once at the end (absent = nearest).
+ *
+ * The result is guaranteed finite — never NaN/±Infinity into game state.
+ */
+export const resolveSetVariableValue = (
+    spec: SetVariableValueSource,
+    variables: VariableValues
+): string | number | boolean => {
+    if (spec.valueSource === 'variable') {
+        if (spec.valueVariableId !== undefined) {
+            const v = variables[spec.valueVariableId];
+            if (v !== undefined) return v;
+        }
+        return spec.value ?? '';
+    }
+
+    if (spec.valueSource === 'calc' && spec.calc) {
+        const calc = spec.calc;
+        let acc = resolveOperand(calc.first, variables);
+        if (!Number.isFinite(acc)) {
+            // Broken first operand: start from the typed value when it's a usable number, else 0.
+            const typed = Number(spec.value);
+            acc = Number.isFinite(typed) && String(spec.value).trim() !== '' ? typed : 0;
+        }
+        for (const step of calc.steps ?? []) {
+            const operand = resolveOperand(step, variables);
+            if (!Number.isFinite(operand)) continue; // dangling/non-numeric operand: skip the step
+            switch (step.op) {
+                case 'add': acc += operand; break;
+                case 'subtract': acc -= operand; break;
+                case 'multiply': acc *= operand; break;
+                case 'divide':
+                    if (operand === 0) continue; // dividing by zero isn't possible — skip the step
+                    acc /= operand;
+                    break;
+                case 'percentOf': acc *= operand / 100; break;
+            }
+            if (!Number.isFinite(acc)) { acc = 0; break; } // overflow guard — never poison state
+        }
+        switch (calc.round ?? 'nearest') {
+            case 'nearest': acc = Math.round(acc); break;
+            case 'down': acc = Math.floor(acc); break;
+            case 'up': acc = Math.ceil(acc); break;
+            case 'none': break;
+        }
+        return Number.isFinite(acc) ? acc : 0;
+    }
+
+    // Absent/unknown valueSource: today's behavior, bit for bit.
+    return spec.value as string | number | boolean;
 };

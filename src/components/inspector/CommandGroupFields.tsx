@@ -16,6 +16,7 @@ import { useProject } from '../../contexts/ProjectContext';
 import { VNProject } from '../../types/project';
 import type { VNID } from '../../types';
 import VideoTrimFields from '../ui/VideoTrimFields';
+import AudioAdjustFields from '../ui/AudioAdjustFields';
 import {
     VNCommand, CommandType, DialogueCommand, ShowButtonCommand, ShowItemCommand, ShowTextCommand, ShowImageCommand, ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand, REACTIVE_VISUAL_TYPES, REACTIVE_FX_TYPES,
     ShowPhoneTextCommand, ChoiceOption,
@@ -26,6 +27,8 @@ import { FormField, Select, TextInput, TextArea, ColorInput, RangeInput } from '
 import { TrashIcon, XMarkIcon, PlusIcon, ChevronUpIcon, ChevronDownIcon } from '../icons';
 import AssetSelector from '../ui/AssetSelector';
 import CursorSelect from '../ui/CursorSelect';
+import EffectStyleSwitch from './EffectStyleSwitch';
+import { commandHasEnhancedStyle, isEnhanced } from '../live-preview/fx/glFx';
 import ActionEditor from '../menu-editor/ActionEditor';
 import ActionCard from '../menu-editor/ActionCard';
 import ConditionsEditor from '../ui/ConditionsEditor';
@@ -46,11 +49,33 @@ import { SetVariablePreview } from './SetVariablePreview';
 import { resolveBoolLabels } from '../../features/variables/booleanLabels';
 import { summarizeSetVariable } from '../../utils/variableLanguage';
 import VariablePicker from '../variables/VariablePicker';
+import ValueCalcEditor, { DEFAULT_CALC } from '../variables/ValueCalcEditor';
+import TypingBlipFields from '../ui/TypingBlipFields';
 import VariableTokenButton from '../variables/VariableTokenButton';
 import { PHONE_GLYPHS } from '../../features/ui/phoneIcons';
 import ConversationStudio from '../ConversationStudio';
 
 export type UpdateCommand = (updates: Partial<VNCommand>) => void;
+
+/** "Let the story continue": the friendly face of modifiers.runAsync — the next command starts
+ *  right away instead of waiting for this one's transition. Residue-free write (uncheck with no
+ *  stackId removes `modifiers` entirely, keeping untouched projects byte-identical). */
+const writeRunAsync = (cmd: any, checked: boolean): Partial<VNCommand> => {
+    const newModifiers = { ...(cmd.modifiers || {}), runAsync: checked };
+    if (!newModifiers.runAsync && !newModifiers.stackId) return { modifiers: undefined } as any;
+    return { modifiers: newModifiers } as any;
+};
+/** Exported for tests only. */
+export const writeRunAsyncForTest = writeRunAsync;
+const LetStoryContinueCheckbox: React.FC<{ cmd: any; updateCommand: UpdateCommand; t: any }> = ({ cmd, updateCommand, t }) => (
+    <div className="mt-1">
+        <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={!!cmd.modifiers?.runAsync} onChange={e => updateCommand(writeRunAsync(cmd, e.target.checked))} className="w-4 h-4" />
+            <span className="text-xs text-[var(--text-secondary)]">{t('shared.letStoryContinue', 'Let the story continue')}</span>
+        </label>
+        <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('shared.letStoryContinueHint', 'The next command starts right away — great for a character fading in while dialogue types.')}</p>
+    </div>
+);
 
 // ── ⟨Player's Character⟩ targeting ─────────────────────────────────────────────
 // A sentinel option shown in the character dropdown for Show/Dialogue/Move/Hide. Picking it sets
@@ -186,6 +211,9 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
     if (command.type === CommandType.SetCharacterLayer) {
         return <SetCharacterLayerGroup groupId={groupId} cmd={command as SetCharacterLayerCommand} updateCommand={updateCommand} project={project} t={t} />;
     }
+    if (command.type === CommandType.PlayCharacterAnimation) {
+        return <PlayCharacterAnimationGroup groupId={groupId} cmd={command as import('../../features/scene/types').PlayCharacterAnimationCommand} updateCommand={updateCommand} project={project} t={t} />;
+    }
     if (command.type === CommandType.SetCharacterPose) {
         return <SetCharacterPoseGroup groupId={groupId} cmd={command as import('../../features/scene/types').SetCharacterPoseCommand} updateCommand={updateCommand} project={project} t={t} />;
     }
@@ -204,6 +232,7 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
             <TransitionFields transition={c.transition} duration={c.duration} onUpdate={updateCommand as any} />
             {c.transition === 'slide' && <PositionInputs label={t('shared.startPosition')} position={c.startPosition as any} onChange={pos => updateCommand({ startPosition: pos } as any)} />}
             {c.transition === 'slide' && <PositionInputs label={t('shared.endPosition')} position={c.endPosition as any} onChange={pos => updateCommand({ endPosition: pos } as any)} />}
+            <LetStoryContinueCheckbox cmd={c} updateCommand={updateCommand} t={t} />
         </>;
         return null;
     }
@@ -451,6 +480,15 @@ export const CommandGroupAccordion: React.FC<{ command: VNCommand; updateCommand
     if (groups.length === 0) return null;
     return (
         <div className="space-y-2">
+            {/* Effect style — the one always-visible property ABOVE the accordion, only for
+                commands that HAVE an Enhanced (WebGL) rendering. Classic REMOVES the field so
+                untouched projects stay byte-identical. */}
+            {commandHasEnhancedStyle(command) && (
+                <EffectStyleSwitch
+                    value={isEnhanced((command as any).effectStyle) ? 'enhanced' : 'classic'}
+                    onChange={style => updateCommand({ effectStyle: style === 'enhanced' ? 'enhanced' : undefined } as any)}
+                />
+            )}
             {groups.map((g, i) => (
                 <CollapsibleSection
                     key={g}
@@ -505,8 +543,40 @@ const DialogueGroup: React.FC<{ groupId: InspectorGroupId; cmd: DialogueCommand;
                         onChange={text => updateCommand({ text } as any)}
                     />
                     <span className="text-[10px] text-[var(--text-muted)]">{t('dialogue.insertVariable', 'Show a variable’s value in this line')}</span>
+                    {/* Mid-sentence beat: inserts a [pause 0.5] code at the caret. */}
+                    <button
+                        onClick={() => {
+                            const el = dialogueTextRef.current;
+                            const text = cmd.text || '';
+                            const at = el && document.activeElement === el ? (el.selectionStart ?? text.length) : text.length;
+                            updateCommand({ text: `${text.slice(0, at)}[pause 0.5]${text.slice(at)}` } as any);
+                        }}
+                        className="px-1.5 py-0.5 rounded border border-[var(--border-default)] text-[10px] text-[var(--text-secondary)] hover:text-white hover:border-[var(--accent-lavender)] font-mono"
+                        title={t('dialogue.insertPauseTitle', 'A mid-sentence beat: the typing holds for that many seconds, right where the code sits')}
+                    >
+                        {t('dialogue.insertPause', '[pause]')}
+                    </button>
                 </div>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('dialogue.pauseCodeHint', 'Type [pause 0.5] anywhere in the text to make the typing hold for half a second.')}</p>
             </FormField>
+            {/* ── Append: this line ADDS to the previous one in the same box ── */}
+            <label className="flex items-center gap-1.5 mb-1">
+                <input type="checkbox" checked={!!(cmd as any).append} onChange={e => updateCommand({ append: e.target.checked || undefined, ...(e.target.checked ? {} : { appendPause: undefined }) } as any)} className="w-4 h-4" />
+                <span className="text-xs text-[var(--text-secondary)]">{t('dialogue.appendPrev', 'Add to the previous line (same text box)')}</span>
+            </label>
+            {(cmd as any).append && <>
+                <FormField label={t('dialogue.appendPause', 'Pause before this part (seconds)')}>
+                    <TextInput type="number" min="0" step="0.1" value={(cmd as any).appendPause ?? ''} placeholder="0.4"
+                        onChange={e => { const n = parseFloat(e.target.value); updateCommand({ appendPause: Number.isFinite(n) && n >= 0 ? n : undefined } as any); }} />
+                </FormField>
+                <p className="text-[10px] text-[var(--text-muted)] -mt-1 mb-2">{t('dialogue.appendHint', 'This text types out after the pause, continuing the previous line — great for comedic timing. A space is added between parts automatically when needed.')}</p>
+            </>}
+            {project.ui?.dialoguePunctuationPacing?.enabled && (
+                <label className="flex items-center gap-1.5 mb-1">
+                    <input type="checkbox" checked={!!(cmd as any).noPunctuationPauses} onChange={e => updateCommand({ noPunctuationPauses: e.target.checked || undefined } as any)} className="w-4 h-4" />
+                    <span className="text-xs text-[var(--text-secondary)]">{t('dialogue.noPunctuationPauses', 'No automatic punctuation pauses on this line')}</span>
+                </label>
+            )}
             <FormField label={t('dialogue.textboxTheme')}>
                 {Object.keys(project.textboxThemes || {}).length > 0 ? (
                     <SearchableSelect options={themeOptions} value={cmd.textboxThemeId || ''} onChange={(v) => updateCommand({ textboxThemeId: v || null } as any)} placeholder={t('dialogue.speakerDefault')} />
@@ -564,6 +634,25 @@ const DialogueGroup: React.FC<{ groupId: InspectorGroupId; cmd: DialogueCommand;
                     <span className="text-xs text-[var(--text-secondary)]">{(cmd.textEffect?.intensity ?? 1).toFixed(1)}x</span>
                 </FormField>
             </>}
+            {/* ── Typing sound (letter blips) — per-line override over the speaker's default ── */}
+            <FormField label={t('dialogue.typingSound', 'Typing sound (letter blips)')}>
+                <Select
+                    value={(cmd as any).typingBlip === 'silent' ? 'silent' : (cmd as any).typingBlip ? 'custom' : 'default'}
+                    onChange={e => {
+                        const v = e.target.value;
+                        if (v === 'default') updateCommand({ typingBlip: undefined } as any);
+                        else if (v === 'silent') updateCommand({ typingBlip: 'silent' } as any);
+                        else updateCommand({ typingBlip: (cmd as any).typingBlip && (cmd as any).typingBlip !== 'silent' ? (cmd as any).typingBlip : { audioId: null } } as any);
+                    }}
+                >
+                    <option value="default">{t('dialogue.typingSoundDefault', "The speaker's own typing sound")}</option>
+                    <option value="silent">{t('dialogue.typingSoundSilent', 'Silent for this line')}</option>
+                    <option value="custom">{t('dialogue.typingSoundCustom', 'Custom for this line')}</option>
+                </Select>
+            </FormField>
+            {(cmd as any).typingBlip && (cmd as any).typingBlip !== 'silent' && (
+                <TypingBlipFields value={(cmd as any).typingBlip} onChange={blip => updateCommand({ typingBlip: blip } as any)} project={project} />
+            )}
         </>;
     }
     return null;
@@ -1019,7 +1108,10 @@ const ShowCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowCharact
         case 'effects':
             return <CharacterVisualEffectsEditor cmd={cmd} updateCommand={updateCommand} />;
         case 'animation':
-            return <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand as any} />;
+            return <>
+                <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand as any} />
+                <LetStoryContinueCheckbox cmd={cmd} updateCommand={updateCommand} t={t} />
+            </>;
         default:
             return null;
     }
@@ -1057,6 +1149,33 @@ const SetCharacterPoseGroup: React.FC<{ groupId: InspectorGroupId; cmd: import('
         return <TransitionFields transition={cmd.transition || 'instant'} duration={cmd.duration ?? 0.3} onUpdate={updateCommand as any} />;
     }
     return null;
+};
+
+const PlayCharacterAnimationGroup: React.FC<{ groupId: InspectorGroupId; cmd: import('../../features/scene/types').PlayCharacterAnimationCommand; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
+    const isPlayer = cmd.characterSource === 'player';
+    const character = project.characters[cmd.characterId];
+    if (groupId !== 'content') return null;
+    const characterOptions = withPlayerCharacterOption(Object.values(project.characters).map((c: any) => ({ value: c.id, label: c.name })));
+    const anims = character ? (Object.values(character.animations || {}) as any[]) : [];
+    return <>
+        <FormField label={t('shared.character')}>
+            <SearchableSelect options={characterOptions} value={characterSelectValue(cmd as any)}
+                onChange={value => { if (value === PLAYER_CHARACTER_OPTION) { updateCommand({ characterSource: 'player' } as any); return; } updateCommand({ characterSource: 'fixed', characterId: value, animationId: null } as any); }}
+                placeholder={Object.keys(project.characters).length === 0 ? t('shared.noCharacters') : t('shared.selectCharacter')} />
+        </FormField>
+        {!isPlayer && character && anims.length === 0 && (
+            <p className="text-[11px] text-amber-400">{t('character.noAnimations', 'This character has no animations yet — make one in the Characters tab (🎞️ Animations).')}</p>
+        )}
+        {(isPlayer || anims.length > 0) && <>
+            <FormField label={t('character.animation', 'Animation')}>
+                <Select value={cmd.animationId ?? ''} onChange={e => updateCommand({ animationId: e.target.value || null } as any)}>
+                    <option value="">{t('character.stopAnimation', 'None (stop the current one)')}</option>
+                    {!isPlayer && anims.map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </Select>
+            </FormField>
+            <p className="text-[11px] text-[var(--text-muted)] -mt-1">{t('character.playAnimationHint', 'The character must already be on stage. A repeating animation keeps going until you stop or replace it — animations set to play by themselves don’t need this command.')}</p>
+        </>}
+    </>;
 };
 
 const SetCharacterLayerGroup: React.FC<{ groupId: InspectorGroupId; cmd: SetCharacterLayerCommand; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
@@ -1172,7 +1291,10 @@ const SetBackgroundGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; update
             )}
         </>;
     }
-    if (groupId === 'animation') return <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand as any} />;
+    if (groupId === 'animation') return <>
+        <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand as any} />
+        <LetStoryContinueCheckbox cmd={cmd} updateCommand={updateCommand} t={t} />
+    </>;
     return null;
 };
 
@@ -1195,6 +1317,18 @@ const AudioCmdGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand; u
             <RangeInput min="0" max="100" value={Math.round((cmd.volume ?? 1) * 100)} onChange={e => updateCommand({ volume: parseInt(e.target.value) / 100 } as any)} className="w-full accent-[var(--accent-lavender)]" />
         </FormField>
     );
+    const soundShaping = (allowReverse: boolean) => (
+        <div className="pt-1 mt-1 border-t border-[var(--border-subtle)]/60">
+            <p className="text-[10px] font-semibold text-[var(--text-secondary)] mb-1">{t('audio.shaping', 'Sound shaping')}</p>
+            <AudioAdjustFields
+                value={cmd.audioAdjust}
+                onChange={next => updateCommand({ audioAdjust: next } as any)}
+                allowReverse={allowReverse}
+                project={project}
+                audioId={cmd.audioId}
+            />
+        </div>
+    );
     switch (command.type) {
         case CommandType.PlayMusic:
             return <>
@@ -1202,6 +1336,7 @@ const AudioCmdGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand; u
                 {volume}
                 <FormField label={t('audio.fadeDurationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.fadeDuration} onChange={e => updateCommand({ fadeDuration: parseFloat(e.target.value) || 0 } as any)} /></FormField>
                 <label className="flex items-center gap-1 text-xs text-[var(--text-secondary)] cursor-pointer"><input type="checkbox" checked={cmd.loop} onChange={e => updateCommand({ loop: e.target.checked } as any)} /> {t('audio.loop')}</label>
+                {soundShaping(false)}
             </>;
         case CommandType.StopMusic:
             return <FormField label={t('audio.fadeDurationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.fadeDuration} onChange={e => updateCommand({ fadeDuration: parseFloat(e.target.value) || 0 } as any)} /></FormField>;
@@ -1210,6 +1345,7 @@ const AudioCmdGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand; u
                 {trackPicker}
                 {volume}
                 <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer"><input type="checkbox" checked={!!cmd.loop} onChange={e => updateCommand({ loop: e.target.checked } as any)} /> <span>{t('audio.loop')}</span></label>
+                {soundShaping(true)}
             </>;
         case CommandType.StopSoundEffect:
             return <>
@@ -1232,18 +1368,37 @@ const AudioCmdGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand; u
 const SetVariableGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
     if (groupId !== 'logic') return null;
     const variable = project.variables[cmd.variableId];
+    const isRandomOp = cmd.operator === 'random' || cmd.operator === 'addRandom' || cmd.operator === 'subtractRandom';
+    // Value mode: absent fields = "a value I type" (old projects, byte-identical). Number vars only.
+    const valueMode: 'typed' | 'variable' | 'calc' =
+        cmd.valueSource === 'variable' ? 'variable' : cmd.valueSource === 'calc' ? 'calc' : 'typed';
+    const showModeSelect = variable?.type === 'number' && !isRandomOp;
+    const setValueMode = (mode: 'typed' | 'variable' | 'calc') => {
+        if (mode === 'typed') {
+            // Back to the default: REMOVE the new fields entirely (keeps old-shape saves identical).
+            updateCommand({ valueSource: undefined, valueVariableId: undefined, calc: undefined } as any);
+        } else if (mode === 'variable') {
+            updateCommand({ valueSource: 'variable', calc: undefined } as any);
+        } else {
+            updateCommand({ valueSource: 'calc', valueVariableId: undefined, calc: cmd.calc ?? DEFAULT_CALC } as any);
+        }
+    };
     return <>
         <FormField label={t('vars.variable')}>
             <VariablePicker value={cmd.variableId} onChange={id => {
                 const newVar = project.variables[id];
                 let op = cmd.operator;
-                if (newVar?.type !== 'number' && (op === 'add' || op === 'subtract' || op === 'random')) op = 'set';
+                if (newVar?.type !== 'number' && (op === 'add' || op === 'subtract' || op === 'random' || op === 'addRandom' || op === 'subtractRandom')) op = 'set';
                 // Keep `value` concrete so a boolean Set never saves an empty value (read as the
                 // uninitialised default at runtime, not a real Yes/No choice).
                 let value = cmd.value;
                 if (newVar?.type === 'boolean' && typeof value !== 'boolean') value = true;
                 else if (newVar?.type !== 'boolean' && typeof value === 'boolean') value = '';
-                updateCommand({ variableId: id, operator: op, value } as any);
+                // From-a-variable / calculation values are number-only — strip them on a type change.
+                const strip = newVar?.type !== 'number' && cmd.valueSource
+                    ? { valueSource: undefined, valueVariableId: undefined, calc: undefined }
+                    : {};
+                updateCommand({ variableId: id, operator: op, value, ...strip } as any);
             }} />
         </FormField>
         <FormField label={t('vars.operator')}>
@@ -1252,13 +1407,30 @@ const SetVariableGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
                 {variable?.type === 'number' && <option value="add">{t('vars.add')}</option>}
                 {variable?.type === 'number' && <option value="subtract">{t('vars.subtract')}</option>}
                 {variable?.type === 'number' && <option value="random">{t('vars.random')}</option>}
+                {variable?.type === 'number' && <option value="addRandom">{t('vars.addRandom', 'Add Random (+ range)')}</option>}
+                {variable?.type === 'number' && <option value="subtractRandom">{t('vars.subtractRandom', 'Subtract Random (− range)')}</option>}
             </Select>
         </FormField>
-        {cmd.operator === 'random' && variable?.type === 'number' ? (
+        {showModeSelect && (
+            <FormField label={t('vars.valueMode', 'What value?')}>
+                <Select value={valueMode} onChange={e => setValueMode(e.target.value as any)}>
+                    <option value="typed">{t('vars.valueModeTyped', 'A value I type')}</option>
+                    <option value="variable">{t('vars.valueModeVariable', "Another variable's value")}</option>
+                    <option value="calc">{t('vars.valueModeCalc', 'A calculation')}</option>
+                </Select>
+            </FormField>
+        )}
+        {isRandomOp && variable?.type === 'number' ? (
             <div className="grid grid-cols-2 gap-1">
                 <FormField label={t('vars.minValue')}><TextInput type="number" value={String(cmd.randomMin ?? 0)} onChange={e => updateCommand({ randomMin: parseFloat(e.target.value) || 0 } as any)} /></FormField>
                 <FormField label={t('vars.maxValue')}><TextInput type="number" value={String(cmd.randomMax ?? 100)} onChange={e => updateCommand({ randomMax: parseFloat(e.target.value) || 100 } as any)} /></FormField>
             </div>
+        ) : showModeSelect && valueMode === 'variable' ? (
+            <FormField label={t('vars.valueOtherVariable', 'Which variable?')}>
+                <VariablePicker value={cmd.valueVariableId ?? ''} onChange={id => updateCommand({ valueVariableId: id } as any)} allowedTypes={['number']} />
+            </FormField>
+        ) : showModeSelect && valueMode === 'calc' ? (
+            <ValueCalcEditor calc={cmd.calc} onChange={calc => updateCommand({ calc } as any)} project={project} />
         ) : (
             <FormField label={t('vars.value')}>
                 {variable?.type === 'boolean' ? (
@@ -1273,7 +1445,8 @@ const SetVariableGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
                 )}
             </FormField>
         )}
-        <SetVariablePreview variable={variable} operator={cmd.operator} value={cmd.value} randomMin={cmd.randomMin} randomMax={cmd.randomMax} />
+        <SetVariablePreview variable={variable} operator={cmd.operator} value={cmd.value} randomMin={cmd.randomMin} randomMax={cmd.randomMax}
+            valueSource={cmd.valueSource} valueVariableId={cmd.valueVariableId} calc={cmd.calc} />
     </>;
 };
 
@@ -1583,7 +1756,13 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
             const isPersistent = overlayDuration === 0;
             return <>
                 <FormField label={t('screen.effect')}>
-                    <Select value={effectType} onChange={e => updateCommand({ effectType: e.target.value, color: undefined } as any)}>
+                    <Select value={effectType} onChange={e => {
+                        const next = e.target.value;
+                        const keepsEnhanced = next === 'fog' || next === 'haze' || next === 'smoke';
+                        // Changing to a type without an Enhanced look removes the style field
+                        // (absence is data — no orphan effectStyle lingers on the command).
+                        updateCommand({ effectType: next, color: undefined, ...(keepsEnhanced ? {} : { effectStyle: undefined }) } as any);
+                    }}>
                         <option value="crtScanlines">{t('screen.effects.crtScanlines')}</option>
                         <option value="chromaticGlitch">{t('screen.effects.chromaticGlitch')}</option>
                         <option value="glitch">{t('screen.effects.glitch', 'Glitch (corruption)')}</option>
@@ -2739,10 +2918,17 @@ const MoveCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; update
                 {TWEEN_EASING.map(g => <optgroup key={g.group} label={g.group}>{g.options.map(o => <option key={o} value={o}>{o}</option>)}</optgroup>)}
             </Select>
         </FormField>
-        <label className="flex items-center gap-1 mt-1">
-            <input type="checkbox" checked={cmd.waitForCompletion !== false} onChange={e => updateCommand({ waitForCompletion: e.target.checked } as any)} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
-            <span className="text-sm">{t('tween.waitForCompletion')}</span>
-        </label>
+        {/* "Let the story continue" — same wording as Show/Hide Character and Set Background.
+            Inverted mapping onto the stored field: checked = waitForCompletion FALSE (the story
+            moves on during the walk). Unchecked removes the field (absent = wait, the default) —
+            existing projects behave identically. */}
+        <div className="mt-1">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={cmd.waitForCompletion === false} onChange={e => updateCommand({ waitForCompletion: e.target.checked ? false : undefined } as any)} className="w-4 h-4" />
+                <span className="text-xs text-[var(--text-secondary)]">{t('shared.letStoryContinue', 'Let the story continue')}</span>
+            </label>
+            <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('shared.letStoryContinueHint', 'The next command starts right away — great for a character fading in while dialogue types.')}</p>
+        </div>
 
         {/* Optional extras — leave blank to keep unchanged. */}
         <div className="mt-2 pt-2 border-t border-[var(--border-subtle)]">
@@ -3194,7 +3380,7 @@ export function summarizeGroup(groupId: InspectorGroupId, command: VNCommand, pr
             case 'content': {
                 const who = cmd.characterId ? (project.characters[cmd.characterId]?.name || '') : 'Narrator';
                 const txt = (cmd.text || '').slice(0, 24);
-                return [who, txt && `“${txt}${cmd.text.length > 24 ? '…' : ''}”`].filter(Boolean).join(' · ');
+                return [(cmd as any).append && '⤷ adds on', who, txt && `“${txt}${cmd.text.length > 24 ? '…' : ''}”`].filter(Boolean).join(' · ');
             }
             case 'effects': return cmd.textEffect?.type ? cmd.textEffect.type : 'none';
             case 'logic': return (cmd as any).conditions?.length ? `${(cmd as any).conditions.length} condition(s)` : '';
@@ -3254,7 +3440,15 @@ export function summarizeGroup(groupId: InspectorGroupId, command: VNCommand, pr
         if (groupId === 'animation') return `${cmd.transition} · ${cmd.duration}s`;
     }
     if (command.type === CommandType.PlayMusic || command.type === CommandType.PlaySoundEffect) {
-        if (groupId === 'audio') { const c = command as any; return assetName(project.audio as any, c.audioId) || 'none'; }
+        if (groupId === 'audio') {
+            const c = command as any;
+            const name = assetName(project.audio as any, c.audioId) || 'none';
+            const adj = c.audioAdjust;
+            const bits: string[] = [];
+            if (adj?.speed !== undefined && adj.speed !== 1) bits.push(`${adj.speed}×`);
+            if (adj?.reverse && command.type === CommandType.PlaySoundEffect) bits.push('reversed');
+            return bits.length ? `${name} · ${bits.join(' ')}` : name;
+        }
     }
     if (command.type === CommandType.StopMusic) {
         if (groupId === 'audio') return `fade ${(command as any).fadeDuration ?? 0}s`;

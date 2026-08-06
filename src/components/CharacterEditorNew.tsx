@@ -20,7 +20,10 @@ import { useToast } from '../contexts/ToastContext';
 import { VNID } from '../types';
 import { VNCharacter, VNCharacterExpression, VNCharacterLayer, VNCharacterPose, VNLayerAsset, VNCharacterTextbox } from '../features/character/types';
 import { assetArtForPose, assetHasPoseArt, characterBaseArtForPose } from '../features/character/poseArt';
+import { layerBoxStyle, layerOrderForPose, poseHiddenLayerIds, resolveLayerBox } from '../features/character/layout';
 import MatchPoseArtModal from './character-poses/MatchPoseArtModal';
+import PoseStudio from './character-poses/PoseStudio';
+import AnimationStudio from './character-anim/AnimationStudio';
 import { fileToBase64 } from '../utils/file';
 import { ingestUpload, resolveFieldUrl } from '../utils/assetStore';
 import { PlusIcon, TrashIcon, UploadIcon, PencilIcon } from './icons';
@@ -32,6 +35,10 @@ import { popularFonts as _sharedFonts } from './ui/FontEditor';
 import ConfirmationModal from './ui/ConfirmationModal';
 import SpriteImportModal from './character-import/SpriteImportModal';
 import { partLayerName } from '../features/character/import/nameGrouping';
+import VariableTokenButton from './variables/VariableTokenButton';
+import { characterNameInitial } from '../utils/variableInterpolation';
+import { sanitizeFontFamily, analyzeFontComplexity, rendererFreezesOnComplexFonts } from '../utils/styleUtils';
+import TypingBlipFields from './ui/TypingBlipFields';
 
 type EditorArea = 'appearance' | 'voice';
 
@@ -265,6 +272,7 @@ const CharacterEditorNew: React.FC<{
     const [importFiles, setImportFiles] = useState<File[] | null>(null);
     const [dragOver, setDragOver] = useState(false);
     const spriteInputRef = useRef<HTMLInputElement>(null);
+    const nameInputRef = useRef<HTMLInputElement>(null);
     const [renamingExprId, setRenamingExprId] = useState<VNID | null>(null);
     const [confirmDeleteExpr, setConfirmDeleteExpr] = useState<VNCharacterExpression | null>(null);
     const baseImageInputRef = useRef<HTMLInputElement>(null);
@@ -275,6 +283,8 @@ const CharacterEditorNew: React.FC<{
     const [renamingPoseId, setRenamingPoseId] = useState<VNID | null>(null);
     const [confirmDeletePose, setConfirmDeletePose] = useState<VNCharacterPose | null>(null);
     const [matchPoseOpen, setMatchPoseOpen] = useState(false);
+    const [poseStudioOpen, setPoseStudioOpen] = useState(false);
+    const [animationsOpen, setAnimationsOpen] = useState(false);
     const poseBaseInputRef = useRef<HTMLInputElement>(null);
 
     const expressionsArray = useMemo(
@@ -310,7 +320,7 @@ const CharacterEditorNew: React.FC<{
 
     /* ── Handlers (same dispatches as the Classic editor) ── */
 
-    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop' | 'baseVideoTrimStart' | 'baseVideoTrimEnd' | 'textbox' | 'textboxThemeId' | 'defaultVoiceId' | 'phoneRingtoneAudioId' | 'textEffect' | 'dialogueTextColorMode' | 'dialogueTextColor'>>) => {
+    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop' | 'baseVideoTrimStart' | 'baseVideoTrimEnd' | 'textbox' | 'textboxThemeId' | 'defaultVoiceId' | 'phoneRingtoneAudioId' | 'textEffect' | 'dialogueTextColorMode' | 'dialogueTextColor' | 'typingBlip'>>) => {
         dispatch({ type: 'UPDATE_CHARACTER', payload: { characterId: activeCharacterId, updates } });
     };
     const updateTextbox = (patch: Partial<VNCharacterTextbox>) => {
@@ -334,8 +344,18 @@ const CharacterEditorNew: React.FC<{
             toast.warning(t('editor.fontUploadWarning'));
             return;
         }
+        if (file.size > 20 * 1024 * 1024) {
+            toast.warning(t('editor.fontSizeWarning', 'This font is very large ({{mb}} MB) — it will make your project file much bigger and saving slower. A subsetted version of the font would work better.', { mb: Math.round(file.size / 1024 / 1024) }));
+        }
+        const complexity = analyzeFontComplexity(await file.arrayBuffer());
+        if (complexity?.tooComplex && rendererFreezesOnComplexFonts()) {
+            toast.error(t('editor.fontTooComplex', "This font can't be used — its letters are drawn with extremely detailed outlines (about {{kb}} KB per letter) that would freeze the app. If the font has a simpler version, use that one.", { kb: Math.round(complexity.avgGlyphBytes / 1024) }));
+            return;
+        }
         const dataUrl = await fileToBase64(file);
-        const fontName = file.name.replace(/\.(ttf|otf)$/i, '');
+        // CSS-safe family: dots/parentheses in a filename make new FontFace() throw,
+        // so the font would silently never load and text falls back to the default face.
+        const fontName = sanitizeFontFamily(file.name.replace(/\.(ttf|otf)$/i, ''));
         updateCharacter({ fontUrl: dataUrl, fontFamily: fontName });
     };
 
@@ -383,6 +403,12 @@ const CharacterEditorNew: React.FC<{
         if (activePoseId === confirmDeletePose.id) setActivePoseId(null);
         setConfirmDeletePose(null);
     };
+    const handleDuplicatePose = (poseId: VNID) => {
+        // Id generated here (not in the reducer) so we can select the copy right away.
+        const newPoseId = `pose-${Math.random().toString(36).substring(2, 9)}` as VNID;
+        dispatch({ type: 'DUPLICATE_POSE', payload: { characterId: activeCharacterId, poseId, newPoseId } });
+        setActivePoseId(newPoseId);
+    };
     const handlePoseBaseUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file || !activePoseId) return;
@@ -410,16 +436,22 @@ const CharacterEditorNew: React.FC<{
             ) : previewBaseArt.imageUrl ? (
                 <img src={resolveFieldUrl(project.id, previewBaseArt.imageUrl) || undefined} alt="Base" className="absolute inset-0 w-full h-full object-contain" />
             ) : null}
-            {selectedExpression && layersArray.map((layer: VNCharacterLayer) => {
-                const assetId = selectedExpression.layerConfiguration[layer.id];
-                if (!assetId) return null;
-                const asset = layer.assets[assetId];
-                if (!asset) return null;
-                const art = assetArtForPose(asset, activePoseId || undefined);
-                if (art.videoUrl) return <video key={layer.id} src={resolveFieldUrl(project.id, art.videoUrl) || undefined} autoPlay muted loop={art.loop} playsInline className="absolute inset-0 w-full h-full object-contain" />;
-                if (art.imageUrl) return <img key={layer.id} src={resolveFieldUrl(project.id, art.imageUrl) || undefined} alt={asset.name} className="absolute inset-0 w-full h-full object-contain" />;
-                return null;
-            })}
+            {selectedExpression && (() => {
+                // Pose Studio order + hidden + boxes (shared resolvers — mirrors every runtime surface).
+                const hidden = poseHiddenLayerIds(character, activePoseId || undefined);
+                return layerOrderForPose(character, activePoseId || undefined).map((layer: VNCharacterLayer, stackIdx: number) => {
+                    if (hidden.has(layer.id)) return null;
+                    const assetId = selectedExpression.layerConfiguration[layer.id];
+                    if (!assetId) return null;
+                    const asset = layer.assets[assetId];
+                    if (!asset) return null;
+                    const art = assetArtForPose(asset, activePoseId || undefined);
+                    const boxStyle = { zIndex: stackIdx + 1, ...layerBoxStyle(resolveLayerBox(layer, asset, activePoseId || undefined)) };
+                    if (art.videoUrl) return <video key={layer.id} src={resolveFieldUrl(project.id, art.videoUrl) || undefined} autoPlay muted loop={art.loop} playsInline className="absolute inset-0 w-full h-full object-contain" style={boxStyle} />;
+                    if (art.imageUrl) return <img key={layer.id} src={resolveFieldUrl(project.id, art.imageUrl) || undefined} alt={asset.name} className="absolute inset-0 w-full h-full object-contain" style={boxStyle} />;
+                    return null;
+                });
+            })()}
             {!character.baseImageUrl && !character.baseVideoUrl && layersArray.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center" style={{ color: 'var(--text-muted)' }}>
@@ -470,16 +502,20 @@ const CharacterEditorNew: React.FC<{
                     ) : character.baseImageUrl ? (
                         <img src={resolveFieldUrl(project.id, character.baseImageUrl) || undefined} alt="" className="w-full h-full object-cover" />
                     ) : (
-                        <span className="text-lg font-bold" style={{ color: character.color }}>{character.name.charAt(0)}</span>
+                        <span className="text-lg font-bold" style={{ color: character.color }}>{characterNameInitial(character.name)}</span>
                     )}
                 </div>
                 <input
+                    ref={nameInputRef}
                     type="text"
                     value={character.name}
                     onChange={e => updateCharacter({ name: e.target.value })}
                     className="bg-transparent text-base font-bold outline-none border-b border-transparent hover:border-[var(--border-subtle)] focus:border-[var(--accent-cyan)] transition-colors min-w-0"
                     style={{ color: 'var(--text-primary)', maxWidth: '180px' }}
+                    title={t('editor.nameTokenHint', 'Names can show a variable — pick { } to make the name change during the story')}
                 />
+                {/* Names can hold {Variable} tokens — "???" until the reveal, nicknames, etc. */}
+                <VariableTokenButton targetRef={nameInputRef} value={character.name} onChange={name => updateCharacter({ name })} />
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                     <ColorInput value={character.color} onChange={v => updateCharacter({ color: v })} />
                     <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('editor.color')}</span>
@@ -604,6 +640,7 @@ const CharacterEditorNew: React.FC<{
                                                 <span className="truncate max-w-[10rem]">{pose.name}</span>
                                             )}
                                             <button onClick={e => { e.stopPropagation(); setRenamingPoseId(pose.id); }} className="p-0.5 text-slate-500 hover:text-[var(--accent-lavender)] opacity-0 group-hover:opacity-100 transition-opacity" title={t('editor.rename')}><PencilIcon className="w-2.5 h-2.5" /></button>
+                                            <button onClick={e => { e.stopPropagation(); handleDuplicatePose(pose.id); }} className="p-0.5 text-slate-500 hover:text-[var(--accent-cyan)] opacity-0 group-hover:opacity-100 transition-opacity" title={t('poses.duplicate', 'Duplicate pose (art + layout)')}>⧉</button>
                                             <button onClick={e => { e.stopPropagation(); setConfirmDeletePose(pose); }} className="p-0.5 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" title={t('editor.delete')}><TrashIcon className="w-2.5 h-2.5" /></button>
                                         </div>
                                     );
@@ -616,6 +653,12 @@ const CharacterEditorNew: React.FC<{
                                         <UploadIcon className="w-3 h-3" /> {t('poses.matchByName', 'Match art by file name')}
                                     </button>
                                 )}
+                                <button onClick={() => setPoseStudioOpen(true)} className="flex items-center gap-1 px-2 py-1 rounded-full text-xs border hover:bg-[var(--bg-tertiary)]" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }} title={t('poses.arrangeHint', 'Move, resize, tilt, reorder, or hide each piece of this character — per pose')}>
+                                    🧍 {t('poses.arrange', 'Pose Studio')}
+                                </button>
+                                <button onClick={() => setAnimationsOpen(true)} className="flex items-center gap-1 px-2 py-1 rounded-full text-xs border hover:bg-[var(--bg-tertiary)]" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }} title={t('anim.openHint', 'Make this character blink, talk, or move pieces on a loop — using their existing pieces as frames')}>
+                                    🎞️ {t('anim.open', 'Animations')}
+                                </button>
                             </div>
                         </div>
 
@@ -808,6 +851,19 @@ const CharacterEditorNew: React.FC<{
                                 </Select>
                                 <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{t('editor.phoneRingtoneHint', 'Default ringtone when this character calls (an Incoming Call command can override it).')}</p>
                             </FormField>
+                            {/* Typing sound (Undertale-style letter blips) */}
+                            <FormField label={t('editor.typingBlip', 'Typing sound (letter blips)')}>
+                                <label className="flex items-center gap-1.5 mb-1.5">
+                                    <input type="checkbox" checked={!!character.typingBlip}
+                                        onChange={e => updateCharacter({ typingBlip: e.target.checked ? { audioId: null } : undefined })}
+                                        className="w-4 h-4" />
+                                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('editor.typingBlipEnable', 'Play a little sound as their words type out')}</span>
+                                </label>
+                                {character.typingBlip && (
+                                    <TypingBlipFields value={character.typingBlip} onChange={blip => updateCharacter({ typingBlip: blip })} project={project} />
+                                )}
+                                <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{t('editor.typingBlipHint', 'Plays on every line this character speaks. Lines with a voice clip stay silent unless the line sets its own typing sound.')}</p>
+                            </FormField>
                         </div>
                     </div>
                 </div>
@@ -824,6 +880,21 @@ const CharacterEditorNew: React.FC<{
                     character={character}
                     pose={character.poses[activePoseId]}
                     onClose={() => setMatchPoseOpen(false)}
+                />
+            )}
+            {poseStudioOpen && (
+                <PoseStudio
+                    character={character}
+                    project={project}
+                    initialPoseId={activePoseId}
+                    onClose={() => setPoseStudioOpen(false)}
+                />
+            )}
+            {animationsOpen && (
+                <AnimationStudio
+                    character={character}
+                    projectId={project.id}
+                    onClose={() => setAnimationsOpen(false)}
                 />
             )}
         </div>

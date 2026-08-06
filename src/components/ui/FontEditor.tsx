@@ -4,6 +4,7 @@ import { VNFontSettings } from '../../features/ui/types';
 import { VNTextShadow, VNTextGradient, VNTextBorder } from '../../features/scene/types';
 import { useProject } from '../../contexts/ProjectContext';
 import { FormField, TextInput, Select, ColorInput } from './Form';
+import { cssFontFamily } from '../../utils/styleUtils';
 
 /** Curated list of popular fonts for visual novels. Exported so consumers can reuse it. */
 export const popularFonts = [
@@ -162,7 +163,7 @@ const FontEditor: React.FC<FontEditorProps> = ({
                     <p
                         className="text-sm"
                         style={{
-                            fontFamily: font.family,
+                            fontFamily: cssFontFamily(font.family),
                             fontSize: `${font.size}px`,
                             color: font.color,
                             fontWeight: font.weight,

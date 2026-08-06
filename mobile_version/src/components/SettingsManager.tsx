@@ -4,14 +4,16 @@ import { VNDayNightCycle, VNDayNightPhase, VNGradeLayer } from '../types/project
 import { VNVariable } from '../features/variables/types';
 import { createDefaultDayNightCycle } from './live-preview/systems/dayNightGrade';
 import { useTranslation, Trans } from 'react-i18next';
+import { useToast } from '../contexts/ToastContext';
 import { SUPPORTED_LANGUAGES, setLanguage } from '../i18n';
-import { VNProject, VNProjectFont, CGGalleryConfig, CGGalleryEntry } from '../types/project';
+import { VNProject, VNProjectFont, CGGalleryConfig, CGGalleryEntry, MusicGalleryConfig, MusicGalleryEntry } from '../types/project';
 import { VNProjectUI } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
-import { Cog6ToothIcon, PhotoIcon, BookOpenIcon, TrashIcon, SparklesIcon, ClockIcon, LockClosedIcon, ChevronDownIcon, UIScreensIcon } from './icons';
+import { Cog6ToothIcon, PhotoIcon, BookOpenIcon, TrashIcon, SparklesIcon, ClockIcon, LockClosedIcon, ChevronDownIcon, UIScreensIcon, MusicalNoteIcon } from './icons';
 import { VNID } from '../types';
 import { AccessibilityManager, A11yPreferences } from '../features/accessibility/AccessibilityManager';
 import { WorkflowTracker, WorkflowStats } from '../features/analytics/WorkflowTracker';
+import { sanitizeFontFamily, loadFontOnce, cssFontFamily, analyzeFontComplexity, rendererFreezesOnComplexFonts } from '../utils/styleUtils';
 
 function isEditorDebugEnabled(): boolean {
     try {
@@ -34,7 +36,7 @@ interface SettingsManagerProps {
 const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
     const { dispatch } = useProject();
     const { t } = useTranslation('settings');
-    const [activeSection, setActiveSection] = useState<'general' | 'fonts' | 'screens' | 'accessibility' | 'analytics' | 'cg-gallery' | 'day-night'>('general');
+    const [activeSection, setActiveSection] = useState<'general' | 'fonts' | 'screens' | 'accessibility' | 'analytics' | 'cg-gallery' | 'music-gallery' | 'day-night'>('general');
 
     const updateUI = (updates: Partial<VNProjectUI>) => {
         editorDebugLog('[SettingsManager] updateUI called with:', updates);
@@ -51,6 +53,7 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
         { id: 'fonts' as const, name: t('sections.fonts'), icon: BookOpenIcon },
         { id: 'screens' as const, name: t('sections.screens'), icon: UIScreensIcon },
         { id: 'cg-gallery' as const, name: t('sections.cgGallery'), icon: PhotoIcon },
+        { id: 'music-gallery' as const, name: t('sections.musicGallery'), icon: MusicalNoteIcon },
         { id: 'day-night' as const, name: t('sections.dayNight', 'Day / Night'), icon: ClockIcon },
         { id: 'accessibility' as const, name: t('sections.accessibility'), icon: SparklesIcon },
         { id: 'analytics' as const, name: t('sections.analytics'), icon: ClockIcon },
@@ -101,6 +104,9 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
                 )}
                 {activeSection === 'cg-gallery' && (
                     <CGGallerySettings project={project} onUpdate={updateProject} />
+                )}
+                {activeSection === 'music-gallery' && (
+                    <MusicGallerySettings project={project} onUpdate={updateProject} />
                 )}
                 {activeSection === 'day-night' && (
                     <DayNightSettings project={project} onUpdate={updateProject} />
@@ -1310,6 +1316,7 @@ const fileToBase64 = (file: File): Promise<string> =>
 const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
     const { dispatch } = useProject();
     const { t } = useTranslation('settings');
+    const toast = useToast();
 
     const projectFontsArray = Object.values((project as any).fonts || {}) as VNProjectFont[];
     
@@ -1321,7 +1328,17 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
             const file: File | undefined = e.target?.files?.[0];
             if (!file) return;
 
-            const baseName = file.name.replace(/\.(ttf|otf)$/i, '').trim() || 'Custom Font';
+            // Family names must be CSS-safe: dots/parentheses make new FontFace() THROW, so a
+            // font registered under such a name silently never loads (all its text falls back).
+            const baseName = sanitizeFontFamily(file.name.replace(/\.(ttf|otf)$/i, ''));
+            if (file.size > 20 * 1024 * 1024) {
+                toast.warning(t('fonts.sizeWarning', 'This font is very large ({{mb}} MB) — it will make your project file much bigger and saving slower. A subsetted version of the font would work better.', { mb: Math.round(file.size / 1024 / 1024) }));
+            }
+            const complexity = analyzeFontComplexity(await file.arrayBuffer());
+            if (complexity?.tooComplex && rendererFreezesOnComplexFonts()) {
+                toast.error(t('fonts.tooComplex', "This font can't be used — its letters are drawn with extremely detailed outlines (about {{kb}} KB per letter) that would freeze the app. If the font has a simpler version, use that one.", { kb: Math.round(complexity.avgGlyphBytes / 1024) }));
+                return;
+            }
             const dataUrl = await fileToBase64(file);
 
             const newId = `font-${Math.random().toString(36).substring(2, 9)}` as VNID;
@@ -1329,8 +1346,8 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
                 Object.values((project as any).fonts || {}).map((f: any) => (f?.fontFamily || '').toLowerCase())
             );
             let fontFamily = baseName;
-            if (existingFamilies.has(fontFamily.toLowerCase())) {
-                fontFamily = `${baseName} (${newId})`;
+            for (let n = 2; existingFamilies.has(fontFamily.toLowerCase()); n++) {
+                fontFamily = `${baseName}-${n}`;
             }
 
             const newFont: VNProjectFont = {
@@ -1351,14 +1368,9 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
                 } as any,
             });
             
-            // Load the font into the document immediately
-            try {
-                const fontFace = new FontFace(fontFamily, `url(${dataUrl})`);
-                await fontFace.load();
-                (document as any).fonts.add(fontFace);
-            } catch (err) {
-                console.error('Failed to load uploaded font:', err);
-            }
+            // Load the font into the document immediately (deduped — the editor's font effect
+            // will also see this font and must not re-parse it).
+            await loadFontOnce(fontFamily, dataUrl);
         };
         input.click();
     };
@@ -1394,7 +1406,7 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
                         {projectFontsArray.map((f) => (
                             <div key={f.id} className="flex items-center justify-between bg-[var(--bg-primary)]/50 border border-[var(--border-default)] rounded p-3">
                                 <div className="min-w-0 flex-1">
-                                    <div className="text-white font-medium" style={{ fontFamily: f.fontFamily }}>
+                                    <div className="text-white font-medium" style={{ fontFamily: cssFontFamily(f.fontFamily) }}>
                                         {f.name}
                                     </div>
                                     <div className="text-xs text-[var(--text-secondary)]">{f.fontFamily}</div>
@@ -1763,6 +1775,295 @@ const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate
                                                             {t('cgGallery.noBooleanVars')}
                                                         </p>
                                                     )}
+                                                    {entry.unlockVariableId && !booleanVariables.find((v) => v.id === entry.unlockVariableId) && (
+                                                        <p className="text-xs text-amber-400 mt-1">{t('cgGallery.varNotFound')}</p>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+};
+
+interface MusicGallerySettingsProps {
+    project: VNProject;
+    onUpdate: (updates: Partial<VNProject>) => void;
+}
+
+const MusicGallerySettings: React.FC<MusicGallerySettingsProps> = ({ project, onUpdate }) => {
+    const { t } = useTranslation('settings');
+    const { dispatch } = useProject();
+    const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+
+    const gallery: MusicGalleryConfig = project.musicGallery ?? { entries: {} };
+
+    const updateGallery = (updates: Partial<MusicGalleryConfig>) => {
+        onUpdate({ musicGallery: { ...gallery, ...updates } });
+    };
+
+    const entries = Object.values(gallery.entries).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    const addEntry = () => {
+        const id = `song-${Math.random().toString(36).substring(2, 9)}` as VNID;
+        const newEntry: MusicGalleryEntry = {
+            id,
+            name: `${t('musicGallery.defaultSongName')} ${entries.length + 1}`,
+            audioId: null,
+            unlockable: false,
+            order: entries.length,
+        };
+        updateGallery({ entries: { ...gallery.entries, [id]: newEntry } });
+        setEditingEntryId(id);
+    };
+
+    const updateEntry = (id: VNID, updates: Partial<MusicGalleryEntry>) => {
+        const existing = gallery.entries[id];
+        if (!existing) return;
+        updateGallery({ entries: { ...gallery.entries, [id]: { ...existing, ...updates } } });
+    };
+
+    const removeEntry = (id: VNID) => {
+        const { [id]: _removed, ...rest } = gallery.entries;
+        updateGallery({ entries: rest });
+        if (editingEntryId === id) setEditingEntryId(null);
+    };
+
+    /** One-click unlock switch: a PERSISTENT boolean so unlocks survive New Game + restarts
+     *  (same rule as the CG Gallery wizard). Created + assigned in one go. */
+    const createUnlockVariable = (entry: MusicGalleryEntry) => {
+        const varId = `var-song-unlock-${Math.random().toString(36).substring(2, 9)}` as VNID;
+        dispatch({
+            type: 'ADD_VARIABLE',
+            payload: {
+                id: varId,
+                name: `Song Unlock: ${entry.name}`,
+                type: 'boolean',
+                defaultValue: false,
+                scope: 'persistent',
+            },
+        });
+        updateEntry(entry.id as VNID, { unlockVariableId: varId });
+    };
+
+    const allAudio = Object.values(project.audio || {}) as { id: string; name: string }[];
+    const allImages = Object.values(project.images || {}) as { id: string; name: string }[];
+    const allBackgrounds = Object.values(project.backgrounds || {}) as { id: string; name: string }[];
+    const artworkOptions = (
+        <>
+            {allImages.length > 0 && (
+                <optgroup label={t('cgGallery.images')}>
+                    {allImages.map((img) => (
+                        <option key={img.id} value={img.id}>{img.name}</option>
+                    ))}
+                </optgroup>
+            )}
+            {allBackgrounds.length > 0 && (
+                <optgroup label={t('cgGallery.backgrounds')}>
+                    {allBackgrounds.map((bg) => (
+                        <option key={bg.id} value={bg.id}>{bg.name}</option>
+                    ))}
+                </optgroup>
+            )}
+        </>
+    );
+
+    const booleanVariables = Object.values(project.variables || {}).filter((v: any) => v.type === 'boolean') as { id: string; name: string; type: string }[];
+    const inputCls = "w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]";
+
+    return (
+        <div className="p-6">
+            <h3 className="text-xl font-bold text-white mb-2">{t('musicGallery.heading')}</h3>
+            <p className="text-sm text-[var(--text-secondary)] mb-6">
+                {t('musicGallery.intro')}
+            </p>
+
+            {/* Gallery-Level Settings */}
+            <div className="space-y-4 max-w-lg mb-8">
+                <h4 className="text-sm font-semibold text-sky-400 uppercase tracking-wider">{t('musicGallery.gallerySettings')}</h4>
+                <div>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('musicGallery.defaultArtwork')}</label>
+                    <select
+                        value={gallery.defaultArtworkAssetId ?? ''}
+                        onChange={(e) => updateGallery({ defaultArtworkAssetId: (e.target.value || null) as VNID | null })}
+                        className={inputCls}
+                    >
+                        <option value="">{t('musicGallery.noDefaultArtwork')}</option>
+                        {artworkOptions}
+                    </select>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">{t('musicGallery.defaultArtworkHint')}</p>
+                </div>
+            </div>
+
+            {/* Songs */}
+            <div className="mb-4 flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-sky-400 uppercase tracking-wider">{t('musicGallery.songsHeading', { count: entries.length })}</h4>
+                <button
+                    onClick={addEntry}
+                    className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-sm rounded-md transition-colors"
+                >
+                    {t('musicGallery.addSong')}
+                </button>
+            </div>
+
+            {entries.length === 0 ? (
+                <div className="text-center py-12 bg-[var(--bg-primary)]/50 rounded-lg border border-[var(--border-subtle)] border-dashed">
+                    <p className="text-[var(--text-secondary)] mb-2">{t('musicGallery.noSongs')}</p>
+                    <p className="text-xs text-[var(--text-muted)]">{t('musicGallery.noSongsHint')}</p>
+                </div>
+            ) : (
+                <div className="space-y-2 max-w-2xl">
+                    {entries.map((entry) => {
+                        const isEditing = editingEntryId === entry.id;
+                        const audioInfo = allAudio.find((a) => a.id === entry.audioId);
+
+                        return (
+                            <div
+                                key={entry.id}
+                                className={`bg-[var(--bg-primary)] rounded-md border ${isEditing ? 'border-sky-500' : 'border-[var(--border-subtle)]'} overflow-hidden`}
+                            >
+                                <div
+                                    className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-750"
+                                    onClick={() => setEditingEntryId(isEditing ? null : entry.id)}
+                                >
+                                    <span className="text-[var(--text-muted)] text-xs font-mono w-6 text-center">{(entry.order ?? 0) + 1}</span>
+                                    <span className="flex-1 text-white text-sm font-medium truncate">{entry.name}</span>
+                                    <span className="text-xs text-[var(--text-secondary)]">
+                                        {audioInfo ? audioInfo.name : t('musicGallery.noAudio')}
+                                    </span>
+                                    {entry.unlockable && (
+                                        <span className="text-xs bg-amber-600/30 text-amber-400 px-2 py-0.5 rounded flex items-center gap-1"><LockClosedIcon className="w-3 h-3" /> {t('cgGallery.unlockable')}</span>
+                                    )}
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); removeEntry(entry.id as VNID); }}
+                                        className="text-red-400 hover:text-red-300 p-1"
+                                        title={t('musicGallery.removeSong')}
+                                    >
+                                        <TrashIcon className="w-4 h-4" />
+                                    </button>
+                                    <span className={`text-[var(--text-secondary)] transition-transform ${isEditing ? 'rotate-180' : ''}`}><ChevronDownIcon className="w-4 h-4" /></span>
+                                </div>
+
+                                {isEditing && (
+                                    <div className="px-4 pb-4 pt-2 border-t border-[var(--border-subtle)] space-y-3">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">{t('musicGallery.songTitle')}</label>
+                                                <input
+                                                    type="text"
+                                                    value={entry.name}
+                                                    onChange={(e) => updateEntry(entry.id as VNID, { name: e.target.value })}
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">{t('musicGallery.artist')}</label>
+                                                <input
+                                                    type="text"
+                                                    value={entry.artist ?? ''}
+                                                    onChange={(e) => updateEntry(entry.id as VNID, { artist: e.target.value || undefined })}
+                                                    className={inputCls}
+                                                    placeholder={t('musicGallery.artistPlaceholder')}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">{t('musicGallery.song')}</label>
+                                                <select
+                                                    value={entry.audioId ?? ''}
+                                                    onChange={(e) => updateEntry(entry.id as VNID, { audioId: (e.target.value || null) as VNID | null })}
+                                                    className={inputCls}
+                                                >
+                                                    <option value="">{t('musicGallery.selectSong')}</option>
+                                                    {allAudio.map((a) => (
+                                                        <option key={a.id} value={a.id}>{a.name}</option>
+                                                    ))}
+                                                </select>
+                                                {allAudio.length === 0 && (
+                                                    <p className="text-xs text-amber-400 mt-1">{t('musicGallery.noAudioAssets')}</p>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">{t('musicGallery.artwork')}</label>
+                                                <select
+                                                    value={entry.artworkAssetId ?? ''}
+                                                    onChange={(e) => updateEntry(entry.id as VNID, { artworkAssetId: (e.target.value || null) as VNID | null })}
+                                                    className={inputCls}
+                                                >
+                                                    <option value="">{t('musicGallery.useDefaultArtwork')}</option>
+                                                    {artworkOptions}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">{t('cgGallery.category')}</label>
+                                                <input
+                                                    type="text"
+                                                    value={entry.category ?? ''}
+                                                    onChange={(e) => updateEntry(entry.id as VNID, { category: e.target.value || undefined })}
+                                                    className={inputCls}
+                                                    placeholder={t('musicGallery.categoryPlaceholder')}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">{t('cgGallery.sortOrder')}</label>
+                                                <input
+                                                    type="number"
+                                                    value={entry.order ?? 0}
+                                                    onChange={(e) => updateEntry(entry.id as VNID, { order: parseInt(e.target.value, 10) || 0 })}
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Unlockable Section */}
+                                        <div className="bg-[var(--bg-primary)]/50 rounded p-3 space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    role="switch"
+                                                    aria-checked={entry.unlockable}
+                                                    onClick={() => updateEntry(entry.id as VNID, { unlockable: !entry.unlockable })}
+                                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent-lavender)] ${
+                                                        entry.unlockable ? 'bg-sky-500' : 'bg-[var(--bg-tertiary)]'
+                                                    }`}
+                                                >
+                                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${entry.unlockable ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                                                </button>
+                                                <label className="text-sm text-[var(--text-primary)]">{t('musicGallery.requiresUnlocking')}</label>
+                                            </div>
+
+                                            {entry.unlockable && (
+                                                <div>
+                                                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">{t('musicGallery.unlockVariable')}</label>
+                                                    <div className="flex gap-2">
+                                                        <select
+                                                            value={entry.unlockVariableId ?? ''}
+                                                            onChange={(e) => updateEntry(entry.id as VNID, { unlockVariableId: (e.target.value || null) as VNID | null })}
+                                                            className={inputCls}
+                                                        >
+                                                            <option value="">{t('cgGallery.selectVariable')}</option>
+                                                            {booleanVariables.map((v) => (
+                                                                <option key={v.id} value={v.id}>{v.name}</option>
+                                                            ))}
+                                                        </select>
+                                                        <button
+                                                            onClick={() => createUnlockVariable(entry)}
+                                                            className="px-2 py-1 bg-emerald-700 hover:bg-emerald-600 text-white text-xs rounded whitespace-nowrap"
+                                                            title={t('musicGallery.createUnlockHint')}
+                                                        >
+                                                            {t('musicGallery.createUnlock')}
+                                                        </button>
+                                                    </div>
                                                     {entry.unlockVariableId && !booleanVariables.find((v) => v.id === entry.unlockVariableId) && (
                                                         <p className="text-xs text-amber-400 mt-1">{t('cgGallery.varNotFound')}</p>
                                                     )}

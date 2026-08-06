@@ -28,7 +28,7 @@ export interface CommandContext {
     getAssetMetadata: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => { isVideo: boolean; loop: boolean };
     musicAudioRef: React.RefObject<HTMLAudioElement>;
     fadeAudio: (audio: HTMLAudioElement, targetVolume: number, duration?: number, onComplete?: () => void) => void;
-    playSound: (soundId: VNID | null, volume?: number, loop?: boolean) => HTMLAudioElement | null | void;
+    playSound: (soundId: VNID | null, volume?: number, loop?: boolean, adjust?: import('../../../features/scene/types').VNAudioAdjust | null) => HTMLAudioElement | null | void;
     /** Play a dialogue VOICE clip: only one at a time (no overlap), volume follows the Voice slider
      *  independently of SFX. Falls back to playSound if absent (older callers). */
     playVoice?: (soundId: VNID | null, volume?: number) => HTMLAudioElement | null | void;
@@ -47,6 +47,10 @@ export interface CommandContext {
     setPlayerState: React.Dispatch<React.SetStateAction<PlayerState | null>>;
     activeEffectTimeoutsRef: React.MutableRefObject<number[]>;
     runtime?: RuntimeCommandHelpers;
+    /** MERGED view of variable values (playerState + dirty UI writes) for handlers that READ other
+     *  variables (Set Variable's from-a-variable / calculation values). Optional — absent falls back
+     *  to playerState.variables (older call sites keep today's behavior). */
+    runtimeVariables?: Record<VNID, string | number | boolean>;
     // Condition evaluation for ShowButton and other conditional commands
     evaluateConditions: (conditions: VNCondition[] | undefined, variables: Record<VNID, string | number | boolean>) => boolean;
     /** Show a toast notification to the player (scripts' game.notify, surfaced script errors). Optional. */
@@ -86,6 +90,10 @@ export interface CommandResult {
      *  Hide Character commands fired in parallel each removing a different character. The plain
      *  `updates.stageState` path replaces whole collections from a stale snapshot and races. */
     stagePatch?: (prev: StageState) => Partial<StageState>;
+    /** Same idea for uiState: a FUNCTIONAL delta against the LATEST uiState. Needed by dialogue
+     *  APPEND — merging into the previous line's text from `context.playerState` would read a
+     *  stale snapshot when parts execute back to back. Composed after `updates.uiState`. */
+    uiStatePatch?: (prev: PlayerState['uiState']) => Partial<PlayerState['uiState']>;
     /** Delay in milliseconds before advancing */
     delay?: number;
     /** Callback to execute after delay */

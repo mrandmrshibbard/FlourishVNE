@@ -206,6 +206,11 @@ export interface StageCharacterState {
     videoLoop?: boolean;
     /** Per-video [start,end] trim (seconds), parallel to videoUrls. The base sprite's slice. */
     videoTrims?: Array<{ start?: number; end?: number }>;
+    /** Pose Studio geometry: where each piece sits (percent boxes, parallel to imageUrls /
+     *  videoUrls; null = whole box). Present ONLY when some piece has a box — box-less
+     *  games' stage state and saves stay byte-identical. */
+    imageBoxes?: Array<import('../../../features/character/types').VNLayerBox | null>;
+    videoBoxes?: Array<import('../../../features/character/types').VNLayerBox | null>;
     transition: StageCharacterTransition | null;
     expressionId?: VNID;
     layerVariableBindings?: Record<VNID, VNID>;
@@ -235,6 +240,13 @@ export interface StageCharacterState {
     /** The pose currently shown (absent = Default). Persists in saves; Set Character Layer
      *  and Change Pose keep/update it. Additive-optional. */
     poseId?: VNID;
+    /** A manually-started character animation currently playing (Play Character Animation).
+     *  Persists in saves so a looping animation resumes after load. Additive-optional. */
+    activeManualAnimationId?: VNID | null;
+    /** RENDER-ONLY, never stored: when a frame animation swaps this character's media for the
+     *  current tick, the pre-animation urls land here so the stage element's React key stays
+     *  stable — otherwise every frame swap would remount the sprite and replay its entrance. */
+    animBaseImageUrls?: string[];
 }
 
 /** A live (reactive) conditional background candidate (from a live Set Background). */
@@ -302,6 +314,9 @@ export interface StageState {
     /** LIVE binding: number variable multiplying every placed light's brightness (0-2, 1 = as
      *  authored). Additive-optional. */
     lightsBrightnessVariableId?: VNID | null;
+    /** Effect style for the placed lights: 'enhanced' = WebGL glow; absent/null = Classic.
+     *  Rides saves wholesale like the rest of stage state. Additive-optional. */
+    lightsStyle?: 'enhanced' | null;
     /** Interactive scene hot spots (ShowHotSpot). Optional for back-compat with older saves. */
     hotSpotOverlays?: HotSpotOverlay[];
     /** Persistent movie overlays (transparent, looping) that play behind characters */
@@ -366,6 +381,10 @@ export interface MusicState {
      *  player's music setting applies alone. Persisted so screen open/close, save/load, and
      *  rewind resume the track at the authored volume instead of resetting to full. */
     volume?: number;
+    /** The Play Music command's speed/keep-pitch shaping. Undefined = play as-is. Persisted
+     *  for the same reason as `volume` — every resume path must re-apply it (or reset to 1×
+     *  when absent), never inherit the element's previous rate. */
+    adjust?: import('../../../features/scene/types').VNAudioAdjust;
 }
 
 export interface PlayerState {
@@ -427,6 +446,18 @@ export interface PlayerState {
             timeLimitLocked?: boolean;
             /** Show a countdown bar while the timer runs. */
             showTimer?: boolean;
+            /** APPEND: raw index into `text` where the newest appended part begins — everything
+             *  before it is revealed instantly, only the new part types out. */
+            appendRevealFrom?: number;
+            /** APPEND: pause (ms) before the newest part starts typing. */
+            appendPauseMs?: number;
+            /** APPEND: commandIndex of the group's first line — history/skip-back land here. */
+            groupStartIndex?: number;
+            /** Typing sound for this line's typewriter (resolved per-line > character default);
+             *  null = explicitly silent. */
+            blip?: import('../../../features/character/types').VNTypingBlip | null;
+            /** This line opted out of the project's automatic punctuation pauses. */
+            noPunctuationPauses?: boolean;
         } | null;
         choices: ChoiceOption[] | null;
         /** Layout for the active choice menu (from the Choice command). undefined = vertical stack. */

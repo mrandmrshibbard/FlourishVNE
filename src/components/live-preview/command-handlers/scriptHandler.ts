@@ -8,6 +8,8 @@ import { CommandContext, CommandResult } from './types';
 import { executeScript, ScriptRuntimeContext } from '../../../features/scripting/ScriptExecutor';
 import { MAX_CALL_DEPTH } from './commonEventHandler';
 import { VNScript, ScriptParam } from '../../../types/scripting';
+import { resolveCharacterDisplayName, findCharacterBySpokenName } from '../../../utils/variableInterpolation';
+import { applyAudioAdjust } from '../../../utils/audioAdjust';
 import { VNProject } from '../../../types/project';
 import { VNID } from '../../../types';
 
@@ -131,6 +133,7 @@ export const handleRunScript = async (
         if (isNewTrack) {
             audio.src = url;
             audio.load();
+            applyAudioAdjust(audio, null);   // reset: never inherit a previous track's speed
             audio.addEventListener('canplaythrough', startPlayback, { once: true });
         } else if (audio.paused) {
             startPlayback();
@@ -160,9 +163,14 @@ export const handleRunScript = async (
 
             onShowDialogue: (characterName, text) => {
                 // Fire-and-forget: set the current dialogue line (last call wins).
-                const match = Object.values(project.characters).find(c => c.name.toLowerCase() === characterName.toLowerCase());
+                // Forgiving lookup: raw stored name OR currently-resolved name — so
+                // character("Yuki") works whether the character is "Yuki" or "{YukiName}".
+                const match = findCharacterBySpokenName(characterName || '', project, variableUpdates);
+                const displayName = match
+                    ? resolveCharacterDisplayName(match.name, variableUpdates, project)
+                    : (characterName || '');
                 dialogueUpdate = {
-                    characterName: characterName || 'Narrator',
+                    characterName: displayName || 'Narrator',
                     characterColor: match?.color || '#FFFFFF',
                     characterId: match?.id || null,
                     text,

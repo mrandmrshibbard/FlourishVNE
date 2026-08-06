@@ -5,7 +5,7 @@
 
 import { VNCondition } from '../../../types/shared';
 import { VNID } from '../../../types';
-import { combineConditions } from '../../../utils/conditionLogic';
+import { combineConditions, resolveConditionValue } from '../../../utils/conditionLogic';
 import { VNVariable } from '../../../features/variables/types';
 import { compareBand, isBandOperator } from '../../../features/variables/bands';
 
@@ -53,27 +53,31 @@ export const evaluateConditions = (
             return compareBand(defs[condition.variableId], varValue, String(condition.value), condition.operator);
         }
 
+        // Compare-to-variable: the right-hand side may be another variable's CURRENT value
+        // (dangling id falls back to the literal). Band ops above keep reading `value` (band id).
+        const cmpValue = resolveConditionValue(condition, variables);
+
         switch (condition.operator) {
             case 'is true':
                 return !!varValue;
             case 'is false':
                 return !varValue;
             case '==':
-                return String(varValue).toLowerCase() === String(condition.value).toLowerCase();
+                return String(varValue).toLowerCase() === String(cmpValue).toLowerCase();
             case '!=':
-                return String(varValue).toLowerCase() !== String(condition.value).toLowerCase();
+                return String(varValue).toLowerCase() !== String(cmpValue).toLowerCase();
             case '>':
-                return Number(varValue) > Number(condition.value);
+                return Number(varValue) > Number(cmpValue);
             case '<':
-                return Number(varValue) < Number(condition.value);
+                return Number(varValue) < Number(cmpValue);
             case '>=':
-                return Number(varValue) >= Number(condition.value);
+                return Number(varValue) >= Number(cmpValue);
             case '<=':
-                return Number(varValue) <= Number(condition.value);
+                return Number(varValue) <= Number(cmpValue);
             case 'contains':
-                return String(varValue).toLowerCase().includes(String(condition.value).toLowerCase());
+                return String(varValue).toLowerCase().includes(String(cmpValue).toLowerCase());
             case 'startsWith':
-                return String(varValue).toLowerCase().startsWith(String(condition.value).toLowerCase());
+                return String(varValue).toLowerCase().startsWith(String(cmpValue).toLowerCase());
             default:
                 return false;
         }

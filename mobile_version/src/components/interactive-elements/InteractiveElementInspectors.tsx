@@ -2,7 +2,7 @@
  * InteractiveElementInspectors
  * ────────────────────────────
  * Inspector panels for hot spots and interactive elements (draggable images /
- * buttons / text / image maps / etc.) that live on a regular screen.
+ * buttons / text / Interactive Images / etc.) that live on a regular screen.
  *
  * The external API is typed against the unified `VNUIElement` types. Internally
  * these components still build patches in the legacy `VNHotSpot` /
@@ -237,7 +237,7 @@ export const HotSpotProperties: React.FC<{
     const targetable = targetableElements;
 
     return (
-        <Panel title={t('hotZone.propsHotSpot')} className="w-96 flex-shrink-0">
+        <Panel title={t('hotZone.propsHotSpot')} className="w-[26rem] flex-shrink-0">
             <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3 text-sm">
             <h4 className="font-bold text-sky-300 flex items-center gap-2">
                 Hot Spot Properties
@@ -466,7 +466,7 @@ export const InteractiveElementProperties: React.FC<{
     /** Drag tags already used on this screen — for the Drag-tag autocomplete. */
     dragTagOptions?: string[];
     onUpdate: (patch: Partial<VNUIElement>) => void;
-    /** Removes this element (draggable / image map) from the screen. */
+    /** Removes this element (draggable / Interactive Image) from the screen. */
     onDelete?: () => void;
 }> = ({ element: typedElement, project, targetableElements, dragTagOptions = [], onUpdate: typedOnUpdate, onDelete }) => {
     const { t } = useTranslation('ui');
@@ -499,7 +499,7 @@ export const InteractiveElementProperties: React.FC<{
         : t('hotZone.propsType', { type: `${elType.charAt(0).toUpperCase()}${elType.slice(1)}` });
 
     return (
-        <Panel title={panelTitle} className="w-96 flex-shrink-0">
+        <Panel title={panelTitle} className="w-[26rem] flex-shrink-0">
             <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3 text-sm">
             <h4 className="font-bold text-purple-300 flex items-center gap-2">
                 Element Properties

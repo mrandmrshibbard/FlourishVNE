@@ -32,6 +32,134 @@ export const buildOrientationTransform = (o?: { rotation?: number; flipX?: boole
  * tightly wrap the text.  Use `extractTextGradientStyle(settings)` to get
  * those props and apply them to a child `<span>` around the text content.
  */
+/**
+ * A CSS-safe font family name derived from author input (usually a filename). The FontFace
+ * constructor REJECTS names with parentheses, dots, commas, etc. — a font registered with an
+ * invalid family silently never loads, and every element referencing it falls back to the same
+ * default typeface. Letters/digits/spaces/hyphens/underscores only; never starts with a digit.
+ */
+export const sanitizeFontFamily = (raw: string | null | undefined, fallback = 'Custom-Font'): string => {
+    // ONE TOKEN, valid as a bare CSS identifier. The previous form kept spaces ("Font 8bitlim",
+    // "My Font 2") — FontFace accepted those, but an UNQUOTED font-family declaration whose
+    // second word starts with a digit is INVALID CSS: the browser drops the whole declaration
+    // and the text silently falls back to the default face at every use site.
+    let family = String(raw ?? '').replace(/[^\p{L}\p{N} _-]+/gu, ' ').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    if (!family) family = fallback;
+    if (/^\d/.test(family)) family = `Font-${family}`;
+    return family;
+};
+
+/**
+ * A font-family value safe to put in CSS/style attributes. Families STORED by older versions
+ * can contain spaces with digit-leading words ("Font 8bitlim", "My Font 2") — valid for
+ * FontFace registration but INVALID as an unquoted font-family declaration, so the browser
+ * dropped the declaration and the font "didn't work" despite being loaded. Quoting heals them.
+ * Stacks (with commas) and already-quoted values pass through untouched.
+ */
+export const cssFontFamily = (family: string | null | undefined): string | undefined => {
+    if (!family) return undefined;
+    const f = String(family).trim();
+    if (!f || f.includes(',') || f.startsWith('"') || f.startsWith("'")) return f || undefined;
+    // A single clean CSS identifier can stay bare; EVERYTHING else (spaces, digit-leading
+    // tokens, odd punctuation) gets quoted - quoting a name that did not need quotes is
+    // always harmless.
+    const isBareIdent = /^[A-Za-z_ -￿][A-Za-z0-9_ -￿-]*$/.test(f);
+    return isBareIdent ? f : '"' + f.replace(/"/g, '') + '"';
+};
+
+/**
+ * Outline-complexity check for TrueType fonts. Some display fonts (e.g. "inflated balloon"
+ * demos) pack tens of thousands of contour points into EVERY glyph — ~43KB of outline data
+ * per letter vs ~1–3KB in normal fonts. Chromium 120's rasterizer (the desktop app) HANGS
+ * the whole renderer on the FIRST paint of such a glyph — the window freezes solid, which
+ * users report as a crash. Parsing is fine; only drawing dies — so we measure the bytes and
+ * refuse to ever draw. Returns null for non-TTF containers (CFF/WOFF — no glyf to measure).
+ */
+export const analyzeFontComplexity = (buf: ArrayBuffer): { glyphs: number; avgGlyphBytes: number; tooComplex: boolean } | null => {
+    try {
+        const dv = new DataView(buf);
+        if (buf.byteLength < 12) return null;
+        const ver = dv.getUint32(0, false);
+        if (ver !== 0x00010000 && ver !== 0x74727565 /* 'true' */) return null;
+        const numTables = dv.getUint16(4, false);
+        let glyfLen = 0, maxpOff = -1;
+        for (let i = 0; i < numTables && 12 + i * 16 + 16 <= buf.byteLength; i++) {
+            const off = 12 + i * 16;
+            const tag = String.fromCharCode(dv.getUint8(off), dv.getUint8(off + 1), dv.getUint8(off + 2), dv.getUint8(off + 3));
+            if (tag === 'glyf') glyfLen = dv.getUint32(off + 12, false);
+            if (tag === 'maxp') maxpOff = dv.getUint32(off + 8, false);
+        }
+        if (!glyfLen || maxpOff < 0 || maxpOff + 6 > buf.byteLength) return null;
+        const glyphs = dv.getUint16(maxpOff + 4, false);
+        if (!glyphs) return null;
+        const avgGlyphBytes = glyfLen / glyphs;
+        // Normal fonts: 1–3KB/glyph; rich display fonts ~5KB. The freezing specimen: ~43KB.
+        return { glyphs, avgGlyphBytes, tooComplex: avgGlyphBytes > 10 * 1024 };
+    } catch { return null; }
+};
+
+/**
+ * Does THIS renderer freeze on ultra-complex glyph outlines? Chromium 120 (the app's current
+ * Electron) hangs solid; Chromium ≥130 renders the same font in milliseconds (verified).
+ * Gating the refusal here means: web games in modern browsers use such fonts TODAY, and the
+ * desktop restriction lifts itself automatically the day the app's Electron is upgraded.
+ * Unknown engines (Firefox/Safari — no Chrome token) are not refused: no evidence they hang.
+ */
+export const rendererFreezesOnComplexFonts = (): boolean => {
+    try {
+        const m = (navigator.userAgent || '').match(/Chrome\/(\d+)/);
+        return !!m && parseInt(m[1], 10) < 130;
+    } catch { return false; }
+};
+
+/** Fonts refused by the complexity check — remembered so the loaders skip them instantly. */
+const refusedFontKeys = new Set<string>();
+
+/**
+ * Register a custom font EXACTLY ONCE per (family, source). Engine code — used by the editor's
+ * font loader and the in-game engine alike.
+ *
+ * Why once: the loaders re-run whenever the project's characters/fonts change (in the editor
+ * that's every character edit). Each `new FontFace().load()` re-parses the whole font file and
+ * `document.fonts.add` keeps every OBJECT (the set dedups by identity, not content) — with a
+ * large font that repeat-decode grew until the renderer died. The URL passed here must already
+ * be RESOLVED (resolveFieldUrl) — a bare managed ref like "assets/fonts/x.ttf" 404s against
+ * the page and the font silently falls back to the default face.
+ */
+const loadedFontKeys = new Set<string>();
+export const loadFontOnce = async (family: string, resolvedUrl: string | null | undefined): Promise<boolean> => {
+    if (!family || !resolvedUrl) return false;
+    const key = `${family}|${resolvedUrl.slice(0, 256)}|${resolvedUrl.length}`;
+    if (loadedFontKeys.has(key)) return true;
+    if (refusedFontKeys.has(key)) return false;
+    try {
+        // Refuse renderer-freezing fonts BEFORE they can ever be drawn — this also un-bricks
+        // projects that already contain one (the font falls back; the app stays responsive
+        // so the author can delete or replace it).
+        try {
+            if (rendererFreezesOnComplexFonts()) {
+                const res = await fetch(resolvedUrl);
+                if (res.ok) {
+                    const info = analyzeFontComplexity(await res.arrayBuffer());
+                    if (info?.tooComplex) {
+                        refusedFontKeys.add(key);
+                        console.error(`Font "${family}" refused: ~${Math.round(info.avgGlyphBytes / 1024)}KB of outline data per glyph would freeze rendering in this app version. Use a simpler version of this font.`);
+                        return false;
+                    }
+                }
+            }
+        } catch { /* unreadable here — let FontFace try below, exactly as before */ }
+        const face = new FontFace(family, `url(${resolvedUrl})`);
+        await face.load();
+        (document as any).fonts.add(face);
+        loadedFontKeys.add(key);
+        return true;
+    } catch (error) {
+        console.error(`Failed to load font "${family}":`, error);
+        return false;
+    }
+};
+
 export const fontSettingsToStyle = (settings: VNFontSettings | undefined | null): React.CSSProperties => {
     /** Wrap a px value so it responds to the --font-scale CSS variable. */
     const px = (n: number) => `calc(var(--font-scale, 1) * ${n}px)`;
@@ -44,7 +172,7 @@ export const fontSettingsToStyle = (settings: VNFontSettings | undefined | null)
     }
 
     const style: React.CSSProperties = {
-        fontFamily: settings.family,
+        fontFamily: cssFontFamily(settings.family),
         fontSize: px(settings.size),
         color: settings.color,
         fontWeight: settings.weight,
@@ -61,9 +189,13 @@ export const fontSettingsToStyle = (settings: VNFontSettings | undefined | null)
         style.textShadow = `${px(ts.offsetX)} ${px(ts.offsetY)} ${px(ts.blur)} ${ts.color}`;
     }
 
-    // Text border / stroke
+    // Text border / stroke. `paint-order` draws the stroke BEHIND the fill — without it the
+    // stroke is centered on the glyph edge and its inner half eats the letter, which gets
+    // brutal on bold text (a user: "bolding swallows 90% of the fill"). Behind-fill, the
+    // border only grows outward, so weight and border thickness are independent.
     if (settings.textBorder?.enabled) {
         (style as any).WebkitTextStroke = `${px(settings.textBorder.width)} ${settings.textBorder.color}`;
+        (style as any).paintOrder = 'stroke fill';
     }
 
     return style;
@@ -137,6 +269,8 @@ export const buildTextEffectStyles = (
 
     if (effects.textBorder?.enabled) {
         (containerStyle as any).WebkitTextStroke = `${px(effects.textBorder.width)} ${effects.textBorder.color}`;
+        // Stroke behind the fill (see fontSettingsToStyle) — bold no longer swallows the letter.
+        (containerStyle as any).paintOrder = 'stroke fill';
     }
 
     if (hasGradient) {

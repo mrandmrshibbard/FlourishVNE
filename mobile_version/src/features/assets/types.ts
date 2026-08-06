@@ -31,6 +31,9 @@ export interface VNAudio {
     name: string;
     audioUrl: string;
     path?: string; // Optional directory path (e.g., "Music/Battle" or "" for root)
+    /** Asset-level DEFAULT sound shaping (speed/reverse/keep-pitch). Per-use settings on a
+     *  command/action override field-by-field (videoTrim discipline). Additive-optional. */
+    audioAdjust?: import('../scene/types').VNAudioAdjust;
 }
 export interface VNVideo {
     id: VNID;

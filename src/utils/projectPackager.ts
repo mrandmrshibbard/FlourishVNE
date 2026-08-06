@@ -545,7 +545,8 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
                 }
             };
             // Video base sprite (was never packed — video-based characters broke on transfer).
-            await packCharArt((character as any).baseVideoUrl, singleCharFolder, 'base_video', `assets/characters/${charId}`, rel => { (character as any).baseVideoUrl = rel; }, `characters:${charId}:baseVideo`);
+            // Filename carries the character id — see the font block below for why.
+            await packCharArt((character as any).baseVideoUrl, singleCharFolder, `${charId}_base_video`, `assets/characters/${charId}`, rel => { (character as any).baseVideoUrl = rel; }, `characters:${charId}:baseVideo`);
             // Character Poses: each pose's own base art.
             for (const poseId in ((character as any).poses || {})) {
                 const pose = (character as any).poses[poseId];
@@ -556,7 +557,7 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
             if (character.baseImageUrl) {
                 if (character.baseImageUrl.startsWith('data:')) {
                     const { blob, mimeType } = await dataUrlToBlob(character.baseImageUrl);
-                    const filename = `base.${mimeToExtension(mimeType)}`;
+                    const filename = `${charId}_base.${mimeToExtension(mimeType)}`;
                     singleCharFolder.file(filename, blob);
                     character.baseImageUrl = `assets/characters/${charId}/${filename}`;
                     addEmbedded('characters', character.baseImageUrl);
@@ -564,7 +565,7 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
                     const fetched = await fetchUrlToBlob(character.baseImageUrl);
                     if (fetched) {
                         const { blob, mimeType } = fetched;
-                        const filename = `base.${mimeToExtension(mimeType)}`;
+                        const filename = `${charId}_base.${mimeToExtension(mimeType)}`;
                         singleCharFolder.file(filename, blob);
                         character.baseImageUrl = `assets/characters/${charId}/${filename}`;
                         addEmbedded('characters', character.baseImageUrl);
@@ -574,22 +575,24 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
                 }
             }
 
-            // Handle custom font URL
+            // Handle custom font URL.
+            // Filename carries the character id: fixed per-folder basenames ("font.ttf") collided
+            // in the import-side managed store and collapsed every character's font onto one file.
             if (character.fontUrl) {
                 if (character.fontUrl.startsWith('data:')) {
                     const { blob, mimeType } = await dataUrlToBlob(character.fontUrl);
                     const ext = mimeType === 'font/otf' ? 'otf' : 'ttf';
-                    const filename = `font.${ext}`;
+                    const filename = `${charId}_font.${ext}`;
                     singleCharFolder.file(filename, blob);
                     character.fontUrl = `assets/characters/${charId}/${filename}`;
                     addEmbedded('characters', character.fontUrl);
                 } else {
                     const fetched = await fetchUrlToBlob(character.fontUrl);
                     if (fetched) {
-                        const { blob } = fetched;
-                        // Determine extension from URL or default to ttf
-                        const ext = character.fontUrl.toLowerCase().endsWith('.otf') ? 'otf' : 'ttf';
-                        const filename = `font.${ext}`;
+                        const { blob, mimeType } = fetched;
+                        // MIME first (managed-store refs often end in .bin), URL suffix as fallback.
+                        const ext = mimeType === 'font/otf' || character.fontUrl.toLowerCase().includes('.otf') ? 'otf' : 'ttf';
+                        const filename = `${charId}_font.${ext}`;
                         singleCharFolder.file(filename, blob);
                         character.fontUrl = `assets/characters/${charId}/${filename}`;
                         addEmbedded('characters', character.fontUrl);
@@ -1346,14 +1349,18 @@ export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array
         if (assetFile) {
             try {
                 // Desktop: write the file into the managed store and keep the ref (no base64 in the
-                // project). Reconstruct the same relative path from assets/<type>/<id>.<ext>.
+                // project). The store id comes from the FULL sub-path below assets/<type>/, not just
+                // the basename — nested archives use fixed basenames per folder (every character's
+                // font used to be `assets/characters/<charId>/font.ttf`), and flattening to the
+                // basename made ALL of them share ONE store file. Last writer won, and every
+                // character then rendered in the exact same font (user report, 2026-08-05).
                 if (electronAPIForImport?.writeProjectAsset && /^assets\//.test(relativePath)) {
                     const parts = relativePath.split('/');
                     const type = parts[1] || 'images';
-                    const fileName = parts[parts.length - 1] || 'asset.bin';
-                    const dot = fileName.lastIndexOf('.');
-                    const id = dot > 0 ? fileName.slice(0, dot) : fileName;
-                    const ext = dot > 0 ? fileName.slice(dot + 1) : 'bin';
+                    const subPath = parts.slice(2).join('_') || 'asset.bin';
+                    const dot = subPath.lastIndexOf('.');
+                    const id = dot > 0 ? subPath.slice(0, dot) : subPath;
+                    const ext = dot > 0 ? subPath.slice(dot + 1) : 'bin';
                     const bytes = await assetFile.async('uint8array');
                     const res = await electronAPIForImport.writeProjectAsset(project.id, type, id, ext, bytes);
                     if (res?.success) return `flourish-asset://${project.id}/${res.relPath}`;

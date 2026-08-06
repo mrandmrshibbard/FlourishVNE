@@ -61,8 +61,8 @@
     "ShowButton": "Show Button",
     "HideButton": "Hide Button",
     "ShowItem": "Show Item",
-    "ShowdraggableImageElement": "Show Image Map",
-    "HidedraggableImageElement": "Hide Image Map",
+    "ShowdraggableImageElement": "Show Interactive Image",
+    "HidedraggableImageElement": "Hide Interactive Image",
     "ShowHotSpot": "Show Hot Spot",
     "HideHotSpot": "Hide Hot Spot",
     "ShowScreen": "Show Screen",
@@ -75,6 +75,7 @@
     "RunScript": "Run Script",
     "CallCommonEvent": "Call Common Event",
     "Group": "Group",
-    "SetCharacterPose": "Change Pose"
+    "SetCharacterPose": "Change Pose",
+    "PlayCharacterAnimation": "Play Animation"
   }
 }

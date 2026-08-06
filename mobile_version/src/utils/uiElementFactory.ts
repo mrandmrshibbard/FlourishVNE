@@ -1,8 +1,9 @@
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 // FIX: UIActionType is exported from shared types.
-import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UITimerElement, UIItemElement, UICustomElement, DropdownOption } from '../features/ui/types';
+import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIMusicGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UITimerElement, UIItemElement, UICustomElement, DropdownOption } from '../features/ui/types';
 import { UIActionType } from '../types/shared';
+import { defaultMusicPlayerParts } from './musicGallery';
 
 const generateId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}`;
 
@@ -263,6 +264,20 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
                 nameFont: project.ui.dialogueTextFont,
                 lockedColor: '#1e293b',
                 lockedText: '🔒',
+            };
+            return el;
+        }
+        case UIElementType.MusicGallery: {
+            const el: UIMusicGalleryElement = {
+                ...base, name: 'Music Gallery', type,
+                width: 56, height: 62, x: 50, y: 50,
+                parts: defaultMusicPlayerParts(),
+                backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                borderRadius: 12,
+                lockedText: '???',
+                lockedColor: 'rgba(148, 163, 184, 0.35)',
+                noSongText: 'Pick a song',
+                onLeave: 'stop',
             };
             return el;
         }

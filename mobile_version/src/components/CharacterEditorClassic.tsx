@@ -21,6 +21,11 @@ import TrimmedVideo from './ui/TrimmedVideo';
 import TextboxStyleFields from './ui/TextboxStyleFields';
 import { popularFonts as _sharedFonts } from './ui/FontEditor';
 import ConfirmationModal from './ui/ConfirmationModal';
+import VariableTokenButton from './variables/VariableTokenButton';
+import { characterNameInitial } from '../utils/variableInterpolation';
+import { sanitizeFontFamily, analyzeFontComplexity, rendererFreezesOnComplexFonts } from '../utils/styleUtils';
+import TypingBlipFields from './ui/TypingBlipFields';
+import AnimationStudio from './character-anim/AnimationStudio';
 
 type EditorTab = 'expressions' | 'layers' | 'style';
 
@@ -236,8 +241,10 @@ const CharacterEditorClassic: React.FC<{
     const [activeTab, setActiveTab] = useState<EditorTab>('expressions');
     const [renamingExprId, setRenamingExprId] = useState<VNID | null>(null);
     const [confirmDeleteExpr, setConfirmDeleteExpr] = useState<VNCharacterExpression | null>(null);
+    const [animationsOpen, setAnimationsOpen] = useState(false);
     const baseImageInputRef = useRef<HTMLInputElement>(null);
     const fontFileInputRef = useRef<HTMLInputElement>(null);
+    const nameInputRef = useRef<HTMLInputElement>(null);
 
     const expressionsArray = useMemo(
         () => character ? Object.values(character.expressions) as VNCharacterExpression[] : [],
@@ -265,7 +272,7 @@ const CharacterEditorClassic: React.FC<{
 
     /* ── Handlers ── */
 
-    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop' | 'baseVideoTrimStart' | 'baseVideoTrimEnd' | 'textbox' | 'textboxThemeId' | 'defaultVoiceId' | 'phoneRingtoneAudioId' | 'textEffect' | 'dialogueTextColorMode' | 'dialogueTextColor'>>) => {
+    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop' | 'baseVideoTrimStart' | 'baseVideoTrimEnd' | 'textbox' | 'textboxThemeId' | 'defaultVoiceId' | 'phoneRingtoneAudioId' | 'textEffect' | 'dialogueTextColorMode' | 'dialogueTextColor' | 'typingBlip'>>) => {
         dispatch({ type: 'UPDATE_CHARACTER', payload: { characterId: activeCharacterId, updates } });
     };
 
@@ -295,8 +302,18 @@ const CharacterEditorClassic: React.FC<{
             toast.warning(t('editor.fontUploadWarning'));
             return;
         }
+        if (file.size > 20 * 1024 * 1024) {
+            toast.warning(t('editor.fontSizeWarning', 'This font is very large ({{mb}} MB) — it will make your project file much bigger and saving slower. A subsetted version of the font would work better.', { mb: Math.round(file.size / 1024 / 1024) }));
+        }
+        const complexity = analyzeFontComplexity(await file.arrayBuffer());
+        if (complexity?.tooComplex && rendererFreezesOnComplexFonts()) {
+            toast.error(t('editor.fontTooComplex', "This font can't be used — its letters are drawn with extremely detailed outlines (about {{kb}} KB per letter) that would freeze the app. If the font has a simpler version, use that one.", { kb: Math.round(complexity.avgGlyphBytes / 1024) }));
+            return;
+        }
         const dataUrl = await fileToBase64(file);
-        const fontName = file.name.replace(/\.(ttf|otf)$/i, '');
+        // CSS-safe family: dots/parentheses in a filename make new FontFace() throw,
+        // so the font would silently never load and text falls back to the default face.
+        const fontName = sanitizeFontFamily(file.name.replace(/\.(ttf|otf)$/i, ''));
         updateCharacter({ fontUrl: dataUrl, fontFamily: fontName });
     };
 
@@ -360,19 +377,25 @@ const CharacterEditorClassic: React.FC<{
                     ) : character.baseImageUrl ? (
                         <img src={resolveFieldUrl(project.id, character.baseImageUrl) || undefined} alt="" className="w-full h-full object-cover" />
                     ) : (
-                        <span className="text-lg font-bold" style={{ color: character.color }}>{character.name.charAt(0)}</span>
+                        <span className="text-lg font-bold" style={{ color: character.color }}>{characterNameInitial(character.name)}</span>
                     )}
                 </div>
 
                 {/* Name & Color */}
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                     <input
+                        ref={nameInputRef}
                         type="text"
                         value={character.name}
                         onChange={e => updateCharacter({ name: e.target.value })}
                         className="bg-transparent text-base font-bold outline-none border-b border-transparent hover:border-[var(--border-subtle)] focus:border-[var(--accent-cyan)] transition-colors min-w-0 flex-shrink"
                         style={{ color: 'var(--text-primary)', maxWidth: '200px' }}
                     />
+                    {/* Names can hold {Variable} tokens — "???" until the reveal, nicknames, etc. */}
+                    <VariableTokenButton targetRef={nameInputRef} value={character.name} onChange={name => updateCharacter({ name })} />
+                    <span className="text-[10px] flex-shrink-0" style={{ color: 'var(--text-muted)' }}>
+                        {t('editor.nameTokenHint', 'Names can show a variable — pick { } to make the name change during the story')}
+                    </span>
                     <div className="flex items-center gap-1.5">
                         <ColorInput value={character.color} onChange={v => updateCharacter({ color: v })} />
                         <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('editor.color')}</span>
@@ -486,6 +509,13 @@ const CharacterEditorClassic: React.FC<{
             <ConfirmationModal isOpen={!!confirmDeleteExpr} onClose={() => setConfirmDeleteExpr(null)} onConfirm={handleConfirmDeleteExpr} title={t('editor.deleteExpression')}>
                 {t('editor.deleteExpressionConfirm', { name: confirmDeleteExpr?.name })}
             </ConfirmationModal>
+            {animationsOpen && (
+                <AnimationStudio
+                    character={character}
+                    projectId={project.id}
+                    onClose={() => setAnimationsOpen(false)}
+                />
+            )}
         </div>
     );
 
@@ -585,12 +615,22 @@ const CharacterEditorClassic: React.FC<{
                             {t('editor.spriteLayersHint')}
                         </p>
                     </div>
-                    <button
-                        onClick={handleAddLayer}
-                        className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1 transition-colors bg-sky-500/10 hover:bg-sky-500/20 text-sky-400"
-                    >
-                        <PlusIcon className="w-3 h-3" /> {t('editor.addLayer')}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            onClick={() => setAnimationsOpen(true)}
+                            className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1 transition-colors border hover:bg-[var(--bg-tertiary)]"
+                            style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}
+                            title={t('anim.openHint', 'Make this character blink, talk, or move pieces on a loop — using their existing pieces as frames')}
+                        >
+                            🎞️ {t('anim.open', 'Animations')}
+                        </button>
+                        <button
+                            onClick={handleAddLayer}
+                            className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1 transition-colors bg-sky-500/10 hover:bg-sky-500/20 text-sky-400"
+                        >
+                            <PlusIcon className="w-3 h-3" /> {t('editor.addLayer')}
+                        </button>
+                    </div>
                 </div>
 
                 {layersArray.length === 0 ? (
@@ -820,6 +860,19 @@ const CharacterEditorClassic: React.FC<{
                             ))}
                         </Select>
                         <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{t('editor.phoneRingtoneHint', 'Default ringtone when this character calls (an Incoming Call command can override it).')}</p>
+                    </FormField>
+                    {/* Typing sound (Undertale-style letter blips) */}
+                    <FormField label={t('editor.typingBlip', 'Typing sound (letter blips)')}>
+                        <label className="flex items-center gap-1.5 mb-1.5">
+                            <input type="checkbox" checked={!!character.typingBlip}
+                                onChange={e => updateCharacter({ typingBlip: e.target.checked ? { audioId: null } : undefined })}
+                                className="w-4 h-4" />
+                            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('editor.typingBlipEnable', 'Play a little sound as their words type out')}</span>
+                        </label>
+                        {character.typingBlip && (
+                            <TypingBlipFields value={character.typingBlip} onChange={blip => updateCharacter({ typingBlip: blip })} project={project} />
+                        )}
+                        <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{t('editor.typingBlipHint', 'Plays on every line this character speaks. Lines with a voice clip stay silent unless the line sets its own typing sound.')}</p>
                     </FormField>
                 </div>
             </div>

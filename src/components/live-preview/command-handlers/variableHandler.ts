@@ -6,9 +6,10 @@
 import { SetVariableCommand } from '../../../features/scene/types';
 import { CommandContext, CommandResult } from './types';
 import { VNID } from '../../../types';
-import { 
-    normalizeSetVariableOperatorByType, 
-    calculateVariableValue 
+import {
+    normalizeSetVariableOperatorByType,
+    calculateVariableValue,
+    resolveSetVariableValue
 } from '../../../utils/variableUtils';
 
 /**
@@ -41,12 +42,19 @@ export const handleSetVariable = (
         originalOperator
     );
     
+    // Value may come from another variable or a calculation. Reads of OTHER variables use the
+    // merged runtime view when the loop provides it (dirty UI writes visible), else playerState.
+    const changeValue = resolveSetVariableValue(
+        command,
+        context.runtimeVariables ?? playerState.variables
+    );
+
     // Use consolidated calculateVariableValue for all value computations
     const newVal = calculateVariableValue(
         effectiveOperator,
         variable.type,
         currentVal,
-        command.value,
+        changeValue,
         command.randomMin,
         command.randomMax,
         wasCoerced ? originalOperator : undefined,

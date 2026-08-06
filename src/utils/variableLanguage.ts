@@ -24,6 +24,7 @@ import { VNProject } from '../types/project';
 import { VNVariable, VNSetVariableOperator } from '../features/variables/types';
 import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { resolveBand, hasBands } from '../features/variables/bands';
+import type { VNValueCalc, VNCalcOperand, VNCalcOp } from '../types/shared';
 
 /** react-i18next's `t(key, defaultValue, options)` — or our English stand-in below. */
 export type Translate = (key: string, defaultValue: string, opts?: Record<string, unknown>) => string;
@@ -62,6 +63,53 @@ interface SetVariableLike {
     value?: string | number | boolean;
     randomMin?: number;
     randomMax?: number;
+    valueSource?: 'variable' | 'calc';
+    valueVariableId?: string;
+    calc?: VNValueCalc;
+}
+
+/** One calc operand in the author's words: "Luck" or "2". */
+function operandLabel(project: VNProject, operand: VNCalcOperand | undefined, t: Translate): string {
+    if (!operand) return '0';
+    if (operand.source === 'variable') {
+        const v = operand.variableId ? project.variables[operand.variableId] : undefined;
+        return v ? variableLabel(v) : t('vars.preview.missingShort', 'a missing variable');
+    }
+    return String(operand.value ?? 0);
+}
+
+const CALC_OP_WORDS: Record<VNCalcOp, [string, string]> = {
+    add: ['vars.preview.opPlus', 'plus'],
+    subtract: ['vars.preview.opMinus', 'minus'],
+    multiply: ['vars.preview.opTimes', 'times'],
+    divide: ['vars.preview.opDividedBy', 'divided by'],
+    percentOf: ['vars.preview.opPercentOf', '% of it:'],
+};
+
+/**
+ * The calc chain in words — "Gold plus Luck times 2". Percent-of steps read
+ * "…then take 20% of it" so the order of operations stays a sentence, not algebra.
+ */
+export function describeCalc(project: VNProject, calc: VNValueCalc, t: Translate = englishT): string {
+    const parts: string[] = [operandLabel(project, calc.first, t)];
+    for (const step of calc.steps ?? []) {
+        if (step.op === 'percentOf') {
+            parts.push(t('vars.preview.percentOfStep', 'then take {{value}}% of it', { value: operandLabel(project, step, t) }));
+        } else {
+            const [key, word] = CALC_OP_WORDS[step.op] ?? CALC_OP_WORDS.add;
+            parts.push(`${t(key, word)} ${operandLabel(project, step, t)}`);
+        }
+    }
+    const chain = parts.join(' ');
+    const roundWord =
+        calc.round === 'none' ? t('vars.preview.roundNone', 'keeping the decimals')
+        : calc.round === 'down' ? t('vars.preview.roundDown', 'rounded down')
+        : calc.round === 'up' ? t('vars.preview.roundUp', 'rounded up')
+        : t('vars.preview.roundNearest', 'rounded to a whole number');
+    const tail = (calc.steps?.length ?? 0) > 1
+        ? t('vars.preview.calcOrder', ' — worked out top to bottom')
+        : '';
+    return `${chain}, ${roundWord}${tail}`;
 }
 
 /**
@@ -77,6 +125,30 @@ export function describeSetVariable(project: VNProject, cmd: SetVariableLike, t:
         return t('vars.preview.boolOn', 'Set {{name}} to {{value}}', { name, value: valueLabel(variable, cmd.value, t) });
     }
     if (variable.type === 'number') {
+        // Value from another variable / a calculation (never used with the random operators —
+        // they ignore `value`, so keep their own phrasing even if a stray field is present).
+        const isRandomOp = cmd.operator === 'random' || cmd.operator === 'addRandom' || cmd.operator === 'subtractRandom';
+        const dynamicValue = isRandomOp ? null
+            : cmd.valueSource === 'variable' ? variableLabel(project.variables[cmd.valueVariableId ?? ''], t('vars.preview.missingShort', 'a missing variable'))
+            : cmd.valueSource === 'calc' && cmd.calc ? describeCalc(project, cmd.calc, t)
+            : null;
+        if (dynamicValue !== null) {
+            const isCalc = cmd.valueSource === 'calc';
+            switch (cmd.operator) {
+                case 'add':
+                    return isCalc
+                        ? t('vars.preview.addCalc', 'Increase {{name}} by: {{calc}}', { name, calc: dynamicValue })
+                        : t('vars.preview.addFromVar', "Increase {{name}} by {{other}}'s value", { name, other: dynamicValue });
+                case 'subtract':
+                    return isCalc
+                        ? t('vars.preview.subtractCalc', 'Decrease {{name}} by: {{calc}}', { name, calc: dynamicValue })
+                        : t('vars.preview.subtractFromVar', "Decrease {{name}} by {{other}}'s value", { name, other: dynamicValue });
+                default:
+                    return isCalc
+                        ? t('vars.preview.setCalc', 'Set {{name}} to: {{calc}}', { name, calc: dynamicValue })
+                        : t('vars.preview.setFromVar', 'Set {{name}} to whatever {{other}} is right now', { name, other: dynamicValue });
+            }
+        }
         switch (cmd.operator) {
             case 'add':
                 return t('vars.preview.add', 'Increase {{name}} by {{value}}', { name, value: String(cmd.value ?? 0) });
@@ -84,6 +156,12 @@ export function describeSetVariable(project: VNProject, cmd: SetVariableLike, t:
                 return t('vars.preview.subtract', 'Decrease {{name}} by {{value}}', { name, value: String(cmd.value ?? 0) });
             case 'random':
                 return t('vars.preview.random', 'Set {{name}} to a random number from {{min}} to {{max}}',
+                    { name, min: String(cmd.randomMin ?? 0), max: String(cmd.randomMax ?? 100) });
+            case 'addRandom':
+                return t('vars.preview.addRandom', 'Increase {{name}} by a random amount from {{min}} to {{max}}',
+                    { name, min: String(cmd.randomMin ?? 0), max: String(cmd.randomMax ?? 100) });
+            case 'subtractRandom':
+                return t('vars.preview.subtractRandom', 'Decrease {{name}} by a random amount from {{min}} to {{max}}',
                     { name, min: String(cmd.randomMin ?? 0), max: String(cmd.randomMax ?? 100) });
             default:
                 return t('vars.preview.setNum', 'Set {{name}} to {{value}}', { name, value: valueLabel(variable, cmd.value, t) });
@@ -103,11 +181,33 @@ export function summarizeSetVariable(project: VNProject, cmd: SetVariableLike): 
 
     if (variable.type === 'boolean') return `${name} → ${valueLabel(variable, cmd.value)}`;
     if (variable.type === 'number') {
+        const isRandomOp = cmd.operator === 'random' || cmd.operator === 'addRandom' || cmd.operator === 'subtractRandom';
+        if (!isRandomOp && cmd.valueSource === 'variable') {
+            const other = variableLabel(project.variables[cmd.valueVariableId ?? ''], '?');
+            switch (cmd.operator) {
+                case 'add': return `${name} + ${other}`;
+                case 'subtract': return `${name} − ${other}`;
+                default: return `${name} = ${other}`;
+            }
+        }
+        if (!isRandomOp && cmd.valueSource === 'calc' && cmd.calc) {
+            // Still words, never operator tokens — truncated to the first term.
+            const start = operandLabel(project, cmd.calc.first, englishT);
+            const stepCount = cmd.calc.steps?.length ?? 0;
+            const chain = stepCount > 0 ? `${start}… (${stepCount} ${stepCount === 1 ? 'step' : 'steps'})` : start;
+            switch (cmd.operator) {
+                case 'add': return `${name} + ${chain}`;
+                case 'subtract': return `${name} − ${chain}`;
+                default: return `${name} = ${chain}`;
+            }
+        }
         switch (cmd.operator) {
             // A true minus sign, not a hyphen — this is read, not parsed.
             case 'add': return `${name} +${cmd.value ?? 0}`;
             case 'subtract': return `${name} −${cmd.value ?? 0}`;
             case 'random': return `${name} = ${cmd.randomMin ?? 0}–${cmd.randomMax ?? 100} (random)`;
+            case 'addRandom': return `${name} +${cmd.randomMin ?? 0}–${cmd.randomMax ?? 100} (random)`;
+            case 'subtractRandom': return `${name} −${cmd.randomMin ?? 0}–${cmd.randomMax ?? 100} (random)`;
             default: return `${name} = ${valueLabel(variable, cmd.value)}`;
         }
     }

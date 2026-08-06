@@ -265,7 +265,13 @@ export async function buildStandaloneGame(
     message: 'Generating game files...'
   });
 
-  const htmlContent = await generateStandaloneHTML(leanProject);
+  const htmlContent = await generateStandaloneHTML(leanProject, {
+    // The floating fullscreen chip is a web-build nicety — desktop/android builds
+    // call generateStandaloneHTML directly and never pass this.
+    fullscreenButton: project.buildOptions?.webFullscreenButton
+      ? { corner: project.buildOptions.webFullscreenCorner }
+      : null,
+  });
   zip.file('index.html', htmlContent);
 
   // Step 3: Copy all assets (50%)
@@ -370,7 +376,71 @@ export function stripBuildExcludedPlugins(project: VNProject): VNProject {
   return { ...rest, plugins: keptPlugins, pluginStorage: keptStorage };
 }
 
-export async function generateStandaloneHTML(project: VNProject): Promise<string> {
+/** Where the optional web-build fullscreen button sits. */
+export type FullscreenCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+export interface StandaloneHtmlOptions {
+  /** When set, a floating fullscreen toggle button is injected (web builds only). */
+  fullscreenButton?: { corner?: FullscreenCorner } | null;
+}
+
+/**
+ * Markup + script for the optional fullscreen toggle chip on web builds.
+ * Self-contained (no engine involvement): hides itself where the browser
+ * forbids fullscreen (e.g. iPhones), swaps icon on state change.
+ */
+export function buildFullscreenButtonHtml(corner: FullscreenCorner = 'top-right'): string {
+  const pos: Record<FullscreenCorner, string> = {
+    'top-left': 'top: 12px; left: 12px;',
+    'top-right': 'top: 12px; right: 12px;',
+    'bottom-left': 'bottom: 12px; left: 12px;',
+    'bottom-right': 'bottom: 12px; right: 12px;',
+  };
+  const place = pos[corner] || pos['top-right'];
+  return `
+  <button id="vn-fullscreen-btn" type="button" title="Fullscreen" aria-label="Fullscreen"
+    style="position: fixed; ${place} z-index: 100000; width: 40px; height: 40px; padding: 8px; border: none; border-radius: 8px; background: rgba(0,0,0,0.45); color: #fff; cursor: pointer; display: none; align-items: center; justify-content: center; transition: opacity 0.2s, background 0.2s; opacity: 0.55;"
+    onmouseenter="this.style.opacity='1'; this.style.background='rgba(0,0,0,0.7)';"
+    onmouseleave="this.style.opacity='0.55'; this.style.background='rgba(0,0,0,0.45)';">
+    <svg id="vn-fs-icon-expand" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+    <svg id="vn-fs-icon-compress" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+  </button>
+  <script>
+    (function () {
+      var btn = document.getElementById('vn-fullscreen-btn');
+      if (!btn) return;
+      var doc = document;
+      var canFullscreen = doc.fullscreenEnabled || doc.webkitFullscreenEnabled;
+      if (!canFullscreen) return; // stays display:none where the browser forbids it
+      btn.style.display = 'flex';
+      function isFullscreen() {
+        return !!(doc.fullscreenElement || doc.webkitFullscreenElement);
+      }
+      function updateIcon() {
+        var full = isFullscreen();
+        document.getElementById('vn-fs-icon-expand').style.display = full ? 'none' : 'block';
+        document.getElementById('vn-fs-icon-compress').style.display = full ? 'block' : 'none';
+        btn.title = full ? 'Exit fullscreen' : 'Fullscreen';
+        btn.setAttribute('aria-label', btn.title);
+      }
+      btn.addEventListener('click', function () {
+        try {
+          if (isFullscreen()) {
+            (doc.exitFullscreen || doc.webkitExitFullscreen).call(doc);
+          } else {
+            var root = doc.documentElement;
+            (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+          }
+        } catch (e) { /* never break the game over a fullscreen refusal */ }
+      });
+      doc.addEventListener('fullscreenchange', updateIcon);
+      doc.addEventListener('webkitfullscreenchange', updateIcon);
+      updateIcon();
+    })();
+  </script>`;
+}
+
+export async function generateStandaloneHTML(project: VNProject, options?: StandaloneHtmlOptions): Promise<string> {
   const gameEngineCode = getMinimalGameEngine();
   // Never ship editor-only extensions (or plugins the user excluded) inside a playable game.
   const projectData = JSON.stringify(stripBuildExcludedPlugins(project));
@@ -763,7 +833,7 @@ export async function generateStandaloneHTML(project: VNProject): Promise<string
   </div>
   
   <div id="game-container"></div>
-
+${options?.fullscreenButton ? buildFullscreenButtonHtml(options.fullscreenButton.corner) : ''}
   <!-- React (inlined for offline play) -->
   ${hasInlinedReact
     ? `<script>${vendor.react}</script>\n  <script>${vendor.reactDom}</script>`

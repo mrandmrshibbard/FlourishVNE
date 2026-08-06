@@ -34,6 +34,8 @@ import KeyboardShortcutsModal from './ui/KeyboardShortcutsModal';
 import GuidedTour from './GuidedTour';
 import { PhotoIcon, Cog6ToothIcon } from './icons';
 import { toggleBackgroundMusic, isBgmPlaying } from '../utils/hubAudio';
+import { resolveFieldUrl } from '../utils/assetStore';
+import { loadFontOnce } from '../utils/styleUtils';
 import { testPlayState } from '../utils/testPlayState';
 import { TemplateService } from '../features/templates/TemplateService';
 import { TemplateGenerator } from '../features/templates/TemplateGenerator';
@@ -161,39 +163,31 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     // All changes are now held in memory until the user manually exports the project.
     // This prevents browser storage quota errors for large projects.
 
-    // Load custom fonts into the document so they're available in the editor
+    // Load custom fonts into the document so they're available in the editor.
+    // TWO load-bearing details (both were bugs): the stored ref MUST go through resolveFieldUrl
+    // (desktop file-backed fonts are bare "assets/…" paths that 404 raw — the font then silently
+    // fell back to the default face in the editor while WORKING in test play), and each font
+    // registers ONCE (this effect refires on every character edit; re-parsing a big font each
+    // time grew document.fonts until the renderer ran out of memory and the app crashed).
     useEffect(() => {
         const loadProjectFonts = async () => {
             const projectFonts = (project as any).fonts || {};
             for (const fontId in projectFonts) {
                 const font = projectFonts[fontId];
                 if (font?.fontUrl && font?.fontFamily) {
-                    try {
-                        const fontFace = new FontFace(font.fontFamily, `url(${font.fontUrl})`);
-                        await fontFace.load();
-                        (document as any).fonts.add(fontFace);
-                        console.log(`✓ Loaded project font: ${font.fontFamily}`);
-                    } catch (error) {
-                        console.error(`Failed to load project font ${font?.name || fontId}:`, error);
-                    }
+                    await loadFontOnce(font.fontFamily, resolveFieldUrl(project.id, font.fontUrl) || font.fontUrl);
                 }
             }
             // Also load character custom fonts
             for (const charId in project.characters) {
                 const char = project.characters[charId];
                 if ((char as any).fontUrl && (char as any).fontFamily) {
-                    try {
-                        const fontFace = new FontFace((char as any).fontFamily, `url(${(char as any).fontUrl})`);
-                        await fontFace.load();
-                        (document as any).fonts.add(fontFace);
-                    } catch (error) {
-                        console.error(`Failed to load custom font for ${char.name}:`, error);
-                    }
+                    await loadFontOnce((char as any).fontFamily, resolveFieldUrl(project.id, (char as any).fontUrl) || (char as any).fontUrl);
                 }
             }
         };
         loadProjectFonts();
-    }, [(project as any).fonts, project.characters]);
+    }, [(project as any).fonts, project.characters, project.id]);
 
     // ADDED: Warn user before leaving the page to prevent data loss.
     // Skip this warning in Electron since it prevents the app from closing.

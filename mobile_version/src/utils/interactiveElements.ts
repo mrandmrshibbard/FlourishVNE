@@ -1,7 +1,7 @@
 /**
  * Interactive-element runtime adapters
  * ────────────────────────────────────
- * Every screen stores its widgets — hot spots, image maps, and draggable
+ * Every screen stores its widgets — hot spots, Interactive Images, and draggable
  * elements included — as `VNUIElement` entries in `screen.elements` (the old
  * separate "hot zone" screen type was retired and migrated away).
  *
@@ -212,7 +212,7 @@ export function deriveHotSpotsFromScreen(screen: VNUIScreen): Record<VNID, VNHot
 }
 
 /** Derive the legacy interactive-element runtime map from a screen by scanning
- *  `screen.elements` for image maps and draggable elements. */
+ *  `screen.elements` for Interactive Images and draggable elements. */
 export function deriveInteractiveElementsFromScreen(screen: VNUIScreen, items?: Record<VNID, { icon?: { type: string; id: VNID } | null; dragTag?: string } | undefined>): Record<VNID, VNHotZoneElement> {
     const out: Record<VNID, VNHotZoneElement> = {};
     for (const el of Object.values(screen.elements || {}) as VNUIElement[]) {

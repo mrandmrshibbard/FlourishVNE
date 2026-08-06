@@ -46,6 +46,33 @@ export interface VNCondition {
      *  Evaluated left-to-right with no operator precedence:
      *  `A or B and C` === `((A or B) and C)`. */
     connector?: 'and' | 'or';
+    /** Compare against another variable's CURRENT value instead of `value`. A separate field
+     *  on purpose: `value` already doubles as a band id for band operators (the editor resets
+     *  it when crossing that line) — overloading it again would repeat that hazard. Dangling
+     *  id → evaluators fall back to `value`. Never set together with a band operator. */
+    compareVariableId?: VNID;
+}
+
+/** One operand in a Set Variable calculation: a typed number or another variable's value. */
+export interface VNCalcOperand {
+    source: 'number' | 'variable';
+    value?: number;
+    variableId?: VNID;
+}
+
+export type VNCalcOp = 'add' | 'subtract' | 'multiply' | 'divide' | 'percentOf';
+
+export interface VNCalcStep extends VNCalcOperand {
+    op: VNCalcOp;
+}
+
+/** A Set Variable value worked out from other variables. Steps run strictly left to right —
+ *  no operator precedence (same rule, and same visible hint, as condition lists). */
+export interface VNValueCalc {
+    first: VNCalcOperand;
+    steps: VNCalcStep[];
+    /** Rounding of the calc result, applied once at the end. Absent = 'nearest'. */
+    round?: 'none' | 'nearest' | 'down' | 'up';
 }
 
 // Moved from ui/types.ts
@@ -179,12 +206,15 @@ export interface GoToScreenAction extends BaseUIAction { type: UIActionType.GoTo
  *  a built-in name or `custom:<id>` (project.customTransitions). Unset = the scene's own setting. */
 export interface JumpToSceneAction extends BaseUIAction { type: UIActionType.JumpToScene; targetSceneId: VNID; transition?: string; }
 export interface JumpToLabelAction extends BaseUIAction { type: UIActionType.JumpToLabel; targetLabel: string; }
-export interface SetVariableAction extends BaseUIAction { type: UIActionType.SetVariable; variableId: VNID; operator: VNSetVariableOperator; value: string | number | boolean; randomMin?: number; randomMax?: number; }
+/** `valueSource` absent = the typed `value` (always the case for old projects). 'variable' reads
+ *  `valueVariableId`'s current value; 'calc' works `calc` out left to right. Number variables only. */
+export interface SetVariableAction extends BaseUIAction { type: UIActionType.SetVariable; variableId: VNID; operator: VNSetVariableOperator; value: string | number | boolean; randomMin?: number; randomMax?: number; valueSource?: 'variable' | 'calc'; valueVariableId?: VNID; calc?: VNValueCalc; }
 /** Sentinel `variableId` for a ResetVariable action that resets every variable. */
 export const RESET_ALL_VARIABLES = '__ALL_VARIABLES__' as VNID;
 export interface ResetVariableAction extends BaseUIAction { type: UIActionType.ResetVariable; variableId: VNID; }
-export interface PlaySoundAction extends BaseUIAction { type: UIActionType.PlaySound; audioId: VNID; volume?: number; loop?: boolean; }
-export interface PlayMusicAction extends BaseUIAction { type: UIActionType.PlayMusic; audioId: VNID; volume?: number; loop?: boolean; fadeDuration?: number; }
+export interface PlaySoundAction extends BaseUIAction { type: UIActionType.PlaySound; audioId: VNID; volume?: number; loop?: boolean; audioAdjust?: import('../features/scene/types').VNAudioAdjust; }
+/** `audioAdjust` here is speed/keep-pitch only — reverse is ignored on the music channel. */
+export interface PlayMusicAction extends BaseUIAction { type: UIActionType.PlayMusic; audioId: VNID; volume?: number; loop?: boolean; fadeDuration?: number; audioAdjust?: import('../features/scene/types').VNAudioAdjust; }
 export interface StopMusicAction extends BaseUIAction { type: UIActionType.StopMusic; fadeDuration?: number; }
 /** Stop sound effects: a specific sound (audioId) or ALL currently playing (audioId unset). */
 export interface StopSoundAction extends BaseUIAction { type: UIActionType.StopSound; audioId?: VNID | null; fadeDuration?: number; }

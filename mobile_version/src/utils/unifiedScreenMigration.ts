@@ -3,7 +3,7 @@
  * ────────────────────────
  * Converts pre-unified projects (which had a separate `screenType: 'hotzone'`
  * with side maps `hotZoneElements` / `hotSpots`) into the unified schema
- * where every screen holds hot spots, draggable elements, image maps, and
+ * where every screen holds hot spots, draggable elements, Interactive Images, and
  * regular UI widgets together in `screen.elements`.
  *
  * History of the in-flight migration phases this file covers:

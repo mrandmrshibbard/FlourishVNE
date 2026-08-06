@@ -64,7 +64,7 @@ export type UsageKind =
     | 'ask';     // the player types/chooses the value
 
 export interface UsageLocation {
-    area: 'scene' | 'screen' | 'commonEvent' | 'map' | 'miniGame' | 'systems' | 'phone' | 'gallery' | 'script' | 'project';
+    area: 'scene' | 'screen' | 'commonEvent' | 'map' | 'miniGame' | 'systems' | 'phone' | 'gallery' | 'script' | 'project' | 'character';
     sceneId?: VNID;
     /** Index into the scene's (or common event's) command list. */
     commandIndex?: number;
@@ -75,6 +75,7 @@ export interface UsageLocation {
     miniGameId?: VNID;
     itemId?: VNID;
     statId?: VNID;
+    characterId?: VNID;
 }
 
 export interface VariableUsage {
@@ -175,6 +176,15 @@ function scanConditions(ctx: Ctx, conditions: unknown, where: string, location: 
             what: `${what}: ${describeOneCondition(ctx.project, c)}`,
             where, location, canJump: canJump(location),
         });
+        // The OTHER side of a compare-to-variable condition is a read too — without this, the
+        // X-ray (and the delete-variable confirmation) would claim the compared variable unused.
+        if (c.compareVariableId && ctx.project.variables[c.compareVariableId]) {
+            add(ctx, {
+                variableId: c.compareVariableId, kind: 'check',
+                what: `Compared against: ${describeOneCondition(ctx.project, c)}`,
+                where, location, canJump: canJump(location),
+            });
+        }
     }
 }
 
@@ -187,7 +197,33 @@ function describeOneCondition(project: VNProject, c: VNCondition): string {
         const word = c.operator === 'inBand' ? 'is' : c.operator === 'atLeastBand' ? 'is at least' : 'is below';
         return `${name} ${word} ${band?.name ?? '…'}`;
     }
+    if (c.compareVariableId !== undefined) {
+        const other = project.variables[c.compareVariableId];
+        return `${name} ${c.operator} ${other ? variableLabel(other) : 'a missing variable'}`;
+    }
     return `${name} ${c.operator} ${c.value ?? ''}`.trim();
+}
+
+/** The variables a Set Variable READS to work out its value (from-a-variable / calculation). */
+function scanSetVariableSources(ctx: Ctx, spec: any, where: string, location: UsageLocation): void {
+    const target = variableLabel(ctx.project.variables[spec.variableId], 'a variable');
+    const seen = new Set<string>();
+    const addRead = (id: unknown) => {
+        if (typeof id !== 'string' || !id || seen.has(id) || !ctx.project.variables[id]) return;
+        seen.add(id);
+        add(ctx, {
+            variableId: id as VNID, kind: 'check',
+            what: `Its value is used to work out ${target}`,
+            where, location, canJump: canJump(location),
+        });
+    };
+    if (spec.valueSource === 'variable') addRead(spec.valueVariableId);
+    if (spec.valueSource === 'calc' && spec.calc) {
+        if (spec.calc.first?.source === 'variable') addRead(spec.calc.first.variableId);
+        for (const step of (spec.calc.steps ?? [])) {
+            if (step?.source === 'variable') addRead(step.variableId);
+        }
+    }
 }
 
 /** Actions nest (a timer's on-finish list, a mini-game tier). Recurse, and never forget their conditions. */
@@ -218,6 +254,7 @@ function scanActions(ctx: Ctx, actions: unknown, where: string, location: UsageL
                     what: describeSetVariable(ctx.project, a),
                     where, location, canJump: canJump(location),
                 });
+                scanSetVariableSources(ctx, a, where, location);
                 break;
             }
             case UIActionType.ResetVariable: {
@@ -271,6 +308,7 @@ function scanCommand(ctx: Ctx, command: VNCommand, where: string, location: Usag
                     what: describeSetVariable(ctx.project, c),
                     where, location, canJump: canJump(location),
                 });
+                scanSetVariableSources(ctx, c, where, location);
             }
             break;
 
@@ -531,6 +569,16 @@ export function buildVariableUsageIndex(project: VNProject): VariableUsageIndex 
         }
     }
 
+    // ── character display names — may hold {Variable} tokens ("???" until the reveal) ──
+    // Indexed so the X-ray, the delete-variable confirmation, and rename-awareness all see them.
+    for (const ch of Object.values(project.characters ?? {}) as any[]) {
+        scanText(ctx, ch?.name, `Character “${ch?.name}”`, { area: 'character', characterId: ch?.id });
+    }
+    // Phone contacts can override a character's name — same treatment.
+    for (const contact of asList<any>((project as any).ui?.phoneContacts)) {
+        scanText(ctx, contact?.displayName, 'Phone contact name', { area: 'phone' });
+    }
+
     // ── maps ──
     for (const map of Object.values(project.maps ?? {}) as any[]) {
         const loc: UsageLocation = { area: 'map', mapId: map.id };
@@ -615,6 +663,18 @@ export function buildVariableUsageIndex(project: VNProject): VariableUsageIndex 
                 variableId: entry.unlockVariableId, kind: 'check',
                 what: `Unlocks the gallery picture “${entry.name || ''}”`,
                 where: 'CG gallery',
+                location: { area: 'gallery' }, canJump: false,
+            });
+        }
+    }
+
+    // ── Music gallery ──
+    for (const song of asList<any>((project as any).musicGallery?.entries)) {
+        if (song?.unlockVariableId) {
+            add(ctx, {
+                variableId: song.unlockVariableId, kind: 'check',
+                what: `Unlocks the song “${song.name || ''}”`,
+                where: 'Music gallery',
                 location: { area: 'gallery' }, canJump: false,
             });
         }

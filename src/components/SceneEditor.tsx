@@ -13,7 +13,7 @@ import { PlusIcon, GripVerticalIcon, ChevronDownIcon, AdjustmentsIcon, FolderIco
 import { createCommand } from '../utils/commandFactory';
 import { describeConditions } from '../utils/conditionLogic';
 import { describeSetVariable, describeTextInput } from '../utils/variableLanguage';
-import { getCommandColor } from './CommandPalette';
+import { getCommandColor, PALETTE_ADD_COMMAND_EVENT } from './CommandPalette';
 import { 
     groupCommandsIntoStacks,
     stackCommands,
@@ -91,6 +91,12 @@ const CommandItem: React.FC<{
                 const cn = project.characters[spc.characterId]?.name || 'N/A';
                 const pn = spc.poseId ? (project.characters[spc.characterId]?.poses?.[spc.poseId]?.name || 'N/A') : 'Default';
                 return `Change Pose: ${cn} → ${pn}`;
+            }
+            case CommandType.PlayCharacterAnimation: {
+                const pac = command as import('../features/scene/types').PlayCharacterAnimationCommand;
+                const cn = pac.characterSource === 'player' ? '⟨Player’s Character⟩' : (project.characters[pac.characterId]?.name || 'N/A');
+                const an = pac.animationId ? (project.characters[pac.characterId]?.animations?.[pac.animationId]?.name || 'N/A') : null;
+                return an ? `Play Animation: ${cn} → ${an}` : `Play Animation: ${cn} → stop`;
             }
             case CommandType.Choice:
                 return `Choice: ${command.options.length} options`;
@@ -906,6 +912,34 @@ const SceneEditor: React.FC<{
         if (dropTarget?.commandId !== rowId || dropTarget.position !== side) return null;
         return <div className="h-10 my-1 rounded-md border-2 border-dashed border-sky-400 bg-sky-500/15 transition-all duration-150" />;
     };
+
+    // Click-to-add from the Events palette (the + buttons): insert right after the selected
+    // command, or at the end of the scene. Raised as a DOM event because the palette lives in
+    // the sibling scenes sidebar. insertCommandsIntoScene selects the new command, so the
+    // inspector opens on it immediately — same feel as a drop.
+    useEffect(() => {
+        const onPaletteAdd = (e: Event) => {
+            const type = (e as CustomEvent).detail?.commandType as CommandType | undefined;
+            if (!type) return;
+            const latestScene = project.scenes[activeSceneId];
+            if (!latestScene) return;
+            const commandCount = latestScene.commands.length;
+            const insertIndex = selectedCommandIndex !== null && selectedCommandIndex >= 0 && selectedCommandIndex < commandCount
+                ? selectedCommandIndex + 1
+                : commandCount;
+            if (type === CommandType.BranchStart) {
+                const branchId = generateBranchId();
+                const branchStart = createCommandWithId(CommandType.BranchStart, { branchId });
+                const branchEnd = createCommandWithId(CommandType.BranchEnd, { branchId });
+                if (branchStart && branchEnd) insertCommandsIntoScene([branchStart, branchEnd], insertIndex);
+                return;
+            }
+            const newCommand = createCommandWithId(type);
+            if (newCommand) insertCommandsIntoScene([newCommand], insertIndex);
+        };
+        window.addEventListener(PALETTE_ADD_COMMAND_EVENT, onPaletteAdd);
+        return () => window.removeEventListener(PALETTE_ADD_COMMAND_EVENT, onPaletteAdd);
+    }, [project, activeSceneId, selectedCommandIndex, createCommandWithId, insertCommandsIntoScene]);
 
     const handleAddCommandToBranch = useCallback((branchId: string, type: CommandType) => {
         if (!activeScene) {

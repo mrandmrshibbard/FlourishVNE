@@ -10,6 +10,7 @@ import { VNProject } from '../types/project';
 import { buildStandaloneGame, downloadBlob, estimateBuildSize, BuildProgress } from '../utils/gameBundler';
 import { validateProjectForBuild, ValidationResult } from '../utils/buildValidator';
 import { GamepadIcon, XMarkIcon, GlobeIcon, SaveIcon, CheckIcon, ArrowDownTrayIcon } from './icons';
+import { useProject } from '../contexts/ProjectContext';
 import { defaultPackageName, isValidPackageName, AndroidOrientation } from '../utils/androidGameBundler';
 
 interface GameBuilderProps {
@@ -26,6 +27,13 @@ interface AndroidToolchainStatus { ready: boolean; estimate?: { totalGB: number;
 
 export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) => {
   const { t } = useTranslation('gameBuilder');
+  const { dispatch } = useProject();
+  // Web-build options live on the project so the choice sticks between sessions.
+  const setBuildOption = (patch: Partial<NonNullable<VNProject['buildOptions']>>) => {
+    dispatch({ type: 'UPDATE_PROJECT', payload: { buildOptions: { ...project.buildOptions, ...patch } } });
+  };
+  const fullscreenOn = project.buildOptions?.webFullscreenButton ?? false;
+  const fullscreenCorner = project.buildOptions?.webFullscreenCorner ?? 'top-right';
   const [buildStep, setBuildStep] = useState<BuildStep>('idle');
   const [buildType, setBuildType] = useState<BuildType>('web');
   const [desktopFormat, setDesktopFormat] = useState<DesktopFormat>('standalone');
@@ -335,6 +343,41 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                   <strong>{t('noCodingRequired')}</strong>
                 </p>
               </div>
+
+              {buildType === 'web' && (
+                <div style={{ margin: '12px 0', padding: '12px 16px', borderRadius: '8px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(100,116,139,0.3)' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px', color: '#e2e8f0' }}>{t('webOptions.title', 'Web options')}</div>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', color: '#e2e8f0', fontSize: '13px' }}>
+                    <input
+                      type="checkbox"
+                      checked={fullscreenOn}
+                      onChange={e => setBuildOption({ webFullscreenButton: e.target.checked })}
+                      style={{ marginTop: '2px', accentColor: '#8b5cf6' }}
+                    />
+                    <span>
+                      <span style={{ fontWeight: 'bold' }}>{t('webOptions.fullscreenLabel', 'Add a fullscreen button')}</span>
+                      <span style={{ display: 'block', fontSize: '11px', opacity: 0.7, marginTop: '2px' }}>
+                        {t('webOptions.fullscreenHint', 'Shows a small button over the game that lets players make it fill their whole screen — great for itch.io, where browser games can look small.')}
+                      </span>
+                    </span>
+                  </label>
+                  {fullscreenOn && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', marginLeft: '24px' }}>
+                      <span style={{ fontSize: '12px', color: '#e2e8f0', opacity: 0.85 }}>{t('webOptions.fullscreenCorner', 'Button corner')}</span>
+                      <select
+                        value={fullscreenCorner}
+                        onChange={e => setBuildOption({ webFullscreenCorner: e.target.value as any })}
+                        style={{ background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', border: '1px solid rgba(100,116,139,0.4)', borderRadius: '6px', padding: '4px 8px', fontSize: '12px' }}
+                      >
+                        <option value="top-right">{t('webOptions.cornerTopRight', 'Top right')}</option>
+                        <option value="top-left">{t('webOptions.cornerTopLeft', 'Top left')}</option>
+                        <option value="bottom-right">{t('webOptions.cornerBottomRight', 'Bottom right')}</option>
+                        <option value="bottom-left">{t('webOptions.cornerBottomLeft', 'Bottom left')}</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {(buildType === 'desktop' || buildType === 'android') && (
                 <div style={styles.iconPickerSection}>

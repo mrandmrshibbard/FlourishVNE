@@ -2,25 +2,26 @@ import React, { useState, useEffect, useRef, useCallback, useReducer, useMemo } 
 import { flushSync, createPortal } from 'react-dom';
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
-import { interpolateVariables } from '../utils/variableInterpolation';
+import { interpolateVariables, resolveCharacterDisplayName, findCharacterBySpokenName, makeDisplayNameResolver } from '../utils/variableInterpolation';
 import { createCommand } from '../utils/commandFactory';
-import { combineConditions } from '../utils/conditionLogic';
+import { combineConditions, resolveConditionValue } from '../utils/conditionLogic';
 import { deriveHotSpotsFromScreen, deriveInteractiveElementsFromScreen } from '../utils/interactiveElements';
 import { XMarkIcon, FilmIcon, VariablesIcon } from './icons';
 import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { compareBand, isBandOperator, formatBandedValue, resolveBand, hasBands } from '../features/variables/bands';
 import { setVariableDefinitions } from './live-preview/systems/conditionEvaluator';
-import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform } from '../utils/styleUtils';
+import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform, loadFontOnce, cssFontFamily } from '../utils/styleUtils';
 import TrimmedVideo from './ui/TrimmedVideo';
 import { resolveVideoTrim } from '../utils/videoTrim';
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject, CGGalleryEntry } from '../types/project';
+import { visibleSongs, VisibleSong, formatTimeLabel, buildPlayOrder, stepIndex, GALLERY_PLAYER_EVENT, MUSIC_CONTROL_GLYPHS } from '../utils/musicGallery';
 import {
     VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, SaveGameAction, LoadGameAction, DeleteSaveAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, CallCommonEventAction, OpenPhoneAppAction, ShowMapAction, ShowMiniGameAction, SaveSlotsPageAction, RESET_ALL_VARIABLES
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
-    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UITimerElement, UIItemElement, UICustomElement, GameSetting, GameToggleSetting, UIElementType, UIAppearanceState,
+    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIMusicGalleryElement, UIMusicPlayerPart, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UITimerElement, UIItemElement, UICustomElement, GameSetting, GameToggleSetting, UIElementType, UIAppearanceState,
     VNHotSpot, VNHotZoneElement, VNConfirmDialogSettings, QuickMenuButtonConfig, QuickMenuButtonKey, VNProjectUI, PhonePortraitSource
 } from '../features/ui/types';
 import { PHONE_GLYPHS } from '../features/ui/phoneIcons';
@@ -29,6 +30,9 @@ import { collectToCameraRoll, phoneThreadKey, countPhoneThread } from './live-pr
 import { resolveVarNumber } from './live-preview/systems/resolveVarNumber';
 import { formatSlotText, isSlotDesignActive, slotPartVisible, SLOT_GRID_PAGE_EVENT } from '../utils/slotDesign';
 import { assetArtForPose, characterBaseArtForPose, resolvePoseId } from '../features/character/poseArt';
+import { layerBoxStyle, layerBoxTransform, layerOrderForPose, poseHiddenLayerIds, resolveLayerBox, normalizeLayerBox } from '../features/character/layout';
+import { isEnhanced } from './live-preview/fx/glFx';
+import GlFxCanvas from './live-preview/fx/GlFxCanvas';
 import MiniGameFrame from './live-preview/minigames/MiniGameFrame';
 import type { PhoneAppId } from './live-preview/types/gameState';
 import { resolveFieldUrl } from '../utils/assetStore';
@@ -48,8 +52,10 @@ import {
     CallCommonEventCommand,
     ShowHotSpotCommand, HideHotSpotCommand,
     TweenElementCommand, MoveCharacterCommand, StartTimerCommand, StopTimerCommand, SetTimeOfDayCommand, REACTIVE_VISUAL_TYPES, REACTIVE_FX_TYPES,
-    VNCustomTransition, VNTransitionAnimation,
+    VNCustomTransition, VNTransitionAnimation, VNAudioAdjust,
 } from '../features/scene/types';
+import { resolveAudioAdjust, applyAudioAdjust } from '../utils/audioAdjust';
+import { peekReversedUrl, getReversedUrl } from './live-preview/reversedAudio';
 import { resolveSceneTransition, transitionHalfDuration, transitionHalfHasContent } from '../utils/sceneTransition';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
@@ -63,9 +69,10 @@ import { AnimatedDialogueText, useRainbowTick } from './live-preview/AnimatedDia
 import { GlossaryTooltip } from './live-preview/GlossaryTooltip';
 import { compileGlossary } from '../utils/glossaryMatcher';
 import { analyzeVoiceWordStarts } from './live-preview/voiceWordTiming';
-import { 
+import {
     normalizeSetVariableOperator as normalizeOperator,
-    calculateVariableValue 
+    calculateVariableValue,
+    resolveSetVariableValue
 } from '../utils/variableUtils';
 import { computeArrangedPositions } from '../utils/characterArrange';
 
@@ -156,6 +163,92 @@ const vnWarmImage = (url: string): Promise<void> =>
         img.onload = img.onerror = () => { vnLoadedImages.add(url); resolve(); };
         img.src = url;
     });
+
+// ── Music Gallery player ────────────────────────────────────────────────────────────────
+// MODULE-scoped so a "keep playing" song survives its element unmounting when the player
+// switches screens (precedent: vnLoadedImages / vnCustomCursorValues). Playback NEVER
+// touches musicAudioRef or playerState.musicState — saves can't capture gallery music by
+// construction. Mounted Music Gallery elements mirror this state via GALLERY_PLAYER_EVENT.
+const vnGalleryPlayer = {
+    audio: null as HTMLAudioElement | null,   // created lazily on first click (gesture-safe)
+    entryId: null as string | null,
+    playing: false,
+    keepPlaying: false,       // owning element's onLeave === 'keepPlaying'
+    loop: false,
+    shuffle: false,
+    /** Current play order over the unlocked songs (entry ids + resolved urls), so the
+     *  module-level 'ended' auto-advance works even with no element mounted. */
+    order: [] as Array<{ entryId: string; url: string }>,
+    volume: 0.8,              // last applied settings.musicVolume
+    fadeTimer: 0 as number | ReturnType<typeof setInterval>,
+};
+
+function galleryPlayerEmit(): void {
+    try { window.dispatchEvent(new CustomEvent(GALLERY_PLAYER_EVENT)); } catch { /* SSR/tests */ }
+}
+
+function galleryPlayGuardedPlay(a: HTMLAudioElement): void {
+    a.play().then(() => { vnGalleryPlayer.playing = true; galleryPlayerEmit(); })
+        .catch(() => { vnGalleryPlayer.playing = false; galleryPlayerEmit(); });
+}
+
+/** Start (or restart) a song by entry id using the singleton's current order. */
+function galleryPlayEntry(entryId: string): void {
+    const song = vnGalleryPlayer.order.find(o => o.entryId === entryId);
+    if (!song || !song.url) return;
+    if (!vnGalleryPlayer.audio) {
+        const a = new Audio();
+        // Module-level ended handler: loop replays, otherwise auto-advance through the order —
+        // works even when no gallery element is mounted (keep-playing mode).
+        a.addEventListener('ended', () => {
+            if (vnGalleryPlayer.loop && vnGalleryPlayer.entryId) {
+                galleryPlayEntry(vnGalleryPlayer.entryId);
+                return;
+            }
+            const ids = vnGalleryPlayer.order.map(o => o.entryId);
+            const next = stepIndex(ids, vnGalleryPlayer.entryId, 1);
+            if (next >= 0 && ids.length > 1) galleryPlayEntry(ids[next]);
+            else { vnGalleryPlayer.playing = false; galleryPlayerEmit(); }
+        });
+        vnGalleryPlayer.audio = a;
+    }
+    const audio = vnGalleryPlayer.audio;
+    if (vnGalleryPlayer.fadeTimer) { clearInterval(vnGalleryPlayer.fadeTimer as any); vnGalleryPlayer.fadeTimer = 0; }
+    audio.src = song.url;
+    audio.load();
+    applyAudioAdjust(audio, null);   // gallery songs always play as recorded (reset discipline)
+    audio.loop = false; // 'ended' owns looping so auto-advance can exist
+    audio.volume = Math.max(0, Math.min(1, vnGalleryPlayer.volume));
+    vnGalleryPlayer.entryId = entryId;
+    galleryPlayGuardedPlay(audio);
+}
+
+/** Stop playback with a short fade and reset the singleton. EVERY stop path uses this. */
+function stopGalleryPlayer(fadeSec = 0.35): void {
+    const a = vnGalleryPlayer.audio;
+    vnGalleryPlayer.playing = false;
+    vnGalleryPlayer.entryId = null;
+    vnGalleryPlayer.keepPlaying = false;
+    if (a && !a.paused) {
+        if (vnGalleryPlayer.fadeTimer) clearInterval(vnGalleryPlayer.fadeTimer as any);
+        const steps = Math.max(1, Math.round((fadeSec * 1000) / 50));
+        const dropPer = a.volume / steps;
+        vnGalleryPlayer.fadeTimer = setInterval(() => {
+            const next = a.volume - dropPer;
+            if (next <= 0.01) {
+                clearInterval(vnGalleryPlayer.fadeTimer as any);
+                vnGalleryPlayer.fadeTimer = 0;
+                a.pause();
+                a.src = '';
+            } else {
+                a.volume = next;
+            }
+        }, 50);
+    } else if (a) {
+        a.src = '';
+    }
+    galleryPlayerEmit();
+}
 
 function isRuntimeDebugEnabled(): boolean {
     try {
@@ -303,7 +396,9 @@ import {
     handleHideCharacter,
     handleSetCharacterLayer,
     handleSetCharacterPose,
+    handlePlayCharacterAnimation,
     handleSetBackground,
+    musicChannelAdjust,
     handlePlayMusic,
     handleStopMusic,
     handlePlaySoundEffect,
@@ -379,6 +474,12 @@ import { getOverlayTransitionClass } from './live-preview/systems/transitionUtil
 import { TweenManager } from './live-preview/systems/tweenManager';
 import { computeGrade, gradeToBackgroundStyle, gradeToCharacterFilter, gradeToSpriteTint } from './live-preview/systems/dayNightGrade';
 import { useTween } from './live-preview/hooks/useTween';
+import { useTypewriter } from './live-preview/hooks/useTypewriter';
+import { processDialogueText, stripDialogueTextCodes, walkToAppendGroupHead, smartJoin, punctuationPauses, DEFAULT_PUNCTUATION_PACING, DEFAULT_PAUSE_MS } from './live-preview/dialogueTextCodes';
+import { playBlip, prepareBlipBuffer, blipIndicesFor } from './live-preview/letterBlips';
+import { noteSpeechReveal, clearSpeech, isSpeakingNow } from './live-preview/speechState';
+import { frameAssetAt, applyAnimationFrame, animationFrameUrls, autoAnimationsOf } from '../features/character/spriteAnim';
+import { buildCharacterMedia, boxFieldsForStage } from './live-preview/command-handlers/characterHandler';
 
 const defaultSettings: GameSettings = {
     textSpeed: 50,
@@ -541,7 +642,7 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
         top: `${ty}%`,
         ...(isSlideTransition ? (_orient ? { transform: _orient } : {}) : { transform: `translate(-50%, -50%) ${_orient}`.trim() }),
         fontSize: `${tFontSize * ovScale}px`,
-        fontFamily: overlay.fontFamily,
+        fontFamily: cssFontFamily(overlay.fontFamily),
         color: tColor,
         fontWeight: overlay.fontWeight || 'normal',
         fontStyle: overlay.fontStyle || 'normal',
@@ -1162,34 +1263,8 @@ interface GameStateSave {
 }
 
 // --- Typewriter Hook ---
-// `msPerCharOverride` (voice-paced text): when set, it replaces the speed-derived interval
-// so the reveal finishes together with the line's voice clip.
-const useTypewriter = (text: string, speed: number, msPerCharOverride?: number | null) => {
-    const [displayText, setDisplayText] = useState('');
-    const hasFinished = displayText.length === text.length;
-
-    useEffect(() => {
-        setDisplayText('');
-        if (!text) return;
-
-        const interval = setInterval(() => {
-            setDisplayText(prev => {
-                if (prev.length < text.length) {
-                    return text.substring(0, prev.length + 1);
-                } else {
-                    clearInterval(interval);
-                    return prev;
-                }
-            });
-        }, msPerCharOverride ?? (1000 / speed));
-
-        return () => clearInterval(interval);
-    }, [text, speed, msPerCharOverride]);
-    
-    const skip = () => setDisplayText(text);
-
-    return { displayText, skip, hasFinished };
-};
+// The typewriter now lives in live-preview/hooks/useTypewriter.ts (extended for dialogue
+// append, inline [pause] codes and letter blips) — see that file for the full contract.
 
 // --- Stage size & measurement hook ---
 const useStageSize = (ref: React.RefObject<HTMLElement | null>) => {
@@ -1365,7 +1440,7 @@ const pickActiveAppearanceState = (
     return null;
 };
 
-// Returns a shallow clone with the state's primaryColor/image mapped onto the element's typed
+// Returns a shallow clone with the state's primaryColor/Interactive Imageped onto the element's typed
 // "main" fields (Meter fill, Text colour, Button bg, Image/Button picture). Universal overrides
 // (opacity/scale/rotation/glow) are applied to the wrapper style by the caller, not here.
 const mergeAppearanceStatePrimary = (element: VNUIElement, state: UIAppearanceState): VNUIElement => {
@@ -1403,9 +1478,18 @@ const pickReactiveTextboxState = (
     return null;
 };
 
-const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], settings: GameSettings, projectUI: any, onFinished: () => void, variables: Record<VNID, string | number | boolean>, project: VNProject, reactiveState?: any, timerPaused?: boolean, uiPalette?: Record<string, string> | null, voiceRef?: React.MutableRefObject<HTMLAudioElement | null> }> = ({ dialogue, settings, projectUI, onFinished, variables, project, reactiveState, timerPaused, uiPalette, voiceRef }) => {
+const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], settings: GameSettings, projectUI: any, onFinished: () => void, variables: Record<VNID, string | number | boolean>, project: VNProject, reactiveState?: any, timerPaused?: boolean, uiPalette?: Record<string, string> | null, voiceRef?: React.MutableRefObject<HTMLAudioElement | null>, autoContinue?: boolean, isSkipping?: boolean }> = ({ dialogue, settings, projectUI, onFinished, variables, project, reactiveState, timerPaused, uiPalette, voiceRef, autoContinue, isSkipping }) => {
     if (!dialogue) return null;
-    const interpolatedText = interpolateVariables(dialogue.text, variables, project);
+    // Inline [pause 0.5] codes are parsed from the RAW text (per segment, BEFORE interpolation —
+    // a variable's value can never inject a pause), and everything below sees only cleanText.
+    const { cleanText: interpolatedText, pauses: inlinePauses } = useMemo(
+        () => processDialogueText(dialogue.text, s => interpolateVariables(s, variables, project)),
+        [dialogue.text, variables, project]
+    );
+    // APPEND: the already-shown prefix (clean length) reveals instantly; only the new part types.
+    const appendStartAt = dialogue.appendRevealFrom && dialogue.appendRevealFrom > 0
+        ? processDialogueText(dialogue.text.slice(0, dialogue.appendRevealFrom), s => interpolateVariables(s, variables, project)).cleanText.length
+        : 0;
     // Per-line text-speed override (Dialogue command) takes precedence over the global setting.
     const effectiveTextSpeed = (dialogue.textSpeed != null && dialogue.textSpeed > 0) ? dialogue.textSpeed : settings.textSpeed;
 
@@ -1455,13 +1539,81 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
         ? Math.max(8, Math.min(200, (voiceDurationMs * 0.92) / interpolatedText.length))
         : null;
 
-    const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, effectiveTextSpeed, pacedMsPerChar);
+    // ── Letter blips (typing sound): resolved per line by the dialogue handler; fire per newly
+    // typed character via the typewriter's onReveal. Indices precomputed once per line;
+    // suppressed while Ctrl-skip is fast-forwarding.
+    const blipCfg = dialogue.blip ?? null;
+    const blipUrl = useMemo(() => {
+        if (!blipCfg) return undefined;                       // no blip for this line
+        if (!blipCfg.audioId) return null;                    // built-in beep
+        const asset = project.audio[blipCfg.audioId];
+        return asset ? resolveFieldUrl(project.id, asset.audioUrl) : undefined;
+    }, [blipCfg, project]);
+    const blipIndices = useMemo(
+        () => (blipCfg && blipUrl !== undefined ? blipIndicesFor(interpolatedText, blipCfg) : null),
+        [blipCfg, blipUrl, interpolatedText]
+    );
+    useEffect(() => { if (blipCfg && blipUrl !== undefined) prepareBlipBuffer(blipUrl, blipCfg.audioAdjust?.reverse); }, [blipCfg, blipUrl]);
+
+    // ── Automatic punctuation pacing: small holds after , . ! ? … (project setting; per-line
+    // opt-out; skipped on voice-paced lines — the clip drives their timing). Merges with inline
+    // [pause] codes for free: the typewriter SUMS pauses landing on the same index.
+    const punctCfg = projectUI.dialoguePunctuationPacing;
+    const punctPauses = useMemo(() => {
+        if (!punctCfg?.enabled || dialogue.noPunctuationPauses || pacedMsPerChar != null) return [];
+        return punctuationPauses(interpolatedText, {
+            commaMs: punctCfg.commaMs ?? DEFAULT_PUNCTUATION_PACING.commaMs,
+            sentenceMs: punctCfg.sentenceMs ?? DEFAULT_PUNCTUATION_PACING.sentenceMs,
+            ellipsisMs: punctCfg.ellipsisMs ?? DEFAULT_PUNCTUATION_PACING.ellipsisMs,
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [punctCfg, dialogue.noPunctuationPauses, pacedMsPerChar, interpolatedText]);
+
+    const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, effectiveTextSpeed, pacedMsPerChar, {
+        startAt: appendStartAt,
+        initialDelayMs: appendStartAt > 0 ? (dialogue.appendPauseMs ?? 0) : 0,
+        pauses: punctPauses.length ? [...inlinePauses, ...punctPauses] : inlinePauses,
+        onReveal: (index) => {
+            // 'speaking' character animations key off this — every typed letter counts,
+            // so a talking mouth pauses exactly with [pause] codes and punctuation holds.
+            noteSpeechReveal(dialogue.characterId);
+            if (!blipIndices) return;
+            if (isSkipping) return; // Ctrl-skip fast-forward stays silent
+            if (blipIndices.has(index)) {
+                playBlip(blipUrl as string | null, {
+                    volume: (settings.voiceVolume ?? 1) * (blipCfg!.volume ?? 1),
+                    pitchWobble: blipCfg!.pitchWobble ?? 0,
+                    speed: blipCfg!.audioAdjust?.speed,
+                    reverse: blipCfg!.audioAdjust?.reverse,
+                });
+            }
+        },
+    });
+
+    // Talking animations stop the moment the line finishes typing (or the box closes).
+    useEffect(() => { if (hasFinished) clearSpeech(dialogue.characterId); }, [hasFinished, dialogue.characterId]);
+    useEffect(() => () => clearSpeech(), []);
+
+    // ── Auto-continue into the next appended part: the moment this part finishes typing, the
+    // story advances by itself (no click) — that's what makes the timing land. Ref-guarded so a
+    // re-render can't double-fire; reset when the text changes (the next part arriving).
+    const autoContinueFiredRef = useRef(false);
+    useEffect(() => { autoContinueFiredRef.current = false; }, [dialogue.text]);
+    useEffect(() => {
+        if (autoContinue && hasFinished && !timerPaused && !autoContinueFiredRef.current) {
+            autoContinueFiredRef.current = true;
+            onFinished();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoContinue, hasFinished, timerPaused]);
 
     // ── Per-line auto-advance timer (Dialogue.timeLimit, seconds) ──
     // Counts from TYPEWRITER COMPLETION (fairer than the global Auto delay, which can't see
     // typing) and advances by itself; mirrors the timed-choice rAF countdown. While paused
     // (pause menu / choices / history open) the countdown suspends and restarts in full.
-    const timeLimit = (dialogue.timeLimit && dialogue.timeLimit > 0) ? dialogue.timeLimit : 0;
+    // With more appended parts coming, this part's timer stands down — the GROUP-END line's
+    // timer is the one that counts.
+    const timeLimit = (dialogue.timeLimit && dialogue.timeLimit > 0 && !autoContinue) ? dialogue.timeLimit : 0;
     const timerLocked = !!(timeLimit && dialogue.timeLimitLocked);
     const [timerRemaining, setTimerRemaining] = useState(0);
     useEffect(() => {
@@ -1509,6 +1661,12 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
             return;
         }
         if (hasFinished) {
+            // Auto-continue lines advance themselves — a click may only hurry them, never
+            // double-advance (shared ref with the auto effect).
+            if (autoContinue) {
+                if (!autoContinueFiredRef.current) { autoContinueFiredRef.current = true; onFinished(); }
+                return;
+            }
             onFinished();
         } else if (settings.enableSkip) {
             skip();
@@ -1570,7 +1728,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     
     const dialogueTextStyle = {
         ...fontSettingsToStyle(charTb?.dialogueTextFont ?? projectUI.dialogueTextFont),
-        ...(characterFont ? { fontFamily: characterFont } : {}),
+        ...(characterFont ? { fontFamily: cssFontFamily(characterFont) } : {}),
         ...(characterFontSize ? { fontSize: `calc(var(--font-scale, 1) * ${characterFontSize}px)` } : {}),
         ...(characterFontWeight ? { fontWeight: characterFontWeight } : {}),
         ...(characterFontItalic ? { fontStyle: 'italic' } : {}),
@@ -1648,7 +1806,8 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     }
 
     const hasCustomImage = dialogueBoxUrl || dialogueBorderUrl;
-    const showNamebox = dialogue.characterName !== 'Narrator' && !reactiveState?.hideNamebox;
+    // Empty names hide the box too — a {Nickname} that resolves to nothing plays narrator-style.
+    const showNamebox = !!dialogue.characterName?.trim() && dialogue.characterName !== 'Narrator' && !reactiveState?.hideNamebox;
 
     // Namebox style: uses name font (character override, else global) with character colour override
     const nameFont = charTb?.dialogueNameFont ?? projectUI.dialogueNameFont;
@@ -1818,8 +1977,9 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                                 }} />
                             )}
                         </p>
-                        {/* Click-to-advance indicator (hidden on locked timed lines — clicking won't advance) */}
-                        {hasFinished && !timerLocked && (
+                        {/* Click-to-advance indicator (hidden on locked timed lines — clicking won't
+                            advance — and while more appended parts auto-continue) */}
+                        {hasFinished && !timerLocked && !autoContinue && (
                             <div style={{
                                 position: 'absolute',
                                 bottom: '8px',
@@ -2291,16 +2451,16 @@ const SaveSlotGridComponent: React.FC<{
     // Empty slot text: use emptySlotFont if configured, otherwise fall back to emptySlotTextColor
     const emptySlotStyle: React.CSSProperties = el.emptySlotFont
         ? { ...fontSettingsToStyle(el.emptySlotFont), textAlign: undefined }
-        : { color: el.emptySlotTextColor || '#a0aec0', fontSize: baseFont.fontSize, fontFamily: baseFont.fontFamily };
+        : { color: el.emptySlotTextColor || '#a0aec0', fontSize: baseFont.fontSize, fontFamily: cssFontFamily(baseFont.fontFamily) };
 
     // Nav buttons: use navButtonFont if configured - exclude textAlign
     const navBtnStyle: React.CSSProperties = el.navButtonFont
         ? { ...fontSettingsToStyle(el.navButtonFont), textAlign: undefined, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', padding: '2px 10px' }
-        : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize, fontWeight: 'bold' as const, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', padding: '2px 10px' };
+        : { color: slotHeaderColor, fontFamily: cssFontFamily(baseFont.fontFamily), fontSize: baseFont.fontSize, fontWeight: 'bold' as const, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', padding: '2px 10px' };
 
     const pageIndicatorStyle: React.CSSProperties = el.pageIndicatorFont
         ? { ...fontSettingsToStyle(el.pageIndicatorFont), textAlign: undefined }
-        : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize };
+        : { color: slotHeaderColor, fontFamily: cssFontFamily(baseFont.fontFamily), fontSize: baseFont.fontSize };
 
     const prevLabel = el.prevButtonText ?? '◀ Prev';
     const nextLabel = el.nextButtonText ?? 'Next ▶';
@@ -2319,7 +2479,7 @@ const SaveSlotGridComponent: React.FC<{
             marginBottom: 8,
             color: '#fca5a5',
             fontSize: 13,
-            fontFamily: baseFont.fontFamily,
+            fontFamily: cssFontFamily(baseFont.fontFamily),
             textAlign: 'center' as const,
         }}>
             ⚠ Saving to this device isn't working (it may be out of space). Your saves will only last
@@ -2373,7 +2533,7 @@ const SaveSlotGridComponent: React.FC<{
                     }
                     const fontStyle = p.font
                         ? fontSettingsToStyle(p.font)
-                        : { color: slotTextColor, fontSize: baseFont.fontSize, fontFamily: baseFont.fontFamily };
+                        : { color: slotTextColor, fontSize: baseFont.fontSize, fontFamily: cssFontFamily(baseFont.fontFamily) };
                     const align = (fontStyle as React.CSSProperties).textAlign;
                     return (
                         <div key={p.id} style={{ ...box, ...fontStyle, display: 'flex', alignItems: 'center', justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start', whiteSpace: 'pre-wrap' }}>
@@ -2447,7 +2607,7 @@ const SaveSlotGridComponent: React.FC<{
                             color: slotHeaderColor,
                             fontWeight: 'bold',
                             fontSize: baseFont.fontSize,
-                            fontFamily: baseFont.fontFamily,
+                            fontFamily: cssFontFamily(baseFont.fontFamily),
                             textShadow: '0 2px 4px rgba(0,0,0,0.7)',
                             zIndex: 10
                         }}>
@@ -2547,7 +2707,7 @@ const SaveSlotGridComponent: React.FC<{
  *  parent re-render can't stale them. Uses a 250ms tick (matching the engine's Start/Stop-Timer cadence)
  *  which also drives the optional visible countdown. */
 /** One live spotlight beam (a positioned, aimable stage light). Runtime-only; not serialized. */
-type SpotlightState = { sourceX: number; sourceY: number; aimAngle: number; intensity: number; beamWidth: number; sourceWidth: number; height: number; falloff: number; color: string; followMouse: boolean; swivelMax: number; toggleKey?: string; affectsDialogue: boolean; on: boolean; conditions?: VNCondition[] | null };
+type SpotlightState = { sourceX: number; sourceY: number; aimAngle: number; intensity: number; beamWidth: number; sourceWidth: number; height: number; falloff: number; color: string; followMouse: boolean; swivelMax: number; toggleKey?: string; affectsDialogue: boolean; on: boolean; conditions?: VNCondition[] | null; effectStyle?: 'enhanced' };
 /** Build a live beam (on) from a Spotlight command / Show Spotlight action's fields, filling defaults.
  *  `conditions` is attached only when the COMMAND opted into Live Evaluation (actions have no
  *  liveConditions flag, so their run-once conditions never leak in here). */
@@ -2558,6 +2718,9 @@ const makeSpotlightState = (c: any): SpotlightState => ({
     followMouse: c.followMouse !== false, swivelMax: c.swivelMax ?? 30, toggleKey: c.toggleKey,
     affectsDialogue: c.affectsDialogue !== false, on: true,
     conditions: c.liveConditions ? (c.conditions ?? null) : null,
+    // Effect style rides the shared constructor so ALL entry points (command, script bridge,
+    // Show Spotlight action) carry it. Absent = Classic.
+    ...(c.effectStyle === 'enhanced' ? { effectStyle: 'enhanced' as const } : {}),
 });
 
 const TIMER_VAR_MUTATION_TYPES = new Set<UIActionType>([
@@ -2950,7 +3113,7 @@ const AssetCyclerElement: React.FC<{
                 <div
                     style={{
                         fontSize: `calc(var(--font-scale, 1) * ${(el.font?.size || 16) * 0.8}px)`,
-                        fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                        fontFamily: cssFontFamily(el.font?.family) || 'Inter, system-ui, sans-serif',
                         fontWeight: el.font?.weight || 'normal',
                         fontStyle: el.font?.italic ? 'italic' : 'normal',
                         color: el.font?.color || '#f1f5f9',
@@ -2983,7 +3146,7 @@ const AssetCyclerElement: React.FC<{
                     style={{
                         flex: 1,
                         fontSize: `calc(var(--font-scale, 1) * ${el.font?.size || 16}px)`,
-                        fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                        fontFamily: cssFontFamily(el.font?.family) || 'Inter, system-ui, sans-serif',
                         fontWeight: el.font?.weight || 'normal',
                         fontStyle: el.font?.italic ? 'italic' : 'normal',
                         color: el.font?.color || '#f1f5f9',
@@ -3207,6 +3370,284 @@ const CGGalleryGridElement: React.FC<{
             >
                 {entries.map((entry, idx) => renderThumb(entry, idx, false))}
             </div>
+        </div>
+    );
+};
+
+// --- Music Gallery player (unlockable songs + author-designed parts) ---
+// ⚠ KEEP IN SYNC with the editor preview (components/menu-editor/MusicGalleryPreview.tsx) —
+// the dual-renderer rule (same as the Meter element). Playback lives in the module-scoped
+// vnGalleryPlayer singleton so a "keep playing" song survives this component unmounting.
+const MusicGalleryPlayerElement: React.FC<{
+    element: UIMusicGalleryElement;
+    songs: VisibleSong[];
+    project: VNProject;
+    assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+    musicVolume: number;
+}> = ({ element, songs, project, assetResolver, musicVolume }) => {
+    // Mirror of the singleton for rendering; the event + a light tick (for seek/time) drive it.
+    const [, forceRender] = useReducer((n: number) => n + 1, 0);
+    useEffect(() => {
+        const onChange = () => forceRender();
+        window.addEventListener(GALLERY_PLAYER_EVENT, onChange);
+        const tick = setInterval(() => {
+            if (vnGalleryPlayer.playing) forceRender();
+        }, 250);
+        return () => {
+            window.removeEventListener(GALLERY_PLAYER_EVENT, onChange);
+            clearInterval(tick);
+        };
+    }, []);
+
+    // The Music volume slider applies live (singleton copy keeps module-level advance correct).
+    useEffect(() => {
+        vnGalleryPlayer.volume = musicVolume;
+        if (vnGalleryPlayer.audio && !vnGalleryPlayer.fadeTimer) {
+            vnGalleryPlayer.audio.volume = Math.max(0, Math.min(1, musicVolume));
+        }
+    }, [musicVolume]);
+
+    const unlocked = songs.filter(s => s.unlocked);
+    const currentSong = vnGalleryPlayer.entryId ? songs.find(s => s.id === vnGalleryPlayer.entryId) || null : null;
+    const audio = vnGalleryPlayer.audio;
+    const currentTime = audio && vnGalleryPlayer.entryId ? audio.currentTime : 0;
+    const duration = audio && vnGalleryPlayer.entryId ? audio.duration : NaN;
+
+    /** (Re)build the singleton's play order from THIS element's unlocked songs. */
+    const rebuildOrder = (keepCurrentFirst: boolean) => {
+        const ids = buildPlayOrder(unlocked.map(s => s.id), vnGalleryPlayer.shuffle, keepCurrentFirst ? vnGalleryPlayer.entryId : null);
+        vnGalleryPlayer.order = ids
+            .map(id => {
+                const song = unlocked.find(s => s.id === id);
+                return { entryId: id, url: song ? (assetResolver(song.audioId, 'audio') || '') : '' };
+            })
+            .filter(o => !!o.url);
+    };
+
+    const playSong = (song: VisibleSong) => {
+        if (!song.unlocked || !song.audioId) return;
+        vnGalleryPlayer.keepPlaying = element.onLeave === 'keepPlaying';
+        rebuildOrder(false);
+        galleryPlayEntry(song.id);
+    };
+
+    const togglePlayPause = () => {
+        if (!audio || !vnGalleryPlayer.entryId) {
+            // Nothing picked yet — start the first unlocked song.
+            if (unlocked.length) playSong(unlocked[0]);
+            return;
+        }
+        if (audio.paused) {
+            galleryPlayGuardedPlay(audio);
+        } else {
+            audio.pause();
+            vnGalleryPlayer.playing = false;
+            galleryPlayerEmit();
+        }
+    };
+
+    const step = (delta: 1 | -1) => {
+        if (!vnGalleryPlayer.order.length) { if (unlocked.length) playSong(unlocked[0]); return; }
+        // Standard player behavior: "previous" restarts the current song when it's underway.
+        if (delta === -1 && audio && audio.currentTime > 3 && vnGalleryPlayer.entryId) {
+            audio.currentTime = 0;
+            return;
+        }
+        const ids = vnGalleryPlayer.order.map(o => o.entryId);
+        const next = stepIndex(ids, vnGalleryPlayer.entryId, delta);
+        if (next >= 0) {
+            vnGalleryPlayer.keepPlaying = element.onLeave === 'keepPlaying';
+            galleryPlayEntry(ids[next]);
+        }
+    };
+
+    const toggleLoop = () => { vnGalleryPlayer.loop = !vnGalleryPlayer.loop; galleryPlayerEmit(); };
+    const toggleShuffle = () => {
+        vnGalleryPlayer.shuffle = !vnGalleryPlayer.shuffle;
+        rebuildOrder(true); // current song stays first — toggling never restarts what's playing
+        galleryPlayerEmit();
+    };
+
+    const seekTo = (clientX: number, box: DOMRect) => {
+        if (!audio || !isFinite(audio.duration) || audio.duration <= 0) return;
+        const ratio = Math.max(0, Math.min(1, (clientX - box.left) / box.width));
+        try { audio.currentTime = ratio * audio.duration; } catch { /* metadata not ready */ }
+        forceRender();
+    };
+
+    const artUrl = (song: VisibleSong | null): string | null => {
+        if (!song) return null;
+        const own = song.artworkAssetId ? assetResolver(song.artworkAssetId, 'image') : null;
+        const fallback = project.musicGallery?.defaultArtworkAssetId
+            ? assetResolver(project.musicGallery.defaultArtworkAssetId, 'image') : null;
+        return own || fallback;
+    };
+
+    const controlGlyph = (part: UIMusicPlayerPart): string => {
+        const g = MUSIC_CONTROL_GLYPHS[part.partType];
+        if (!g) return '?';
+        const active =
+            (part.partType === 'playPause' && vnGalleryPlayer.playing) ||
+            (part.partType === 'loopToggle' && vnGalleryPlayer.loop) ||
+            (part.partType === 'shuffleToggle' && vnGalleryPlayer.shuffle);
+        return active && g.active ? g.active : g.normal;
+    };
+
+    const controlActive = (part: UIMusicPlayerPart): boolean =>
+        (part.partType === 'playPause' && vnGalleryPlayer.playing) ||
+        (part.partType === 'loopToggle' && vnGalleryPlayer.loop) ||
+        (part.partType === 'shuffleToggle' && vnGalleryPlayer.shuffle);
+
+    const controlClick = (part: UIMusicPlayerPart) => {
+        switch (part.partType) {
+            case 'playPause': togglePlayPause(); break;
+            case 'prevButton': step(-1); break;
+            case 'nextButton': step(1); break;
+            case 'loopToggle': toggleLoop(); break;
+            case 'shuffleToggle': toggleShuffle(); break;
+        }
+    };
+
+    const renderPart = (part: UIMusicPlayerPart): React.ReactNode => {
+        const baseText: React.CSSProperties = part.font
+            ? fontSettingsToStyle(part.font)
+            : { color: part.color || '#e2e8f0', fontSize: 13 };
+
+        switch (part.partType) {
+            case 'artwork': {
+                const url = artUrl(currentSong);
+                return (
+                    <div className="w-full h-full overflow-hidden" style={{ background: part.backgroundColor || 'rgba(0,0,0,0.35)', borderRadius: part.borderRadius }}>
+                        {url
+                            ? <img src={url} alt="" className="w-full h-full" style={{ objectFit: part.objectFit || 'cover' }} draggable={false} />
+                            : (
+                                <div className="w-full h-full flex flex-col items-center justify-center" style={{ color: part.color || '#94a3b8' }}>
+                                    <span style={{ fontSize: '200%' }}>♪</span>
+                                    {!currentSong && <span className="text-[10px] opacity-80">{element.noSongText || 'Pick a song'}</span>}
+                                </div>
+                            )}
+                    </div>
+                );
+            }
+            case 'songTitle':
+                return <div className="w-full h-full flex items-center overflow-hidden" style={{ ...baseText, fontWeight: part.font ? undefined : 'bold' }}>{currentSong ? currentSong.name : (element.noSongText || 'Pick a song')}</div>;
+            case 'artistName':
+                return <div className="w-full h-full flex items-center overflow-hidden" style={{ ...baseText, opacity: 0.75 }}>{currentSong?.artist || ''}</div>;
+            case 'timeLabel':
+                return <div className="w-full h-full flex items-center justify-center" style={baseText}>{formatTimeLabel(currentTime, duration)}</div>;
+            case 'seekBar': {
+                const progress = isFinite(duration) && duration > 0 ? currentTime / duration : 0;
+                const track = part.trackColor || 'rgba(148,163,184,0.35)';
+                const fill = part.color || '#38bdf8';
+                const thumb = part.thumbColor || '#e2e8f0';
+                return (
+                    <div
+                        className="w-full h-full flex items-center"
+                        style={{ cursor: 'var(--vn-cursor-hand, pointer)', touchAction: 'none' }}
+                        onPointerDown={e => {
+                            const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                            seekTo(e.clientX, box);
+                            const move = (ev: PointerEvent) => seekTo(ev.clientX, box);
+                            const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+                            window.addEventListener('pointermove', move);
+                            window.addEventListener('pointerup', up);
+                        }}
+                    >
+                        <div className="w-full relative" style={{ height: '40%', minHeight: 4, borderRadius: 999, background: track }}>
+                            <div className="absolute left-0 top-0 h-full" style={{ width: `${progress * 100}%`, borderRadius: 999, background: fill }} />
+                            <div className="absolute" style={{ left: `${progress * 100}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 10, height: 10, borderRadius: '50%', background: thumb }} />
+                        </div>
+                    </div>
+                );
+            }
+            case 'songList': {
+                return (
+                    <div className="w-full h-full overflow-y-auto flex flex-col" style={{ gap: part.rowGap ?? 4, background: part.backgroundColor }}>
+                        {songs.map(song => {
+                            const isCurrent = song.id === vnGalleryPlayer.entryId;
+                            const locked = !song.unlocked;
+                            const rowArt = locked ? null : artUrl(song);
+                            return (
+                                <button
+                                    key={song.id}
+                                    type="button"
+                                    onClick={() => !locked && playSong(song)}
+                                    className="flex items-center gap-2 px-2 py-1 flex-shrink-0 text-left w-full"
+                                    style={{
+                                        background: isCurrent ? (part.playingRowColor || 'rgba(56,189,248,0.25)') : (part.rowColor || 'rgba(255,255,255,0.05)'),
+                                        borderRadius: part.borderRadius ?? 6,
+                                        border: 'none',
+                                        // Tailwind preflight sets button{cursor:pointer} — locked rows must
+                                        // suppress the hand INLINE or the pointer betrays them.
+                                        cursor: locked ? 'var(--vn-cursor-normal, default)' : 'var(--vn-cursor-hand, pointer)',
+                                    }}
+                                >
+                                    {(part.showArtworkInList ?? true) && (
+                                        <span className="flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ width: 18, height: 18, borderRadius: 4, background: 'rgba(0,0,0,0.3)', color: part.color || '#94a3b8', fontSize: 10 }}>
+                                            {locked ? '🔒' : (rowArt ? <img src={rowArt} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} draggable={false} /> : '♪')}
+                                        </span>
+                                    )}
+                                    <span className="flex-1 min-w-0">
+                                        <span className="block truncate" style={{ ...baseText, fontSize: (baseText.fontSize as number) || 12, ...(locked ? { color: element.lockedColor || 'rgba(148,163,184,0.6)' } : {}) }}>
+                                            {locked ? (element.lockedText || '???') : song.name}
+                                        </span>
+                                        {(part.showArtistInList ?? false) && !locked && song.artist && (
+                                            <span className="block truncate" style={{ ...baseText, fontSize: 10, opacity: 0.6 }}>{song.artist}</span>
+                                        )}
+                                    </span>
+                                    {isCurrent && <span style={{ color: part.color || '#38bdf8', fontSize: 10 }}>▶</span>}
+                                </button>
+                            );
+                        })}
+                    </div>
+                );
+            }
+            default: {
+                const active = controlActive(part);
+                const normalUrl = part.image?.id ? assetResolver(part.image.id as VNID, 'image') : null;
+                const activeUrl = part.imageActive?.id ? assetResolver(part.imageActive.id as VNID, 'image') : null;
+                const url = active ? (activeUrl || normalUrl) : normalUrl;
+                return (
+                    <button
+                        type="button"
+                        onClick={() => controlClick(part)}
+                        className="w-full h-full flex items-center justify-center"
+                        style={{
+                            background: part.backgroundColor || 'transparent',
+                            borderRadius: part.borderRadius,
+                            border: 'none',
+                            cursor: 'var(--vn-cursor-hand, pointer)', // inline: Tailwind preflight rule
+                            opacity: (part.partType === 'loopToggle' || part.partType === 'shuffleToggle') && !active ? 0.55 : 1,
+                        }}
+                    >
+                        {url
+                            ? <img src={url} alt="" className="max-w-full max-h-full" style={{ objectFit: 'contain' }} draggable={false} />
+                            : <span style={{ color: part.color || '#e2e8f0', fontSize: 'min(4vh, 20px)', lineHeight: 1 }}>{controlGlyph(part)}</span>}
+                    </button>
+                );
+            }
+        }
+    };
+
+    const bgUrl = element.backgroundImage?.id ? assetResolver(element.backgroundImage.id as VNID, 'image') : null;
+
+    return (
+        <div
+            className="w-full h-full relative overflow-hidden"
+            style={{
+                backgroundColor: element.hideBackgroundPanel ? 'transparent' : (element.backgroundColor || 'rgba(15, 23, 42, 0.92)'),
+                borderRadius: element.borderRadius ?? 12,
+                pointerEvents: 'auto',
+            }}
+        >
+            {bgUrl && !element.hideBackgroundPanel && (
+                <img src={bgUrl} alt="" className="absolute inset-0 w-full h-full pointer-events-none" style={{ objectFit: 'cover' }} draggable={false} />
+            )}
+            {(element.parts || []).filter(p => p.visible !== false).map(p => (
+                <div key={p.id} className="absolute" style={{ left: `${p.x}%`, top: `${p.y}%`, width: `${p.width}%`, height: `${p.height}%` }}>
+                    {renderPart(p)}
+                </div>
+            ))}
         </div>
     );
 };
@@ -3665,7 +4106,7 @@ const HotZoneTextInput: React.FC<{
                     border: `1px solid ${(element as any).borderColor || '#475569'}`,
                     borderRight: 'none',
                     color: font?.color || '#fff',
-                    fontFamily: font?.fontFamily,
+                    fontFamily: cssFontFamily(font?.fontFamily),
                     fontSize: font?.fontSize,
                 }}
                 placeholder={(element as any).placeholder || ''}
@@ -3805,7 +4246,7 @@ const InteractiveRuntime: React.FC<{
     const { project } = useProject();
     // Derive the legacy hot zone shapes from the unified `screen.elements` map.
     // Post-Phase-3, screens no longer carry separate `hotSpots` / `interactiveElements`
-    // maps; hot spots, image maps, and any draggable element are first-class
+    // maps; hot spots, Interactive Images, and any draggable element are first-class
     // `VNUIElement` entries that we convert back to the shapes this runtime
     // expects via a derivation shim.
     const hotSpots = useMemo(() => deriveHotSpotsFromScreen(screen), [screen]);
@@ -4091,14 +4532,14 @@ const InteractiveRuntime: React.FC<{
                     >
                         {elType === 'text' ? (
                             <div className="w-full h-full flex items-center justify-center text-white pointer-events-none"
-                                style={elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, fontWeight: elFont.bold ? 'bold' : 'normal', fontStyle: elFont.italic ? 'italic' : 'normal', color: elFont.color || '#fff' } : {}}>
+                                style={elFont ? { fontFamily: cssFontFamily(elFont.fontFamily), fontSize: elFont.fontSize, fontWeight: elFont.bold ? 'bold' : 'normal', fontStyle: elFont.italic ? 'italic' : 'normal', color: elFont.color || '#fff' } : {}}>
                                 {project ? interpolateVariables(elText, variables, project) : elText}
                             </div>
                         ) : elType === 'button' ? (
                             <div className="w-full h-full relative flex items-center justify-center pointer-events-none">
                                 {imageUrl && <img src={imageUrl} alt={el.name} className="absolute inset-0 w-full h-full object-fill" draggable={false} />}
                                 <span className="relative z-10 text-white text-sm font-semibold"
-                                    style={elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, color: elFont.color || '#fff' } : {}}>
+                                    style={elFont ? { fontFamily: cssFontFamily(elFont.fontFamily), fontSize: elFont.fontSize, color: elFont.color || '#fff' } : {}}>
                                     {project ? interpolateVariables(elText, variables, project) : elText}
                                 </span>
                             </div>
@@ -4417,6 +4858,9 @@ const UIScreenRenderer: React.FC<{
             && evaluateConditions(element.disabledConditions, variables));
 
         const combinedFilter = [isDisabled ? 'grayscale(0.6)' : '', stateFilter || ''].filter(Boolean).join(' ') || undefined;
+        // Author-set rotation/flip (BaseUIElement.rotation/flipX/flipY) — same builder as scene
+        // items. Rotates the clickable area with the visuals (DOM hit-testing follows transforms).
+        const baseOrientation = buildOrientationTransform(element as any);
         const style: React.CSSProperties = {
             position: 'absolute',
             left: `${element.x}%`, top: `${element.y}%`,
@@ -4426,11 +4870,15 @@ const UIScreenRenderer: React.FC<{
             // will paint over non-composited siblings at the same z-index — which made buttons
             // vanish behind a parallaxed video bg. Promoting elements keeps normal z-order.
             // `stateExtraTransform` (appearance-state scale/rotation) composes on top.
-            transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)${parallaxTransform((element as any).parallaxDepth)} translateZ(0)${stateExtraTransform}`,
+            transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)${parallaxTransform((element as any).parallaxDepth)} translateZ(0)${baseOrientation ? ' ' + baseOrientation : ''}${stateExtraTransform}`,
             // The entrance keyframes read these so their end state lands EXACTLY on this element's
             // anchor (they used to hardcode -50%,-50% and snap on completion for any other anchor).
+            // --vn-el-rot/-sx/-sy carry the author's rotation/flip through entrances the same way.
             ['--vn-el-tx' as any]: `-${element.anchorX * 100}%`,
             ['--vn-el-ty' as any]: `-${element.anchorY * 100}%`,
+            ['--vn-el-rot' as any]: `${(element as any).rotation || 0}deg`,
+            ['--vn-el-sx' as any]: (element as any).flipX ? -1 : 1,
+            ['--vn-el-sy' as any]: (element as any).flipY ? -1 : 1,
             overflow: 'hidden', // Prevent content overflow when using cover
             // Author-controlled stacking. Default 0 → insertion order (back-compat).
             zIndex: element.layer ?? 0,
@@ -4824,9 +5272,15 @@ const UIScreenRenderer: React.FC<{
                 
                 // Get the default expression if specified
                 const defaultExpression = el.expressionId ? character.expressions[el.expressionId] : null;
-                
-                // Add layer assets - process in layer order
-                Object.entries(character.layers).forEach(([layerId, layer]: [string, VNCharacterLayer]) => {
+
+                // Pose Studio geometry (parallel to the url arrays; base entry above = null).
+                const previewImageBoxes: Array<import('../features/character/types').VNLayerBox | null> = imageUrls.map(() => null);
+                const previewVideoBoxes: Array<import('../features/character/types').VNLayerBox | null> = videoUrls.map(() => null);
+                const previewHidden = poseHiddenLayerIds(character, previewPoseId);
+                // Add layer assets — Pose Studio order + hidden respected (legacy = base order).
+                layerOrderForPose(character, previewPoseId).forEach((layer: VNCharacterLayer) => {
+                    const layerId = layer.id;
+                    if (previewHidden.has(layerId)) return;
                     let variableId = el.layerVariableMap[layerId];
                     // ⟨Player's Character⟩: auto-detect the customizer variable holding a valid asset id
                     // for this layer (mirrors ShowCharacter's auto-bind), so the player's chosen outfit
@@ -4867,13 +5321,16 @@ const UIScreenRenderer: React.FC<{
                     
                     if (asset) {
                         const art = assetArtForPose(asset, previewPoseId);
+                        const pieceBox = normalizeLayerBox(resolveLayerBox(layer, asset, previewPoseId)) ?? null;
                         if (art.videoUrl) {
                             videoUrls.push(resolveFieldUrl(project.id, art.videoUrl) || art.videoUrl);
                             videoTrims.push({});
+                            previewVideoBoxes.push(pieceBox);
                             hasVideo = true;
                             videoLoop = videoLoop || !!art.loop;
                         } else if (art.imageUrl) {
                             imageUrls.push(resolveFieldUrl(project.id, art.imageUrl) || art.imageUrl);
+                            previewImageBoxes.push(pieceBox);
                         }
                     }
                 });
@@ -4899,17 +5356,17 @@ const UIScreenRenderer: React.FC<{
                                         trimEnd={videoTrims[index]?.end}
                                         playsInline
                                         className="absolute top-0 left-0 w-full h-full object-contain"
-                                        style={{ zIndex: index }}
+                                        style={{ zIndex: index, ...layerBoxStyle(previewVideoBoxes[index]) }}
                                     />
                                 ))
                             ) : (
                                 imageUrls.map((url, index) => (
-                                    <img 
+                                    <img
                                         key={index}
-                                        src={url} 
-                                        alt="" 
-                                        className="absolute top-0 left-0 w-full h-full object-contain" 
-                                        style={{ zIndex: index }}
+                                        src={url}
+                                        alt=""
+                                        className="absolute top-0 left-0 w-full h-full object-contain"
+                                        style={{ zIndex: index, ...layerBoxStyle(previewImageBoxes[index]) }}
                                     />
                                 ))
                             )}
@@ -4939,7 +5396,7 @@ const UIScreenRenderer: React.FC<{
                                 backgroundColor: el.backgroundColor || '#1e293b',
                                 color: el.font?.color || '#f1f5f9',
                                 fontSize: `calc(var(--font-scale, 1) * ${el.font?.size || 16}px)`,
-                                fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                                fontFamily: cssFontFamily(el.font?.family) || 'Inter, system-ui, sans-serif',
                                 fontWeight: el.font?.weight || 'normal',
                                 fontStyle: el.font?.italic ? 'italic' : 'normal',
                                 border: `2px solid ${el.borderColor || '#475569'}`,
@@ -4978,7 +5435,7 @@ const UIScreenRenderer: React.FC<{
                                 backgroundColor: el.backgroundColor || '#1e293b',
                                 color: el.font?.color || '#f1f5f9',
                                 fontSize: `calc(var(--font-scale, 1) * ${el.font?.size || 16}px)`,
-                                fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                                fontFamily: cssFontFamily(el.font?.family) || 'Inter, system-ui, sans-serif',
                                 fontWeight: el.font?.weight || 'normal',
                                 fontStyle: el.font?.italic ? 'italic' : 'normal',
                                 border: `2px solid ${el.borderColor || '#475569'}`,
@@ -5041,7 +5498,7 @@ const UIScreenRenderer: React.FC<{
                             style={{
                                 color: el.labelColor || '#f1f5f9',
                                 fontSize: `calc(var(--font-scale, 1) * ${el.font?.size || 16}px)`,
-                                fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                                fontFamily: cssFontFamily(el.font?.family) || 'Inter, system-ui, sans-serif',
                                 fontWeight: el.font?.weight || 'normal',
                                 fontStyle: el.font?.italic ? 'italic' : 'normal',
                                 cursor: 'var(--vn-cursor-hand, pointer)',
@@ -5064,19 +5521,25 @@ const UIScreenRenderer: React.FC<{
                 const czPoseId = resolvePoseId(character, (el as any).poseId);
                 const imageUrls: string[] = [];
                 const videoUrls: string[] = [];
+                const czImageBoxes: Array<import('../features/character/types').VNLayerBox | null> = [];
+                const czVideoBoxes: Array<import('../features/character/types').VNLayerBox | null> = [];
                 let hasVideo = false, videoLoop = false;
                 const czBase = characterBaseArtForPose(character, czPoseId);
-                if (czBase.videoUrl) { videoUrls.push(resolveFieldUrl(project.id, czBase.videoUrl) || czBase.videoUrl); hasVideo = true; videoLoop = !!czBase.loop; }
-                else if (czBase.imageUrl) { imageUrls.push(resolveFieldUrl(project.id, czBase.imageUrl) || czBase.imageUrl); }
-                Object.entries(character.layers).forEach(([layerId, layer]) => {
+                if (czBase.videoUrl) { videoUrls.push(resolveFieldUrl(project.id, czBase.videoUrl) || czBase.videoUrl); czVideoBoxes.push(null); hasVideo = true; videoLoop = !!czBase.loop; }
+                else if (czBase.imageUrl) { imageUrls.push(resolveFieldUrl(project.id, czBase.imageUrl) || czBase.imageUrl); czImageBoxes.push(null); }
+                const czHidden = poseHiddenLayerIds(character, czPoseId);
+                layerOrderForPose(character, czPoseId).forEach(layer => {
+                    const layerId = layer.id;
+                    if (czHidden.has(layerId)) return;
                     const cat = (el.categories || []).find(c => c.layerId === layerId);
                     let assetId: string | null = null;
                     if (cat) assetId = String(variables[cat.variableId] ?? '') || null;
                     if (!assetId && fallbackExpr) assetId = fallbackExpr.layerConfiguration[layerId] || null;
                     const asset = assetId ? layer.assets[assetId] : null;
                     const art = asset ? assetArtForPose(asset, czPoseId) : null;
-                    if (art?.videoUrl) { videoUrls.push(resolveFieldUrl(project.id, art.videoUrl) || art.videoUrl); hasVideo = true; videoLoop = videoLoop || !!art.loop; }
-                    else if (art?.imageUrl) { imageUrls.push(resolveFieldUrl(project.id, art.imageUrl) || art.imageUrl); }
+                    const pieceBox = asset ? (normalizeLayerBox(resolveLayerBox(layer, asset, czPoseId)) ?? null) : null;
+                    if (art?.videoUrl) { videoUrls.push(resolveFieldUrl(project.id, art.videoUrl) || art.videoUrl); czVideoBoxes.push(pieceBox); hasVideo = true; videoLoop = videoLoop || !!art.loop; }
+                    else if (art?.imageUrl) { imageUrls.push(resolveFieldUrl(project.id, art.imageUrl) || art.imageUrl); czImageBoxes.push(pieceBox); }
                 });
 
                 const swatchSize = el.swatchSize ?? 48;
@@ -5093,8 +5556,8 @@ const UIScreenRenderer: React.FC<{
                 const previewNode = (
                     <div className="relative w-full h-full">
                         {hasVideo && videoUrls.length > 0
-                            ? videoUrls.map((u, i) => <video key={i} src={u} autoPlay muted loop={videoLoop} playsInline className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i }} />)
-                            : imageUrls.map((u, i) => <img key={i} src={u} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i }} />)}
+                            ? videoUrls.map((u, i) => <video key={i} src={u} autoPlay muted loop={videoLoop} playsInline className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, ...layerBoxStyle(czVideoBoxes[i]) }} />)
+                            : imageUrls.map((u, i) => <img key={i} src={u} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, ...layerBoxStyle(czImageBoxes[i]) }} />)}
                     </div>
                 );
 
@@ -5312,8 +5775,8 @@ const UIScreenRenderer: React.FC<{
                             <div style={previewBoxStyle}>
                                 <div className="relative w-full h-full">
                                     {hasVideo && videoUrls.length > 0
-                                        ? videoUrls.map((u, i) => <video key={i} src={u} autoPlay muted loop={videoLoop} playsInline className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, objectPosition: 'bottom' }} />)
-                                        : imageUrls.map((u, i) => <img key={i} src={u} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, objectPosition: 'bottom' }} />)}
+                                        ? videoUrls.map((u, i) => <video key={i} src={u} autoPlay muted loop={videoLoop} playsInline className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, objectPosition: 'bottom', ...layerBoxStyle(czVideoBoxes[i]) }} />)
+                                        : imageUrls.map((u, i) => <img key={i} src={u} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, objectPosition: 'bottom', ...layerBoxStyle(czImageBoxes[i]) }} />)}
                                 </div>
                             </div>
                             {kr && <div style={pickersBoxStyle}>{pickersNode}</div>}
@@ -5379,6 +5842,21 @@ const UIScreenRenderer: React.FC<{
                             project={project}
                             assetResolver={assetResolver}
                             viewerPortalRef={screenRootRef}
+                        />
+                    </div>
+                );
+            }
+            case UIElementType.MusicGallery: {
+                const el = element as UIMusicGalleryElement;
+                const gallerySongs = visibleSongs(project.musicGallery, el, variables);
+                return (
+                    <div key={el.id} style={style}>
+                        <MusicGalleryPlayerElement
+                            element={el}
+                            songs={gallerySongs}
+                            project={project}
+                            assetResolver={assetResolver}
+                            musicVolume={settings.musicVolume}
                         />
                     </div>
                 );
@@ -5755,7 +6233,7 @@ const UIScreenRenderer: React.FC<{
                 return renderElement(element as VNUIElement, variables, project, onCommitVariables);
             })}
             {/* Hot zone runtime activates whenever the screen has any interactive content
-                (hot spots, image maps, draggable elements) or a win condition. */}
+                (hot spots, Interactive Images, draggable elements) or a win condition. */}
             {(
                 Object.values(screen.elements || {}).some((el: any) =>
                     el.type === 'HotSpot' || el.type === 'draggableImageElement' || el.draggable === true
@@ -6279,6 +6757,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const scenePaused = !!pausingOverlayScreen;
     // Editor-only live Variable Tracker overlay (never shown in exported/standalone games).
     const [showVarWatcher, setShowVarWatcher] = useState(false);
+    // Editor-only "Location" overlay: shows which scene/screen the author is looking at.
+    const [showLocation, setShowLocation] = useState(false);
     // Tween tick counter — forces re-render each frame during active tweens
     const [, setTweenTick] = useState(0);
     useEffect(() => {
@@ -6401,7 +6881,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         setMenuVariables(updatedVars);
     }, [project.variables]);
     
-    // Load custom fonts (project library + character overrides)
+    // Load custom fonts (project library + character overrides). loadFontOnce dedups per
+    // (family, source) — this effect refires on character/font changes, and re-parsing large
+    // font files on every run grew document.fonts until the renderer ran out of memory.
     useEffect(() => {
         const loadCustomFonts = async () => {
             // Project-level font library
@@ -6409,29 +6891,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             for (const fontId in projectFonts) {
                 const font = projectFonts[fontId];
                 if (font?.fontUrl && font?.fontFamily) {
-                    try {
-                        const fontFace = new FontFace(font.fontFamily, `url(${resolveFieldUrl(project.id, font.fontUrl)})`);
-                        await fontFace.load();
-                        (document as any).fonts.add(fontFace);
-                        runtimeDebugLog(`✓ Loaded project font: ${font.fontFamily}`);
-                    } catch (error) {
-                        console.error(`Failed to load project font ${font?.name || fontId}:`, error);
-                    }
+                    await loadFontOnce(font.fontFamily, resolveFieldUrl(project.id, font.fontUrl) || font.fontUrl);
                 }
             }
 
             for (const charId in project.characters) {
                 const char = project.characters[charId];
                 if (char.fontUrl && char.fontFamily) {
-                    try {
-                        // Create @font-face rule for custom font
-                        const fontFace = new FontFace(char.fontFamily, `url(${resolveFieldUrl(project.id, char.fontUrl)})`);
-                        await fontFace.load();
-                        (document as any).fonts.add(fontFace);
-                        runtimeDebugLog(`✓ Loaded custom font: ${char.fontFamily}`);
-                    } catch (error) {
-                        console.error(`Failed to load custom font for ${char.name}:`, error);
-                    }
+                    await loadFontOnce(char.fontFamily, resolveFieldUrl(project.id, char.fontUrl) || char.fontUrl);
                 }
             }
         };
@@ -6553,7 +7020,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [saveStorageBroken, setSaveStorageBroken] = useState(false);
 
     // Queue music when autoplay is blocked; retry when user interacts
-    const queuedMusicRef = useRef<{ url: string; loop: boolean; fadeDuration: number } | null>(null);
+    const queuedMusicRef = useRef<{ url: string; loop: boolean; fadeDuration: number; adjust?: VNAudioAdjust | null } | null>(null);
     const userGestureDetectedRef = useRef<boolean>(false);
 
     // Track active one-shot SFX (tagged with their audioId so Stop Sound Effect can
@@ -6808,7 +7275,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [lightningStorm]);
     // Flashlight (persistent mouse-following dark overlay). `on` is the live toggle state.
-    const [flashlight, setFlashlight] = useState<{ radius: number; softness: number; darkness: number; radiusVariableId?: VNID | null; darknessVariableId?: VNID | null; color: string; toggleKey?: string; affectsDialogue: boolean; darkWhenOff: boolean; on: boolean; conditions?: VNCondition[] | null } | null>(null);
+    const [flashlight, setFlashlight] = useState<{ radius: number; softness: number; darkness: number; radiusVariableId?: VNID | null; darknessVariableId?: VNID | null; color: string; toggleKey?: string; affectsDialogue: boolean; darkWhenOff: boolean; on: boolean; conditions?: VNCondition[] | null; effectStyle?: 'enhanced' } | null>(null);
     const flashlightOverlayRef = useRef<HTMLDivElement | null>(null);
 
     // Flashlight: let the player toggle it on/off with the author-chosen key.
@@ -6841,7 +7308,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const fRadius = resolveVarNumber(fVars, (flashlight as any).radiusVariableId, flashlight.radius, { min: 1, max: 100 });
             const fDarkness = resolveVarNumber(fVars, (flashlight as any).darknessVariableId, flashlight.darkness, { min: 0, max: 1 });
             const radiusPx = (fRadius / 100) * Math.min(rect.width, rect.height);
-            el.style.background = flashlightBg(mx, my, radiusPx, flashlight.softness, hexToRgba(flashlight.color, fDarkness * 100));
+            flashlightMouseRef.current = { x: mx, y: my };
+            // Enhanced style paints in its own WebGL canvas each frame — only Classic repaints
+            // the CSS gradient string here.
+            if (!isEnhanced((flashlight as any).effectStyle)) {
+                el.style.background = flashlightBg(mx, my, radiusPx, flashlight.softness, hexToRgba(flashlight.color, fDarkness * 100));
+            }
         };
         window.addEventListener('mousemove', onMove);
         return () => window.removeEventListener('mousemove', onMove);
@@ -6851,6 +7323,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // Each has a source point + aim angle; it can swivel toward the mouse and be toggled by a hotkey.
     const [spotlights, setSpotlights] = useState<Record<string, SpotlightState>>({});
     const spotlightRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+    // Live swivel angles per beam (Enhanced beams read these each frame; Classic keeps its
+    // direct transform writes). Absent entry = the beam's authored aimAngle.
+    const spotlightLiveAngles = useRef<Map<string, number>>(new Map());
+    // Flashlight cursor position in play-root CSS px (Enhanced reads it each frame).
+    const flashlightMouseRef = useRef<{ x: number; y: number } | null>(null);
 
     // A player can toggle any beam whose author-chosen key they press (ignored while typing in a field).
     const spotToggleKeys = (Object.values(spotlights) as SpotlightState[]).map(s => s.toggleKey || '').join(',');
@@ -6891,6 +7368,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 // Angle from straight-down toward the cursor (0=down, +=right), clamped around the base aim.
                 let A = Math.atan2(vx, vy) * 180 / Math.PI;
                 A = Math.max(s.aimAngle - s.swivelMax, Math.min(s.aimAngle + s.swivelMax, A));
+                spotlightLiveAngles.current.set(id, A);
                 el.style.transform = `rotate(${-A}deg)`;
             }
         };
@@ -7285,6 +7763,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // Route coverage: teleporting into a save is not a route the author "walked" — forget the
         // cursor so we don't credit them with a branch they never took.
         coverageRef.current?.resetCursor();
+        // Gallery music never follows the player into a loaded game.
+        stopGalleryPlayer(0);
         // Tear down any in-flight phone event (ringing call / queued follow-ups) before loading.
         clearPhoneTimers(); stopRingtone(); activeCallCmdRef.current = null;
         // Immediately stop music without fade to avoid race condition where
@@ -7318,7 +7798,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 mode: 'playing',
                 currentSceneId: saveData.playerStateData.currentSceneId,
                 currentCommands: saveData.playerStateData.currentCommands || project.scenes[saveData.playerStateData.currentSceneId]?.commands || [],
-                currentIndex: saveData.playerStateData.currentIndex ?? 0,
+                // A save made mid-way through an appended dialogue group resumes from the group's
+                // FIRST line — otherwise the earlier parts of the box would be missing.
+                currentIndex: walkToAppendGroupHead(
+                    saveData.playerStateData.currentCommands || project.scenes[saveData.playerStateData.currentSceneId]?.commands || [],
+                    saveData.playerStateData.currentIndex ?? 0
+                ),
                 commandStack: saveData.playerStateData.commandStack || [],
                 variables: saveData.playerStateData.variables,
                 stageState: saveData.playerStateData.stageState,
@@ -7372,6 +7857,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // author mid-story) — so record no route into the first scene, only that they reached it.
         coverageRef.current?.resetCursor();
         stopAndResetMusic();
+        // Gallery music never follows the player into a fresh playthrough.
+        stopGalleryPlayer(0);
         // Tear down any in-flight phone event (ringing call / queued follow-ups) for the fresh start.
         clearPhoneTimers(); stopRingtone(); activeCallCmdRef.current = null;
         // Re-arm reactive-restock guards for the fresh playthrough (record-only on first observation).
@@ -7422,17 +7909,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 if (isBandOperator(condition.operator)) {
                     return compareBand(project.variables[condition.variableId], varValue, String(condition.value), condition.operator);
                 }
+                // Compare-to-variable: right-hand side may be another variable (dangling → literal).
+                const cmpValue = resolveConditionValue(condition, initialVariables);
                 switch (condition.operator) {
                     case 'is true': return !!varValue;
                     case 'is false': return !varValue;
-                    case '==': return String(varValue).toLowerCase() == String(condition.value).toLowerCase();
-                    case '!=': return String(varValue).toLowerCase() != String(condition.value).toLowerCase();
-                    case '>': return Number(varValue) > Number(condition.value);
-                    case '<': return Number(varValue) < Number(condition.value);
-                    case '>=': return Number(varValue) >= Number(condition.value);
-                    case '<=': return Number(varValue) <= Number(condition.value);
-                    case 'contains': return String(varValue).toLowerCase().includes(String(condition.value).toLowerCase());
-                    case 'startsWith': return String(varValue).toLowerCase().startsWith(String(condition.value).toLowerCase());
+                    case '==': return String(varValue).toLowerCase() == String(cmpValue).toLowerCase();
+                    case '!=': return String(varValue).toLowerCase() != String(cmpValue).toLowerCase();
+                    case '>': return Number(varValue) > Number(cmpValue);
+                    case '<': return Number(varValue) < Number(cmpValue);
+                    case '>=': return Number(varValue) >= Number(cmpValue);
+                    case '<=': return Number(varValue) <= Number(cmpValue);
+                    case 'contains': return String(varValue).toLowerCase().includes(String(cmpValue).toLowerCase());
+                    case 'startsWith': return String(varValue).toLowerCase().startsWith(String(cmpValue).toLowerCase());
                     default: return false;
                 }
             });
@@ -7472,7 +7961,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // AFTER the teardown line above, which nulls the ref.
         if (hasOverride) {
             const cmds = project.scenes[startSceneId]?.commands || [];
-            const idx = Math.max(0, Math.min(startOverride!.index, Math.max(0, cmds.length - 1)));
+            // "Play from here" onto a middle part of an appended group starts at the group head.
+            const idx = walkToAppendGroupHead(cmds, Math.max(0, Math.min(startOverride!.index, Math.max(0, cmds.length - 1))));
             fastForwardTargetRef.current = idx > 0 ? idx : null;
         }
     }, [project, stopAndResetMusic, menuVariables]);
@@ -7515,7 +8005,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             if (!targetScene) return;
             const cmds = targetScene.commands || [];
             const requested = typeof detail.commandIndex === 'number' ? detail.commandIndex : 0;
-            const idx = Math.max(0, Math.min(requested, Math.max(0, cmds.length - 1)));
+            // Landing INSIDE an appended dialogue group would show only the tail of the box —
+            // start from the group's first line instead.
+            const idx = walkToAppendGroupHead(cmds, Math.max(0, Math.min(requested, Math.max(0, cmds.length - 1))));
             // Fast-forward (default on): replay the scene's visual setup from the top up to the line so
             // the stage is composed (background/characters/images), then stop on the edited line. When
             // off, jump straight to the line with a bare stage.
@@ -7607,7 +8099,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return true;
         }
 
-        return combineConditions(conditions, condition => {
+        return combineConditions(conditions, rawCondition => {
+            // Compare-to-variable: swap the literal for the other variable's CURRENT value up
+            // front, so every branch below (numeric/boolean coercion, debug logs) sees one view.
+            // Band operators are exempt — their `value` is a band id, never a comparison literal.
+            const condition = (rawCondition.compareVariableId !== undefined && !isBandOperator(rawCondition.operator))
+                ? { ...rawCondition, value: resolveConditionValue(rawCondition, variables) }
+                : rawCondition;
             const varValue = variables[condition.variableId];
             const projectVar = project.variables[condition.variableId];
             // Use default value if runtime value is not set
@@ -7968,7 +8466,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const url = half.sfxId ? assetResolver(half.sfxId, 'audio') : null;
                 if (!url) return;
                 try {
-                    const a = new Audio(url);
+                    // Honor the asset's default shaping here too (fresh element; reverse plays
+                    // from cache when warm, else kicks off the build for next time).
+                    const shaped = resolveAudioAdjust(null, half.sfxId ? (project.audio as any)?.[half.sfxId]?.audioAdjust : null);
+                    let playUrl = url;
+                    if (shaped?.reverse) {
+                        const cached = peekReversedUrl(url);
+                        if (cached === undefined) getReversedUrl(url);
+                        else if (cached) playUrl = cached;
+                    }
+                    const a = new Audio(playUrl);
+                    applyAudioAdjust(a, shaped);
                     a.volume = Number.isFinite(settings.sfxVolume) ? settings.sfxVolume : 0.8;
                     a.play().catch(() => {});
                 } catch (e) { /* ignore */ }
@@ -8027,6 +8535,42 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }, [project.scenes, project.customTransitions, assetResolver, settings.sfxVolume, stopAllSfx]);
 
     // --- Audio Management ---
+    // ── Music Gallery ↔ music channel coordination ──────────────────────────────────────
+    // galleryEpoch bumps whenever the module-scoped gallery player changes state, so the
+    // music-channel effect below re-runs and restores normal music after the gallery stops.
+    const [galleryEpoch, setGalleryEpoch] = useState(0);
+    useEffect(() => {
+        const onGalleryChange = () => setGalleryEpoch(n => n + 1);
+        window.addEventListener(GALLERY_PLAYER_EVENT, onGalleryChange);
+        return () => window.removeEventListener(GALLERY_PLAYER_EVENT, onGalleryChange);
+    }, []);
+
+    /** May a playing gallery song continue over this screen? Yes when the screen hosts a
+     *  Music Gallery element (browsing = playing) or the author opted the screen in. */
+    const screenAllowsGalleryMusic = useCallback((screen: VNUIScreen | null | undefined): boolean => {
+        if (!screen) return false;
+        if (screen.allowGalleryMusic === true) return true;
+        return Object.values(screen.elements || {}).some(e => (e as VNUIElement).type === UIElementType.MusicGallery);
+    }, []);
+
+    // Gallery lifecycle keeper: a playing song survives only while the top screen hosts a
+    // gallery, or (keep-playing mode) an opted-in screen is on top. Everything else —
+    // navigating away, quit-to-title, loading a save, returning to gameplay under a
+    // non-allowing HUD — stops it (which in turn restores normal music via galleryEpoch).
+    useEffect(() => {
+        if (!vnGalleryPlayer.playing && !vnGalleryPlayer.entryId) return;
+        const topScreenId = playerState?.mode === 'playing'
+            ? (hudStack.length > 0 ? hudStack[hudStack.length - 1] : null)
+            : (screenStack.length > 0 ? screenStack[screenStack.length - 1] : null);
+        const topScreen = topScreenId ? project.uiScreens[topScreenId] : null;
+        const hostsGallery = !!topScreen && Object.values(topScreen.elements || {}).some(e => (e as VNUIElement).type === UIElementType.MusicGallery);
+        const allowed = hostsGallery || (vnGalleryPlayer.keepPlaying && screenAllowsGalleryMusic(topScreen));
+        if (!allowed) stopGalleryPlayer();
+    }, [screenStack, hudStack, playerState?.mode, project.uiScreens, screenAllowsGalleryMusic, galleryEpoch]);
+
+    // Belt-and-braces: whatever is playing dies with the engine (test-play close, page nav).
+    useEffect(() => () => { stopGalleryPlayer(0); }, []);
+
     useEffect(() => {
         if (playerState?.mode === 'playing') {
             // Mid-game, a screen shown over the scene (Show Screen command / Toggle Screen —
@@ -8035,6 +8579,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const audio = musicAudioRef.current;
             if (!audio) return;
             const topHudId = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+            const topHudScreen = topHudId ? project.uiScreens[topHudId] : null;
+            // A playing Music Gallery song outranks the channel while its screen (or an
+            // opted-in screen) is on top. Bookmark the scene track first so closing restores
+            // it at the exact position (same mechanism as HUD screen-music takeover). When the
+            // gallery stops, galleryEpoch re-runs this effect and the normal branches below
+            // hand the channel back.
+            if (vnGalleryPlayer.playing && screenAllowsGalleryMusic(topHudScreen)) {
+                if (!hudMusicTakeoverRef.current) {
+                    hudMusicTakeoverRef.current = { url: audio.src || null, time: audio.currentTime || 0, wasPlaying: !audio.paused };
+                }
+                if (!audio.paused) fadeAudio(audio, 0, 0.35, () => audio.pause());
+                return;
+            }
             const hudMusic = topHudId ? project.uiScreens[topHudId]?.music : null;
             const hudUrl = hudMusic?.audioId ? assetResolver(hudMusic.audioId, 'audio') : null;
 
@@ -8048,6 +8605,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         if (!hudMusicTakeoverRef.current) return; // screen already closed again
                         audio.src = hudUrl;
                         audio.load();
+                        applyAudioAdjust(audio, musicChannelAdjust(resolveAudioAdjust((hudMusic as any)?.audioAdjust, (project.audio as any)?.[hudMusic!.audioId!]?.audioAdjust)));
                         audio.loop = true;
                         audio.play().then(() => {
                             fadeAudio(audio, (hudMusic!.volume ?? 1) * settings.musicVolume, 0.5);
@@ -8076,6 +8634,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     if (saved.url && ms?.audioId) {
                         audio.src = saved.url;
                         audio.load();
+                        applyAudioAdjust(audio, ms.adjust ?? null);   // scene track resumes with ITS shaping
                         audio.loop = ms.loop;
                         try { audio.currentTime = saved.time; } catch { /* seek after load may need metadata; resume from 0 then */ }
                         if (saved.wasPlaying) {
@@ -8110,12 +8669,28 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return;
         }
 
+        // A playing Music Gallery song outranks the menu screen's own music while this screen
+        // hosts a gallery or opts in ("Let gallery music keep playing here"). When the gallery
+        // stops, galleryEpoch re-runs this effect and the normal logic below restores the
+        // screen's own track — no separate restore path needed.
+        if (vnGalleryPlayer.playing && screenAllowsGalleryMusic(activeScreen)) {
+            if (!audio.paused) {
+                fadeAudio(audio, 0, 0.4, () => audio.pause());
+            }
+            menuMusicUrlRef.current = null;
+            return;
+        }
+
         const musicInfo = activeScreen.music;
         if (playerState?.mode === 'paused' && musicInfo.policy === 'continue') {
             return;
         }
 
         const newAudioUrl = musicInfo?.audioId ? assetResolver(musicInfo.audioId, 'audio') : null;
+        // Screen music shaping (speed/keep-pitch only — the music channel never reverses).
+        const screenAdjust = musicInfo?.audioId
+            ? musicChannelAdjust(resolveAudioAdjust((musicInfo as any).audioAdjust, (project.audio as any)?.[musicInfo.audioId]?.audioAdjust))
+            : null;
         const normalize = (value: string | null): string | null => {
             if (!value) return null;
             try {
@@ -8145,7 +8720,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }).catch(e => {
                 console.error('Menu music play failed:', e);
                 if (!userGestureDetectedRef.current) {
-                    queuedMusicRef.current = { url: newAudioUrl, loop: true, fadeDuration: 0.5 };
+                    queuedMusicRef.current = { url: newAudioUrl, loop: true, fadeDuration: 0.5, adjust: screenAdjust };
                 }
             });
         };
@@ -8153,20 +8728,25 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         if (currentSrcNormalized !== newSrcNormalized) {
             audio.src = newAudioUrl;
             audio.load();
+            applyAudioAdjust(audio, screenAdjust);
             startPlayback();
         } else if (audio.paused) {
+            applyAudioAdjust(audio, screenAdjust);
             startPlayback();
         } else {
             menuMusicUrlRef.current = newAudioUrl;
         }
 
-    }, [screenStack, hudStack, playerState?.mode, project.uiScreens, assetResolver, settings.musicVolume, fadeAudio]);
+    }, [screenStack, hudStack, playerState?.mode, project.uiScreens, assetResolver, settings.musicVolume, fadeAudio, galleryEpoch, screenAllowsGalleryMusic]);
 
     useEffect(() => {
         if (!musicAudioRef.current) return;
         // While a HUD screen's music owns the channel, its own play/fade set the volume —
         // don't stomp it with menu-screen/scene math.
         if (hudMusicTakeoverRef.current) return;
+        // While a gallery song owns the channel the menu track is faded out — don't restore
+        // its volume behind the gallery's back.
+        if (vnGalleryPlayer.playing) return;
         const safeVol = Number.isFinite(settings.musicVolume) ? settings.musicVolume : 0.8;
         const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
         const screenVol = activeScreen?.music?.volume ?? 1;
@@ -8177,7 +8757,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const commandVol = (!activeScreen?.music?.audioId && typeof playerState?.musicState?.volume === 'number')
             ? playerState.musicState.volume : safeVol;
         musicAudioRef.current.volume = Math.max(0, Math.min(1, screenVol * commandVol));
-    }, [settings.musicVolume, screenStack, project.uiScreens, playerState?.musicState?.volume]);
+    }, [settings.musicVolume, screenStack, project.uiScreens, playerState?.musicState?.volume, galleryEpoch]);
 
     // ── Scene asset pre-warm ────────────────────────────────────────────────────────────
     // In BUILT games sprites/backgrounds are files fetched on demand — an entrance animation
@@ -8237,6 +8817,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 case 'ShowImage': {
                     const im = cmd.imageId ? ((project.images as any)?.[cmd.imageId] || (project.backgrounds as any)?.[cmd.imageId]) : null;
                     if (im?.imageUrl) urls.add(im.imageUrl);
+                    break;
+                }
+                case 'PlaySoundEffect': {
+                    // "Play backwards" sounds decode once per file — start that decode at scene
+                    // entry so the command itself plays on time (cold cache = late start).
+                    const shaped = resolveAudioAdjust(cmd.audioAdjust, cmd.audioId ? (project.audio as any)?.[cmd.audioId]?.audioAdjust : null);
+                    if (shaped?.reverse && cmd.audioId) {
+                        const u = assetResolver(cmd.audioId, 'audio');
+                        if (u) getReversedUrl(u);
+                    }
                     break;
                 }
                 default: break;
@@ -8365,6 +8955,102 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         return () => { alive = false; };
     }, [playerState?.stageState?.characters]);
 
+    // ── Character frame animations (Animation Studio) ────────────────────────────────────────
+    // One shared ~30fps clock, running ONLY while a staged character has auto animations (or a
+    // manually-started one). Frame selections are computed per tick into a ref; the render map
+    // reads them synchronously. Nothing here ever writes playerState — pure presentation.
+    const animFrameSelectionsRef = useRef<Map<string, Record<string, string | null>>>(new Map());
+    const animIdleScheduleRef = useRef<Map<string, number>>(new Map()); // "charId:animId" → next/current play start
+    const [, bumpAnimEpoch] = useReducer((x: number) => x + 1, 0);
+    useEffect(() => {
+        const chars = playerState?.stageState?.characters;
+        if (!chars || playerState.mode !== 'playing') { animFrameSelectionsRef.current = new Map(); return; }
+        // Which staged characters can animate at all?
+        const animated: Array<{ char: any; charData: any; anims: any[] }> = [];
+        for (const c of Object.values(chars) as any[]) {
+            if (!c || c.isVideo) continue;
+            const charData = project.characters[c.charId];
+            if (!charData?.animations) continue;
+            const anims = [
+                ...autoAnimationsOf(charData),
+                ...(c.activeManualAnimationId && charData.animations[c.activeManualAnimationId]
+                    ? [charData.animations[c.activeManualAnimationId]] : []),
+            ];
+            if (anims.length) animated.push({ char: c, charData, anims });
+        }
+        if (!animated.length) { animFrameSelectionsRef.current = new Map(); return; }
+        // Prewarm every frame any of these animations can show — an unwarmed frame would hide
+        // the whole sprite (atomic paint). Animation for a character stays OFF until warmed.
+        for (const { char, charData, anims } of animated) {
+            const urls = animationFrameUrls(charData, anims, char.poseId)
+                .map((u: string) => resolveFieldUrl(project.id, u) || u);
+            urls.filter(u => !vnLoadedImages.has(u)).forEach(u => { vnWarmImage(u); });
+        }
+        let raf = 0;
+        let last = 0;
+        const epoch = performance.now();
+        const tick = (now: number) => {
+            raf = requestAnimationFrame(tick);
+            if (now - last < 33) return; // ~30fps is plenty for step-frame animation
+            last = now;
+            const nextMap = new Map<string, Record<string, string | null>>();
+            for (const { char, charData, anims } of animated) {
+                const frameUrls = animationFrameUrls(charData, anims, char.poseId)
+                    .map((u: string) => resolveFieldUrl(project.id, u) || u);
+                if (frameUrls.some(u => !vnLoadedImages.has(u))) continue; // not warmed yet
+                // Full selections, ALWAYS: buildCharacterMedia drops any layer missing from the
+                // map, so a partial baseline would make un-animated pieces vanish. Old saves may
+                // predate layerSelections — fall back to the expression's configuration.
+                const baseSel = char.layerSelections
+                    ?? charData.expressions?.[char.expressionId]?.layerConfiguration ?? {};
+                let sel = baseSel;
+                for (const anim of anims) {
+                    const key = `${char.charId}:${anim.id}`;
+                    if (anim.trigger === 'always' || (char.activeManualAnimationId === anim.id)) {
+                        sel = applyAnimationFrame(sel, anim, now - epoch);
+                    } else if (anim.trigger === 'speaking') {
+                        if (isSpeakingNow(char.charId, now)) {
+                            const start = animIdleScheduleRef.current.get(key) ?? now;
+                            if (!animIdleScheduleRef.current.has(key)) animIdleScheduleRef.current.set(key, now);
+                            sel = applyAnimationFrame(sel, { ...anim, loop: true }, now - start);
+                        } else {
+                            animIdleScheduleRef.current.delete(key);
+                        }
+                    } else if (anim.trigger === 'idle') {
+                        const startAt = animIdleScheduleRef.current.get(key);
+                        if (startAt === undefined) {
+                            const min = anim.idleMinMs ?? 2000, max = anim.idleMaxMs ?? 6000;
+                            animIdleScheduleRef.current.set(key, now + min + Math.random() * Math.max(0, max - min));
+                        } else if (now >= startAt) {
+                            const t = now - startAt;
+                            if (t <= Math.max(1, anim.durationMs)) {
+                                sel = applyAnimationFrame(sel, anim, t);
+                            } else {
+                                animIdleScheduleRef.current.delete(key); // finished — reschedule next tick
+                            }
+                        }
+                    }
+                }
+                if (sel !== baseSel) nextMap.set(char.charId, sel);
+            }
+            const prev = animFrameSelectionsRef.current;
+            // Re-render only when some character's selections actually changed.
+            let changed = prev.size !== nextMap.size;
+            if (!changed) {
+                for (const [k, v] of nextMap) {
+                    const pv = prev.get(k);
+                    if (!pv || Object.keys(v).some(lk => v[lk] !== pv[lk])) { changed = true; break; }
+                }
+            }
+            if (changed) {
+                animFrameSelectionsRef.current = nextMap;
+                bumpAnimEpoch();
+            }
+        };
+        raf = requestAnimationFrame(tick);
+        return () => { cancelAnimationFrame(raf); animFrameSelectionsRef.current = new Map(); };
+    }, [playerState?.stageState?.characters, playerState?.mode, project]);
+
     // Ambient Noise Management
     useEffect(() => {
         // Manage the per-SCREEN ambient noise for whichever screen is on top — a menu/pause/title
@@ -8427,12 +9113,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             });
         };
 
+        // Ambient loops on the shared ambient element — same channel rule as music: speed/keep-
+        // pitch only, and EVERY src= applies (or resets) the shaping.
+        const ambientAdjust = musicChannelAdjust(resolveAudioAdjust((ambientInfo as any).audioAdjust, (project.audio as any)?.[ambientInfo.audioId!]?.audioAdjust));
         if (currentSrcNormalized !== newSrcNormalized) {
             if (!audio) return;
             audio.src = newAudioUrl;
             audio.load();
+            applyAudioAdjust(audio, ambientAdjust);
             startAmbientPlayback();
         } else if (audio && audio.paused) {
+            applyAudioAdjust(audio, ambientAdjust);
             startAmbientPlayback();
         } else {
             menuAmbientUrlRef.current = newAudioUrl;
@@ -8489,6 +9180,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 audio.src = queued.url;
                 audio.loop = queued.loop;
                 audio.load();
+                applyAudioAdjust(audio, queued.adjust ?? null);
                 audio.play().then(() => {
                     fadeAudio(audio, settings.musicVolume, queued.fadeDuration);
                     queuedMusicRef.current = null;
@@ -8515,6 +9207,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const url = assetResolver(musicState.audioId, 'audio');
                 if (url) {
                     audio.src = url;
+                    applyAudioAdjust(audio, musicState.adjust ?? null);
                     audio.loop = musicState.loop;
                     audio.currentTime = musicState.currentTime;
                     audio.play().then(() => {
@@ -8565,6 +9258,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const url = assetResolver(currentAudioId, 'audio');
         if (!url) return;
         audio.src = url;
+        applyAudioAdjust(audio, musicState.adjust ?? null);
         audio.loop = musicState.loop;
         audio.currentTime = musicState.currentTime || 0;
         if (musicState.isPlaying) {
@@ -8612,7 +9306,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         });
     }, []);
 
-    const playSound = useCallback((soundId: VNID | null, volume?: number, loop?: boolean): HTMLAudioElement | null => {
+    const playSound = useCallback((soundId: VNID | null, volume?: number, loop?: boolean, adjust?: VNAudioAdjust | null): HTMLAudioElement | null => {
         runtimeDebugLog('[SFX] playSound called with soundId:', soundId, 'volume:', volume, 'loop:', loop);
         if (!soundId) return null;
 
@@ -8624,48 +9318,69 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 return null;
             }
 
-            // Use HTMLAudio for SFX - more reliable in packaged environments. Each call creates an
-            // independent element, so multiple distinct sounds layer/overlap (pooled up to MAX).
-            runtimeDebugLog('[SFX] Creating HTMLAudio element for playback');
-            const audio = new Audio(url);
-            audio.loop = !!loop;
-            audio.volume = (typeof volume === 'number' ? Math.max(0, Math.min(1, volume)) : 1.0) * (Number.isFinite(settings.sfxVolume) ? settings.sfxVolume : 0.8);
+            // Per-use over asset-default shaping. Merging HERE means every SFX path (commands,
+            // UI actions, phone, FX) honors an asset's default speed/reverse for free.
+            const shaped = resolveAudioAdjust(adjust, (project.audio as any)?.[soundId]?.audioAdjust);
 
-            // Limit simultaneous one-shot SFX. Looping sounds are excluded from eviction so a
-            // sustained ambient isn't cut off by a burst of one-shots.
-            if (!loop) {
-                const oneShots = sfxPoolRef.current.filter(e => !e.audio.loop);
-                if (oneShots.length >= MAX_SIMULTANEOUS_SFX) {
-                    const oldest = oneShots[0];
-                    sfxPoolRef.current = sfxPoolRef.current.filter(e => e !== oldest);
-                    try { oldest?.audio.pause(); if (oldest) oldest.audio.currentTime = 0; } catch (e) {}
+            // Fresh elements start at rate 1, so applyAudioAdjust below fully defines the rate.
+            const spawn = (playUrl: string): HTMLAudioElement => {
+                // Use HTMLAudio for SFX - more reliable in packaged environments. Each call creates an
+                // independent element, so multiple distinct sounds layer/overlap (pooled up to MAX).
+                runtimeDebugLog('[SFX] Creating HTMLAudio element for playback');
+                const audio = new Audio(playUrl);
+                audio.loop = !!loop;
+                applyAudioAdjust(audio, shaped);
+                audio.volume = (typeof volume === 'number' ? Math.max(0, Math.min(1, volume)) : 1.0) * (Number.isFinite(settings.sfxVolume) ? settings.sfxVolume : 0.8);
+
+                // Limit simultaneous one-shot SFX. Looping sounds are excluded from eviction so a
+                // sustained ambient isn't cut off by a burst of one-shots.
+                if (!loop) {
+                    const oneShots = sfxPoolRef.current.filter(e => !e.audio.loop);
+                    if (oneShots.length >= MAX_SIMULTANEOUS_SFX) {
+                        const oldest = oneShots[0];
+                        sfxPoolRef.current = sfxPoolRef.current.filter(e => e !== oldest);
+                        try { oldest?.audio.pause(); if (oldest) oldest.audio.currentTime = 0; } catch (e) {}
+                    }
                 }
+
+                sfxPoolRef.current.push({ audio, audioId: soundId });
+                runtimeDebugLog('[SFX] Playing audio, volume:', audio.volume);
+
+                audio.play()
+                    .then(() => {
+                        runtimeDebugLog('[SFX] Audio playback started successfully');
+                    })
+                    .catch(e => {
+                        console.error('[SFX] Audio playback failed:', e);
+                    });
+
+                // Remove from pool when ended (looping sounds never fire 'ended').
+                audio.addEventListener('ended', () => {
+                    runtimeDebugLog('[SFX] Audio playback ended');
+                    sfxPoolRef.current = sfxPoolRef.current.filter(e => e.audio !== audio);
+                }, { once: true });
+
+                return audio;
+            };
+
+            // "Play backwards": swap in the cached reversed blob URL. Cold cache = wait for the
+            // one-time decode and start slightly late (reverse is a flourish; silence is a bug —
+            // any failure resolves null and the sound plays forward).
+            if (shaped?.reverse) {
+                const cached = peekReversedUrl(url);
+                if (cached === undefined) {
+                    getReversedUrl(url).then(rev => { spawn(rev || url); });
+                    return null;
+                }
+                return spawn(cached || url);
             }
-
-            sfxPoolRef.current.push({ audio, audioId: soundId });
-            runtimeDebugLog('[SFX] Playing audio, volume:', audio.volume);
-
-            audio.play()
-                .then(() => {
-                    runtimeDebugLog('[SFX] Audio playback started successfully');
-                })
-                .catch(e => {
-                    console.error('[SFX] Audio playback failed:', e);
-                });
-
-            // Remove from pool when ended (looping sounds never fire 'ended').
-            audio.addEventListener('ended', () => {
-                runtimeDebugLog('[SFX] Audio playback ended');
-                sfxPoolRef.current = sfxPoolRef.current.filter(e => e.audio !== audio);
-            }, { once: true });
-
-            return audio;
+            return spawn(url);
         } catch (outerError) {
             console.error('[SFX] Critical error in playSound:', outerError);
             console.error('[SFX] Error stack:', outerError instanceof Error ? outerError.stack : 'N/A');
             return null;
         }
-    }, [assetResolver, settings.sfxVolume]);
+    }, [assetResolver, settings.sfxVolume, project.audio]);
 
     /** Stop the current dialogue voice clip (called when advancing past a voiced line). */
     const stopVoice = useCallback(() => {
@@ -8685,19 +9400,34 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         try {
             const url = assetResolver(soundId, 'audio');
             if (!url) return null;
-            const audio = new Audio(url);
-            audio.volume = typeof voiceVol === 'number' ? Math.max(0, Math.min(1, voiceVol)) : 1.0;
-            currentVoiceRef.current = audio;
-            audio.play().catch(e => console.error('[Voice] playback failed:', e));
-            audio.addEventListener('ended', () => {
-                if (currentVoiceRef.current === audio) currentVoiceRef.current = null;
-            }, { once: true });
-            return audio;
+            // Voice honors the ASSET's default shaping (speed/reverse/keep-pitch) — voices are
+            // one-shots, so reverse is allowed here (unlike the music channel).
+            const shaped = resolveAudioAdjust(null, (project.audio as any)?.[soundId]?.audioAdjust);
+            const spawn = (playUrl: string): HTMLAudioElement => {
+                const audio = new Audio(playUrl);
+                applyAudioAdjust(audio, shaped);
+                audio.volume = typeof voiceVol === 'number' ? Math.max(0, Math.min(1, voiceVol)) : 1.0;
+                currentVoiceRef.current = audio;
+                audio.play().catch(e => console.error('[Voice] playback failed:', e));
+                audio.addEventListener('ended', () => {
+                    if (currentVoiceRef.current === audio) currentVoiceRef.current = null;
+                }, { once: true });
+                return audio;
+            };
+            if (shaped?.reverse) {
+                const cached = peekReversedUrl(url);
+                if (cached === undefined) {
+                    getReversedUrl(url).then(rev => { if (currentVoiceRef.current === null) spawn(rev || url); });
+                    return null;
+                }
+                return spawn(cached || url);
+            }
+            return spawn(url);
         } catch (e) {
             console.error('[Voice] error:', e);
             return null;
         }
-    }, [assetResolver, stopVoice]);
+    }, [assetResolver, stopVoice, project.audio]);
 
     // Keep master gain in sync with settings
     useEffect(() => {
@@ -8755,8 +9485,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 onJumpToScene: () => { /* ignored for lifecycle scripts */ },
                 onJumpToLabel: () => { /* ignored for lifecycle scripts */ },
                 onShowDialogue: (characterName, text) => {
-                    const match = (Object.values(project.characters) as Array<{ id: VNID; name: string; color?: string }>).find(c => c.name.toLowerCase() === (characterName || '').toLowerCase());
-                    updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, dialogue: { characterName: characterName || 'Narrator', characterColor: match?.color || '#FFFFFF', characterId: match?.id || null, text } } } : null);
+                    // Forgiving lookup: raw stored name OR the currently-resolved name — so
+                    // character("Yuki") works whether the character is named "Yuki" or "{YukiName}".
+                    const match = findCharacterBySpokenName(characterName || '', project, variableUpdates);
+                    const displayName = match
+                        ? resolveCharacterDisplayName(match.name, variableUpdates, project)
+                        : (characterName || '');
+                    updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, dialogue: { characterName: displayName || 'Narrator', characterColor: match?.color || '#FFFFFF', characterId: match?.id || null, text } } } : null);
                 },
                 onPlaySFX: (nameOrId, volume) => { playSound(resolveAudioId(nameOrId), volume); },
                 onPlayMusic: (nameOrId, loop, volume) => {
@@ -8863,6 +9598,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 advance: () => {},
                 setPlayerState: updatePlayerState,
                 activeEffectTimeoutsRef,
+                // Same accumulated map the ctx's playerState carries — so a from-a-variable /
+                // calculation value sees this tick's earlier parallel writes too.
+                runtimeVariables: { ...ps.variables, ...(varAccum || {}) },
                 evaluateConditions,
                 notify,
             });
@@ -9395,6 +10133,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             advance,
             setPlayerState: updatePlayerState,
             activeEffectTimeoutsRef,
+            // Merged view (dirty UI writes included) for handlers that READ other variables.
+            runtimeVariables: getRuntimeVariables(),
             evaluateConditions,
             notify,
             isStandalone,
@@ -9427,6 +10167,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     // because none depend on the main loop's advance/index.
                     case 'SetCharacterLayer': result = handleSetCharacterLayer(cmd, hctx); break;
                     case 'SetCharacterPose': result = handleSetCharacterPose(cmd, hctx); break;
+                    case 'PlayCharacterAnimation': result = handlePlayCharacterAnimation(cmd, hctx); break;
                     case 'ShowText': result = handleShowText(cmd, hctx); break;
                     case 'HideText': result = handleHideText(cmd, hctx); break;
                     case 'HideImage': result = handleHideImage(cmd, hctx); break;
@@ -9447,8 +10188,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     case 'RestockCollection': result = handleRestockCollectionCommand(cmd, hctx); break;
                     case 'BuyItem': result = handleBuyItemCommand(cmd, hctx); break;
                     case 'SellItem': result = handleSellItemCommand(cmd, hctx); break;
-                    case 'PlaceLights': result = { advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null }) }; break;
-                    case 'ClearLights': result = { advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null }) }; break;
+                    case 'PlaceLights': result = { advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null, lightsStyle: cmd.effectStyle === 'enhanced' ? 'enhanced' : null }) }; break;
+                    case 'ClearLights': result = { advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null, lightsStyle: null }) }; break;
                     case 'CreditRoll': { setActiveCreditRoll(cmd); result = handleCreditRoll(cmd, hctx); break; }
                     // Screen effects are INLINE in the main loop (component refs/state), so we replicate
                     // the exact same effect here (identical refs/render path) rather than touch the loop.
@@ -9495,6 +10236,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 radiusVariableId: cmd.radiusVariableId ?? null, darknessVariableId: cmd.darknessVariableId ?? null,
                                 color: cmd.color || '#000000', toggleKey: cmd.toggleKey, affectsDialogue: cmd.affectsDialogue !== false,
                                 darkWhenOff: cmd.darkWhenOff === true, on: true,
+                                ...(cmd.effectStyle === 'enhanced' ? { effectStyle: 'enhanced' as const } : {}),
                             });
                             if (cmd.sfxId) playSound(cmd.sfxId);
                         } else { setFlashlight(null); }
@@ -9547,7 +10289,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         return;
                     }
                     case 'SetScreenOverlayEffect': {
-                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: cmd.effectType, intensity: cmd.intensity, intensityVariableId: cmd.intensityVariableId ?? null, variant: cmd.variant, color: cmd.color, params: cmd.params }) } } } : p);
+                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: cmd.effectType, intensity: cmd.intensity, intensityVariableId: cmd.intensityVariableId ?? null, variant: cmd.variant, color: cmd.color, params: cmd.params, ...(cmd.effectStyle === 'enhanced' ? { effectStyle: 'enhanced' as const } : {}) }) } } } : p);
                         const overlayDur = cmd.duration ?? 0;
                         if (overlayDur > 0) {
                             const effType = cmd.effectType;
@@ -9686,7 +10428,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         }
                     }
                 }
-                if (result.updates || result.stagePatch) {
+                if (result.updates || result.stagePatch || result.uiStatePatch) {
                     const isSceneChange = result.updates?.currentSceneId !== undefined && result.updates.currentSceneId !== previousSceneId;
                     updatePlayerState(p => {
                         if (!p) return null;
@@ -9704,6 +10446,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         if (result.stagePatch) {
                             nextStage = { ...(nextStage ?? p.stageState), ...result.stagePatch(p.stageState) };
                         }
+                        // Like stagePatch: `uiStatePatch` runs against the LATEST uiState so
+                        // dialogue APPEND merges into the real previous text, not a stale snapshot.
+                        let nextUi: typeof p.uiState | undefined =
+                            result.updates?.uiState !== undefined ? { ...p.uiState, ...result.updates.uiState } : undefined;
+                        if (result.uiStatePatch) {
+                            nextUi = { ...(nextUi ?? p.uiState), ...result.uiStatePatch(nextUi ?? p.uiState) };
+                        }
                         return {
                             ...p,
                             ...(result.updates?.currentSceneId !== undefined ? { currentSceneId: result.updates.currentSceneId } : {}),
@@ -9713,7 +10462,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             ...(result.updates?.variables !== undefined || isSceneChange ? { variables: mergedVariables } : {}),
                             ...(nextStage !== undefined ? { stageState: nextStage } : {}),
                             ...(result.updates?.musicState !== undefined ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {}),
-                            ...(result.updates?.uiState !== undefined ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}),
+                            ...(nextUi !== undefined ? { uiState: nextUi } : {}),
                         };
                     });
                     
@@ -9876,6 +10625,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.SetCharacterPose: {
                     const result = handleSetCharacterPose(command as SetCharacterPoseCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.PlayCharacterAnimation: {
+                    const result = handlePlayCharacterAnimation(command as any, commandContext);
                     applyResult(result);
                     break;
                 }
@@ -10310,11 +11064,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 case CommandType.PlaceLights: {
                     const cmd = command as PlaceLightsCommand;
                     // lightsConditions: Live Evaluation — lights stay placed but only render while met.
-                    applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null, lightsConditions: (cmd as any).liveConditions ? (cmd.conditions ?? null) : null } as any) });
+                    applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null, lightsStyle: cmd.effectStyle === 'enhanced' ? 'enhanced' : null, lightsConditions: (cmd as any).liveConditions ? (cmd.conditions ?? null) : null } as any) });
                     break;
                 }
                 case CommandType.ClearLights: {
-                    applyResult({ advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null, lightsConditions: null } as any) });
+                    applyResult({ advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null, lightsStyle: null, lightsConditions: null } as any) });
                     break;
                 }
                 case CommandType.ShowPhone: { applyResult(handleShowPhone(command as ShowPhoneCommand, commandContext)); break; }
@@ -10407,6 +11161,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             // Live Evaluation: keep the flashlight registered and show/hide it as
                             // these conditions flip (renderer re-checks every render).
                             conditions: (cmd as any).liveConditions ? (cmd.conditions ?? null) : null,
+                            ...(cmd.effectStyle === 'enhanced' ? { effectStyle: 'enhanced' as const } : {}),
                         });
                         if (cmd.sfxId) playSound(cmd.sfxId);
                     } else {
@@ -10440,6 +11195,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     variant: cmd.variant,
                                     color: (cmd as any).color,
                                     params: (cmd as any).params,
+                                    ...((cmd as any).effectStyle === 'enhanced' ? { effectStyle: 'enhanced' as const } : {}),
                                     // Live Evaluation: the effect stays registered and renders only
                                     // while these conditions hold (re-checked every render).
                                     conditions: (cmd as any).liveConditions ? (cmd.conditions ?? undefined) : undefined,
@@ -10756,7 +11512,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return;
         }
         // Advancing past a line cuts off its voice clip so it doesn't bleed into the next line.
-        stopVoice();
+        // EXCEPTION: auto-continuing into an appended part with no voice of its own — a pause-only
+        // beat must not cut a still-playing voice line.
+        {
+            const ps = playerStateRef.current;
+            const nextCmd = ps ? project.scenes[ps.currentSceneId]?.commands[ps.currentIndex + 1] : undefined;
+            const nextIsVoicelessAppend = nextCmd?.type === CommandType.Dialogue
+                && (nextCmd as DialogueCommand).append && !(nextCmd as DialogueCommand).voiceAudioId;
+            if (!nextIsVoicelessAppend) stopVoice();
+        }
         updatePlayerState(p => {
             if (!p || !p.uiState.dialogue) return p;
 
@@ -10777,7 +11541,29 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     // Keep dialogue open!
                 };
             }
-            
+
+            // ── APPEND GROUP: the next command adds to THIS box. Advance without clearing the
+            // dialogue and without a history entry — the whole group becomes ONE backlog line,
+            // pushed when the group ends. (Generalizes the keep-open-during-choices idea.)
+            // A false-conditioned append part must not eat the group's history push, so
+            // conditions are checked here.
+            const nextIsAppend = nextCmd?.type === CommandType.Dialogue
+                && (nextCmd as DialogueCommand).append
+                && evaluateConditions((nextCmd as DialogueCommand).conditions, mergeDirtyUiVariables(p.variables));
+            if (nextIsAppend) {
+                return {
+                    ...p,
+                    currentIndex: p.currentIndex + 1,
+                    uiState: {
+                        ...p.uiState,
+                        isWaitingForInput: false,
+                        isSkipping: false,
+                        // Remember where the group started — history/skip-back land there.
+                        dialogue: { ...p.uiState.dialogue, groupStartIndex: p.uiState.dialogue.groupStartIndex ?? p.currentIndex },
+                    },
+                };
+            }
+
             // Add dialogue to history with full state snapshot for skip-backward
             const historyEntry: HistoryEntry = {
                 timestamp: Date.now(),
@@ -10786,7 +11572,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 characterColor: p.uiState.dialogue.characterColor,
                 text: p.uiState.dialogue.text,
                 sceneId: p.currentSceneId,
-                commandIndex: p.currentIndex,
+                // An appended group is ONE backlog line — record where it BEGAN.
+                commandIndex: p.uiState.dialogue.groupStartIndex ?? p.currentIndex,
                 // Full state snapshots for backward navigation
                 stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
                 variablesSnapshot: { ...p.variables },
@@ -10881,13 +11668,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const effectiveOperator = normalizeOperator(variable.type, variable.name, originalOperator);
                     const wasCoercedOperator = originalOperator !== effectiveOperator;
                     const currentVal = newState.variables[setVarAction.variableId];
-                    
+                    // From-a-variable / calculation values read the merged view (dirty UI writes
+                    // included) over this choice's own sequential writes (newState.variables).
+                    const changeValue = resolveSetVariableValue(
+                        setVarAction,
+                        mergeDirtyUiVariables(newState.variables)
+                    );
+
                     // Use consolidated calculateVariableValue for all value computations
                     const newVal = calculateVariableValue(
                         effectiveOperator,
                         variable.type,
                         currentVal,
-                        setVarAction.value,
+                        changeValue,
                         setVarAction.randomMin,
                         setVarAction.randomMax,
                         wasCoercedOperator ? originalOperator : undefined,
@@ -11631,6 +12424,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 // Clear player state, uiVariables, and return to title screen
                 updatePlayerState(null);
                 setHudStack([]);
+                // A playing gallery song is NOT stopped here on purpose: the lifecycle keeper
+                // effect re-evaluates on this mode/stack change and keeps the song only when
+                // it's in keep-playing mode AND the title screen opted in ("Let gallery music
+                // keep playing here") — otherwise it stops it there. One stop path, no leaks.
                 // The story's timers must not follow the player onto the title screen (they used
                 // to keep ticking invisibly here — with menu screens now rendering timer values,
                 // that leak would become visible). Keep-across-games timers carry on by design.
@@ -11996,13 +12793,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const effectiveOperator = normalizeOperator(variable.type, variable.name, originalOperator);
             const wasCoercedOperator = originalOperator !== effectiveOperator;
 
-            const computeNewValue = (currentVal: string | number | boolean | undefined): string | number | boolean => {
+            const computeNewValue = (
+                currentVal: string | number | boolean | undefined,
+                readVars: Record<string, string | number | boolean | undefined>
+            ): string | number | boolean => {
+                // From-a-variable / calculation values read OTHER variables from the branch's
+                // correct source (readVars); the target's own current value stays `currentVal`.
+                const changeValue = resolveSetVariableValue(setVarAction, readVars);
                 // Use consolidated calculateVariableValue for all value computations
                 return calculateVariableValue(
                     effectiveOperator,
                     variable.type,
                     currentVal,
-                    setVarAction.value,
+                    changeValue,
                     setVarAction.randomMin,
                     setVarAction.randomMax,
                     wasCoercedOperator ? originalOperator : undefined,
@@ -12019,7 +12822,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     uiDirtyVariableIdsRef.current.add(setVarAction.variableId);
                     setUiVariables(prev => {
                         const currentVal = prev[setVarAction.variableId];
-                        const newVal = computeNewValue(currentVal);
+                        // Reads of OTHER variables need the MERGED view — uiVariables alone was
+                        // seeded at screen-open and never sees in-scene writes, and only DIRTY
+                        // ui writes may shadow the game state (dirty-uiVars rule). Earlier actions
+                        // in this screen are dirty already, so they're visible here too.
+                        const newVal = computeNewValue(
+                            currentVal,
+                            mergeDirtyUiVariables(playerStateRef.current?.variables ?? {})
+                        );
                         runtimeDebugLog('[SetVariable] Details (uiVariables):', {
                             variable: variable.name,
                             variableId: setVarAction.variableId,
@@ -12036,7 +12846,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 } else {
                     setMenuVariables(prev => {
                         const currentVal = prev[setVarAction.variableId] ?? variable.defaultValue;
-                        const newVal = computeNewValue(currentVal);
+                        // Pre-game (title/menus): other variables read menu values over defaults —
+                        // the same `prev ?? defaultValue` rule the target's own value uses.
+                        const menuView: Record<string, string | number | boolean | undefined> = {};
+                        for (const v of Object.values(project.variables) as VNVariable[]) {
+                            menuView[v.id] = prev[v.id] ?? v.defaultValue;
+                        }
+                        const newVal = computeNewValue(currentVal, menuView);
                         runtimeDebugLog('[SetVariable] Details (menu):', {
                             variable: variable.name,
                             variableId: setVarAction.variableId,
@@ -12103,14 +12919,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const soundAction = action as PlaySoundAction;
             if (soundAction.audioId) {
                 runtimeDebugLog('[PlaySound] action triggered:', soundAction.audioId, 'volume:', soundAction.volume, 'loop:', soundAction.loop);
-                playSound(soundAction.audioId, soundAction.volume, soundAction.loop);
+                playSound(soundAction.audioId, soundAction.volume, soundAction.loop, soundAction.audioAdjust ?? null);
             }
         } else if (action.type === UIActionType.PlayMusic) {
             // Route through the exact same handler as the Play Music COMMAND so behaviour (fade, single
             // music channel, loop, musicState bookkeeping / save-restore) is identical.
-            const a = action as { audioId?: VNID; loop?: boolean; fadeDuration?: number; volume?: number };
+            const a = action as { audioId?: VNID; loop?: boolean; fadeDuration?: number; volume?: number; audioAdjust?: VNAudioAdjust };
             if (a.audioId) {
-                const cmd = { type: CommandType.PlayMusic, audioId: a.audioId, loop: a.loop ?? true, fadeDuration: a.fadeDuration ?? 1, volume: a.volume } as PlayMusicCommand;
+                const cmd = { type: CommandType.PlayMusic, audioId: a.audioId, loop: a.loop ?? true, fadeDuration: a.fadeDuration ?? 1, volume: a.volume, audioAdjust: a.audioAdjust } as PlayMusicCommand;
                 const r = handlePlayMusic(cmd, { project, playerState: playerStateRef.current, assetResolver, musicAudioRef, fadeAudio, settings, setPlayerState: updatePlayerState } as any);
                 if (r.updates?.musicState) updatePlayerState(p => p ? { ...p, musicState: { ...p.musicState, ...r.updates!.musicState } } : p);
             }
@@ -13054,7 +13870,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const log = ph.callLog || [];
             const entry: PhoneCallLogEntry = { id: `call-${Date.now()}`, callerId: cmd.callerId, status: outcome, portrait: cmd.portrait, order: log.length, direction: 'incoming' };
             const missed = outcome === 'missed';
-            const callerName = cmd.callerId === 'player' ? '' : (project.characters[cmd.callerId as VNID]?.name || '');
+            // Snapshot the RESOLVED name into the missed-call notification (names may hold {Variable} tokens).
+            const callerName = cmd.callerId === 'player' ? '' : resolveCharacterDisplayName(project.characters[cmd.callerId as VNID]?.name, mergeDirtyUiVariables(p.variables), project);
             return { ...p, uiState: { ...p.uiState, phone: { ...ph, incomingCall: null, ...(hasConversation ? {} : { callLog: [...log, entry] }),
                 // A missed call now leaves a trace: a banner + a notification-list row.
                 ...(missed ? {
@@ -13790,6 +14607,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             const emphasisDim = project.ui.speakerEmphasisDim ?? 0.5;
                             const emphasisScale = project.ui.speakerEmphasisScale ?? 1.04;
                             return allChars.map((char: StageCharacterState) => {
+                            // Frame animation (Animation Studio): the clock computed this
+                            // character's current frame selections — swap the media in. The
+                            // char object is replaced locally; playerState is never touched.
+                            const animSel = animFrameSelectionsRef.current.get(char.charId);
+                            if (animSel && !char.isVideo) {
+                                const animCharData = project.characters[char.charId];
+                                if (animCharData) {
+                                    const wrapUrl = (u: string) => resolveFieldUrl(project.id, u) || u;
+                                    const media = buildCharacterMedia(animCharData, animSel, wrapUrl, char.poseId);
+                                    // animBaseImageUrls: the element's key must come from the PRE-animation
+                                    // urls, or every frame swap would remount and replay the entrance.
+                                    char = { ...char, animBaseImageUrls: char.imageUrls, imageUrls: media.imageUrls, ...boxFieldsForStage(media.imageBoxes, media.videoBoxes) } as StageCharacterState;
+                                }
+                            }
                             let transitionClass = '';
                             let animationDuration = '1s';
                             let slideStyle: React.CSSProperties = {};
@@ -14034,7 +14865,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                                 trimEnd={char.videoTrims?.[index]?.end}
                                                 playsInline
                                                 className="absolute top-0 left-0 w-full h-full object-contain"
-                                                style={{ zIndex: index }}
+                                                style={{ zIndex: index, ...layerBoxStyle(char.videoBoxes?.[index]) }}
                                             />
                                         ))
                                     ) : (
@@ -14044,12 +14875,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                                 src={url}
                                                 alt=""
                                                 className="absolute top-0 left-0 w-full h-full object-contain"
-                                                style={{ zIndex: index }}
+                                                style={{ zIndex: index, ...layerBoxStyle(char.imageBoxes?.[index]) }}
                                             />
                                         ))
                                     )}
                                     {/* Day/night SPRITE tint — a true color overlay masked to each layer's
-                                        pixels (multiply), so the sprite shows the real tint and keeps its shading. */}
+                                        pixels (multiply), so the sprite shows the real tint and keeps its shading.
+                                        Pose Studio geometry rides on each copy (spread AFTER the hardcoded
+                                        top/left/width/height) so the tint hugs the boxed piece exactly. */}
                                     {dnSpriteTint && !char.isVideo && char.imageUrls.map((url, index) => (
                                         <div key={`dn-tint-${index}`} aria-hidden style={{
                                             position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: index,
@@ -14059,6 +14892,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                             WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
                                             WebkitMaskPosition: 'center', maskPosition: 'center',
                                             transition: `opacity ${dnTrans}s ease-in-out, background-color ${dnTrans}s ease-in-out`,
+                                            ...layerBoxStyle(char.imageBoxes?.[index]),
                                         }} />
                                     ))}
                                     {/* Glitch: RIM GHOSTS — solid-colour copies of the sprite (masked to its own
@@ -14074,21 +14908,30 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         const push = 7 * Math.max(0.2, Math.min(3, g.rimSize));
                                         const dir = [[-1, 0], [1, 0], [0, -1], [1, 1], [-1, 1], [0, 1]][ci % 6];
                                         const dur = (1.1 / g.speed);
-                                        return char.imageUrls.map((url, index) => (
+                                        return char.imageUrls.map((url, index) => {
+                                            // Pose Studio geometry: same box as the piece; the box transform sits
+                                            // OUTERMOST so the glitch push happens inside the rotated/flipped frame
+                                            // and the ghost keeps hugging the silhouette.
+                                            const pieceBox = char.imageBoxes?.[index];
+                                            const boxStyle = layerBoxStyle(pieceBox);
+                                            const boxTf = layerBoxTransform(pieceBox);
+                                            return (
                                             <div key={`glitch-rim-${ci}-${index}`} aria-hidden style={{
                                                 position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
                                                 zIndex: -(g.colors.length - ci),   // behind every sprite layer
                                                 pointerEvents: 'none',
                                                 backgroundColor: rimColor,
-                                                transform: `translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + 0.015 * Math.max(0.2, Math.min(3, g.rimSize))).toFixed(3)})`,
                                                 animation: `vnfx-glitch-bands-flicker ${dur.toFixed(2)}s steps(1, end) infinite`,
                                                 animationDelay: `${((dur / g.colors.length) * ci).toFixed(2)}s`,
                                                 WebkitMaskImage: `url("${url}")`, maskImage: `url("${url}")`,
                                                 WebkitMaskSize: 'contain', maskSize: 'contain',
                                                 WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
                                                 WebkitMaskPosition: 'center', maskPosition: 'center',
+                                                ...boxStyle,
+                                                transform: `${boxTf ? boxTf + ' ' : ''}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + 0.015 * Math.max(0.2, Math.min(3, g.rimSize))).toFixed(3)})`,
                                             }} />
-                                        ));
+                                            );
+                                        });
                                     })}
                                     {/* Glitch: DEAD-PIXEL CLUSTERS — same behind-the-sprite ghost trick as the rims,
                                         but scaled out a touch further and filled with a sparse thresholded-noise
@@ -14102,7 +14945,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         const dir = [[1, -1], [-1, 1], [1, 1], [-1, -1], [0, -1], [1, 0]][ci % 6];
                                         const dur = (1.1 / g.speed) * 0.7;
                                         const blockPx = Math.round(36 + 26 * Math.min(1.5, g.intensity));
-                                        return char.imageUrls.map((url, index) => (
+                                        return char.imageUrls.map((url, index) => {
+                                            // Same box-outermost composition as the rim ghosts above.
+                                            const pieceBox = char.imageBoxes?.[index];
+                                            const boxStyle = layerBoxStyle(pieceBox);
+                                            const boxTf = layerBoxTransform(pieceBox);
+                                            return (
                                             <div key={`glitch-px-${ci}-${index}`} aria-hidden style={{
                                                 position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
                                                 // Further back than the rims, so the pixels flash BEYOND the rim edge.
@@ -14111,15 +14959,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                                 backgroundImage: deadPixelTile(pxColor, 13 + ci * 37),
                                                 backgroundSize: `${blockPx}px ${blockPx}px`,
                                                 imageRendering: 'pixelated',
-                                                transform: `translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + (0.035 + ci * 0.012) * rim).toFixed(3)})`,
                                                 animation: `vnfx-glitch-bands-flicker ${dur.toFixed(2)}s steps(1, end) infinite`,
                                                 animationDelay: `${((dur / g.colors.length) * ci + dur * 0.31).toFixed(2)}s`,
                                                 WebkitMaskImage: `url("${url}")`, maskImage: `url("${url}")`,
                                                 WebkitMaskSize: 'contain', maskSize: 'contain',
                                                 WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
                                                 WebkitMaskPosition: 'center', maskPosition: 'center',
+                                                ...boxStyle,
+                                                transform: `${boxTf ? boxTf + ' ' : ''}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + (0.035 + ci * 0.012) * rim).toFixed(3)})`,
                                             }} />
-                                        ));
+                                            );
+                                        });
                                     })}
                                     {/* Glitch: the per-character displacement filter definition. Lives inside the
                                         content wrapper so it mounts/unmounts with the sprite; the id is stable per
@@ -14244,7 +15094,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     // the key is stable (just charId) so the SAME element persists and only swaps
                                     // its image — remounting on every instant change caused a blank-frame flash.
                                     key={char.transition
-                                        ? `${char.charId}-${char.expressionId}-${char.imageUrls.join(',')}-${char.transition.action}`
+                                        ? `${char.charId}-${char.expressionId}-${(char.animBaseImageUrls ?? char.imageUrls).join(',')}-${char.transition.action}`
                                         : char.charId}
                                     className={`absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`}
                                     style={{
@@ -14305,7 +15155,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             const lights = lb === 1 ? state.lights : state.lights.map((l: VNLight) => ({ ...l, brightness: (l.brightness ?? 1) * lb }));
                             return (
                                 <div className="absolute inset-0 pointer-events-none" style={{ zIndex: state.lightsAbove ? 40 : 4 }}>
-                                    <LightsLayer lights={lights} stageW={stageSize.width} stageH={stageSize.height} />
+                                    {isEnhanced((state as any).lightsStyle) ? (
+                                        // Enhanced (WebGL glow) — Classic <LightsLayer> rides as the
+                                        // automatic fallback wherever WebGL can't run.
+                                        <GlFxCanvas
+                                            kind="lights"
+                                            width={stageSize.width}
+                                            height={stageSize.height}
+                                            style={{ mixBlendMode: 'screen' }}
+                                            getParams={() => ({ kind: 'lights', lights, stageW: stageSize.width, stageH: stageSize.height })}
+                                        >
+                                            <LightsLayer lights={lights} stageW={stageSize.width} stageH={stageSize.height} />
+                                        </GlFxCanvas>
+                                    ) : (
+                                        <LightsLayer lights={lights} stageW={stageSize.width} stageH={stageSize.height} />
+                                    )}
                                 </div>
                             );
                         })()}
@@ -14772,8 +15636,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                             </div>
                                         )}
                                         <div className="text-white/90 text-sm leading-relaxed">
-                                            {entry.type === 'choice' ? entry.choiceText || entry.text : 
-                                             entry.type === 'textInput' ? `"${entry.inputValue}"` : entry.text}
+                                            {entry.type === 'choice' ? entry.choiceText || entry.text :
+                                             entry.type === 'textInput' ? `"${entry.inputValue}"` : stripDialogueTextCodes(entry.text || '')}
                                         </div>
                                         {entry.type === 'choice' && (
                                             <div className="text-blue-400/70 text-xs mt-1 font-medium">Selected choice</div>
@@ -15131,7 +15995,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         );
                     })()}
                     <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} reactiveState={pickReactiveTextboxState(project.ui.dialogueReactiveStates, playerState.variables, evaluateConditions)}
-                        timerPaused={scenePaused || !!uiState.choices || !!uiState.textInput || !!uiState.showHistory} uiPalette={playerState.uiPaletteOverride} voiceRef={currentVoiceRef} />
+                        timerPaused={scenePaused || !!uiState.choices || !!uiState.textInput || !!uiState.showHistory} uiPalette={playerState.uiPaletteOverride} voiceRef={currentVoiceRef}
+                        isSkipping={!!uiState.isSkipping}
+                        autoContinue={(() => {
+                            // More appended parts coming? Then this part auto-continues when it
+                            // finishes typing (same predicate the advance path uses).
+                            const nextCmd = project.scenes[playerState.currentSceneId]?.commands[playerState.currentIndex + 1];
+                            return nextCmd?.type === CommandType.Dialogue
+                                && !!(nextCmd as DialogueCommand).append
+                                && evaluateConditions((nextCmd as DialogueCommand).conditions, mergeDirtyUiVariables(playerState.variables));
+                        })()} />
                 </>
             )}
             {uiState.choices && <ChoiceMenu choices={uiState.choices} projectUI={project.ui} onSelect={handleChoiceSelect} variables={playerState.variables} project={project} layout={uiState.choiceLayout}
@@ -15213,6 +16086,33 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const fVars = playerState?.variables;
                 const fRadius = resolveVarNumber(fVars, (flashlight as any).radiusVariableId, flashlight.radius, { min: 1, max: 100 });
                 const fDarkness = resolveVarNumber(fVars, (flashlight as any).darknessVariableId, flashlight.darkness, { min: 0, max: 1 });
+                if (isEnhanced((flashlight as any).effectStyle)) {
+                    // Enhanced: darkness + dithered light hole + warm rim in ONE shader canvas.
+                    // Mouse/vars resolve per frame via refs; Classic JSX is the automatic fallback.
+                    const fl = flashlight;
+                    return (
+                        <div ref={flashlightOverlayRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: fl.affectsDialogue ? 45 : 15 }}>
+                            <GlFxCanvas
+                                kind="flashlight"
+                                width={playContainerSize.width}
+                                height={playContainerSize.height}
+                                getParams={() => {
+                                    const vars = playerStateRef.current?.variables;
+                                    const r = resolveVarNumber(vars, (fl as any).radiusVariableId, fl.radius, { min: 1, max: 100 });
+                                    const d = resolveVarNumber(vars, (fl as any).darknessVariableId, fl.darkness, { min: 0, max: 1 });
+                                    const m = flashlightMouseRef.current || { x: playContainerSize.width / 2, y: playContainerSize.height / 2 };
+                                    return { kind: 'flashlight', stageW: playContainerSize.width, stageH: playContainerSize.height, mouseX: m.x, mouseY: m.y, radius: r, softness: fl.softness, darkness: d, on: fl.on, color: fl.color };
+                                }}
+                            >
+                                <div className="absolute inset-0" style={{
+                                    background: fl.on
+                                        ? flashlightBg(playContainerSize.width / 2, playContainerSize.height / 2, (fRadius / 100) * Math.min(playContainerSize.width || 1280, playContainerSize.height || 720), fl.softness, hexToRgba(fl.color, fDarkness * 100))
+                                        : hexToRgba(fl.color, fDarkness * 100),
+                                }} />
+                            </GlFxCanvas>
+                        </div>
+                    );
+                }
                 return (
                     <div
                         ref={flashlightOverlayRef}
@@ -15240,10 +16140,64 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const maxIntensity = Math.max(...active.map(([, s]) => Math.max(0, Math.min(1, s.intensity))));
                 const affectsDialogue = active.some(([, s]) => s.affectsDialogue);
                 const vpMin = typeof window !== 'undefined' ? Math.min(window.innerWidth, window.innerHeight) : 720;
+                // Style split: Classic beams keep today's CSS cones; Enhanced beams render in ONE
+                // shared shader canvas (true additive mixing where cones overlap). Both screen-blend
+                // over the same shared darkness, so mixed styles compose exactly like before.
+                const classicBeams = active.filter(([, s]) => !isEnhanced((s as any).effectStyle));
+                const enhancedBeams = active.filter(([, s]) => isEnhanced((s as any).effectStyle));
                 return (
                     <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: affectsDialogue ? 45 : 15 }}>
                         {!flashActive && <div className="absolute inset-0" style={{ background: hexToRgba('#000000', maxIntensity * 100) }} />}
-                        {active.map(([id, s]) => {
+                        {enhancedBeams.length > 0 && (
+                            <GlFxCanvas
+                                kind="beams"
+                                width={playContainerSize.width}
+                                height={playContainerSize.height}
+                                style={{ mixBlendMode: 'screen' }}
+                                getParams={() => ({
+                                    kind: 'beams',
+                                    stageW: playContainerSize.width,
+                                    stageH: playContainerSize.height,
+                                    beams: enhancedBeams.map(([id, s]) => ({
+                                        sourceX: s.sourceX, sourceY: s.sourceY,
+                                        // Live swivel angle (mouse-follow) when present, else the authored aim.
+                                        aimAngle: spotlightLiveAngles.current.get(id) ?? s.aimAngle,
+                                        intensity: s.intensity, beamWidth: s.beamWidth, sourceWidth: s.sourceWidth,
+                                        height: s.height, falloff: s.falloff, color: s.color,
+                                    })),
+                                })}
+                            >
+                                {/* Fallback: these beams render as Classic CSS cones (same math as below). */}
+                                {enhancedBeams.map(([id, s]) => {
+                                    const half = Math.max(2, Math.min(100, s.beamWidth)) / 2;
+                                    const len = Math.max(5, Math.min(200, s.height));
+                                    const srcHalf = Math.max(0, Math.min(60, s.sourceWidth)) / 2;
+                                    const inner = Math.round(Math.max(0, Math.min(1, 1 - s.falloff)) * 100);
+                                    const blurPx = Math.round((0.015 + Math.max(0, Math.min(1, s.falloff)) * 0.05) * vpMin);
+                                    const sx = s.sourceX, sy = s.sourceY;
+                                    return (
+                                        <div key={id}
+                                            ref={el => { spotlightRefs.current.set(id, el); }}
+                                            className="absolute inset-0"
+                                            style={{
+                                                mixBlendMode: 'screen',
+                                                transformOrigin: `${sx}% ${sy}%`,
+                                                transform: `rotate(${-s.aimAngle}deg)`,
+                                                transition: s.followMouse ? 'none' : 'transform 0.15s ease-out',
+                                                filter: `blur(${blurPx}px)`,
+                                                willChange: 'transform',
+                                            }}
+                                        >
+                                            <div className="absolute inset-0" style={{
+                                                clipPath: `polygon(${sx - srcHalf}% ${sy}%, ${sx + srcHalf}% ${sy}%, ${sx + half}% ${sy + len}%, ${sx - half}% ${sy + len}%)`,
+                                                background: `radial-gradient(120% ${len}% at ${sx}% ${sy}%, ${hexToRgba(s.color, 95)} 0%, ${hexToRgba(s.color, 55)} ${inner}%, ${hexToRgba(s.color, 0)} 100%)`,
+                                            }} />
+                                        </div>
+                                    );
+                                })}
+                            </GlFxCanvas>
+                        )}
+                        {classicBeams.map(([id, s]) => {
                             const half = Math.max(2, Math.min(100, s.beamWidth)) / 2;
                             const len = Math.max(5, Math.min(200, s.height));
                             const srcHalf = Math.max(0, Math.min(60, s.sourceWidth)) / 2;
@@ -15613,44 +16567,44 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                    The *NoFade variants slide WITHOUT fading — a user asked for exactly this: the box
                    arrives whole and eases to a stop, no ghosting in. */
                 @keyframes elementTransitionslideUp {
-                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) + var(--vn-el-dist, 70%))); }
-                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) + var(--vn-el-dist, 70%))) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideDown {
-                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) - var(--vn-el-dist, 20%))); }
-                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) - var(--vn-el-dist, 20%))) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideLeft {
-                    from { opacity: 0; transform: translate(calc(var(--vn-el-tx, -50%) + var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)); }
-                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { opacity: 0; transform: translate(calc(var(--vn-el-tx, -50%) + var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideRight {
-                    from { opacity: 0; transform: translate(calc(var(--vn-el-tx, -50%) - var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)); }
-                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { opacity: 0; transform: translate(calc(var(--vn-el-tx, -50%) - var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionscale {
-                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(0.5); }
-                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(1); }
+                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(0.5) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(1) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideUpNoFade {
-                    from { transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) + var(--vn-el-dist, 70%))); }
-                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) + var(--vn-el-dist, 70%))) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideDownNoFade {
-                    from { transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) - var(--vn-el-dist, 20%))); }
-                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) - var(--vn-el-dist, 20%))) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideLeftNoFade {
-                    from { transform: translate(calc(var(--vn-el-tx, -50%) + var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)); }
-                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { transform: translate(calc(var(--vn-el-tx, -50%) + var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideRightNoFade {
-                    from { transform: translate(calc(var(--vn-el-tx, -50%) - var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)); }
-                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { transform: translate(calc(var(--vn-el-tx, -50%) - var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionscaleNoFade {
-                    from { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(0.5); }
-                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(1); }
+                    from { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(0.5) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(1) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 /* Appearance-state image swap crossfade (new image fades in over the old) */
                 @keyframes vnImgCrossfade {
@@ -16286,7 +17240,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             : nIconImg ? <img src={nIconImg} alt="" style={{ width: '2.4em', height: '2.4em', objectFit: 'contain', flexShrink: 0 }} />
                             : n.icon ? <span style={{ fontSize: '1.6em', flexShrink: 0 }}>{PHONE_GLYPHS[n.icon] || '🔔'}</span> : null}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                            {(n.title || nchar?.name) && <div style={{ fontWeight: 700, fontSize: '0.85em' }}>{n.title || nchar?.name}</div>}
+                            {(n.title || nchar?.name) && <div style={{ fontWeight: 700, fontSize: '0.85em' }}>{makeDisplayNameResolver(screenVariables, project)(n.title || nchar?.name, '')}</div>}
                             <div style={{ fontSize: '0.85em', opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{interpolateVariables(n.text, screenVariables, project)}</div>
                         </div>
                         <span style={{ fontSize: '1.2em' }}>{n.title ? '🔔' : '💬'}</span>
@@ -16316,7 +17270,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             <div style={{ ...((project.ui.phoneCallPortraitX != null || project.ui.phoneCallPortraitY != null) ? { position: 'absolute', left: `${project.ui.phoneCallPortraitX ?? 50}%`, top: `${project.ui.phoneCallPortraitY ?? 18}%` } : { position: 'relative' }), width: `${project.ui.phoneCallPortraitSize ?? 22}%`, aspectRatio: '1', borderRadius: shape === 'circle' ? '9999px' : '16px', overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
                                 {curls.map((u, i) => <img key={i} src={u} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: project.ui.phoneCallPortraitFit || 'cover', objectPosition: project.ui.phoneCallPortraitPosition || 'center' }} />)}
                             </div>
-                            <div style={{ textAlign: 'center', ...nameStyle }}>{cchar?.name || 'Unknown'}</div>
+                            <div style={{ textAlign: 'center', ...nameStyle }}>{makeDisplayNameResolver(screenVariables, project)(cchar?.name, 'Unknown')}</div>
                             <div style={{ opacity: 0.7, fontSize: '0.9em' }}>Incoming call…</div>
                             <div style={{ display: 'flex', gap: 48, marginTop: 8 }}>{declineBtn}{acceptBtn}</div>
                         </div>
@@ -16328,7 +17282,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                             <PhonePortrait urls={curls} size="2.6em" />
                             <div style={{ minWidth: 0 }}>
-                                <div style={{ ...nameStyle, fontSize: '1em' }}>{cchar?.name || 'Unknown'}</div>
+                                <div style={{ ...nameStyle, fontSize: '1em' }}>{makeDisplayNameResolver(screenVariables, project)(cchar?.name, 'Unknown')}</div>
                                 <div style={{ opacity: 0.7, fontSize: '0.75em' }}>Incoming call…</div>
                             </div>
                         </div>
@@ -16351,7 +17305,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         <div style={{ ...((project.ui.phoneCallPortraitX != null || project.ui.phoneCallPortraitY != null) ? { position: 'absolute', left: `${project.ui.phoneCallPortraitX ?? 50}%`, top: `${project.ui.phoneCallPortraitY ?? 18}%` } : { position: 'relative' }), width: `${project.ui.phoneCallPortraitSize ?? 22}%`, aspectRatio: '1', borderRadius: shape === 'circle' ? '9999px' : '16px', overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
                             {ourls.map((u, i) => <img key={i} src={u} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: project.ui.phoneCallPortraitFit || 'cover', objectPosition: project.ui.phoneCallPortraitPosition || 'center' }} />)}
                         </div>
-                        <div style={{ textAlign: 'center', ...nameStyle }}>{contact?.displayName || ochar?.name || 'Unknown'}</div>
+                        <div style={{ textAlign: 'center', ...nameStyle }}>{makeDisplayNameResolver(screenVariables, project)(contact?.displayName || ochar?.name, 'Unknown')}</div>
                         <div style={{ opacity: 0.7, fontSize: '0.9em' }}>Calling…</div>
                         <button onClick={endOutgoingCall} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', cursor: 'var(--vn-cursor-hand, pointer)', color: '#fff', fontSize: '0.85em', marginTop: 8 }}>
                             <span style={{ width: '3em', height: '3em', borderRadius: '9999px', background: project.ui.phoneCallDeclineColor || '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3em' }}>⊘</span>
@@ -16402,6 +17356,47 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         <VariablesIcon className="w-4 h-4 flex-shrink-0" />
                         <span>Variables</span>
                     </button>
+                    <button
+                        onClick={() => setShowLocation(s => !s)}
+                        className={`flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border shadow-lg ${
+                            showLocation
+                                ? 'bg-sky-500/90 border-sky-400/60 text-white'
+                                : 'bg-slate-800/80 border-slate-600/60 text-slate-100 hover:bg-slate-700/90'
+                        }`}
+                        title="Location — see which scene and screen you're looking at while you play. (Editor only — not shown in exported games.)"
+                    >
+                        <FilmIcon className="w-4 h-4 flex-shrink-0" />
+                        <span>Location</span>
+                    </button>
+                    {showLocation && (() => {
+                        const scene = playerState ? project.scenes[playerState.currentSceneId] : null;
+                        const stepInfo = playerState && playerState.mode !== 'menu' && playerState.currentCommands?.length
+                            ? `step ${Math.min(playerState.currentIndex + 1, playerState.currentCommands.length)} of ${playerState.currentCommands.length}`
+                            : null;
+                        const menuNames = screenStack.map(id => project.uiScreens[id]?.name).filter(Boolean) as string[];
+                        const hudNames = hudStack.map(id => project.uiScreens[id]?.name).filter(Boolean) as string[];
+                        const row = (label: string, value: React.ReactNode) => (
+                            <li className="flex items-baseline justify-between gap-3">
+                                <span className="text-slate-400 flex-shrink-0">{label}</span>
+                                <span className="text-white text-right truncate" title={typeof value === 'string' ? value : undefined}>{value}</span>
+                            </li>
+                        );
+                        return (
+                            <div className="bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full border border-white/10 shadow-xl">
+                                <ul className="space-y-1">
+                                    {scene && playerState?.mode !== 'menu' && row('Scene', scene.name)}
+                                    {stepInfo && row('', <span className="text-slate-400 font-normal">{stepInfo}</span>)}
+                                    {/* Menu screens (title, settings…) — top of the stack is what's visible. */}
+                                    {menuNames.length > 0 && row(menuNames.length > 1 ? 'Screens' : 'Screen', menuNames.join(' → '))}
+                                    {/* Screens shown OVER gameplay (Show Screen / HUD). */}
+                                    {playerState?.mode === 'playing' && hudNames.length > 0 && row(hudNames.length > 1 ? 'Overlays' : 'Overlay', hudNames.join(' → '))}
+                                    {!scene && menuNames.length === 0 && hudNames.length === 0 && (
+                                        <li className="text-slate-400 italic">Nothing playing yet.</li>
+                                    )}
+                                </ul>
+                            </div>
+                        );
+                    })()}
                     {showVarWatcher && (() => {
                         const defs = Object.values(project.variables) as any[];
                         if (defs.length === 0) return (

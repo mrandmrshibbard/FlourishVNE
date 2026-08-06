@@ -8,9 +8,11 @@ import { VNScene } from '../../features/scene/types';
 import { VNUIScreen } from '../../features/ui/types';
 import { resolveBoolLabels } from '../../features/variables/booleanLabels';
 import VariablePicker from '../variables/VariablePicker';
+import ValueCalcEditor, { DEFAULT_CALC } from '../variables/ValueCalcEditor';
 import { FormField, Select, TextInput, RangeInput } from './Form';
 import type { ActionTargetableElement } from './UIActionsListEditor';
 import { collectTimerIds } from '../../utils/actionMeta';
+import AudioAdjustFields from './AudioAdjustFields';
 
 /**
  * THE single per-action parameter-field renderer, shared by ActionEditor (single action) and
@@ -151,13 +153,17 @@ const ActionFields: React.FC<{
                 <VariablePicker value={a.variableId || ''} onChange={v => {
                     const nv = project.variables[v];
                     let op = a.operator;
-                    if (nv?.type !== 'number' && (op === 'add' || op === 'subtract' || op === 'random')) op = 'set';
+                    if (nv?.type !== 'number' && (op === 'add' || op === 'subtract' || op === 'random' || op === 'addRandom' || op === 'subtractRandom')) op = 'set';
                     // Keep `value` concrete & type-appropriate so a boolean Set never saves an empty value
                     // (the engine reads an empty boolean Set as its default, not a real Yes/No choice).
                     let value = a.value;
                     if (nv?.type === 'boolean' && typeof value !== 'boolean') value = true;
                     else if (nv?.type !== 'boolean' && typeof value === 'boolean') value = '';
-                    set({ variableId: v, operator: op, value });
+                    // From-a-variable / calculation values are number-only — strip them on a type change.
+                    const strip = nv?.type !== 'number' && (a as any).valueSource
+                        ? { valueSource: undefined, valueVariableId: undefined, calc: undefined }
+                        : {};
+                    set({ variableId: v, operator: op, value, ...strip } as any);
                 }} />
             );
             const opSelect = sel(a.operator || 'set', v => set({ operator: v as VNSetVariableOperator }), <>
@@ -165,13 +171,47 @@ const ActionFields: React.FC<{
                 {isNum && <option value="add">{t('actionsList.addOp', 'Add')}</option>}
                 {isNum && <option value="subtract">{t('actionsList.subtract', 'Subtract')}</option>}
                 {isNum && <option value="random">{t('actionsList.random', 'Random')}</option>}
+                {isNum && <option value="addRandom">{t('actionsList.addRandom', 'Add random')}</option>}
+                {isNum && <option value="subtractRandom">{t('actionsList.subtractRandom', 'Subtract random')}</option>}
             </>);
-            const valueCtl = a.operator === 'random' && isNum ? (
-                <div className="flex gap-1 flex-1">
-                    <input type="number" value={a.randomMin ?? 0} placeholder={t('actionsList.min', 'Min')} onChange={e => set({ randomMin: Number(e.target.value) })} className={inputCls} />
-                    <input type="number" value={a.randomMax ?? 100} placeholder={t('actionsList.max', 'Max')} onChange={e => set({ randomMax: Number(e.target.value) })} className={inputCls} />
+            const isRandomOp = a.operator === 'random' || a.operator === 'addRandom' || a.operator === 'subtractRandom';
+            // Random min/max live on their OWN full-width row (see the compact return below) —
+            // sharing a flex row with the w-full operator select crushed them into unusable
+            // slivers (user report: "the boxes look like just slits").
+            const randomRangeRow = isRandomOp && isNum ? (
+                <div className="flex gap-1 mt-1">
+                    <label className="flex-1 flex items-center gap-1 text-[9px] text-slate-400 min-w-0">
+                        <span className="shrink-0">{t('actionsList.min', 'Min')}</span>
+                        <input type="number" value={a.randomMin ?? 0} onChange={e => set({ randomMin: Number(e.target.value) })} className={inputCls} style={{ minWidth: '3rem' }} />
+                    </label>
+                    <label className="flex-1 flex items-center gap-1 text-[9px] text-slate-400 min-w-0">
+                        <span className="shrink-0">{t('actionsList.max', 'Max')}</span>
+                        <input type="number" value={a.randomMax ?? 100} onChange={e => set({ randomMax: Number(e.target.value) })} className={inputCls} style={{ minWidth: '3rem' }} />
+                    </label>
                 </div>
-            ) : variable?.type === 'boolean' ? sel(a.value === false ? 'false' : 'true', v => set({ value: v === 'true' }), <>
+            ) : null;
+            // Value mode: absent fields = "a value I type" (old data, byte-identical). Number-only.
+            const valueMode: 'typed' | 'variable' | 'calc' =
+                (a as any).valueSource === 'variable' ? 'variable' : (a as any).valueSource === 'calc' ? 'calc' : 'typed';
+            const showModeSelect = isNum && !isRandomOp;
+            const setValueMode = (mode: string) => {
+                if (mode === 'typed') set({ valueSource: undefined, valueVariableId: undefined, calc: undefined } as any);
+                else if (mode === 'variable') set({ valueSource: 'variable', calc: undefined } as any);
+                else set({ valueSource: 'calc', valueVariableId: undefined, calc: (a as any).calc ?? DEFAULT_CALC } as any);
+            };
+            const modeSelect = showModeSelect ? sel(valueMode, setValueMode, <>
+                <option value="typed">{t('actionsList.valueModeTyped', 'A value I type')}</option>
+                <option value="variable">{t('actionsList.valueModeVariable', "Another variable's value")}</option>
+                <option value="calc">{t('actionsList.valueModeCalc', 'A calculation')}</option>
+            </>) : null;
+            const otherVarPicker = showModeSelect && valueMode === 'variable' ? (
+                <VariablePicker value={(a as any).valueVariableId || ''} onChange={v => set({ valueVariableId: v } as any)} allowedTypes={['number']} />
+            ) : null;
+            const calcEditor = showModeSelect && valueMode === 'calc' ? (
+                <ValueCalcEditor calc={(a as any).calc} onChange={calc => set({ calc } as any)} project={project} />
+            ) : null;
+            const valueCtl = (isRandomOp && isNum) || (showModeSelect && valueMode !== 'typed') ? null
+            : variable?.type === 'boolean' ? sel(a.value === false ? 'false' : 'true', v => set({ value: v === 'true' }), <>
                 <option value="true">{resolveBoolLabels(variable, t('actionsList.true', 'Yes'), t('actionsList.false', 'No')).yes}</option>
                 <option value="false">{resolveBoolLabels(variable, t('actionsList.true', 'Yes'), t('actionsList.false', 'No')).no}</option>
             </>) : (
@@ -182,17 +222,26 @@ const ActionFields: React.FC<{
                 return group('sky', <>
                     {field(t('actionEditor.variable', 'Variable'), varSelect)}
                     {field(t('actionEditor.operator', 'Operator'), opSelect)}
-                    {a.operator === 'random' && isNum
+                    {modeSelect && field(t('actionEditor.valueMode', 'What value?'), modeSelect)}
+                    {isRandomOp && isNum
                         ? <div className="grid grid-cols-2 gap-2">
                             <FormField label={t('actionEditor.min', 'Min')}><TextInput type="number" value={String(a.randomMin ?? 0)} onChange={e => set({ randomMin: parseFloat(e.target.value) || 0 })} /></FormField>
                             <FormField label={t('actionEditor.max', 'Max')}><TextInput type="number" value={String(a.randomMax ?? 100)} onChange={e => set({ randomMax: parseFloat(e.target.value) || 100 })} /></FormField>
                           </div>
+                        : otherVarPicker ? field(t('actionEditor.valueOtherVariable', 'Which variable?'), otherVarPicker)
+                        : calcEditor ? calcEditor
                         : field(t('actionEditor.value', 'Value'), valueCtl)}
                 </>);
             }
             return group('sky', <>
                 {varSelect}
                 <div className="flex gap-1">{opSelect}{valueCtl}</div>
+                {/* Mode select + its editors get their own full-width rows (the randomRangeRow
+                    lesson: sharing a flex row with the operator select crushes inputs to slits). */}
+                {modeSelect && <div className="mt-1">{modeSelect}</div>}
+                {otherVarPicker && <div className="mt-1">{otherVarPicker}</div>}
+                {calcEditor && <div className="mt-1">{calcEditor}</div>}
+                {randomRangeRow}
             </>);
         }
         case UIActionType.ResetVariable:
@@ -215,6 +264,7 @@ const ActionFields: React.FC<{
                     <input type="checkbox" checked={a.loop ?? false} onChange={e => set({ loop: e.target.checked })} />
                     {t('actionsList.loop', 'Loop')}
                 </label>
+                <AudioAdjustFields value={a.audioAdjust} onChange={next => set({ audioAdjust: next })} allowReverse project={project} audioId={a.audioId || null} />
             </>);
         case UIActionType.StopSound:
             return group('purple', <>
@@ -266,6 +316,7 @@ const ActionFields: React.FC<{
                     <input type="checkbox" checked={a.loop ?? true} onChange={e => set({ loop: e.target.checked })} />
                     {t('actionsList.loop', 'Loop')}
                 </label>
+                <AudioAdjustFields value={a.audioAdjust} onChange={next => set({ audioAdjust: next })} allowReverse={false} project={project} audioId={a.audioId || null} />
             </>);
         case UIActionType.StopMusic:
             return group('purple', <>

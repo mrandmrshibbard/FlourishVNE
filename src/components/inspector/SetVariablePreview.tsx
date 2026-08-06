@@ -19,14 +19,17 @@ export const SetVariablePreview: React.FC<{
     value: string | number | boolean;
     randomMin?: number;
     randomMax?: number;
-}> = ({ variable, operator, value, randomMin, randomMax }) => {
+    valueSource?: 'variable' | 'calc';
+    valueVariableId?: string;
+    calc?: import('../../types/shared').VNValueCalc;
+}> = ({ variable, operator, value, randomMin, randomMax, valueSource, valueVariableId, calc }) => {
     const { t } = useTranslation('properties');
     const { project } = useProject();
     if (!variable) return null;
 
     const text = describeSetVariable(
         project,
-        { variableId: variable.id, operator, value, randomMin, randomMax },
+        { variableId: variable.id, operator, value, randomMin, randomMax, valueSource, valueVariableId, calc },
         t as unknown as Translate,
     );
 

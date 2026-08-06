@@ -20,7 +20,7 @@ import { PHONE_GLYPHS } from '../../../features/ui/phoneIcons';
 import { PhoneReply } from '../../../features/scene/types';
 import { VNUIAction, UIActionType, VNCondition } from '../../../types/shared';
 import { PlayerState, PhoneAppId } from '../types/gameState';
-import { interpolateVariables } from '../../../utils/variableInterpolation';
+import { interpolateVariables, makeDisplayNameResolver } from '../../../utils/variableInterpolation';
 import { fontSettingsToStyle } from '../../../utils/styleUtils';
 import { phoneThreadKey, countPhoneThread } from '../command-handlers/phoneHandler';
 
@@ -161,7 +161,8 @@ export const renderContactsRoster = (ctx: PhoneAppContext): React.ReactNode => {
     ) : sortedContacts.map(c => {
         const char = project.characters[c.characterId];
         const curls = resolvePhonePortrait(c.avatar, char, assetResolver);
-        const name = c.displayName || char?.name || 'Unknown';
+        const dn = makeDisplayNameResolver(variables, project);
+        const name = dn(c.displayName || char?.name, 'Unknown');
         const status = c.statusText ? interpolateVariables(c.statusText, variables, project) : '';
         const preview = lastMessageFor(c.characterId);
         return (
@@ -260,6 +261,7 @@ const ChatApp: PhoneAppDef = {
         const bodyFont = ui.phoneFont ? fontSettingsToStyle(ui.phoneFont) : {};
         const chatAvatarSize = `${ui.phoneChatAvatarSize ?? 2.2}em`;
         const activeContactId = phone.activeContactId;
+        const dn = makeDisplayNameResolver(variables, project);
 
         // ── Threads inbox (no thread focused) — one row per conversation, newest first ──
         if (!activeContactId) {
@@ -272,7 +274,7 @@ const ChatApp: PhoneAppDef = {
             const rows = Array.from(groups.entries()).map(([key, entries]) => {
                 const contact = key ? (ui.phoneContacts || []).find(c => c.characterId === key) : undefined;
                 const char = key ? project.characters[key] : null;
-                const name = contact?.displayName || char?.name || (key ? '?' : (ui.phoneMessagesHeader || 'Messages'));
+                const name = dn(contact?.displayName || char?.name, key ? '?' : (ui.phoneMessagesHeader || 'Messages'));
                 const urls = char ? resolvePhonePortrait(contact?.avatar, char, assetResolver) : [];
                 const last = entries[entries.length - 1];
                 const preview = last.m.text ? interpolateVariables(last.m.text, variables, project) : (last.m.image ? '📷 Photo' : '');
@@ -290,7 +292,7 @@ const ChatApp: PhoneAppDef = {
                     && (!e.conditions?.length || evaluateConditions(e.conditions, variables)));
                 if (!available) return;
                 const char = project.characters[c.characterId];
-                rows.push({ key: c.characterId, name: c.displayName || char?.name || '?', urls: char ? resolvePhonePortrait(c.avatar, char, assetResolver) : [], preview: ui.phoneMessagesNewHint || 'New conversation', unread: 1, recency: Number.MAX_SAFE_INTEGER });
+                rows.push({ key: c.characterId, name: dn(c.displayName || char?.name, '?'), urls: char ? resolvePhonePortrait(c.avatar, char, assetResolver) : [], preview: ui.phoneMessagesNewHint || 'New conversation', unread: 1, recency: Number.MAX_SAFE_INTEGER });
             });
             rows.sort((a, b) => b.recency - a.recency);
             return (
@@ -319,8 +321,8 @@ const ChatApp: PhoneAppDef = {
         const threadKey = activeContactId === '__misc__' ? '' : activeContactId;
         const threadMessages = phone.messages.filter(m => phoneThreadKey(m) === threadKey);
         const activeContact = (ui.phoneContacts || []).find(c => c.characterId === activeContactId);
-        const activeContactName = activeContact?.displayName || project.characters[activeContactId]?.name
-            || (activeContactId === '__misc__' ? (ui.phoneMessagesHeader || 'Messages') : '');
+        const activeContactName = dn(activeContact?.displayName || project.characters[activeContactId]?.name,
+            activeContactId === '__misc__' ? (ui.phoneMessagesHeader || 'Messages') : '');
         return (
             <>
                 {activeContactId && (
@@ -337,7 +339,7 @@ const ChatApp: PhoneAppDef = {
                         <div key={m.id} style={{ display: 'flex', flexDirection: mine ? 'row-reverse' : 'row', gap: 6, alignItems: 'flex-end' }}>
                             {ui.phoneShowAvatars !== false && !mine && <PhonePortrait urls={portraitUrls} size={chatAvatarSize} fit={ui.phoneChatAvatarFit} />}
                             <div style={{ maxWidth: '76%' }}>
-                                {!mine && char?.name && <div style={{ fontSize: '0.7em', opacity: 0.75, marginBottom: 1, color: char.color }}>{char.name}</div>}
+                                {!mine && char?.name && <div style={{ fontSize: '0.7em', opacity: 0.75, marginBottom: 1, color: char.color }}>{dn(char.name, '')}</div>}
                                 {/* Attached photo/video (tap = fullscreen). Text may be empty on photo-only messages. */}
                                 {m.image && <PhoneMedia media={m.image} assetResolver={assetResolver} caption={m.text ? interpolateVariables(m.text, variables, project) : undefined} style={{ borderRadius: 14, marginBottom: m.text ? 3 : 0, aspectRatio: '4 / 3' }} />}
                                 {m.text && <div style={{ padding: '6px 10px', borderRadius: 14, wordBreak: 'break-word', background: mine ? (ui.phoneOutgoingBubbleColor || '#2f6bff') : (ui.phoneIncomingBubbleColor || '#2a2f3a'), color: ui.phoneBubbleTextColor || '#fff' }}>
@@ -380,6 +382,7 @@ const HistoryApp: PhoneAppDef = {
     id: 'history', glyph: 'call', defaultLabel: 'Recents',
     render: (ctx) => {
         const { ui, project, phone, assetResolver, variables, playTap, onAction } = ctx;
+        const dn = makeDisplayNameResolver(variables, project);
         const notifs = [...(phone.notifications || [])].reverse();
         return (
             <>
@@ -399,7 +402,7 @@ const HistoryApp: PhoneAppDef = {
                                         : eIconImg ? <img src={eIconImg} alt="" style={{ width: '2em', height: '2em', objectFit: 'contain', flexShrink: 0 }} />
                                         : <span style={{ fontSize: '1.3em', flexShrink: 0 }}>{(e.icon && PHONE_GLYPHS[e.icon]) || '🔔'}</span>}
                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                        {(e.title || echar?.name) && <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: e.read ? 400 : 700 }}>{e.title || echar?.name}</div>}
+                                        {(e.title || echar?.name) && <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: e.read ? 400 : 700 }}>{dn(e.title || echar?.name, '')}</div>}
                                         <div style={{ fontSize: '0.7em', opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{interpolateVariables(e.text, variables, project)}</div>
                                     </div>
                                     {!e.read && <span style={{ width: 8, height: 8, borderRadius: 9999, background: ui.phoneBadgeColor || '#ef4444', flexShrink: 0 }} />}
@@ -418,7 +421,7 @@ const HistoryApp: PhoneAppDef = {
                         <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 10, background: ui.phoneHistoryRowColor || 'rgba(255,255,255,0.05)', color: ui.phoneHistoryTextColor || '#fff' }}>
                             <PhonePortrait urls={purls} size="2em" />
                             <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{caller?.name || 'Unknown'}</div>
+                                <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dn(caller?.name, 'Unknown')}</div>
                                 <div style={{ fontSize: '0.7em', opacity: 0.8, color: tint }}>{entry.direction === 'outgoing' ? '↗' : icon} {entry.status}{entry.durationMs ? ` · ${fmtCallTime(entry.durationMs)}` : ''}</div>
                             </div>
                         </div>
@@ -446,7 +449,7 @@ const CallApp: PhoneAppDef = {
         if (!ac) return <div style={{ opacity: 0.5, textAlign: 'center', marginTop: 12, fontSize: '0.8em' }}>No active call</div>;
         const char = ac.contactId === 'player' ? null : project.characters[ac.contactId];
         const contact = ac.contactId === 'player' ? undefined : (ui.phoneContacts || []).find(c => c.characterId === ac.contactId);
-        const name = contact?.displayName || char?.name || 'Unknown';
+        const name = makeDisplayNameResolver(variables, project)(contact?.displayName || char?.name, 'Unknown');
         const purls = resolvePhonePortrait(ac.portrait || contact?.avatar, char, assetResolver);
         const bodyFont = ui.phoneFont ? fontSettingsToStyle(ui.phoneFont) : {};
         const endBtn = (label?: string) => (

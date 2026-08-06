@@ -58,6 +58,10 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
             const command = { type, characterId: firstCharId || '', transition: 'fade', duration: 0.3 };
             return command;
         }
+        case CommandType.PlayCharacterAnimation: {
+            const command = { type, characterId: firstCharId || '', animationId: null };
+            return command;
+        }
         case CommandType.Choice: {
             const command = {
                 type,

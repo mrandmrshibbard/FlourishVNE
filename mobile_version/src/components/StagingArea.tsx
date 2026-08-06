@@ -64,10 +64,41 @@ const ResizeHandle: React.FC<{ onMouseDown: (e: React.MouseEvent) => void; title
 };
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
-import { combineConditions } from '../utils/conditionLogic';
+import { combineConditions, resolveConditionValue } from '../utils/conditionLogic';
+import { stripDialogueTextCodes } from './live-preview/dialogueTextCodes';
+import { normalizeSetVariableOperatorByType, calculateVariableValue, resolveSetVariableValue } from '../utils/variableUtils';
 import { VNFontSettings } from '../features/ui/types';
 import { VNCharacterLayer } from '../features/character/types';
 import { assetArtForPose, characterBaseArtForPose, resolvePoseId } from '../features/character/poseArt';
+import { layerBoxStyle, layerOrderForPose, poseHiddenLayerIds, resolveLayerBox, normalizeLayerBox } from '../features/character/layout';
+import type { VNLayerBox } from '../features/character/types';
+
+/** Shared canvas composite builder (mirrors the runtime's buildCharacterMedia, images only):
+ *  base first, then each layer in POSE ORDER, skipping pose-hidden layers, with the piece's
+ *  Pose Studio box parallel to each url. `imageBoxes` is omitted entirely when nothing is
+ *  boxed so legacy previews stay pixel-identical. */
+const buildStagingComposite = (
+    cData: any,
+    sel: Record<string, string | null>,
+    poseId?: string,
+): { imageUrls: string[]; imageBoxes?: Array<VNLayerBox | null> } => {
+    const imageUrls: string[] = [];
+    const imageBoxes: Array<VNLayerBox | null> = [];
+    const base = characterBaseArtForPose(cData, poseId);
+    if (base.imageUrl) { imageUrls.push(base.imageUrl); imageBoxes.push(null); }
+    const hidden = poseHiddenLayerIds(cData, poseId);
+    layerOrderForPose(cData, poseId).forEach((layer: VNCharacterLayer) => {
+        if (hidden.has(layer.id)) return;
+        const aId = sel[layer.id];
+        const asset = aId ? layer.assets[aId] : null;
+        const art = asset ? assetArtForPose(asset, poseId) : null;
+        if (art?.imageUrl) {
+            imageUrls.push(art.imageUrl);
+            imageBoxes.push(asset ? (normalizeLayerBox(resolveLayerBox(layer, asset, poseId)) ?? null) : null);
+        }
+    });
+    return { imageUrls, ...(imageBoxes.some(Boolean) ? { imageBoxes } : {}) };
+};
 import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { compareBand, isBandOperator, formatBandedValue, resolveBand } from '../features/variables/bands';
 import { EyeIcon, EyeSlashIcon, FilmIcon, VariablesIcon } from './icons';
@@ -77,7 +108,7 @@ import CanvasEdgeFrame from './ui/CanvasEdgeFrame';
 import TrimmedVideo from './ui/TrimmedVideo';
 import { canvasPointPick, useCanvasPointPick } from '../utils/canvasPointPick';
 import { useCommandRadial } from './inspector/CommandRadialContext';
-import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform } from '../utils/styleUtils';
+import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform, cssFontFamily } from '../utils/styleUtils';
 import { GradientText } from './ui/GradientText';
 
 /** Convert hex color + opacity (0-100) to rgba string */
@@ -114,7 +145,7 @@ function buildImageBackgroundStyle(url: string, sizeMode: string, slicePx?: numb
             return { backgroundImage: `url(${url})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
     }
 }
-import { interpolateVariables } from '../utils/variableInterpolation';
+import { interpolateVariables, resolveCharacterDisplayName } from '../utils/variableInterpolation';
 
 interface TextOverlay {
     id: VNID;
@@ -367,17 +398,26 @@ const StagingArea: React.FC<{
                 if (isBandOperator(condition.operator)) {
                     return compareBand(projectVar, effectiveVarValue, String(condition.value), condition.operator);
                 }
+                // Compare-to-variable: the other side may be another variable's current value
+                // (same missing→default fallback as the checked variable); dangling → literal.
+                const cmpValue = condition.compareVariableId !== undefined
+                    ? resolveConditionValue(condition, {
+                        [condition.compareVariableId]:
+                            currentVariables[condition.compareVariableId]
+                            ?? project.variables[condition.compareVariableId]?.defaultValue,
+                    })
+                    : condition.value;
                 switch (condition.operator) {
                     case 'is true': return !!effectiveVarValue;
                     case 'is false': return !effectiveVarValue;
-                    case '==': return String(effectiveVarValue).toLowerCase() == String(condition.value).toLowerCase();
-                    case '!=': return String(effectiveVarValue).toLowerCase() != String(condition.value).toLowerCase();
-                    case '>': return Number(effectiveVarValue) > Number(condition.value);
-                    case '<': return Number(effectiveVarValue) < Number(condition.value);
-                    case '>=': return Number(effectiveVarValue) >= Number(condition.value);
-                    case '<=': return Number(effectiveVarValue) <= Number(condition.value);
-                    case 'contains': return String(effectiveVarValue).toLowerCase().includes(String(condition.value).toLowerCase());
-                    case 'startsWith': return String(effectiveVarValue).toLowerCase().startsWith(String(condition.value).toLowerCase());
+                    case '==': return String(effectiveVarValue).toLowerCase() == String(cmpValue).toLowerCase();
+                    case '!=': return String(effectiveVarValue).toLowerCase() != String(cmpValue).toLowerCase();
+                    case '>': return Number(effectiveVarValue) > Number(cmpValue);
+                    case '<': return Number(effectiveVarValue) < Number(cmpValue);
+                    case '>=': return Number(effectiveVarValue) >= Number(cmpValue);
+                    case '<=': return Number(effectiveVarValue) <= Number(cmpValue);
+                    case 'contains': return String(effectiveVarValue).toLowerCase().includes(String(cmpValue).toLowerCase());
+                    case 'startsWith': return String(effectiveVarValue).toLowerCase().startsWith(String(cmpValue).toLowerCase());
                     default: return false;
                 }
             });
@@ -467,24 +507,16 @@ const StagingArea: React.FC<{
                             else if ((prevChar as any)?.layerSelections && Object.prototype.hasOwnProperty.call((prevChar as any).layerSelections, layer.id)) sel[layer.id] = (prevChar as any).layerSelections[layer.id];
                             else sel[layer.id] = null;
                         });
-                        // Pose-aware art (mirrors the runtime): same asset ids, per-pose pictures.
+                        // Pose-aware art + Pose Studio layout (mirrors the runtime).
                         const showPoseId = resolvePoseId(charData, command.poseId);
-                        const imageUrls: string[] = [];
-                        const showBase = characterBaseArtForPose(charData, showPoseId);
-                        if (showBase.imageUrl) imageUrls.push(showBase.imageUrl);
-                        Object.values(charData.layers).forEach((layer: VNCharacterLayer) => {
-                            const assetId = sel[layer.id];
-                            const asset = assetId ? layer.assets[assetId] : null;
-                            const art = asset ? assetArtForPose(asset, showPoseId) : null;
-                            if (art?.imageUrl) imageUrls.push(art.imageUrl);
-                        });
+                        const { imageUrls, imageBoxes } = buildStagingComposite(charData, sel, showPoseId);
                         // "Keep current position": if the character is already on stage and the command
                         // opts in, preview it at its existing position (mirrors the runtime handler) so the
                         // author sees an expression change stay put instead of snapping to center.
                         const keptPosition = command.keepPosition && characters[command.characterId]
                             ? characters[command.characterId].position
                             : command.position;
-                        characters[command.characterId] = { charId: command.characterId, layer: command.layer, position: keptPosition, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY, contentBox: command.contentBox, layerSelections: sel, ...(showPoseId ? { poseId: showPoseId } : {}) } as any;
+                        characters[command.characterId] = { charId: command.characterId, layer: command.layer, position: keptPosition, imageUrls, ...(imageBoxes ? { imageBoxes } : {}), transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY, contentBox: command.contentBox, layerSelections: sel, ...(showPoseId ? { poseId: showPoseId } : {}) } as any;
                     }
                     break;
                 case CommandType.HideCharacter:
@@ -518,16 +550,8 @@ const StagingArea: React.FC<{
                         (command.layers || []).forEach(({ layerId, assetId }) => { sel[layerId] = assetId || null; });
                         // Rebuild in the character's CURRENT pose (mirrors the runtime handler).
                         const curPoseId = resolvePoseId(cData, (cur as any).poseId);
-                        const imageUrls: string[] = [];
-                        const layerBase = characterBaseArtForPose(cData, curPoseId);
-                        if (layerBase.imageUrl) imageUrls.push(layerBase.imageUrl);
-                        Object.values(cData.layers).forEach((layer: VNCharacterLayer) => {
-                            const aId = sel[layer.id];
-                            const asset = aId ? layer.assets[aId] : null;
-                            const art = asset ? assetArtForPose(asset, curPoseId) : null;
-                            if (art?.imageUrl) imageUrls.push(art.imageUrl);
-                        });
-                        characters[command.characterId] = { ...cur, imageUrls, layerSelections: sel };
+                        const { imageUrls, imageBoxes } = buildStagingComposite(cData, sel, curPoseId);
+                        characters[command.characterId] = { ...cur, imageUrls, imageBoxes, layerSelections: sel } as any;
                     }
                     break;
                 }
@@ -538,16 +562,8 @@ const StagingArea: React.FC<{
                     if (cur && cData) {
                         const newPoseId = resolvePoseId(cData, (command as any).poseId);
                         const sel: Record<string, string | null> = { ...((cur as any).layerSelections || {}) };
-                        const imageUrls: string[] = [];
-                        const poseBase = characterBaseArtForPose(cData, newPoseId);
-                        if (poseBase.imageUrl) imageUrls.push(poseBase.imageUrl);
-                        Object.values(cData.layers).forEach((layer: VNCharacterLayer) => {
-                            const aId = sel[layer.id];
-                            const asset = aId ? layer.assets[aId] : null;
-                            const art = asset ? assetArtForPose(asset, newPoseId) : null;
-                            if (art?.imageUrl) imageUrls.push(art.imageUrl);
-                        });
-                        characters[command.characterId] = { ...cur, imageUrls, ...(newPoseId ? { poseId: newPoseId } : { poseId: undefined }) } as any;
+                        const { imageUrls, imageBoxes } = buildStagingComposite(cData, sel, newPoseId);
+                        characters[command.characterId] = { ...cur, imageUrls, imageBoxes, ...(newPoseId ? { poseId: newPoseId } : { poseId: undefined }) } as any;
                     }
                     break;
                 }
@@ -555,17 +571,26 @@ const StagingArea: React.FC<{
                     const variable = project.variables[command.variableId];
                     if (variable) {
                         const currentVal = currentVariables[command.variableId];
-                        let newVal: string | number | boolean = command.value;
-                        if (command.operator === 'add') {
-                            newVal = (Number(currentVal) || 0) + (Number(command.value) || 0);
-                        } else if (command.operator === 'subtract') {
-                            newVal = (Number(currentVal) || 0) - (Number(command.value) || 0);
+                        const isRandomOp = command.operator === 'random' || command.operator === 'addRandom' || command.operator === 'subtractRandom';
+                        let newVal: string | number | boolean;
+                        if (isRandomOp) {
+                            // Stage preview is a deterministic walk — rolling here would make the
+                            // preview flicker to a new number on every recompute. Keep the old
+                            // behavior for random ops (the typed value, coerced).
+                            newVal = variable.type === 'number' ? Number(command.value) || 0
+                                : variable.type === 'boolean' ? String(command.value).toLowerCase() === 'true'
+                                : String(command.value);
                         } else {
-                            switch (variable.type) {
-                                case 'number': newVal = Number(command.value) || 0; break;
-                                case 'boolean': newVal = String(command.value).toLowerCase() === 'true'; break;
-                                default: newVal = String(command.value);
-                            }
+                            // Shared engine math (was a hand-rolled duplicate that lacked clamping
+                            // and would have diverged on from-a-variable / calculation values).
+                            const { effectiveOperator, wasCoerced } = normalizeSetVariableOperatorByType(variable.type, variable.name, command.operator);
+                            const changeValue = resolveSetVariableValue(command, currentVariables);
+                            newVal = calculateVariableValue(
+                                effectiveOperator, variable.type, currentVal, changeValue,
+                                command.randomMin, command.randomMax,
+                                wasCoerced ? command.operator : undefined,
+                                (variable as any).min, (variable as any).max
+                            );
                         }
                         currentVariables[command.variableId] = newVal;
                     }
@@ -576,7 +601,7 @@ const StagingArea: React.FC<{
                 case CommandType.ShowText:
                     textOverlays.push({
                         id: command.id, layer: command.layer, text: command.text, x: command.x, y: command.y,
-                        fontSize: command.fontSize, fontFamily: command.fontFamily, color: command.color,
+                        fontSize: command.fontSize, fontFamily: cssFontFamily(command.fontFamily), color: command.color,
                         width: command.width, height: command.height, textAlign: command.textAlign, verticalAlign: command.verticalAlign,
                         fontWeight: command.fontWeight, fontStyle: command.fontStyle, letterSpacing: command.letterSpacing,
                         textShadow: command.textShadow, textGradient: command.textGradient, textBorder: command.textBorder,
@@ -706,7 +731,10 @@ const StagingArea: React.FC<{
             switch (currentCommand.type) {
                 case CommandType.Dialogue:
                     const char = currentCommand.characterId ? project.characters[currentCommand.characterId] : null;
-                    dialogue = { characterName: char?.name || 'Narrator', characterColor: char?.color || '#FFFFFF', characterId: currentCommand.characterId || null, text: currentCommand.text };
+                    // {Variable} names preview resolved, same variables view the text preview uses.
+                    // Editor stage preview is static: strip [pause] codes; prefix appended parts
+                    // with "…" so the author sees it continues the previous line.
+                    dialogue = { characterName: resolveCharacterDisplayName(char?.name, currentVariables, project) || 'Narrator', characterColor: char?.color || '#FFFFFF', characterId: currentCommand.characterId || null, text: `${(currentCommand as any).append ? '… ' : ''}${stripDialogueTextCodes(currentCommand.text)}` };
                     break;
                 case CommandType.Choice:
                     choices = currentCommand.options.filter(opt => evaluateConditions(opt.conditions, currentVariables));
@@ -1481,7 +1509,8 @@ const StagingArea: React.FC<{
 
     const renderDialogueBox = (dialogue: NonNullable<StageState['dialogue']>) => {
         const interpolatedText = interpolateVariables(dialogue.text, currentVariables, project);
-        const showNamebox = dialogue.characterName !== 'Narrator';
+        // Empty resolved names hide the box too — mirrors the runtime rule.
+        const showNamebox = !!dialogue.characterName?.trim() && dialogue.characterName !== 'Narrator';
         const nameStyle: React.CSSProperties = {
             ...fontSettingsToStyle(project.ui.dialogueNameFont),
             ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})
@@ -1491,7 +1520,7 @@ const StagingArea: React.FC<{
         const character = dialogue.characterId ? project.characters[dialogue.characterId] : null;
         const dialogueTextStyle: React.CSSProperties = {
             ...fontSettingsToStyle(project.ui.dialogueTextFont),
-            ...(character?.fontFamily ? { fontFamily: character.fontFamily } : {}),
+            ...(character?.fontFamily ? { fontFamily: cssFontFamily(character.fontFamily) } : {}),
             ...(character?.fontSize ? { fontSize: s(character.fontSize) } : {}),
             ...(character?.fontWeight ? { fontWeight: character.fontWeight } : {}),
             ...(character?.fontItalic ? { fontStyle: 'italic' } : {}),
@@ -2019,13 +2048,15 @@ const StagingArea: React.FC<{
                             onMouseDown={char.sourceCommandId ? (e) => handleCharMouseDown(e, char) : undefined}
                             onContextMenu={(commandRadial && char.sourceCommandId) ? (e) => { e.preventDefault(); commandRadial.openById(char.sourceCommandId!, e.clientX, e.clientY); } : undefined}
                         >
-                            {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: index, filter: dnCharFilter || undefined }} />)}
-                            {/* Day/night sprite tint preview — true color overlay masked to each layer. */}
+                            {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: index, filter: dnCharFilter || undefined, ...layerBoxStyle((char as any).imageBoxes?.[index]) }} />)}
+                            {/* Day/night sprite tint preview — true color overlay masked to each layer.
+                                Pose Studio geometry rides on each copy so the tint hugs the boxed piece. */}
                             {dnSpriteTint && char.imageUrls.map((url, index) => (
                                 <div key={`dn-tint-${index}`} aria-hidden className="absolute inset-0" style={{
                                     zIndex: index, backgroundColor: dnSpriteTint.color, opacity: dnSpriteTint.opacity, mixBlendMode: 'multiply', pointerEvents: 'none',
                                     WebkitMaskImage: `url("${url}")`, maskImage: `url("${url}")`,
                                     WebkitMaskSize: 'contain', maskSize: 'contain', WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskPosition: 'center',
+                                    ...layerBoxStyle((char as any).imageBoxes?.[index]),
                                 }} />
                             ))}
                             {/* Resize handles — grab ANY corner to scale the sprite uniformly. Placed at the

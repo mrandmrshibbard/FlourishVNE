@@ -6,6 +6,7 @@ import { MiniGameRenderCtx, FeedbackPos } from './types';
 import { resolveMiniGameDef } from './registry';
 import { interpolateVariables } from '../../../utils/variableInterpolation';
 import { resolveFieldUrl } from '../../../utils/assetStore';
+import { cssFontFamily } from '../../../utils/styleUtils';
 
 /** Compose a project character's sprite for a given expression → stacked image URLs
  *  (base image, then each configured layer asset). Used by the reacting-character overlay. */
@@ -50,7 +51,7 @@ const MessageBody: React.FC<{
             {cfg.text && (
                 <div style={{
                     fontSize: (cfg.fontSize ?? 48) * scale,
-                    fontFamily: cfg.fontFamily || undefined,
+                    fontFamily: cssFontFamily(cfg.fontFamily) || undefined,
                     color: cfg.color || '#ffffff',
                     fontWeight: cfg.bold === false ? 'normal' : 'bold',
                     fontStyle: cfg.italic ? 'italic' : 'normal',
@@ -345,7 +346,7 @@ const MiniGameFrame: React.FC<{
     return (
         // game.fontFamily cascades to ALL mini-game text (title/instructions/labels/keycaps/cutscene/
         // Skip/pips…); per-message fonts still override via MessageBody. Absent = inherit app default.
-        <div style={{ position: 'absolute', inset: 0, background: game.backgroundColor || 'rgba(0,0,0,0.75)', display: 'flex', flexDirection: 'column', userSelect: 'none', fontFamily: game.fontFamily || undefined }}>
+        <div style={{ position: 'absolute', inset: 0, background: game.backgroundColor || 'rgba(0,0,0,0.75)', display: 'flex', flexDirection: 'column', userSelect: 'none', fontFamily: cssFontFamily(game.fontFamily) || undefined }}>
             {bgUrl && <img src={bgUrl} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />}
 
             {/* Header: title / instructions / step counter */}

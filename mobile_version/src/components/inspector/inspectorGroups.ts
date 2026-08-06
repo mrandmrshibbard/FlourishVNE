@@ -92,6 +92,9 @@ export function getCommandGroups(command: VNCommand | null | undefined): Inspect
         case CommandType.SetCharacterPose:
             // character + the pose to switch to; optional transition.
             return order(['content', 'animation', 'conditions']);
+        case CommandType.PlayCharacterAnimation:
+            // character + which animation to start (or stop).
+            return order(['content', 'conditions']);
         case CommandType.HideCharacter:
         case CommandType.HideText:
         case CommandType.HideImage:

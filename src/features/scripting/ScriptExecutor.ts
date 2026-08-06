@@ -9,6 +9,7 @@
 import { VNProject } from '../../types/project';
 import { VNScript, ScriptAPI, ScriptExecutionResult, ScriptValidationResult, ScriptValidationError } from '../../types/scripting';
 import { VNID } from '../../types';
+import { resolveCharacterDisplayName } from '../../utils/variableInterpolation';
 
 /**
  * Runtime context passed to the executor so scripts
@@ -74,11 +75,15 @@ export async function executeScript(
 
     // Resolve a character / expression / asset by id or (case-insensitive) name. Used by the
     // presentation API so scripts can reference things by their friendly names.
+    // Names may hold {Variable} tokens: match the RAW stored name first, then the
+    // currently-RESOLVED name — character("Yuki") works either way.
     const resolveCharacterId = (nameOrId: string): VNID | undefined => {
         const chars = (context.project.characters || {}) as Record<string, any>;
         if (chars[nameOrId]) return nameOrId;
         const lower = nameOrId.toLowerCase();
-        const found = Object.entries(chars).find(([, c]) => c?.name?.toLowerCase() === lower);
+        const found = Object.entries(chars).find(([, c]) => c?.name?.toLowerCase() === lower)
+            ?? Object.entries(chars).find(([, c]) =>
+                resolveCharacterDisplayName(c?.name, context.variables, context.project).toLowerCase() === lower);
         return found?.[0];
     };
     const resolveExpressionId = (charId: VNID, nameOrId: string): VNID | undefined => {

@@ -6,7 +6,7 @@
 import { GiveItemCommand, UseItemCommand, DestroyItemCommand, RestockCollectionCommand, BuyItemCommand, SellItemCommand, CommandType } from '../../../features/scene/types';
 import { UIActionType } from '../../../types/shared';
 import { CommandContext, CommandResult } from './types';
-import { normalizeSetVariableOperatorByType, calculateVariableValue } from '../../../utils/variableUtils';
+import { normalizeSetVariableOperatorByType, calculateVariableValue, resolveSetVariableValue } from '../../../utils/variableUtils';
 import { computeCollectionRestock } from '../../../features/items/restock';
 import { computeBuy, computeSell } from '../../../features/items/trade';
 
@@ -42,7 +42,9 @@ export const handleItemCommand = (command: ItemCommand, context: CommandContext)
                 const ev = project.variables[ea.variableId];
                 if (!ev) continue;
                 const { effectiveOperator } = normalizeSetVariableOperatorByType(ev.type, ev.name, ea.operator);
-                vars[ea.variableId] = calculateVariableValue(effectiveOperator, ev.type, vars[ea.variableId], ea.value, ea.randomMin, ea.randomMax, undefined, ev.min, ev.max);
+                // Reads the local clone so sequential use-effects see each other's writes.
+                const changeValue = resolveSetVariableValue(ea, vars);
+                vars[ea.variableId] = calculateVariableValue(effectiveOperator, ev.type, vars[ea.variableId], changeValue, ea.randomMin, ea.randomMax, undefined, ev.min, ev.max);
             } else if (eff.type === UIActionType.ResetVariable) {
                 const ev = project.variables[(eff as any).variableId];
                 if (ev) vars[(eff as any).variableId] = ev.defaultValue;

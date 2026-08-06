@@ -84,6 +84,37 @@ export interface CGGalleryConfig {
     viewerBackgroundColor?: string;
 }
 
+/** One song in the Music Gallery. */
+export interface MusicGalleryEntry {
+    id: VNID;
+    /** Song title shown to players */
+    name: string;
+    /** The music file (ref into project.audio) */
+    audioId: VNID | null;
+    /** Cover art shown while the song plays (ref into project.images or project.backgrounds).
+     *  MUST stay an asset ID (never a raw URL) — export/build pipelines pack the asset
+     *  libraries wholesale, so ID refs ride along for free. */
+    artworkAssetId?: VNID | null;
+    /** Optional "By …" line under the title */
+    artist?: string;
+    /** Whether this song must be unlocked before players can play it */
+    unlockable: boolean;
+    /** Boolean variable that tracks unlock status (true = unlocked). Required if unlockable=true */
+    unlockVariableId?: VNID | null;
+    /** Category/group for filtering (e.g. "Chapter 1", "Battle themes") */
+    category?: string;
+    /** Sort order within the list */
+    order?: number;
+}
+
+/** Music Gallery configuration for the project. Additive-optional — absent = feature unused. */
+export interface MusicGalleryConfig {
+    /** All songs */
+    entries: Record<VNID, MusicGalleryEntry>;
+    /** Cover art stand-in for songs without their own (asset ID ref, same packing rule as above) */
+    defaultArtworkAssetId?: VNID | null;
+}
+
 /** One touchable location on a map (the phone Map app + the Show Map command). */
 export interface VNMapLocation {
     id: VNID;
@@ -216,6 +247,8 @@ export interface VNProject {
     };
     /** CG Gallery configuration for unlockable art gallery */
     cgGallery?: CGGalleryConfig;
+    /** Music Gallery configuration for unlockable songs (the Music Gallery element plays these) */
+    musicGallery?: MusicGalleryConfig;
     /** Story Flow Map layout (hand-placed node positions). EDITOR-ONLY — the game engine never reads
      *  it. Additive-optional: absent = every node auto-laid-out. */
     flowMap?: VNFlowMapLayout;
@@ -264,4 +297,14 @@ export interface VNProject {
     autoArrangeCharacters?: boolean;
     /** Day/night cycle: a time-of-day value drives a color grade over background + sprites. Additive-optional. */
     dayNightCycle?: VNDayNightCycle;
+    /** Build-time options chosen in the Build Game screen. Additive-optional — absent means all defaults. */
+    buildOptions?: VNBuildOptions;
+}
+
+/** Options for game builds (web/desktop/android). All fields optional so old projects are untouched. */
+export interface VNBuildOptions {
+    /** Web builds: show a floating fullscreen toggle button over the game. */
+    webFullscreenButton?: boolean;
+    /** Which corner the fullscreen button sits in. Default 'top-right'. */
+    webFullscreenCorner?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 }

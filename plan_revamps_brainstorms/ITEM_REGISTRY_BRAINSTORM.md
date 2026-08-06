@@ -25,7 +25,7 @@ variables + scattered conditions.
 | Reason | What it fixes today |
 |---|---|
 | **Single source of truth** | An item like `key` lives as a magic string in a variable, a condition, and an image-map region — three places, easy to typo/desync. Define it once. |
-| **Kills the "one element per item" explosion** | Inventory currently needs a hand-placed image map + region + visibility condition *per item*. A data-driven grid renders the whole inventory from the registry (how `CGGalleryGridElement` already renders the CG gallery). |
+| **Kills the "one element per item" explosion** | Inventory currently needs a hand-placed Interactive Image + region + visibility condition *per item*. A data-driven grid renders the whole inventory from the registry (how `CGGalleryGridElement` already renders the CG gallery). |
 | **Quantities / stacking** | Variables model "have key" (boolean) clumsily and "3 potions" painfully. A registry holds counts natively. |
 | **Richer metadata** | Name, description, icon, category, rarity, value, tags, "consumable?" — none of which a bare string carries. Enables tooltips, detail panels, sorting. |
 | **Safer logic** | "Has item" / "item qty ≥ N" become first-class conditions instead of fragile string-matching that silently breaks. |

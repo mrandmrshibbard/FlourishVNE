@@ -33,7 +33,7 @@ features have clean injection points.
 
 ### Data model (additive-optional)
 - Add `layer?: number` to every scene visual command (`ShowImage`, `ShowCharacter`,
-  `ShowText`, `ShowButton`, `PlayMovie`, hot spots, image maps) and to `BaseUIElement`
+  `ShowText`, `ShowButton`, `PlayMovie`, hot spots, Interactive Images) and to `BaseUIElement`
   (`features/ui/types.ts`). Higher = nearer the viewer.
 - `undefined` ⇒ fall back to today's behavior. **No migration needed.**
 

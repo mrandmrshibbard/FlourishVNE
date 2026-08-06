@@ -37,6 +37,16 @@
     "remove": "Remover",
     "hint": "Recomendado: PNG 256×256"
   },
+  "webOptions": {
+    "title": "Opções para web",
+    "fullscreenLabel": "Adicionar um botão de tela cheia",
+    "fullscreenHint": "Mostra um pequeno botão sobre o jogo que permite aos jogadores preencher a tela inteira — ótimo para o itch.io, onde jogos no navegador podem parecer pequenos.",
+    "fullscreenCorner": "Canto do botão",
+    "cornerTopRight": "Canto superior direito",
+    "cornerTopLeft": "Canto superior esquerdo",
+    "cornerBottomRight": "Canto inferior direito",
+    "cornerBottomLeft": "Canto inferior esquerdo"
+  },
   "formatPicker": {
     "title": "Formato de Compilação",
     "standaloneName": "📦 Autônomo .exe",

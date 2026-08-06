@@ -81,7 +81,7 @@ export const HotSpotOverlay: React.FC<{
 };
 
 /** Internal helper: map a unified `VNUIElement` (image / button / text /
- *  text-input / image map / draggable image) into the legacy
+ *  text-input / Interactive Image / draggable image) into the legacy
  *  `VNHotZoneElement` shape that InteractiveElementOverlay's body renders.
  *  Kept private to this module so the component has a typed external API. */
 function toLegacyHotZoneElement(el: VNUIElement, items?: Record<string, any>): VNHotZoneElement | null {
@@ -324,7 +324,7 @@ export const PolyRegionOverlay: React.FC<{
 };
 
 /** Renders an interactive hot zone element (image / button / text / video /
- *  text input / image map / draggable) on the canvas. Takes a unified
+ *  text input / Interactive Image / draggable) on the canvas. Takes a unified
  *  `VNUIElement` and converts to the legacy `VNHotZoneElement` layout
  *  internally so the existing per-type JSX can render unchanged. */
 export const InteractiveElementOverlay: React.FC<{

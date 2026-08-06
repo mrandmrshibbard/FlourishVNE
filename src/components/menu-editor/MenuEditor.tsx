@@ -6,7 +6,7 @@ import { useProject } from '../../contexts/ProjectContext';
 import { useToast } from '../../contexts/ToastContext';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
-import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UICustomElement } from '../../features/ui/types';
+import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIMusicGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UICustomElement } from '../../features/ui/types';
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import { UIActionType } from '../../types/shared';
 import { resolveBand } from '../../features/variables/bands';
@@ -19,13 +19,17 @@ import { computeAlphaBounds } from '../../utils/alphaBounds';
 import { createUIElement, createCustomUIElement } from '../../utils/uiElementFactory';
 import { pluginManager } from '../../features/plugins/PluginManagerService';
 import { useExtensionUIElementTypes } from '../ExtensionPanelsHost';
-import { fontSettingsToStyle, extractTextGradientStyle } from '../../utils/styleUtils';
+import { fontSettingsToStyle, extractTextGradientStyle, buildOrientationTransform, cssFontFamily } from '../../utils/styleUtils';
 import { isSlotDesignActive, slotPartVisible, formatSlotText, SAMPLE_SLOT_SAVE, SAMPLE_SLOT_SCREENSHOT } from '../../utils/slotDesign';
 import { assetArtForPose, characterBaseArtForPose, resolvePoseId } from '../../features/character/poseArt';
+import { layerBoxStyle, layerOrderForPose, poseHiddenLayerIds, resolveLayerBox, normalizeLayerBox } from '../../features/character/layout';
+import type { VNLayerBox } from '../../features/character/types';
 import { GradientText } from '../ui/GradientText';
 import { PlusIcon, SparklesIcon } from '../icons';
 import CharacterCreatorWizard, { UnifiedWizardResult } from './CharacterCreatorWizard';
 import CGGalleryWizard, { CGGalleryGeneratedConfig } from './CGGalleryWizard';
+import MusicGalleryWizard, { MusicGalleryGeneratedConfig } from './MusicGalleryWizard';
+import MusicGalleryPreview from './MusicGalleryPreview';
 import SystemWizard from './SystemWizard';
 import { applySystemWizardResult } from '../../features/systems/applySystem';
 import { applyCharacterCreator, applyDressUp } from '../../features/systems/applyCharacterCreator';
@@ -143,7 +147,7 @@ const FreeSlotPreview: React.FC<{ element: UISaveSlotGridElement | UICGGalleryEl
         const baseFont = fontSettingsToStyle(el.font);
         const emptyStyle = el.emptySlotFont
             ? fontSettingsToStyle(el.emptySlotFont)
-            : { color: el.emptySlotTextColor || '#a0aec0', fontSize: baseFont.fontSize, fontFamily: baseFont.fontFamily };
+            : { color: el.emptySlotTextColor || '#a0aec0', fontSize: baseFont.fontSize, fontFamily: cssFontFamily(baseFont.fontFamily) };
         if (isSlotDesignActive(el.slotDesign)) {
             return (
                 <div style={{ width: '100%', height: '100%', border: `2px solid ${slotBorderColor}`, borderRadius: 8, overflow: 'hidden', boxShadow: ringShadow }}>
@@ -283,24 +287,30 @@ const CustomizerSprite: React.FC<{ cz: UICustomizerElement, project: VNProject, 
     // Pose-aware art (mirrors the engine's Customizer preview): same asset ids, per-pose pictures.
     const czPoseId = resolvePoseId(czChar, (cz as any).poseId);
     const imgs: string[] = []; const vids: string[] = []; let hasVid = false;
+    const imgBoxes: Array<VNLayerBox | null> = []; const vidBoxes: Array<VNLayerBox | null> = [];
     const czBase = characterBaseArtForPose(czChar, czPoseId);
-    if (czBase.videoUrl) { vids.push(czBase.videoUrl); hasVid = true; }
-    else if (czBase.imageUrl) { imgs.push(czBase.imageUrl); }
-    Object.entries(czChar.layers).forEach(([layerId, layer]: [string, any]) => {
+    if (czBase.videoUrl) { vids.push(czBase.videoUrl); vidBoxes.push(null); hasVid = true; }
+    else if (czBase.imageUrl) { imgs.push(czBase.imageUrl); imgBoxes.push(null); }
+    // Pose Studio order + hidden + boxes (mirrors the engine's Customizer preview).
+    const czHidden = poseHiddenLayerIds(czChar, czPoseId);
+    layerOrderForPose(czChar, czPoseId).forEach((layer: any) => {
+        const layerId = layer.id;
+        if (czHidden.has(layerId)) return;
         const cat = (cz.categories || []).find(c => c.layerId === layerId);
         let assetId: string | null = null;
         if (cat) assetId = String((project.variables[cat.variableId]?.defaultValue ?? '') || '') || null;
         if (!assetId && czFallback) assetId = czFallback.layerConfiguration[layerId] || null;
         const asset = assetId ? layer.assets[assetId] : null;
         const art = asset ? assetArtForPose(asset, czPoseId) : null;
-        if (art?.videoUrl) { vids.push(art.videoUrl); hasVid = true; }
-        else if (art?.imageUrl) { imgs.push(art.imageUrl); }
+        const pieceBox = asset ? (normalizeLayerBox(resolveLayerBox(layer, asset, czPoseId)) ?? null) : null;
+        if (art?.videoUrl) { vids.push(art.videoUrl); vidBoxes.push(pieceBox); hasVid = true; }
+        else if (art?.imageUrl) { imgs.push(art.imageUrl); imgBoxes.push(pieceBox); }
     });
     const op = bottom ? 'bottom' : 'center';
     return <div className="relative w-full h-full">
         {(hasVid ? vids : imgs).map((u, i) => hasVid
-            ? <video key={i} src={u} autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, objectPosition: op }} />
-            : <img key={i} src={u} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, objectPosition: op }} />)}
+            ? <video key={i} src={u} autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, objectPosition: op, ...layerBoxStyle(vidBoxes[i]) }} />
+            : <img key={i} src={u} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i, objectPosition: op, ...layerBoxStyle(imgBoxes[i]) }} />)}
     </div>;
 };
 
@@ -496,15 +506,15 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             const baseFont = fontSettingsToStyle(slotEl.font);
             const emptySlotStyle = slotEl.emptySlotFont
                 ? fontSettingsToStyle(slotEl.emptySlotFont)
-                : { color: slotEl.emptySlotTextColor || '#a0aec0', fontSize: baseFont.fontSize, fontFamily: baseFont.fontFamily };
+                : { color: slotEl.emptySlotTextColor || '#a0aec0', fontSize: baseFont.fontSize, fontFamily: cssFontFamily(baseFont.fontFamily) };
             const emptySlotTextAlign = (emptySlotStyle as any).textAlign ?? 'center';
             const emptySlotJustify = emptySlotTextAlign === 'right' ? 'flex-end' : emptySlotTextAlign === 'left' ? 'flex-start' : 'center';
             const navBtnStyle: React.CSSProperties = slotEl.navButtonFont
                 ? { ...fontSettingsToStyle(slotEl.navButtonFont), backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', padding: '2px 10px' }
-                : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize, fontWeight: 'bold' as const, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', padding: '2px 10px' };
+                : { color: slotHeaderColor, fontFamily: cssFontFamily(baseFont.fontFamily), fontSize: baseFont.fontSize, fontWeight: 'bold' as const, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', padding: '2px 10px' };
             const pageIndicatorStyle: React.CSSProperties = slotEl.pageIndicatorFont
                 ? fontSettingsToStyle(slotEl.pageIndicatorFont)
-                : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize };
+                : { color: slotHeaderColor, fontFamily: cssFontFamily(baseFont.fontFamily), fontSize: baseFont.fontSize };
             const previewPerPage = Math.max(1, slotEl.slotsPerPage ?? 4);
             const previewColumns = Math.max(1, slotEl.slotColumns ?? (previewPerPage <= 4 ? 2 : Math.ceil(Math.sqrt(previewPerPage))));
             const totalPages = Math.max(1, Math.ceil(slotEl.slotCount / previewPerPage));
@@ -593,25 +603,33 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                  imageUrls.push(cpBase.imageUrl);
              }
 
-             // Add layers from first expression (for preview purposes)
+             // Add layers from first expression — via the shared Pose Studio order/hidden/box
+             // resolvers (this used to iterate layerConfiguration entries, a pre-existing order
+             // fork from every other surface; now all surfaces stack identically).
+             const cpImageBoxes: Array<VNLayerBox | null> = imageUrls.map(() => null);
+             const cpVideoBoxes: Array<VNLayerBox | null> = videoUrls.map(() => null);
              const firstExpr = Object.values(char.expressions)[0];
              if (firstExpr && firstExpr.layerConfiguration) {
-                 Object.entries(firstExpr.layerConfiguration).forEach(([layerId, assetId]) => {
-                     const layer = char.layers[layerId];
-                     if (layer && assetId) {
-                         const asset = layer.assets[assetId];
-                         const art = asset ? assetArtForPose(asset, cpPoseId) : null;
-                         if (art?.videoUrl) {
-                             videoUrls.push(art.videoUrl);
-                             videoTrims.push({});
-                             hasVideo = true;
-                         } else if (art?.imageUrl) {
-                             imageUrls.push(art.imageUrl);
-                         }
+                 const cpHidden = poseHiddenLayerIds(char, cpPoseId);
+                 layerOrderForPose(char, cpPoseId).forEach((layer: any) => {
+                     if (cpHidden.has(layer.id)) return;
+                     const assetId = firstExpr.layerConfiguration[layer.id];
+                     if (!assetId) return;
+                     const asset = layer.assets[assetId];
+                     const art = asset ? assetArtForPose(asset, cpPoseId) : null;
+                     const pieceBox = asset ? (normalizeLayerBox(resolveLayerBox(layer, asset, cpPoseId)) ?? null) : null;
+                     if (art?.videoUrl) {
+                         videoUrls.push(art.videoUrl);
+                         videoTrims.push({});
+                         cpVideoBoxes.push(pieceBox);
+                         hasVideo = true;
+                     } else if (art?.imageUrl) {
+                         imageUrls.push(art.imageUrl);
+                         cpImageBoxes.push(pieceBox);
                      }
                  });
              }
-             
+
              return <div className="w-full h-full border-2 border-dashed border-[var(--accent-purple)] flex items-center justify-center relative overflow-hidden bg-black/20">
                  {hasVideo && videoUrls.length > 0 ? (
                      videoUrls.map((url, i) => (
@@ -625,17 +643,17 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                              trimEnd={videoTrims[i]?.end}
                              playsInline
                              className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none"
-                             style={{ zIndex: i }}
+                             style={{ zIndex: i, ...layerBoxStyle(cpVideoBoxes[i]) }}
                          />
                      ))
                  ) : (
                      imageUrls.map((url, i) => (
-                         <img 
+                         <img
                              key={i}
-                             src={url} 
-                             alt="" 
-                             className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none" 
-                             style={{ zIndex: i }}
+                             src={url}
+                             alt=""
+                             className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none"
+                             style={{ zIndex: i, ...layerBoxStyle(cpImageBoxes[i]) }}
                          />
                      ))
                  )}
@@ -750,6 +768,8 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                     })}
                 </div>
             </div>;
+        case UIElementType.MusicGallery:
+            return <MusicGalleryPreview element={element as UIMusicGalleryElement} project={project} />;
         case UIElementType.Inventory:
             return <InventoryPreview inv={element as UIInventoryGridElement} project={project} />;
         case UIElementType.Meter: {
@@ -919,6 +939,7 @@ const MenuEditor: React.FC<{
         return () => window.removeEventListener('flourish:playended', onPlayEnded);
     }, []);
     const [showCGGalleryWizard, setShowCGGalleryWizard] = useState(false);
+    const [showMusicGalleryWizard, setShowMusicGalleryWizard] = useState(false);
     const [showShopWizard, setShowShopWizard] = useState(false);
     const [showInventoryWizard, setShowInventoryWizard] = useState(false);
     const [showTemplateSelector, setShowTemplateSelector] = useState(false);
@@ -1195,7 +1216,7 @@ const MenuEditor: React.FC<{
         handleUpdateElement(elementId, { [field]: rect } as Partial<VNUIElement>);
     };
 
-    /** Hot spots / draggable elements / image maps are all `VNUIElement` entries
+    /** Hot spots / draggable elements / Interactive Images are all `VNUIElement` entries
      *  in `screen.elements`. The overlay components emit geometric patches
      *  (`{x, y, width, height}`) which apply identically to all element types. */
     const handleUpdateInteractive = useCallback((elementId: VNID, updates: { x?: number; y?: number; width?: number; height?: number }) => {
@@ -1305,6 +1326,40 @@ const MenuEditor: React.FC<{
         const buttonElement = createUIElement(UIElementType.Button, project) as UIButtonElement;
         if (buttonElement) {
             buttonElement.name = 'Close Gallery';
+            buttonElement.text = 'Close';
+            buttonElement.x = 35;
+            buttonElement.y = 90;
+            buttonElement.width = 30;
+            buttonElement.height = 7;
+            buttonElement.actions = [{ type: UIActionType.ReturnToPreviousScreen }];
+            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: buttonElement } });
+        }
+    };
+
+    const handleMusicGalleryGenerate = (config: MusicGalleryGeneratedConfig) => {
+        // 1. Unlock variables (locked-by-default mode). PERSISTENT scope so an unlock earned in
+        //    any playthrough stays unlocked across New Game — same rule as the CG Gallery.
+        config.unlockVariables.forEach(varConfig => {
+            dispatch({
+                type: 'ADD_VARIABLE',
+                payload: {
+                    id: varConfig.id,
+                    name: varConfig.name,
+                    type: 'boolean',
+                    defaultValue: false,
+                    scope: 'persistent',
+                },
+            });
+        });
+
+        // 2. The song list on the project + the ready-made player element on this screen
+        dispatch({ type: 'UPDATE_PROJECT', payload: { musicGallery: config.galleryConfig } });
+        dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: config.galleryElement } });
+
+        // 3. A "Close" button under the player
+        const buttonElement = createUIElement(UIElementType.Button, project) as UIButtonElement;
+        if (buttonElement) {
+            buttonElement.name = 'Close Music Gallery';
             buttonElement.text = 'Close';
             buttonElement.x = 35;
             buttonElement.y = 90;
@@ -1424,7 +1479,7 @@ const MenuEditor: React.FC<{
                         );
                     })}
 
-                    {/* Standard UI elements (non-interactive). Hot spots, image maps, and any
+                    {/* Standard UI elements (non-interactive). Hot spots, Interactive Images, and any
                         draggable element are skipped here — they render via the dedicated
                         interactive-element overlays below, read from `screen.elements`. */}
                     {isReady && stageSize.width > 0 && Object.values(screen.elements).map((element: VNUIElement) => {
@@ -1538,6 +1593,7 @@ const MenuEditor: React.FC<{
                                 siblings={siblingsFor(element.id)}
                                 onGuides={setMenuSnapGuides}
                                 contentBox={(element as any).contentBox}
+                                contentTransform={buildOrientationTransform(element as any) || undefined}
                                 overlay={selectedElementIds.includes(element.id) && (element.type === UIElementType.Button || element.type === UIElementType.Image) ? (
                                     <ContentBoxEditor
                                         box={(element as any).contentBox}
@@ -1552,7 +1608,7 @@ const MenuEditor: React.FC<{
                         );
                     })}
 
-                    {/* Interactive-element overlays. Hot spots, image maps, and draggables are typed
+                    {/* Interactive-element overlays. Hot spots, Interactive Images, and draggables are typed
                         entries in screen.elements — the overlay components consume them directly. */}
                     {isReady && stageSize.width > 0 && Object.values(screen.elements).map((el: VNUIElement) => {
                         if (hiddenElementIds?.has(el.id)) return null; // eye-toggled off in the tree (editor-only)
@@ -1622,6 +1678,7 @@ const MenuEditor: React.FC<{
                     <button onClick={() => handleAddElement(UIElementType.SettingsSlider)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Slider</button>
                     <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Toggle</button>
                     <button onClick={() => handleAddElement(UIElementType.CGGallery)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> CG Gallery</button>
+                    <button onClick={() => handleAddElement(UIElementType.MusicGallery)} title="An unlockable-songs music player: song list, cover art, and playback controls you can fully redesign" className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Music Gallery</button>
                     <button onClick={() => handleAddElement(UIElementType.Inventory)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Inventory</button>
                     <button onClick={() => handleAddElement(UIElementType.Meter)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Meter</button>
                     <button onClick={() => handleAddElement(UIElementType.Timer)} title="Runs actions after a delay when this screen opens" className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Timer</button>
@@ -1670,6 +1727,20 @@ const MenuEditor: React.FC<{
                                     <div className="text-xs text-white/70">{t('menuEditor.cgGalleryDesc')}</div>
                                 </div>
                             </button>
+
+                            <button
+                                onClick={() => {
+                                    setShowTemplateSelector(false);
+                                    setShowMusicGalleryWizard(true);
+                                }}
+                                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 p-4 rounded-lg flex items-center gap-4 text-left transition-all hover:scale-[1.02]"
+                            >
+                                <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center text-2xl">🎵</div>
+                                <div>
+                                    <div className="font-semibold">{t('menuEditor.musicGallery', 'Music Gallery')}</div>
+                                    <div className="text-xs text-white/70">{t('menuEditor.musicGalleryDesc', 'A jukebox of unlockable songs with cover art and playback controls')}</div>
+                                </div>
+                            </button>
                         </div>
                         
                         <button
@@ -1700,6 +1771,15 @@ const MenuEditor: React.FC<{
                 project={project}
                 screenId={activeScreenId}
                 onGenerate={handleCGGalleryGenerate}
+            />
+
+            {/* Music Gallery Wizard */}
+            <MusicGalleryWizard
+                isOpen={showMusicGalleryWizard}
+                onClose={() => setShowMusicGalleryWizard(false)}
+                project={project}
+                screenId={activeScreenId}
+                onGenerate={handleMusicGalleryGenerate}
             />
 
             {/* Shop & Inventory System Wizards — generate a dedicated screen of native

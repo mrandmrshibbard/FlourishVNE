@@ -7,7 +7,7 @@
  * execute automatically at scene start.
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import { useProject } from '../contexts/ProjectContext';
@@ -21,6 +21,7 @@ import {
 } from './icons';
 import { getCommandColor, COMMAND_CATEGORIES } from './CommandPalette';
 import { createCommand } from '../utils/commandFactory';
+import { isReorderableCommand, moveCommonEventCommand, stepCommonEventCommand } from '../utils/commonEventReorder';
 import { CommandGroupAccordion } from './inspector/CommandGroupFields';
 import { useCommandDefaults, useChoiceActionNormalization } from './PropertiesInspector';
 
@@ -78,6 +79,18 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
     const [renameValue, setRenameValue] = useState('');
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
     const [selectedCommandIndex, setSelectedCommandIndex] = useState<number | null>(null);
+    // ── Command reorder drag (pointer-based, like the scene editor's list) ──
+    // dropLine = the insertion index the amber line previews (0..length; null = not dragging).
+    const [dropLine, setDropLine] = useState<number | null>(null);
+    const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+    const reorderRef = useRef<{
+        fromIndex: number; startX: number; startY: number; started: boolean;
+        /** Row midpoints snapshotted at drag START (stable against our own drop-line shifting
+         *  layout — the scene editor's hard-won lesson). */
+        mids: number[];
+    } | null>(null);
+    const justDraggedRef = useRef(false);
+    const commandListRef = useRef<HTMLDivElement | null>(null);
     const [expandedSections, setExpandedSections] = useState<Set<string>>(
         new Set(['properties', 'commands'])
     );
@@ -103,6 +116,60 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
 
     // Clear the open command editor whenever the selected event changes.
     React.useEffect(() => { setSelectedCommandIndex(null); }, [selectedEventId]);
+
+    // ── Command reorder: pointer drag + ▲▼ (parity with the scene editor's list). ──
+    // One UPDATE_COMMON_EVENT dispatch with the rebuilt array = one clean undo step.
+    const commitCommandsReorder = useCallback((next: VNCommand[] | null) => {
+        if (!next || !selectedEventId) return;
+        dispatch({ type: 'UPDATE_COMMON_EVENT', payload: { commonEventId: selectedEventId, updates: { commands: next } } });
+        setSelectedCommandIndex(null);
+    }, [dispatch, selectedEventId]);
+
+    const beginCommandReorder = useCallback((e: React.PointerEvent, index: number) => {
+        if (e.button !== 0 || !selectedEvent) return;
+        if (!isReorderableCommand(selectedEvent.commands[index])) return;
+        // Snapshot row midpoints NOW (in viewport space) — detection must not read the
+        // drop-line-shifted layout mid-drag or the target flickers (scene-editor lesson).
+        const rows = Array.from(commandListRef.current?.querySelectorAll('[data-ce-row]') || []) as HTMLElement[];
+        const mids = rows
+            .sort((a, b) => Number(a.dataset.ceRow) - Number(b.dataset.ceRow))
+            .map(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2; });
+        reorderRef.current = { fromIndex: index, startX: e.clientX, startY: e.clientY, started: false, mids };
+
+        const onMove = (ev: PointerEvent) => {
+            const st = reorderRef.current;
+            if (!st) return;
+            if (!st.started) {
+                if (Math.abs(ev.clientY - st.startY) + Math.abs(ev.clientX - st.startX) < 5) return;
+                st.started = true;
+                setDraggingIndex(st.fromIndex);
+            }
+            // Insertion index = first row whose midpoint is below the cursor.
+            let insert = st.mids.length;
+            for (let i = 0; i < st.mids.length; i++) {
+                if (ev.clientY < st.mids[i]) { insert = i; break; }
+            }
+            setDropLine(insert);
+        };
+        const onUp = (ev: PointerEvent) => {
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+            const st = reorderRef.current;
+            reorderRef.current = null;
+            setDraggingIndex(null);
+            setDropLine(null);
+            if (!st || !st.started || !selectedEvent) return;
+            justDraggedRef.current = true;
+            setTimeout(() => { justDraggedRef.current = false; }, 0);
+            let insert = st.mids.length;
+            for (let i = 0; i < st.mids.length; i++) {
+                if (ev.clientY < st.mids[i]) { insert = i; break; }
+            }
+            commitCommandsReorder(moveCommonEventCommand(selectedEvent.commands, st.fromIndex, insert));
+        };
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+    }, [selectedEvent, commitCommandsReorder]);
 
     // Apply the same auto-defaults the scene inspector uses (e.g. select the first variable for a
     // new Set Variable so the number operators appear, first character for Show Character, etc.)
@@ -583,6 +650,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
 
                                     {/* Command list */}
                                     <div
+                                        ref={commandListRef}
                                         className="min-h-[80px] rounded-lg p-2 space-y-1 mb-2 transition-colors"
                                         style={{
                                             background: dragOverIndex !== null ? 'rgba(245,158,11,0.1)' : 'var(--bg-primary)',
@@ -603,38 +671,62 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
                                             selectedEvent.commands.map((cmd: VNCommand, index: number) => {
                                                 const colorClass = getCommandColor(cmd.type);
                                                 const isSelected = selectedCommandIndex === index;
+                                                const reorderable = isReorderableCommand(cmd);
                                                 return (
-                                                    <div
-                                                        key={cmd.id}
-                                                        onClick={() => setSelectedCommandIndex(isSelected ? null : index)}
-                                                        className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-xs border ${colorClass} group cursor-pointer ${isSelected ? 'ring-2 ring-amber-400' : ''}`}
-                                                        title={t('editCommand')}
-                                                    >
-                                                        <GripVerticalIcon className="w-3 h-3 flex-shrink-0 opacity-40" />
-                                                        <span className="flex-1 truncate font-medium">
-                                                            {formatCommandName(cmd.type)}
-                                                            {cmd.type === CommandType.Dialogue && (cmd as any).text && (
-                                                                <span className="ml-1 opacity-50 font-normal">"{(cmd as any).text.slice(0, 30)}{(cmd as any).text.length > 30 ? '…' : ''}"</span>
-                                                            )}
-                                                            {cmd.type === CommandType.Label && (cmd as any).labelId && (
-                                                                <span className="ml-1 opacity-50 font-normal">({(cmd as any).labelId})</span>
-                                                            )}
-                                                            {cmd.type === CommandType.CallCommonEvent && (cmd as any).commonEventId && (
-                                                                <span className="ml-1 opacity-50 font-normal">
-                                                                    → {(project.commonEvents || {})[(cmd as any).commonEventId]?.name || t('unknown')}
-                                                                </span>
-                                                            )}
-                                                        </span>
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); handleDeleteCommand(index); }}
-                                                            className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-red-400 transition-opacity"
-                                                            title={t('removeCommand')}
+                                                    <React.Fragment key={cmd.id}>
+                                                        {dropLine === index && <div className="h-0.5 rounded" style={{ background: 'var(--accent-amber, #f59e0b)' }} />}
+                                                        <div
+                                                            data-ce-row={index}
+                                                            onClick={() => { if (justDraggedRef.current) return; setSelectedCommandIndex(isSelected ? null : index); }}
+                                                            onPointerDown={e => beginCommandReorder(e, index)}
+                                                            className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-xs border ${colorClass} group cursor-pointer ${isSelected ? 'ring-2 ring-amber-400' : ''}`}
+                                                            style={draggingIndex === index ? { opacity: 0.45 } : undefined}
+                                                            title={reorderable ? t('dragToReorder', 'Click to edit · drag to reorder') : t('editCommand')}
                                                         >
-                                                            <TrashIcon className="w-3 h-3" />
-                                                        </button>
-                                                    </div>
+                                                            <GripVerticalIcon className={`w-3 h-3 flex-shrink-0 ${reorderable ? 'opacity-40 cursor-grab' : 'opacity-10'}`} />
+                                                            <span className="flex-1 truncate font-medium">
+                                                                {formatCommandName(cmd.type)}
+                                                                {cmd.type === CommandType.Dialogue && (cmd as any).text && (
+                                                                    <span className="ml-1 opacity-50 font-normal">"{(cmd as any).text.slice(0, 30)}{(cmd as any).text.length > 30 ? '…' : ''}"</span>
+                                                                )}
+                                                                {cmd.type === CommandType.Label && (cmd as any).labelId && (
+                                                                    <span className="ml-1 opacity-50 font-normal">({(cmd as any).labelId})</span>
+                                                                )}
+                                                                {cmd.type === CommandType.CallCommonEvent && (cmd as any).commonEventId && (
+                                                                    <span className="ml-1 opacity-50 font-normal">
+                                                                        → {(project.commonEvents || {})[(cmd as any).commonEventId]?.name || t('unknown')}
+                                                                    </span>
+                                                                )}
+                                                            </span>
+                                                            {reorderable && <>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); commitCommandsReorder(stepCommonEventCommand(selectedEvent.commands, index, -1)); }}
+                                                                    onPointerDown={e => e.stopPropagation()}
+                                                                    className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-opacity"
+                                                                    title={t('moveUp', 'Move up')}
+                                                                >▲</button>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); commitCommandsReorder(stepCommonEventCommand(selectedEvent.commands, index, 1)); }}
+                                                                    onPointerDown={e => e.stopPropagation()}
+                                                                    className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-opacity"
+                                                                    title={t('moveDown', 'Move down')}
+                                                                >▼</button>
+                                                            </>}
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleDeleteCommand(index); }}
+                                                                onPointerDown={e => e.stopPropagation()}
+                                                                className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-red-400 transition-opacity"
+                                                                title={t('removeCommand')}
+                                                            >
+                                                                <TrashIcon className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                    </React.Fragment>
                                                 );
                                             })
+                                        )}
+                                        {dropLine !== null && selectedEvent.commands.length > 0 && dropLine >= selectedEvent.commands.length && (
+                                            <div className="h-0.5 rounded" style={{ background: 'var(--accent-amber, #f59e0b)' }} />
                                         )}
                                     </div>
 

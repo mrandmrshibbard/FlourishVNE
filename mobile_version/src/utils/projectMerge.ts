@@ -106,6 +106,12 @@ const writableRecord = (project: VNProject, key: string): Record<string, any> =>
         if (!p.cgGallery.entries) p.cgGallery.entries = {};
         return p.cgGallery.entries;
     }
+    if (key === 'musicGallery') {
+        const p = project as any;
+        if (!p.musicGallery) p.musicGallery = { entries: {} };
+        if (!p.musicGallery.entries) p.musicGallery.entries = {};
+        return p.musicGallery.entries;
+    }
     const p = project as any;
     if (!p[key]) p[key] = {};
     return p[key];

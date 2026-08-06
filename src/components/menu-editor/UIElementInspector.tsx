@@ -217,7 +217,7 @@ const UIElementInspector: React.FC<{
     if (!element) return <Panel title={t('elementInspector.propsTitle')}>{t('elementInspector.notFound')}</Panel>;
 
     return (
-        <Panel title={`Properties: ${element.type}`} className="w-96 flex-shrink-0">
+        <Panel title={`Properties: ${element.type}`} className="w-[26rem] flex-shrink-0">
             <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-2">
                 {systemsLink && (
                     <button onClick={() => onOpenSystems!(systemsLink.sel)}

@@ -37,6 +37,16 @@
     "remove": "Remove",
     "hint": "Recommended: 256×256 PNG"
   },
+  "webOptions": {
+    "title": "Web options",
+    "fullscreenLabel": "Add a fullscreen button",
+    "fullscreenHint": "Shows a small button over the game that lets players make it fill their whole screen — great for itch.io, where browser games can look small.",
+    "fullscreenCorner": "Button corner",
+    "cornerTopRight": "Top right",
+    "cornerTopLeft": "Top left",
+    "cornerBottomRight": "Bottom right",
+    "cornerBottomLeft": "Bottom left"
+  },
   "formatPicker": {
     "title": "Build Format",
     "standaloneName": "📦 Standalone .exe",

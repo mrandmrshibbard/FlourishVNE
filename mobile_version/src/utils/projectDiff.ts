@@ -77,6 +77,7 @@ export const CATEGORIES: CatDef[] = [
     { key: 'textboxThemes', label: 'Textbox Themes', kind: 'generic', get: p => p.textboxThemes },
     { key: 'fonts', label: 'Fonts', kind: 'generic', get: p => p.fonts },
     { key: 'cgGallery', label: 'CG Gallery', kind: 'generic', get: p => p.cgGallery?.entries },
+    { key: 'musicGallery', label: 'Music Gallery', kind: 'generic', get: p => p.musicGallery?.entries },
 ];
 
 function diffCategory(def: CatDef, yours: VNProject, theirs: VNProject): DiffCategory {

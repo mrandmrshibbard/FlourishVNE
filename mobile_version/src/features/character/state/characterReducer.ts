@@ -1,7 +1,8 @@
 import { VNID } from '../../../types';
 import { VNProject } from '../../../types/project';
 import { VNCommand, CommandType } from '../../scene/types';
-import { VNCharacter, VNCharacterExpression, VNCharacterLayer, VNCharacterPose, VNLayerAsset, VNPoseArt } from '../types';
+import { VNCharacter, VNCharacterAnimation, VNCharacterExpression, VNCharacterLayer, VNCharacterPose, VNLayerAsset, VNLayerBox, VNPoseArt } from '../types';
+import { normalizeLayerBox } from '../layout';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
@@ -22,7 +23,26 @@ export type CharacterAction =
     | { type: 'ADD_POSE', payload: { characterId: VNID, name: string } }
     | { type: 'UPDATE_POSE', payload: { characterId: VNID, poseId: VNID, updates: Partial<VNCharacterPose> } }
     | { type: 'DELETE_POSE', payload: { characterId: VNID, poseId: VNID } }
-    | { type: 'SET_ASSET_POSE_ART', payload: { characterId: VNID, layerId: VNID, assetId: VNID, poseId: VNID, art: VNPoseArt | null } };
+    | { type: 'SET_ASSET_POSE_ART', payload: { characterId: VNID, layerId: VNID, assetId: VNID, poseId: VNID, art: VNPoseArt | null } }
+    /** The Pose Studio's single Done commit (one undo step). Every map is a sparse PATCH:
+     *  only mentioned keys change; a null/full box deletes the entry (normalizeLayerBox). */
+    | { type: 'APPLY_CHARACTER_LAYOUT', payload: {
+        characterId: VNID,
+        layerBoxes?: Record<VNID, VNLayerBox | null>,
+        layerPoseBoxes?: Record<VNID, Record<VNID, VNLayerBox | null>>,
+        assetBoxes?: Record<VNID, Record<VNID, VNLayerBox | null>>,
+        assetPoseBoxes?: Record<VNID, Record<VNID, Record<VNID, VNLayerBox | null>>>,
+        poseLayerOrders?: Record<VNID, VNID[] | null>,
+        poseHiddenLayers?: Record<VNID, VNID[] | null>,
+        baseLayerOrder?: VNID[],
+      } }
+    /** Copy a pose: record fields (incl. layout/order/hidden + base-art URLS by reference),
+     *  every asset's poseArt[src], and every layer/asset poseBoxes[src] → the new pose id.
+     *  Caller may supply newPoseId so the UI can select the copy. */
+    | { type: 'DUPLICATE_POSE', payload: { characterId: VNID, poseId: VNID, newPoseId?: VNID, newName?: string } }
+    | { type: 'ADD_CHARACTER_ANIMATION', payload: { characterId: VNID, name: string } }
+    | { type: 'UPDATE_CHARACTER_ANIMATION', payload: { characterId: VNID, animationId: VNID, updates: Partial<VNCharacterAnimation> } }
+    | { type: 'DELETE_CHARACTER_ANIMATION', payload: { characterId: VNID, animationId: VNID } };
 
 export const characterReducer = (state: VNProject, action: CharacterAction): VNProject => {
   switch (action.type) {
@@ -113,12 +133,41 @@ export const characterReducer = (state: VNProject, action: CharacterAction): VNP
         const character = state.characters[characterId];
         if (!character) return state;
         const { [layerId]: _, ...remainingLayers } = character.layers;
-        // Also remove this layer from all expressions
-        const newExpressions = { ...character.expressions };
-        for (const exprId in newExpressions) {
-            delete newExpressions[exprId].layerConfiguration[layerId];
+        // Also remove this layer from all expressions (immutably — the old in-place delete
+        // mutated expression objects shared with the undo history).
+        const newExpressions: Record<VNID, VNCharacterExpression> = {};
+        for (const [exprId, expr] of Object.entries(character.expressions)) {
+            if (layerId in expr.layerConfiguration) {
+                const { [layerId]: _cfg, ...restCfg } = expr.layerConfiguration;
+                newExpressions[exprId] = { ...expr, layerConfiguration: restCfg };
+            } else {
+                newExpressions[exprId] = expr;
+            }
         }
-        return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: remainingLayers, expressions: newExpressions } } };
+        // And from every pose's layerOrder / hiddenLayers (drop the fields when they empty).
+        let newPoses = character.poses;
+        if (character.poses) {
+            const posesNext: Record<VNID, VNCharacterPose> = {};
+            for (const [poseId, pose] of Object.entries(character.poses)) {
+                let p = pose;
+                if (p.layerOrder?.includes(layerId)) {
+                    const filtered = p.layerOrder.filter(id => id !== layerId);
+                    const { layerOrder: _lo, ...rest } = p;
+                    p = filtered.length ? { ...rest, layerOrder: filtered } : rest as VNCharacterPose;
+                }
+                if (p.hiddenLayers?.includes(layerId)) {
+                    const filtered = p.hiddenLayers.filter(id => id !== layerId);
+                    const { hiddenLayers: _hl, ...rest } = p;
+                    p = filtered.length ? { ...rest, hiddenLayers: filtered } : rest as VNCharacterPose;
+                }
+                posesNext[poseId] = p;
+            }
+            newPoses = posesNext;
+        }
+        const updatedChar: VNCharacter = newPoses !== character.poses
+            ? { ...character, layers: remainingLayers, expressions: newExpressions, poses: newPoses }
+            : { ...character, layers: remainingLayers, expressions: newExpressions };
+        return { ...state, characters: { ...state.characters, [characterId]: updatedChar } };
     }
 
     case 'ADD_LAYER_ASSET': {
@@ -234,22 +283,30 @@ export const characterReducer = (state: VNProject, action: CharacterAction): VNP
         const character = state.characters[characterId];
         if (!character?.poses?.[poseId]) return state;
         const { [poseId]: _removed, ...remainingPoses } = character.poses;
-        // Strip this pose's art from every layer asset (drop empty poseArt keys entirely so
-        // untouched-project JSON stays minimal).
+        // Strip this pose's art AND layout boxes from every layer + asset (drop emptied
+        // Records entirely so untouched-project JSON stays minimal). The pose's own
+        // layerOrder/hiddenLayers die with its record.
+        const stripPoseBoxes = <T extends { poseBoxes?: Record<VNID, VNLayerBox> }>(owner: T): T => {
+            if (!owner.poseBoxes || !(poseId in owner.poseBoxes)) return owner;
+            const { [poseId]: _box, ...restBoxes } = owner.poseBoxes;
+            if (Object.keys(restBoxes).length) return { ...owner, poseBoxes: restBoxes };
+            const { poseBoxes: _pb, ...rest } = owner;
+            return rest as T;
+        };
         const newLayers: Record<VNID, VNCharacterLayer> = {};
         for (const [layerId, layer] of Object.entries(character.layers)) {
             const newAssets: Record<VNID, VNLayerAsset> = {};
             for (const [assetId, asset] of Object.entries(layer.assets)) {
-                if (asset.poseArt && poseId in asset.poseArt) {
-                    const { [poseId]: _art, ...restArt } = asset.poseArt;
-                    newAssets[assetId] = Object.keys(restArt).length
-                        ? { ...asset, poseArt: restArt }
-                        : (() => { const { poseArt: _pa, ...rest } = asset; return rest as VNLayerAsset; })();
-                } else {
-                    newAssets[assetId] = asset;
+                let a = asset;
+                if (a.poseArt && poseId in a.poseArt) {
+                    const { [poseId]: _art, ...restArt } = a.poseArt;
+                    a = Object.keys(restArt).length
+                        ? { ...a, poseArt: restArt }
+                        : (() => { const { poseArt: _pa, ...rest } = a; return rest as VNLayerAsset; })();
                 }
+                newAssets[assetId] = stripPoseBoxes(a);
             }
-            newLayers[layerId] = { ...layer, assets: newAssets };
+            newLayers[layerId] = stripPoseBoxes({ ...layer, assets: newAssets });
         }
         // Scene hygiene (mirrors DELETE_EXPRESSION): drop references to the deleted pose from
         // Show Character and Change Pose commands. Runtime stays dangling-safe regardless.
@@ -270,6 +327,37 @@ export const characterReducer = (state: VNProject, action: CharacterAction): VNP
         return { ...state, characters: { ...state.characters, [characterId]: updatedChar }, scenes: newScenes };
     }
 
+    case 'ADD_CHARACTER_ANIMATION': {
+        const { characterId, name } = action.payload;
+        const character = state.characters[characterId];
+        if (!character) return state;
+        const id = `anim-${generateId()}`;
+        const anim: VNCharacterAnimation = { id, name, durationMs: 1000, tracks: [], loop: false };
+        return { ...state, characters: { ...state.characters, [characterId]: { ...character, animations: { ...(character.animations || {}), [id]: anim } } } };
+    }
+
+    case 'UPDATE_CHARACTER_ANIMATION': {
+        const { characterId, animationId, updates } = action.payload;
+        const character = state.characters[characterId];
+        const anim = character?.animations?.[animationId];
+        if (!character || !anim) return state;
+        const next: VNCharacterAnimation = { ...anim, ...updates };
+        // Normalize: keys sorted by time so every consumer can rely on order.
+        next.tracks = (next.tracks || []).map(tr => ({ ...tr, keys: [...(tr.keys || [])].sort((a, b) => a.atMs - b.atMs) }));
+        return { ...state, characters: { ...state.characters, [characterId]: { ...character, animations: { ...character.animations, [animationId]: next } } } };
+    }
+
+    case 'DELETE_CHARACTER_ANIMATION': {
+        const { characterId, animationId } = action.payload;
+        const character = state.characters[characterId];
+        if (!character?.animations?.[animationId]) return state;
+        const { [animationId]: _gone, ...rest } = character.animations;
+        // Drop the emptied Record entirely — untouched-project JSON stays minimal.
+        const nextChar = { ...character } as any;
+        if (Object.keys(rest).length) nextChar.animations = rest; else delete nextChar.animations;
+        return { ...state, characters: { ...state.characters, [characterId]: nextChar } };
+    }
+
     case 'SET_ASSET_POSE_ART': {
         const { characterId, layerId, assetId, poseId, art } = action.payload;
         const character = state.characters[characterId];
@@ -288,6 +376,142 @@ export const characterReducer = (state: VNProject, action: CharacterAction): VNP
         const newAssets = { ...character.layers[layerId].assets, [assetId]: newAsset };
         const newLayers = { ...character.layers, [layerId]: { ...character.layers[layerId], assets: newAssets } };
         return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers } } };
+    }
+
+    case 'APPLY_CHARACTER_LAYOUT': {
+        const { characterId, layerBoxes, layerPoseBoxes, assetBoxes, assetPoseBoxes, poseLayerOrders, poseHiddenLayers, baseLayerOrder } = action.payload;
+        const character = state.characters[characterId];
+        if (!character) return state;
+
+        // Patch a poseId→box Record: normalized boxes land, null/full boxes delete their key,
+        // and an emptied Record disappears entirely (the SET_ASSET_POSE_ART idiom).
+        const patchBoxRecord = (
+            existing: Record<VNID, VNLayerBox> | undefined,
+            patch: Record<VNID, VNLayerBox | null>
+        ): Record<VNID, VNLayerBox> | undefined => {
+            const next: Record<VNID, VNLayerBox> = { ...(existing || {}) };
+            for (const [key, value] of Object.entries(patch)) {
+                const norm = normalizeLayerBox(value || undefined);
+                if (norm) next[key] = norm; else delete next[key];
+            }
+            return Object.keys(next).length ? next : undefined;
+        };
+        // Set-or-REMOVE an optional field (undefined must delete the key, never store it —
+        // the byte-identity rule).
+        const withOpt = <T extends object>(obj: T, key: keyof T & string, val: unknown): T => {
+            const { [key]: _drop, ...rest } = obj as Record<string, unknown>;
+            return (val === undefined ? rest : { ...rest, [key]: val }) as T;
+        };
+
+        // 1) Layer + asset boxes
+        let newLayers: Record<VNID, VNCharacterLayer> = {};
+        for (const [layerId, layer] of Object.entries(character.layers)) {
+            let l = layer;
+            if (layerBoxes && layerId in layerBoxes) {
+                l = withOpt(l, 'box', normalizeLayerBox(layerBoxes[layerId] || undefined));
+            }
+            if (layerPoseBoxes?.[layerId]) {
+                l = withOpt(l, 'poseBoxes', patchBoxRecord(l.poseBoxes, layerPoseBoxes[layerId]));
+            }
+            const assetBoxPatch = assetBoxes?.[layerId];
+            const assetPosePatch = assetPoseBoxes?.[layerId];
+            if (assetBoxPatch || assetPosePatch) {
+                const newAssets: Record<VNID, VNLayerAsset> = {};
+                for (const [assetId, asset] of Object.entries(l.assets)) {
+                    let a = asset;
+                    if (assetBoxPatch && assetId in assetBoxPatch) {
+                        a = withOpt(a, 'box', normalizeLayerBox(assetBoxPatch[assetId] || undefined));
+                    }
+                    if (assetPosePatch?.[assetId]) {
+                        a = withOpt(a, 'poseBoxes', patchBoxRecord(a.poseBoxes, assetPosePatch[assetId]));
+                    }
+                    newAssets[assetId] = a;
+                }
+                l = { ...l, assets: newAssets };
+            }
+            newLayers[layerId] = l;
+        }
+
+        // 2) Base stacking order — rebuild the Record's key order (REORDER_CHARACTERS safety
+        //    tail: unknown ids skipped, missing layers appended — never drop data).
+        if (baseLayerOrder) {
+            const ordered: Record<VNID, VNCharacterLayer> = {};
+            baseLayerOrder.forEach(id => { if (newLayers[id]) ordered[id] = newLayers[id]; });
+            for (const id in newLayers) {
+                if (!ordered[id]) ordered[id] = newLayers[id];
+            }
+            newLayers = ordered;
+        }
+
+        // 3) Per-pose order + hidden lists. An order identical to the base order and an empty
+        //    hidden list are stored as ABSENCE.
+        let newPoses = character.poses;
+        if ((poseLayerOrders || poseHiddenLayers) && character.poses) {
+            const baseOrder = Object.keys(newLayers);
+            const posesNext: Record<VNID, VNCharacterPose> = {};
+            for (const [poseId, pose] of Object.entries(character.poses)) {
+                let p = pose;
+                if (poseLayerOrders && poseId in poseLayerOrders) {
+                    const requested = poseLayerOrders[poseId];
+                    const cleaned = requested ? requested.filter(id => !!newLayers[id]) : null;
+                    const sameAsBase = !!cleaned && cleaned.length === baseOrder.length && cleaned.every((id, i) => id === baseOrder[i]);
+                    p = withOpt(p, 'layerOrder', (!cleaned || sameAsBase) ? undefined : cleaned);
+                }
+                if (poseHiddenLayers && poseId in poseHiddenLayers) {
+                    const requested = poseHiddenLayers[poseId];
+                    const cleaned = requested ? requested.filter(id => !!newLayers[id]) : null;
+                    p = withOpt(p, 'hiddenLayers', (!cleaned || cleaned.length === 0) ? undefined : cleaned);
+                }
+                posesNext[poseId] = p;
+            }
+            newPoses = posesNext;
+        }
+
+        const updatedChar: VNCharacter = newPoses !== character.poses
+            ? { ...character, layers: newLayers, poses: newPoses }
+            : { ...character, layers: newLayers };
+        return { ...state, characters: { ...state.characters, [characterId]: updatedChar } };
+    }
+
+    case 'DUPLICATE_POSE': {
+        const { characterId, poseId, newPoseId, newName } = action.payload;
+        const character = state.characters[characterId];
+        const src = character?.poses?.[poseId];
+        if (!character || !src) return state;
+        const newId = newPoseId || `pose-${generateId()}`;
+        if (character.poses![newId]) return state;
+        // Spread carries layerOrder/hiddenLayers AND base-art URL fields BY REFERENCE — a
+        // duplicate never copies files, only pointers.
+        const copy: VNCharacterPose = { ...src, id: newId, name: newName || `${src.name} (copy)` };
+        const newLayers: Record<VNID, VNCharacterLayer> = {};
+        for (const [layerId, layer] of Object.entries(character.layers)) {
+            let l = layer;
+            if (layer.poseBoxes?.[poseId]) {
+                l = { ...l, poseBoxes: { ...l.poseBoxes, [newId]: { ...layer.poseBoxes[poseId] } } };
+            }
+            if (Object.values(l.assets).some(a => a.poseArt?.[poseId] || a.poseBoxes?.[poseId])) {
+                const newAssets: Record<VNID, VNLayerAsset> = {};
+                for (const [assetId, asset] of Object.entries(l.assets)) {
+                    let a = asset;
+                    if (asset.poseArt?.[poseId]) {
+                        a = { ...a, poseArt: { ...a.poseArt, [newId]: { ...asset.poseArt[poseId] } } };
+                    }
+                    if (asset.poseBoxes?.[poseId]) {
+                        a = { ...a, poseBoxes: { ...a.poseBoxes, [newId]: { ...asset.poseBoxes[poseId] } } };
+                    }
+                    newAssets[assetId] = a;
+                }
+                l = { ...l, assets: newAssets };
+            }
+            newLayers[layerId] = l;
+        }
+        return {
+            ...state,
+            characters: {
+                ...state.characters,
+                [characterId]: { ...character, layers: newLayers, poses: { ...character.poses, [newId]: copy } },
+            },
+        };
     }
 
     case 'REORDER_CHARACTERS': {

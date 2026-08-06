@@ -13,6 +13,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIElementType2["Checkbox"] = "Checkbox";
     UIElementType2["AssetCycler"] = "AssetCycler";
     UIElementType2["CGGallery"] = "CGGallery";
+    UIElementType2["MusicGallery"] = "MusicGallery";
     UIElementType2["Inventory"] = "Inventory";
     UIElementType2["HotSpot"] = "HotSpot";
     UIElementType2["draggableImageElement"] = "draggableImageElement";
@@ -353,23 +354,23 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     min: stat.min,
     max: stat.max
   });
-  const statReducer = (state, action) => {
+  const statReducer = (state2, action) => {
     var _a, _b, _c;
     switch (action.type) {
       case "ADD_STAT": {
         const p = action.payload;
         const statId = p.id || `stat-${generateId$8()}`;
-        const stats = state.stats || {};
+        const stats = state2.stats || {};
         const min = p.min ?? 0;
         const max = p.max ?? 100;
         const defaultValue = p.defaultValue ?? min;
         const appliesTo = p.appliesTo || "global";
         const characterIds = appliesTo === "characters" ? p.characterIds || [] : void 0;
-        let variables = state.variables;
+        let variables = state2.variables;
         const variableIds = {};
         const targets2 = appliesTo === "characters" ? characterIds || [] : ["global"];
         for (const target of targets2) {
-          const charName = target === "global" ? void 0 : (_a = state.characters[target]) == null ? void 0 : _a.name;
+          const charName = target === "global" ? void 0 : (_a = state2.characters[target]) == null ? void 0 : _a.name;
           if (target !== "global" && !charName) continue;
           const varId = `var-${generateId$8()}`;
           variables = { ...variables, [varId]: makeStatVar(varId, statVarName(p.name, charName), { min, max, defaultValue }) };
@@ -389,22 +390,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           variableIds,
           order: p.order ?? Object.keys(stats).length
         };
-        return { ...state, variables, stats: { ...stats, [statId]: newStat } };
+        return { ...state2, variables, stats: { ...stats, [statId]: newStat } };
       }
       case "UPDATE_STAT": {
         const { statId, updates } = action.payload;
-        const stats = state.stats || {};
+        const stats = state2.stats || {};
         const existing = stats[statId];
-        if (!existing) return state;
+        if (!existing) return state2;
         const merged = { ...existing, ...updates };
-        let variables = state.variables;
+        let variables = state2.variables;
         const rangeChanged = updates.min !== void 0 || updates.max !== void 0 || updates.defaultValue !== void 0;
         if (updates.name || rangeChanged) {
           const next = { ...variables };
           for (const [target, varId] of Object.entries(existing.variableIds)) {
             const v = next[varId];
             if (!v) continue;
-            const charName = target === "global" ? void 0 : (_b = state.characters[target]) == null ? void 0 : _b.name;
+            const charName = target === "global" ? void 0 : (_b = state2.characters[target]) == null ? void 0 : _b.name;
             next[varId] = {
               ...v,
               name: updates.name ? statVarName(merged.name, charName) : v.name,
@@ -415,30 +416,30 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
           variables = next;
         }
-        return { ...state, variables, stats: { ...stats, [statId]: merged } };
+        return { ...state2, variables, stats: { ...stats, [statId]: merged } };
       }
       case "DELETE_STAT": {
         const { statId, deleteVariables } = action.payload;
-        const stats = state.stats || {};
+        const stats = state2.stats || {};
         const existing = stats[statId];
-        if (!existing) return state;
+        if (!existing) return state2;
         const { [statId]: _removed, ...remainingStats } = stats;
-        let variables = state.variables;
+        let variables = state2.variables;
         if (deleteVariables) {
           const next = { ...variables };
           for (const varId of Object.values(existing.variableIds)) delete next[varId];
           variables = next;
         }
-        return { ...state, variables, stats: remainingStats };
+        return { ...state2, variables, stats: remainingStats };
       }
       case "SET_STAT_CHARACTERS": {
         const { statId, characterIds } = action.payload;
-        const stats = state.stats || {};
+        const stats = state2.stats || {};
         const existing = stats[statId];
-        if (!existing || existing.appliesTo !== "characters") return state;
+        if (!existing || existing.appliesTo !== "characters") return state2;
         const prev = new Set(existing.characterIds || []);
         const next = new Set(characterIds);
-        let variables = { ...state.variables };
+        let variables = { ...state2.variables };
         const variableIds = { ...existing.variableIds };
         for (const charId of prev) {
           if (!next.has(charId)) {
@@ -449,7 +450,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         for (const charId of next) {
           if (!prev.has(charId)) {
-            const charName = (_c = state.characters[charId]) == null ? void 0 : _c.name;
+            const charName = (_c = state2.characters[charId]) == null ? void 0 : _c.name;
             if (!charName) continue;
             const varId = `var-${generateId$8()}`;
             variables[varId] = makeStatVar(varId, statVarName(existing.name, charName), existing);
@@ -457,13 +458,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         }
         return {
-          ...state,
+          ...state2,
           variables,
           stats: { ...stats, [statId]: { ...existing, characterIds: [...next], variableIds } }
         };
       }
       default:
-        return state;
+        return state2;
     }
   };
   var CommandType = /* @__PURE__ */ ((CommandType2) => {
@@ -473,6 +474,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["HideCharacter"] = "HideCharacter";
     CommandType2["SetCharacterLayer"] = "SetCharacterLayer";
     CommandType2["SetCharacterPose"] = "SetCharacterPose";
+    CommandType2["PlayCharacterAnimation"] = "PlayCharacterAnimation";
     CommandType2["Choice"] = "Choice";
     CommandType2["BranchStart"] = "BranchStart";
     CommandType2["BranchElseIf"] = "BranchElseIf";
@@ -760,39 +762,39 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }));
     return { ...project, storyBible: { sections } };
   }
-  const projectReducer = (state, action) => {
+  const projectReducer = (state2, action) => {
     switch (action.type) {
       case "SET_PROJECT":
         return migrateStoryBiblePluginStorage(migrateMapLocationActions(repairOrphanBranchMarkers(migrateStatVariables(migrateItemCountVariableBounds(migrateInventorySlotButton(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload))))))));
       case "UPDATE_PROJECT": {
         return {
-          ...state,
+          ...state2,
           ...action.payload
         };
       }
       case "UPDATE_PROJECT_TITLE": {
         return {
-          ...state,
+          ...state2,
           title: action.payload.title
         };
       }
       default:
         if (action && action.type && !action.type.startsWith("UPDATE_PROJECT_")) {
-          return state;
+          return state2;
         }
-        return state;
+        return state2;
     }
   };
-  const assetReducer = (state, action) => {
+  const assetReducer = (state2, action) => {
     switch (action.type) {
       case "ADD_ASSET": {
         const { assetType, asset } = action.payload;
         console.log("[assetReducer] ADD_ASSET:", { assetType, assetId: asset.id, assetName: asset.name });
-        console.log("[assetReducer] Current state[assetType]:", state[assetType]);
+        console.log("[assetReducer] Current state[assetType]:", state2[assetType]);
         const newState = {
-          ...state,
+          ...state2,
           [assetType]: {
-            ...state[assetType],
+            ...state2[assetType],
             [asset.id]: asset
           }
         };
@@ -801,22 +803,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "UPDATE_ASSET": {
         const { assetType, assetId, updates } = action.payload;
-        const asset = state[assetType][assetId];
-        if (!asset) return state;
+        const asset = state2[assetType][assetId];
+        if (!asset) return state2;
         return {
-          ...state,
+          ...state2,
           [assetType]: {
-            ...state[assetType],
+            ...state2[assetType],
             [assetId]: { ...asset, ...updates }
           }
         };
       }
       case "DELETE_ASSET": {
         const { assetType, assetId } = action.payload;
-        const { [assetId]: _, ...remainingAssets } = state[assetType];
+        const { [assetId]: _, ...remainingAssets } = state2[assetType];
         const fallbackId = Object.keys(remainingAssets)[0];
-        let newState = { ...state, [assetType]: remainingAssets };
-        const newScenes = JSON.parse(JSON.stringify(state.scenes));
+        let newState = { ...state2, [assetType]: remainingAssets };
+        const newScenes = JSON.parse(JSON.stringify(state2.scenes));
         let scenesChanged = false;
         for (const sceneId in newScenes) {
           newScenes[sceneId].commands = newScenes[sceneId].commands.map((cmd) => {
@@ -849,12 +851,68 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return newState;
       }
       default:
-        return state;
+        return state2;
     }
   };
+  const EPS = 5e-3;
+  const near = (a, b) => Math.abs(a - b) < EPS;
+  function isFullBox(box) {
+    return near(box.x, 0) && near(box.y, 0) && near(box.width, 100) && near(box.height, 100) && !box.rotation && !box.flipH;
+  }
+  function normalizeLayerBox(box) {
+    if (!box) return void 0;
+    if (isFullBox(box)) return void 0;
+    const out = { x: box.x, y: box.y, width: box.width, height: box.height };
+    if (box.rotation) out.rotation = box.rotation;
+    if (box.flipH) out.flipH = true;
+    return out;
+  }
+  function resolveLayerBox(layer, asset, poseId) {
+    var _a, _b;
+    if (poseId && ((_a = asset == null ? void 0 : asset.poseBoxes) == null ? void 0 : _a[poseId])) return asset.poseBoxes[poseId];
+    if (asset == null ? void 0 : asset.box) return asset.box;
+    if (poseId && ((_b = layer.poseBoxes) == null ? void 0 : _b[poseId])) return layer.poseBoxes[poseId];
+    if (layer.box) return layer.box;
+    return void 0;
+  }
+  function layerOrderForPose(char, poseId) {
+    var _a, _b;
+    const base = Object.values(char.layers || {});
+    const order = poseId ? (_b = (_a = char.poses) == null ? void 0 : _a[poseId]) == null ? void 0 : _b.layerOrder : void 0;
+    if (!order || order.length === 0) return base;
+    const byId = char.layers || {};
+    const listed = order.map((id) => byId[id]).filter((l) => !!l);
+    const listedIds = new Set(order);
+    const appended = base.filter((l) => !listedIds.has(l.id));
+    return [...listed, ...appended];
+  }
+  function poseHiddenLayerIds(char, poseId) {
+    var _a, _b;
+    const hidden = poseId ? (_b = (_a = char.poses) == null ? void 0 : _a[poseId]) == null ? void 0 : _b.hiddenLayers : void 0;
+    return new Set(hidden || []);
+  }
+  function layerBoxStyle(box) {
+    if (!box) return {};
+    const style = {
+      left: `${box.x}%`,
+      top: `${box.y}%`,
+      width: `${box.width}%`,
+      height: `${box.height}%`
+    };
+    const transform = layerBoxTransform(box);
+    if (transform) style.transform = transform;
+    return style;
+  }
+  function layerBoxTransform(box) {
+    if (!box) return "";
+    const parts = [];
+    if (box.rotation) parts.push(`rotate(${box.rotation}deg)`);
+    if (box.flipH) parts.push("scaleX(-1)");
+    return parts.join(" ");
+  }
   const generateId$7 = () => Math.random().toString(36).substring(2, 9);
-  const characterReducer = (state, action) => {
-    var _a, _b, _c, _d, _e;
+  const characterReducer = (state2, action) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
     switch (action.type) {
       case "ADD_CHARACTER": {
         const { name, color } = action.payload;
@@ -870,18 +928,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           expressions: { [newExprId]: newExpression }
         };
         return {
-          ...state,
+          ...state2,
           characters: {
-            ...state.characters,
+            ...state2.characters,
             [newId2]: newCharacter
           }
         };
       }
       case "DELETE_CHARACTER": {
         const { characterId } = action.payload;
-        const { [characterId]: _, ...remaining } = state.characters;
+        const { [characterId]: _, ...remaining } = state2.characters;
         const fallbackId = Object.keys(remaining)[0];
-        const newScenes = JSON.parse(JSON.stringify(state.scenes));
+        const newScenes = JSON.parse(JSON.stringify(state2.scenes));
         for (const sceneId in newScenes) {
           newScenes[sceneId].commands = newScenes[sceneId].commands.map((cmd) => {
             if (cmd.type === CommandType.Dialogue && cmd.characterId === characterId) {
@@ -896,56 +954,81 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }).filter(Boolean);
         }
         return {
-          ...state,
+          ...state2,
           characters: remaining,
           scenes: newScenes
         };
       }
       case "UPDATE_CHARACTER": {
         const { characterId, updates } = action.payload;
-        const character = state.characters[characterId];
-        if (!character) return state;
+        const character = state2.characters[characterId];
+        if (!character) return state2;
         const updatedCharacter = { ...character, ...updates };
         return {
-          ...state,
+          ...state2,
           characters: {
-            ...state.characters,
+            ...state2.characters,
             [characterId]: updatedCharacter
           }
         };
       }
       case "ADD_CHARACTER_LAYER": {
         const { characterId, name } = action.payload;
-        const character = state.characters[characterId];
-        if (!character) return state;
+        const character = state2.characters[characterId];
+        if (!character) return state2;
         const newLayerId = `layer-${generateId$7()}`;
         const newLayer = { id: newLayerId, name, assets: {} };
         const newLayers = { ...character.layers, [newLayerId]: newLayer };
-        return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers } } };
+        return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, layers: newLayers } } };
       }
       case "UPDATE_CHARACTER_LAYER": {
         const { characterId, layerId, name } = action.payload;
-        const character = state.characters[characterId];
-        if (!(character == null ? void 0 : character.layers[layerId])) return state;
+        const character = state2.characters[characterId];
+        if (!(character == null ? void 0 : character.layers[layerId])) return state2;
         const updatedLayer = { ...character.layers[layerId], name };
         const newLayers = { ...character.layers, [layerId]: updatedLayer };
-        return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers } } };
+        return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, layers: newLayers } } };
       }
       case "DELETE_CHARACTER_LAYER": {
         const { characterId, layerId } = action.payload;
-        const character = state.characters[characterId];
-        if (!character) return state;
+        const character = state2.characters[characterId];
+        if (!character) return state2;
         const { [layerId]: _, ...remainingLayers } = character.layers;
-        const newExpressions = { ...character.expressions };
-        for (const exprId in newExpressions) {
-          delete newExpressions[exprId].layerConfiguration[layerId];
+        const newExpressions = {};
+        for (const [exprId, expr] of Object.entries(character.expressions)) {
+          if (layerId in expr.layerConfiguration) {
+            const { [layerId]: _cfg, ...restCfg } = expr.layerConfiguration;
+            newExpressions[exprId] = { ...expr, layerConfiguration: restCfg };
+          } else {
+            newExpressions[exprId] = expr;
+          }
         }
-        return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: remainingLayers, expressions: newExpressions } } };
+        let newPoses = character.poses;
+        if (character.poses) {
+          const posesNext = {};
+          for (const [poseId, pose] of Object.entries(character.poses)) {
+            let p = pose;
+            if ((_a = p.layerOrder) == null ? void 0 : _a.includes(layerId)) {
+              const filtered = p.layerOrder.filter((id) => id !== layerId);
+              const { layerOrder: _lo, ...rest } = p;
+              p = filtered.length ? { ...rest, layerOrder: filtered } : rest;
+            }
+            if ((_b = p.hiddenLayers) == null ? void 0 : _b.includes(layerId)) {
+              const filtered = p.hiddenLayers.filter((id) => id !== layerId);
+              const { hiddenLayers: _hl, ...rest } = p;
+              p = filtered.length ? { ...rest, hiddenLayers: filtered } : rest;
+            }
+            posesNext[poseId] = p;
+          }
+          newPoses = posesNext;
+        }
+        const updatedChar = newPoses !== character.poses ? { ...character, layers: remainingLayers, expressions: newExpressions, poses: newPoses } : { ...character, layers: remainingLayers, expressions: newExpressions };
+        return { ...state2, characters: { ...state2.characters, [characterId]: updatedChar } };
       }
       case "ADD_LAYER_ASSET": {
         const { characterId, layerId, name, imageUrl, videoUrl, isVideo, loop, autoplay, poseArt } = action.payload;
-        const character = state.characters[characterId];
-        if (!(character == null ? void 0 : character.layers[layerId])) return state;
+        const character = state2.characters[characterId];
+        if (!(character == null ? void 0 : character.layers[layerId])) return state2;
         const newAssetId = action.payload.id || `asset-${generateId$7()}`;
         const newAsset = {
           id: newAssetId,
@@ -960,12 +1043,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         };
         const newAssets = { ...character.layers[layerId].assets, [newAssetId]: newAsset };
         const newLayers = { ...character.layers, [layerId]: { ...character.layers[layerId], assets: newAssets } };
-        return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers } } };
+        return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, layers: newLayers } } };
       }
       case "DELETE_LAYER_ASSET": {
         const { characterId, layerId, assetId } = action.payload;
-        const character = state.characters[characterId];
-        if (!((_a = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _a.assets[assetId])) return state;
+        const character = state2.characters[characterId];
+        if (!((_c = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _c.assets[assetId])) return state2;
         const { [assetId]: _, ...remainingAssets } = character.layers[layerId].assets;
         const newLayers = { ...character.layers, [layerId]: { ...character.layers[layerId], assets: remainingAssets } };
         const newExpressions = { ...character.expressions };
@@ -974,43 +1057,43 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             newExpressions[exprId].layerConfiguration[layerId] = null;
           }
         }
-        return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers, expressions: newExpressions } } };
+        return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, layers: newLayers, expressions: newExpressions } } };
       }
       case "UPDATE_LAYER_ASSET": {
         const { characterId, layerId, assetId, updates } = action.payload;
-        const character = state.characters[characterId];
-        const asset = (_b = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _b.assets[assetId];
-        if (!asset) return state;
+        const character = state2.characters[characterId];
+        const asset = (_d = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _d.assets[assetId];
+        if (!asset) return state2;
         const newAssets = { ...character.layers[layerId].assets, [assetId]: { ...asset, ...updates } };
         const newLayers = { ...character.layers, [layerId]: { ...character.layers[layerId], assets: newAssets } };
-        return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers } } };
+        return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, layers: newLayers } } };
       }
       case "ADD_EXPRESSION": {
         const { characterId, name } = action.payload;
-        const character = state.characters[characterId];
-        if (!character) return state;
+        const character = state2.characters[characterId];
+        if (!character) return state2;
         const newExprId = `expr-${generateId$7()}`;
         const newExpression = { id: newExprId, name, layerConfiguration: {} };
         Object.keys(character.layers).forEach((layerId) => {
           newExpression.layerConfiguration[layerId] = null;
         });
         const newExpressions = { ...character.expressions, [newExprId]: newExpression };
-        return { ...state, characters: { ...state.characters, [characterId]: { ...character, expressions: newExpressions } } };
+        return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, expressions: newExpressions } } };
       }
       case "UPDATE_EXPRESSION": {
         const { characterId, expressionId, updates } = action.payload;
-        const character = state.characters[characterId];
-        if (!(character == null ? void 0 : character.expressions[expressionId])) return state;
+        const character = state2.characters[characterId];
+        if (!(character == null ? void 0 : character.expressions[expressionId])) return state2;
         const newExpression = { ...character.expressions[expressionId], ...updates };
         const newExpressions = { ...character.expressions, [expressionId]: newExpression };
-        return { ...state, characters: { ...state.characters, [characterId]: { ...character, expressions: newExpressions } } };
+        return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, expressions: newExpressions } } };
       }
       case "DELETE_EXPRESSION": {
         const { characterId, expressionId } = action.payload;
-        const character = state.characters[characterId];
-        if (!character) return state;
+        const character = state2.characters[characterId];
+        if (!character) return state2;
         const { [expressionId]: _, ...remainingExpressions } = character.expressions;
-        const newScenes = JSON.parse(JSON.stringify(state.scenes));
+        const newScenes = JSON.parse(JSON.stringify(state2.scenes));
         const firstExprId = Object.keys(remainingExpressions)[0];
         for (const sceneId in newScenes) {
           newScenes[sceneId].commands.forEach((cmd) => {
@@ -1019,45 +1102,52 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
           });
         }
-        return { ...state, scenes: newScenes, characters: { ...state.characters, [characterId]: { ...character, expressions: remainingExpressions } } };
+        return { ...state2, scenes: newScenes, characters: { ...state2.characters, [characterId]: { ...character, expressions: remainingExpressions } } };
       }
       case "ADD_POSE": {
         const { characterId, name } = action.payload;
-        const character = state.characters[characterId];
-        if (!character) return state;
+        const character = state2.characters[characterId];
+        if (!character) return state2;
         const newPoseId = `pose-${generateId$7()}`;
         const newPose = { id: newPoseId, name };
-        return { ...state, characters: { ...state.characters, [characterId]: { ...character, poses: { ...character.poses || {}, [newPoseId]: newPose } } } };
+        return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, poses: { ...character.poses || {}, [newPoseId]: newPose } } } };
       }
       case "UPDATE_POSE": {
         const { characterId, poseId, updates } = action.payload;
-        const character = state.characters[characterId];
-        const pose = (_c = character == null ? void 0 : character.poses) == null ? void 0 : _c[poseId];
-        if (!character || !pose) return state;
-        return { ...state, characters: { ...state.characters, [characterId]: { ...character, poses: { ...character.poses, [poseId]: { ...pose, ...updates } } } } };
+        const character = state2.characters[characterId];
+        const pose = (_e = character == null ? void 0 : character.poses) == null ? void 0 : _e[poseId];
+        if (!character || !pose) return state2;
+        return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, poses: { ...character.poses, [poseId]: { ...pose, ...updates } } } } };
       }
       case "DELETE_POSE": {
         const { characterId, poseId } = action.payload;
-        const character = state.characters[characterId];
-        if (!((_d = character == null ? void 0 : character.poses) == null ? void 0 : _d[poseId])) return state;
+        const character = state2.characters[characterId];
+        if (!((_f = character == null ? void 0 : character.poses) == null ? void 0 : _f[poseId])) return state2;
         const { [poseId]: _removed, ...remainingPoses } = character.poses;
+        const stripPoseBoxes = (owner) => {
+          if (!owner.poseBoxes || !(poseId in owner.poseBoxes)) return owner;
+          const { [poseId]: _box, ...restBoxes } = owner.poseBoxes;
+          if (Object.keys(restBoxes).length) return { ...owner, poseBoxes: restBoxes };
+          const { poseBoxes: _pb, ...rest } = owner;
+          return rest;
+        };
         const newLayers = {};
         for (const [layerId, layer] of Object.entries(character.layers)) {
           const newAssets = {};
           for (const [assetId, asset] of Object.entries(layer.assets)) {
-            if (asset.poseArt && poseId in asset.poseArt) {
-              const { [poseId]: _art, ...restArt } = asset.poseArt;
-              newAssets[assetId] = Object.keys(restArt).length ? { ...asset, poseArt: restArt } : (() => {
-                const { poseArt: _pa, ...rest } = asset;
+            let a = asset;
+            if (a.poseArt && poseId in a.poseArt) {
+              const { [poseId]: _art, ...restArt } = a.poseArt;
+              a = Object.keys(restArt).length ? { ...a, poseArt: restArt } : (() => {
+                const { poseArt: _pa, ...rest } = a;
                 return rest;
               })();
-            } else {
-              newAssets[assetId] = asset;
             }
+            newAssets[assetId] = stripPoseBoxes(a);
           }
-          newLayers[layerId] = { ...layer, assets: newAssets };
+          newLayers[layerId] = stripPoseBoxes({ ...layer, assets: newAssets });
         }
-        const newScenes = JSON.parse(JSON.stringify(state.scenes));
+        const newScenes = JSON.parse(JSON.stringify(state2.scenes));
         for (const sceneId in newScenes) {
           newScenes[sceneId].commands = newScenes[sceneId].commands.map((cmd) => {
             if ((cmd.type === CommandType.ShowCharacter || cmd.type === CommandType.SetCharacterPose) && cmd.characterId === characterId && cmd.poseId === poseId) {
@@ -1071,16 +1161,43 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const { poses: _po, ...rest } = character;
           return { ...rest, layers: newLayers };
         })();
-        return { ...state, characters: { ...state.characters, [characterId]: updatedChar }, scenes: newScenes };
+        return { ...state2, characters: { ...state2.characters, [characterId]: updatedChar }, scenes: newScenes };
+      }
+      case "ADD_CHARACTER_ANIMATION": {
+        const { characterId, name } = action.payload;
+        const character = state2.characters[characterId];
+        if (!character) return state2;
+        const id = `anim-${generateId$7()}`;
+        const anim = { id, name, durationMs: 1e3, tracks: [], loop: false };
+        return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, animations: { ...character.animations || {}, [id]: anim } } } };
+      }
+      case "UPDATE_CHARACTER_ANIMATION": {
+        const { characterId, animationId, updates } = action.payload;
+        const character = state2.characters[characterId];
+        const anim = (_g = character == null ? void 0 : character.animations) == null ? void 0 : _g[animationId];
+        if (!character || !anim) return state2;
+        const next = { ...anim, ...updates };
+        next.tracks = (next.tracks || []).map((tr) => ({ ...tr, keys: [...tr.keys || []].sort((a, b) => a.atMs - b.atMs) }));
+        return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, animations: { ...character.animations, [animationId]: next } } } };
+      }
+      case "DELETE_CHARACTER_ANIMATION": {
+        const { characterId, animationId } = action.payload;
+        const character = state2.characters[characterId];
+        if (!((_h = character == null ? void 0 : character.animations) == null ? void 0 : _h[animationId])) return state2;
+        const { [animationId]: _gone, ...rest } = character.animations;
+        const nextChar = { ...character };
+        if (Object.keys(rest).length) nextChar.animations = rest;
+        else delete nextChar.animations;
+        return { ...state2, characters: { ...state2.characters, [characterId]: nextChar } };
       }
       case "SET_ASSET_POSE_ART": {
         const { characterId, layerId, assetId, poseId, art } = action.payload;
-        const character = state.characters[characterId];
-        const asset = (_e = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _e.assets[assetId];
-        if (!character || !asset) return state;
+        const character = state2.characters[characterId];
+        const asset = (_i = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _i.assets[assetId];
+        if (!character || !asset) return state2;
         let newAsset;
         if (art === null) {
-          if (!asset.poseArt || !(poseId in asset.poseArt)) return state;
+          if (!asset.poseArt || !(poseId in asset.poseArt)) return state2;
           const { [poseId]: _art, ...restArt } = asset.poseArt;
           newAsset = Object.keys(restArt).length ? { ...asset, poseArt: restArt } : (() => {
             const { poseArt: _pa, ...rest } = asset;
@@ -1091,54 +1208,173 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         const newAssets = { ...character.layers[layerId].assets, [assetId]: newAsset };
         const newLayers = { ...character.layers, [layerId]: { ...character.layers[layerId], assets: newAssets } };
-        return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers } } };
+        return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, layers: newLayers } } };
+      }
+      case "APPLY_CHARACTER_LAYOUT": {
+        const { characterId, layerBoxes, layerPoseBoxes, assetBoxes, assetPoseBoxes, poseLayerOrders, poseHiddenLayers, baseLayerOrder } = action.payload;
+        const character = state2.characters[characterId];
+        if (!character) return state2;
+        const patchBoxRecord = (existing, patch) => {
+          const next = { ...existing || {} };
+          for (const [key, value] of Object.entries(patch)) {
+            const norm = normalizeLayerBox(value || void 0);
+            if (norm) next[key] = norm;
+            else delete next[key];
+          }
+          return Object.keys(next).length ? next : void 0;
+        };
+        const withOpt = (obj, key, val) => {
+          const { [key]: _drop, ...rest } = obj;
+          return val === void 0 ? rest : { ...rest, [key]: val };
+        };
+        let newLayers = {};
+        for (const [layerId, layer] of Object.entries(character.layers)) {
+          let l = layer;
+          if (layerBoxes && layerId in layerBoxes) {
+            l = withOpt(l, "box", normalizeLayerBox(layerBoxes[layerId] || void 0));
+          }
+          if (layerPoseBoxes == null ? void 0 : layerPoseBoxes[layerId]) {
+            l = withOpt(l, "poseBoxes", patchBoxRecord(l.poseBoxes, layerPoseBoxes[layerId]));
+          }
+          const assetBoxPatch = assetBoxes == null ? void 0 : assetBoxes[layerId];
+          const assetPosePatch = assetPoseBoxes == null ? void 0 : assetPoseBoxes[layerId];
+          if (assetBoxPatch || assetPosePatch) {
+            const newAssets = {};
+            for (const [assetId, asset] of Object.entries(l.assets)) {
+              let a = asset;
+              if (assetBoxPatch && assetId in assetBoxPatch) {
+                a = withOpt(a, "box", normalizeLayerBox(assetBoxPatch[assetId] || void 0));
+              }
+              if (assetPosePatch == null ? void 0 : assetPosePatch[assetId]) {
+                a = withOpt(a, "poseBoxes", patchBoxRecord(a.poseBoxes, assetPosePatch[assetId]));
+              }
+              newAssets[assetId] = a;
+            }
+            l = { ...l, assets: newAssets };
+          }
+          newLayers[layerId] = l;
+        }
+        if (baseLayerOrder) {
+          const ordered = {};
+          baseLayerOrder.forEach((id) => {
+            if (newLayers[id]) ordered[id] = newLayers[id];
+          });
+          for (const id in newLayers) {
+            if (!ordered[id]) ordered[id] = newLayers[id];
+          }
+          newLayers = ordered;
+        }
+        let newPoses = character.poses;
+        if ((poseLayerOrders || poseHiddenLayers) && character.poses) {
+          const baseOrder = Object.keys(newLayers);
+          const posesNext = {};
+          for (const [poseId, pose] of Object.entries(character.poses)) {
+            let p = pose;
+            if (poseLayerOrders && poseId in poseLayerOrders) {
+              const requested = poseLayerOrders[poseId];
+              const cleaned = requested ? requested.filter((id) => !!newLayers[id]) : null;
+              const sameAsBase = !!cleaned && cleaned.length === baseOrder.length && cleaned.every((id, i) => id === baseOrder[i]);
+              p = withOpt(p, "layerOrder", !cleaned || sameAsBase ? void 0 : cleaned);
+            }
+            if (poseHiddenLayers && poseId in poseHiddenLayers) {
+              const requested = poseHiddenLayers[poseId];
+              const cleaned = requested ? requested.filter((id) => !!newLayers[id]) : null;
+              p = withOpt(p, "hiddenLayers", !cleaned || cleaned.length === 0 ? void 0 : cleaned);
+            }
+            posesNext[poseId] = p;
+          }
+          newPoses = posesNext;
+        }
+        const updatedChar = newPoses !== character.poses ? { ...character, layers: newLayers, poses: newPoses } : { ...character, layers: newLayers };
+        return { ...state2, characters: { ...state2.characters, [characterId]: updatedChar } };
+      }
+      case "DUPLICATE_POSE": {
+        const { characterId, poseId, newPoseId, newName } = action.payload;
+        const character = state2.characters[characterId];
+        const src = (_j = character == null ? void 0 : character.poses) == null ? void 0 : _j[poseId];
+        if (!character || !src) return state2;
+        const newId2 = newPoseId || `pose-${generateId$7()}`;
+        if (character.poses[newId2]) return state2;
+        const copy = { ...src, id: newId2, name: newName || `${src.name} (copy)` };
+        const newLayers = {};
+        for (const [layerId, layer] of Object.entries(character.layers)) {
+          let l = layer;
+          if ((_k = layer.poseBoxes) == null ? void 0 : _k[poseId]) {
+            l = { ...l, poseBoxes: { ...l.poseBoxes, [newId2]: { ...layer.poseBoxes[poseId] } } };
+          }
+          if (Object.values(l.assets).some((a) => {
+            var _a2, _b2;
+            return ((_a2 = a.poseArt) == null ? void 0 : _a2[poseId]) || ((_b2 = a.poseBoxes) == null ? void 0 : _b2[poseId]);
+          })) {
+            const newAssets = {};
+            for (const [assetId, asset] of Object.entries(l.assets)) {
+              let a = asset;
+              if ((_l = asset.poseArt) == null ? void 0 : _l[poseId]) {
+                a = { ...a, poseArt: { ...a.poseArt, [newId2]: { ...asset.poseArt[poseId] } } };
+              }
+              if ((_m = asset.poseBoxes) == null ? void 0 : _m[poseId]) {
+                a = { ...a, poseBoxes: { ...a.poseBoxes, [newId2]: { ...asset.poseBoxes[poseId] } } };
+              }
+              newAssets[assetId] = a;
+            }
+            l = { ...l, assets: newAssets };
+          }
+          newLayers[layerId] = l;
+        }
+        return {
+          ...state2,
+          characters: {
+            ...state2.characters,
+            [characterId]: { ...character, layers: newLayers, poses: { ...character.poses, [newId2]: copy } }
+          }
+        };
       }
       case "REORDER_CHARACTERS": {
         const { characterIds } = action.payload;
         const newCharacters = {};
         characterIds.forEach((id) => {
-          if (state.characters[id]) newCharacters[id] = state.characters[id];
+          if (state2.characters[id]) newCharacters[id] = state2.characters[id];
         });
-        for (const id in state.characters) {
-          if (!newCharacters[id]) newCharacters[id] = state.characters[id];
+        for (const id in state2.characters) {
+          if (!newCharacters[id]) newCharacters[id] = state2.characters[id];
         }
-        return { ...state, characters: newCharacters };
+        return { ...state2, characters: newCharacters };
       }
       default:
-        return state;
+        return state2;
     }
   };
   const generateId$6 = () => Math.random().toString(36).substring(2, 9);
-  const sceneReducer = (state, action) => {
+  const sceneReducer = (state2, action) => {
     switch (action.type) {
       case "ADD_SCENE": {
         const newId2 = `scene-${generateId$6()}`;
         const newScene = { id: newId2, name: action.payload.name, commands: [] };
         return {
-          ...state,
-          scenes: { ...state.scenes, [newId2]: newScene }
+          ...state2,
+          scenes: { ...state2.scenes, [newId2]: newScene }
         };
       }
       case "UPDATE_SCENE": {
         const { sceneId, name } = action.payload;
         return {
-          ...state,
-          scenes: { ...state.scenes, [sceneId]: { ...state.scenes[sceneId], name } }
+          ...state2,
+          scenes: { ...state2.scenes, [sceneId]: { ...state2.scenes[sceneId], name } }
         };
       }
       case "UPDATE_SCENE_CONFIG": {
         const { sceneId, updates } = action.payload;
         return {
-          ...state,
-          scenes: { ...state.scenes, [sceneId]: { ...state.scenes[sceneId], ...updates } }
+          ...state2,
+          scenes: { ...state2.scenes, [sceneId]: { ...state2.scenes[sceneId], ...updates } }
         };
       }
       case "DELETE_SCENE": {
         const { sceneId } = action.payload;
-        if (Object.keys(state.scenes).length <= 1) return state;
-        const { [sceneId]: _, ...remainingScenes } = state.scenes;
-        let newStartSceneId = state.startSceneId;
-        if (state.startSceneId === sceneId) {
+        if (Object.keys(state2.scenes).length <= 1) return state2;
+        const { [sceneId]: _, ...remainingScenes } = state2.scenes;
+        let newStartSceneId = state2.startSceneId;
+        if (state2.startSceneId === sceneId) {
           newStartSceneId = Object.keys(remainingScenes)[0] || "";
         }
         for (const sId in remainingScenes) {
@@ -1169,15 +1405,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           });
         }
         return {
-          ...state,
+          ...state2,
           scenes: remainingScenes,
           startSceneId: newStartSceneId
         };
       }
       case "DUPLICATE_SCENE": {
         const { sceneId } = action.payload;
-        const originalScene = state.scenes[sceneId];
-        if (!originalScene) return state;
+        const originalScene = state2.scenes[sceneId];
+        if (!originalScene) return state2;
         const newId2 = `scene-${generateId$6()}`;
         const branchIdRemap = /* @__PURE__ */ new Map();
         const duplicatedScene = {
@@ -1198,34 +1434,34 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           })
         };
         return {
-          ...state,
-          scenes: { ...state.scenes, [newId2]: duplicatedScene }
+          ...state2,
+          scenes: { ...state2.scenes, [newId2]: duplicatedScene }
         };
       }
       case "REORDER_SCENES": {
         const { sceneIds } = action.payload;
         const newScenes = {};
         sceneIds.forEach((id) => {
-          if (state.scenes[id]) {
-            newScenes[id] = state.scenes[id];
+          if (state2.scenes[id]) {
+            newScenes[id] = state2.scenes[id];
           }
         });
         return {
-          ...state,
+          ...state2,
           scenes: newScenes
         };
       }
       case "SET_START_SCENE": {
-        return { ...state, startSceneId: action.payload.sceneId };
+        return { ...state2, startSceneId: action.payload.sceneId };
       }
       case "UPDATE_SCENE_COMMANDS": {
         const { sceneId, commands } = action.payload;
         return {
-          ...state,
+          ...state2,
           scenes: {
-            ...state.scenes,
+            ...state2.scenes,
             [sceneId]: {
-              ...state.scenes[sceneId],
+              ...state2.scenes[sceneId],
               commands
             }
           }
@@ -1233,49 +1469,49 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "ADD_COMMAND": {
         const { sceneId, command } = action.payload;
-        const scene = state.scenes[sceneId];
+        const scene = state2.scenes[sceneId];
         const newCommands = [...scene.commands, { ...command, id: `cmd-${generateId$6()}` }];
         return {
-          ...state,
-          scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } }
+          ...state2,
+          scenes: { ...state2.scenes, [sceneId]: { ...scene, commands: newCommands } }
         };
       }
       case "UPDATE_COMMAND": {
         const { sceneId, commandIndex, command } = action.payload;
-        const scene = state.scenes[sceneId];
+        const scene = state2.scenes[sceneId];
         const newCommands = [...scene.commands];
         newCommands[commandIndex] = command;
         return {
-          ...state,
-          scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } }
+          ...state2,
+          scenes: { ...state2.scenes, [sceneId]: { ...scene, commands: newCommands } }
         };
       }
       case "DELETE_COMMAND": {
         const { sceneId, commandIndex } = action.payload;
-        const scene = state.scenes[sceneId];
+        const scene = state2.scenes[sceneId];
         const commandToDelete = scene.commands[commandIndex];
         if ((commandToDelete == null ? void 0 : commandToDelete.type) === CommandType.BranchStart) {
           const branchId = commandToDelete.branchId;
           const isBranchMarker = (cmd) => (cmd.type === CommandType.BranchStart || cmd.type === CommandType.BranchElseIf || cmd.type === CommandType.BranchElse || cmd.type === CommandType.BranchEnd) && cmd.branchId === branchId;
           const newCommands2 = scene.commands.filter((cmd) => !isBranchMarker(cmd));
           return {
-            ...state,
-            scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands2 } }
+            ...state2,
+            scenes: { ...state2.scenes, [sceneId]: { ...scene, commands: newCommands2 } }
           };
         }
         if ((commandToDelete == null ? void 0 : commandToDelete.type) === CommandType.BranchEnd) {
-          return state;
+          return state2;
         }
         const newCommands = scene.commands.filter((_, index) => index !== commandIndex);
         return {
-          ...state,
-          scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } }
+          ...state2,
+          scenes: { ...state2.scenes, [sceneId]: { ...scene, commands: newCommands } }
         };
       }
       case "MOVE_COMMAND": {
         const { sceneId, fromIndex, toIndex } = action.payload;
-        if (fromIndex === toIndex) return state;
-        const scene = state.scenes[sceneId];
+        if (fromIndex === toIndex) return state2;
+        const scene = state2.scenes[sceneId];
         const newCommands = [...scene.commands];
         const movedCommand = newCommands[fromIndex];
         if (movedCommand.type === CommandType.BranchStart) {
@@ -1292,24 +1528,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             newCommands.splice(adjustedToIndex, 0, ...branchCommands);
             return {
-              ...state,
-              scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } }
+              ...state2,
+              scenes: { ...state2.scenes, [sceneId]: { ...scene, commands: newCommands } }
             };
           }
         }
         if (movedCommand.type === CommandType.BranchEnd) {
-          return state;
+          return state2;
         }
         const [removed] = newCommands.splice(fromIndex, 1);
         newCommands.splice(toIndex, 0, removed);
         return {
-          ...state,
-          scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } }
+          ...state2,
+          scenes: { ...state2.scenes, [sceneId]: { ...scene, commands: newCommands } }
         };
       }
       case "TOGGLE_GROUP_COLLAPSE": {
         const { sceneId, groupId } = action.payload;
-        const scene = state.scenes[sceneId];
+        const scene = state2.scenes[sceneId];
         const newCommands = scene.commands.map((cmd) => {
           if (cmd.id === groupId && cmd.type === CommandType.Group) {
             return { ...cmd, collapsed: !cmd.collapsed };
@@ -1317,24 +1553,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           return cmd;
         });
         return {
-          ...state,
-          scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } }
+          ...state2,
+          scenes: { ...state2.scenes, [sceneId]: { ...scene, commands: newCommands } }
         };
       }
       case "TOGGLE_BRANCH_COLLAPSE": {
         const { sceneId, branchId } = action.payload;
-        const scene = state.scenes[sceneId];
+        const scene = state2.scenes[sceneId];
         const newCommands = scene.commands.map(
           (cmd) => cmd.type === CommandType.BranchStart && cmd.branchId === branchId ? { ...cmd, isCollapsed: !cmd.isCollapsed } : cmd
         );
         return {
-          ...state,
-          scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } }
+          ...state2,
+          scenes: { ...state2.scenes, [sceneId]: { ...scene, commands: newCommands } }
         };
       }
       case "ADD_COMMAND_TO_GROUP": {
         const { sceneId, groupId, commandId } = action.payload;
-        const scene = state.scenes[sceneId];
+        const scene = state2.scenes[sceneId];
         const newCommands = scene.commands.map((cmd) => {
           if (cmd.id === groupId && cmd.type === CommandType.Group) {
             const groupCmd = cmd;
@@ -1343,13 +1579,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           return cmd;
         });
         return {
-          ...state,
-          scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } }
+          ...state2,
+          scenes: { ...state2.scenes, [sceneId]: { ...scene, commands: newCommands } }
         };
       }
       case "REMOVE_COMMAND_FROM_GROUP": {
         const { sceneId, groupId, commandId } = action.payload;
-        const scene = state.scenes[sceneId];
+        const scene = state2.scenes[sceneId];
         const newCommands = scene.commands.map((cmd) => {
           if (cmd.id === groupId && cmd.type === CommandType.Group) {
             const groupCmd = cmd;
@@ -1358,13 +1594,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           return cmd;
         });
         return {
-          ...state,
-          scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } }
+          ...state2,
+          scenes: { ...state2.scenes, [sceneId]: { ...scene, commands: newCommands } }
         };
       }
       case "RENAME_GROUP": {
         const { sceneId, groupId, name } = action.payload;
-        const scene = state.scenes[sceneId];
+        const scene = state2.scenes[sceneId];
         const newCommands = scene.commands.map((cmd) => {
           if (cmd.id === groupId && cmd.type === CommandType.Group) {
             const groupCmd = cmd;
@@ -1373,13 +1609,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           return cmd;
         });
         return {
-          ...state,
-          scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } }
+          ...state2,
+          scenes: { ...state2.scenes, [sceneId]: { ...scene, commands: newCommands } }
         };
       }
       case "REORDER_COMMANDS_IN_GROUP": {
         const { sceneId, groupId, commandIds } = action.payload;
-        const scene = state.scenes[sceneId];
+        const scene = state2.scenes[sceneId];
         const newCommands = scene.commands.map((cmd) => {
           if (cmd.id === groupId && cmd.type === CommandType.Group) {
             const groupCmd = cmd;
@@ -1388,12 +1624,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           return cmd;
         });
         return {
-          ...state,
-          scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } }
+          ...state2,
+          scenes: { ...state2.scenes, [sceneId]: { ...scene, commands: newCommands } }
         };
       }
       default:
-        return state;
+        return state2;
     }
   };
   const generateId$5 = (prefix) => `${prefix}-${Math.random().toString(36).substring(2, 9)}`;
@@ -1495,14 +1731,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return { screens, specialIds };
   };
   const generateId$4 = () => Math.random().toString(36).substring(2, 9);
-  const uiReducer = (state, action) => {
+  const uiReducer = (state2, action) => {
     var _a, _b, _c, _d;
     switch (action.type) {
       case "UPDATE_UI": {
         return {
-          ...state,
+          ...state2,
           ui: {
-            ...state.ui,
+            ...state2.ui,
             ...action.payload
           }
         };
@@ -1510,9 +1746,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "UPDATE_UI_CONFIG": {
         const { key, value } = action.payload;
         return {
-          ...state,
+          ...state2,
           ui: {
-            ...state.ui,
+            ...state2.ui,
             [key]: value
           }
         };
@@ -1520,11 +1756,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "UPDATE_UI_FONT_CONFIG": {
         const { target, property, value } = action.payload;
         return {
-          ...state,
+          ...state2,
           ui: {
-            ...state.ui,
+            ...state2.ui,
             [target]: {
-              ...state.ui[target],
+              ...state2.ui[target],
               [property]: value
             }
           }
@@ -1533,13 +1769,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "RESTORE_DEFAULT_UI_SCREENS": {
         const { screens: defaultScreens, specialIds } = createDefaultUIScreens();
         return {
-          ...state,
+          ...state2,
           uiScreens: {
-            ...state.uiScreens,
+            ...state2.uiScreens,
             ...defaultScreens
           },
           ui: {
-            ...state.ui,
+            ...state2.ui,
             titleScreenId: specialIds.titleScreenId,
             settingsScreenId: specialIds.settingsScreenId,
             saveScreenId: specialIds.saveScreenId,
@@ -1551,36 +1787,36 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "ADD_TEXTBOX_THEME": {
         const id = action.payload.id || `tbtheme-${generateId$4()}`;
         const theme = { id, name: action.payload.name };
-        return { ...state, textboxThemes: { ...state.textboxThemes || {}, [id]: theme } };
+        return { ...state2, textboxThemes: { ...state2.textboxThemes || {}, [id]: theme } };
       }
       case "UPDATE_TEXTBOX_THEME": {
         const { themeId, updates } = action.payload;
-        const existing = (_a = state.textboxThemes) == null ? void 0 : _a[themeId];
-        if (!existing) return state;
-        return { ...state, textboxThemes: { ...state.textboxThemes, [themeId]: { ...existing, ...updates, id: themeId } } };
+        const existing = (_a = state2.textboxThemes) == null ? void 0 : _a[themeId];
+        if (!existing) return state2;
+        return { ...state2, textboxThemes: { ...state2.textboxThemes, [themeId]: { ...existing, ...updates, id: themeId } } };
       }
       case "DELETE_TEXTBOX_THEME": {
-        if (!((_b = state.textboxThemes) == null ? void 0 : _b[action.payload.themeId])) return state;
-        const next = { ...state.textboxThemes };
+        if (!((_b = state2.textboxThemes) == null ? void 0 : _b[action.payload.themeId])) return state2;
+        const next = { ...state2.textboxThemes };
         delete next[action.payload.themeId];
-        return { ...state, textboxThemes: next };
+        return { ...state2, textboxThemes: next };
       }
       case "ADD_CUSTOM_TRANSITION": {
         const id = action.payload.id || `ctrans-${generateId$4()}`;
         const transition = { id, name: action.payload.name, close: {}, open: {} };
-        return { ...state, customTransitions: { ...state.customTransitions || {}, [id]: transition } };
+        return { ...state2, customTransitions: { ...state2.customTransitions || {}, [id]: transition } };
       }
       case "UPDATE_CUSTOM_TRANSITION": {
         const { transitionId, updates } = action.payload;
-        const existing = (_c = state.customTransitions) == null ? void 0 : _c[transitionId];
-        if (!existing) return state;
-        return { ...state, customTransitions: { ...state.customTransitions, [transitionId]: { ...existing, ...updates, id: transitionId } } };
+        const existing = (_c = state2.customTransitions) == null ? void 0 : _c[transitionId];
+        if (!existing) return state2;
+        return { ...state2, customTransitions: { ...state2.customTransitions, [transitionId]: { ...existing, ...updates, id: transitionId } } };
       }
       case "DELETE_CUSTOM_TRANSITION": {
-        if (!((_d = state.customTransitions) == null ? void 0 : _d[action.payload.transitionId])) return state;
-        const next = { ...state.customTransitions };
+        if (!((_d = state2.customTransitions) == null ? void 0 : _d[action.payload.transitionId])) return state2;
+        const next = { ...state2.customTransitions };
         delete next[action.payload.transitionId];
-        return { ...state, customTransitions: next };
+        return { ...state2, customTransitions: next };
       }
       case "ADD_UI_SCREEN": {
         const { name, id } = action.payload;
@@ -1594,43 +1830,43 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           elements: {},
           effects: []
         };
-        return { ...state, uiScreens: { ...state.uiScreens, [newId2]: newScreen } };
+        return { ...state2, uiScreens: { ...state2.uiScreens, [newId2]: newScreen } };
       }
       case "UPDATE_UI_SCREEN": {
         const { screenId, updates } = action.payload;
-        const screen = state.uiScreens[screenId];
-        if (!screen) return state;
-        return { ...state, uiScreens: { ...state.uiScreens, [screenId]: { ...screen, ...updates } } };
+        const screen = state2.uiScreens[screenId];
+        if (!screen) return state2;
+        return { ...state2, uiScreens: { ...state2.uiScreens, [screenId]: { ...screen, ...updates } } };
       }
       case "DELETE_UI_SCREEN": {
         const { screenId } = action.payload;
         const specialScreenIds = [
-          state.ui.titleScreenId,
-          state.ui.settingsScreenId,
-          state.ui.saveScreenId,
-          state.ui.loadScreenId,
-          state.ui.pauseScreenId
+          state2.ui.titleScreenId,
+          state2.ui.settingsScreenId,
+          state2.ui.saveScreenId,
+          state2.ui.loadScreenId,
+          state2.ui.pauseScreenId
         ];
         if (specialScreenIds.includes(screenId)) {
           console.warn(`Attempted to delete a special UI screen (${screenId}), which is not allowed.`);
-          return state;
+          return state2;
         }
-        const { [screenId]: _, ...remainingScreens } = state.uiScreens;
-        const newUiConfig = { ...state.ui };
+        const { [screenId]: _, ...remainingScreens } = state2.uiScreens;
+        const newUiConfig = { ...state2.ui };
         let uiConfigChanged = false;
-        if (state.ui.titleScreenId === screenId) {
+        if (state2.ui.titleScreenId === screenId) {
           newUiConfig.titleScreenId = null;
           uiConfigChanged = true;
         }
-        if (state.ui.settingsScreenId === screenId) {
+        if (state2.ui.settingsScreenId === screenId) {
           newUiConfig.settingsScreenId = null;
           uiConfigChanged = true;
         }
-        if (state.ui.saveScreenId === screenId) {
+        if (state2.ui.saveScreenId === screenId) {
           newUiConfig.saveScreenId = null;
           uiConfigChanged = true;
         }
-        if (state.ui.loadScreenId === screenId) {
+        if (state2.ui.loadScreenId === screenId) {
           newUiConfig.loadScreenId = null;
           uiConfigChanged = true;
         }
@@ -1660,7 +1896,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           return acc;
         }, {});
         return {
-          ...state,
+          ...state2,
           uiScreens: cleanedScreens,
           ...uiConfigChanged && { ui: newUiConfig }
         };
@@ -1668,10 +1904,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "DUPLICATE_UI_SCREEN": {
         const { screenId } = action.payload;
         console.log("[DUPLICATE_UI_SCREEN] Duplicating screen:", screenId);
-        const originalScreen = state.uiScreens[screenId];
+        const originalScreen = state2.uiScreens[screenId];
         if (!originalScreen) {
           console.error("[DUPLICATE_UI_SCREEN] Screen not found:", screenId);
-          return state;
+          return state2;
         }
         const newScreenId = `screen-${generateId$4()}`;
         const newScreen = JSON.parse(JSON.stringify(originalScreen));
@@ -1685,128 +1921,158 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         newScreen.elements = newElements;
         console.log("[DUPLICATE_UI_SCREEN] Created new screen:", newScreenId, "with name:", newScreen.name);
         return {
-          ...state,
+          ...state2,
           uiScreens: {
-            ...state.uiScreens,
+            ...state2.uiScreens,
             [newScreenId]: newScreen
           }
         };
       }
       case "ADD_UI_ELEMENT": {
         const { screenId, element } = action.payload;
-        const screen = state.uiScreens[screenId];
-        if (!screen) return state;
+        const screen = state2.uiScreens[screenId];
+        if (!screen) return state2;
         const newElements = { ...screen.elements, [element.id]: element };
-        return { ...state, uiScreens: { ...state.uiScreens, [screenId]: { ...screen, elements: newElements } } };
+        return { ...state2, uiScreens: { ...state2.uiScreens, [screenId]: { ...screen, elements: newElements } } };
       }
       case "REORDER_UI_ELEMENT": {
         const { screenId, elementId, direction } = action.payload;
-        const screen = state.uiScreens[screenId];
-        if (!(screen == null ? void 0 : screen.elements[elementId])) return state;
+        const screen = state2.uiScreens[screenId];
+        if (!(screen == null ? void 0 : screen.elements[elementId])) return state2;
         const ids = Object.keys(screen.elements);
         const i = ids.indexOf(elementId);
         const j = i + direction;
-        if (i < 0 || j < 0 || j >= ids.length) return state;
+        if (i < 0 || j < 0 || j >= ids.length) return state2;
         [ids[i], ids[j]] = [ids[j], ids[i]];
         const elements = {};
         for (const id of ids) elements[id] = screen.elements[id];
-        return { ...state, uiScreens: { ...state.uiScreens, [screenId]: { ...screen, elements } } };
+        return { ...state2, uiScreens: { ...state2.uiScreens, [screenId]: { ...screen, elements } } };
       }
       case "REORDER_UI_ELEMENTS": {
         const { screenId, elementIds } = action.payload;
-        const screen = state.uiScreens[screenId];
-        if (!screen) return state;
+        const screen = state2.uiScreens[screenId];
+        if (!screen) return state2;
         const current = Object.keys(screen.elements);
-        if (elementIds.length !== current.length || elementIds.some((id) => !screen.elements[id])) return state;
+        if (elementIds.length !== current.length || elementIds.some((id) => !screen.elements[id])) return state2;
         const elements = {};
         for (const id of elementIds) elements[id] = screen.elements[id];
-        return { ...state, uiScreens: { ...state.uiScreens, [screenId]: { ...screen, elements } } };
+        return { ...state2, uiScreens: { ...state2.uiScreens, [screenId]: { ...screen, elements } } };
       }
       case "UPDATE_UI_ELEMENT": {
         const { screenId, elementId, updates } = action.payload;
-        const screen = state.uiScreens[screenId];
+        const screen = state2.uiScreens[screenId];
         const element = screen == null ? void 0 : screen.elements[elementId];
-        if (!element) return state;
+        if (!element) return state2;
         const newElement = { ...element, ...updates };
         const newElements = { ...screen.elements, [elementId]: newElement };
-        return { ...state, uiScreens: { ...state.uiScreens, [screenId]: { ...screen, elements: newElements } } };
+        return { ...state2, uiScreens: { ...state2.uiScreens, [screenId]: { ...screen, elements: newElements } } };
       }
       case "DELETE_UI_ELEMENT": {
         const { screenId, elementId } = action.payload;
-        const screen = state.uiScreens[screenId];
-        if (!screen) return state;
+        const screen = state2.uiScreens[screenId];
+        if (!screen) return state2;
         const { [elementId]: _, ...remainingElements } = screen.elements;
-        return { ...state, uiScreens: { ...state.uiScreens, [screenId]: { ...screen, elements: remainingElements } } };
+        return { ...state2, uiScreens: { ...state2.uiScreens, [screenId]: { ...screen, elements: remainingElements } } };
       }
       default:
-        return state;
+        return state2;
     }
   };
   const generateId$3 = () => Math.random().toString(36).substring(2, 9);
-  const variableReducer = (state, action) => {
+  const variableReducer = (state2, action) => {
     var _a, _b;
     switch (action.type) {
       case "ADD_VARIABLE_FOLDER": {
         const id = action.payload.id || `vfolder-${generateId$3()}`;
         const folder = { id, name: action.payload.name };
-        return { ...state, variableFolders: { ...state.variableFolders || {}, [id]: folder } };
+        return { ...state2, variableFolders: { ...state2.variableFolders || {}, [id]: folder } };
       }
       case "RENAME_VARIABLE_FOLDER": {
         const { folderId, name } = action.payload;
-        const existing = (_a = state.variableFolders) == null ? void 0 : _a[folderId];
-        if (!existing) return state;
-        return { ...state, variableFolders: { ...state.variableFolders, [folderId]: { ...existing, name } } };
+        const existing = (_a = state2.variableFolders) == null ? void 0 : _a[folderId];
+        if (!existing) return state2;
+        return { ...state2, variableFolders: { ...state2.variableFolders, [folderId]: { ...existing, name } } };
       }
       case "DELETE_VARIABLE_FOLDER": {
         const { folderId } = action.payload;
-        if (!((_b = state.variableFolders) == null ? void 0 : _b[folderId])) return state;
-        const next = { ...state.variableFolders };
+        if (!((_b = state2.variableFolders) == null ? void 0 : _b[folderId])) return state2;
+        const next = { ...state2.variableFolders };
         delete next[folderId];
-        const variables = { ...state.variables };
+        const variables = { ...state2.variables };
         for (const id in variables) {
           if (variables[id].folderId === folderId) variables[id] = { ...variables[id], folderId: void 0 };
         }
-        return { ...state, variableFolders: next, variables };
+        return { ...state2, variableFolders: next, variables };
       }
       case "ADD_VARIABLE": {
         const newId2 = action.payload.id || `var-${generateId$3()}`;
         const newVar = { id: newId2, name: action.payload.name, type: action.payload.type, defaultValue: action.payload.defaultValue };
         return {
-          ...state,
-          variables: { ...state.variables, [newId2]: newVar }
+          ...state2,
+          variables: { ...state2.variables, [newId2]: newVar }
         };
       }
       case "UPDATE_VARIABLE": {
         const { variableId, updates } = action.payload;
         return {
-          ...state,
-          variables: { ...state.variables, [variableId]: { ...state.variables[variableId], ...updates } }
+          ...state2,
+          variables: { ...state2.variables, [variableId]: { ...state2.variables[variableId], ...updates } }
         };
       }
       case "DELETE_VARIABLE": {
         const { variableId } = action.payload;
         console.log("[variableReducer] DELETE_VARIABLE received for:", variableId);
-        console.log("[variableReducer] Current variables:", Object.keys(state.variables));
-        const { [variableId]: deletedVar, ...remainingVars } = state.variables;
+        console.log("[variableReducer] Current variables:", Object.keys(state2.variables));
+        const { [variableId]: deletedVar, ...remainingVars } = state2.variables;
         console.log("[variableReducer] Deleted variable:", (deletedVar == null ? void 0 : deletedVar.name) || "NOT FOUND");
         console.log("[variableReducer] Remaining variables:", Object.keys(remainingVars));
-        const newScenes = { ...state.scenes };
+        const frozen = Number(deletedVar == null ? void 0 : deletedVar.defaultValue) || 0;
+        const freezeOperand = (o) => o && o.source === "variable" && o.variableId === variableId ? { source: "number", value: frozen } : o;
+        const freezeSetVarSpec = (spec) => {
+          let next = spec;
+          if (next.valueSource === "variable" && next.valueVariableId === variableId) {
+            next = { ...next, value: frozen };
+            delete next.valueSource;
+            delete next.valueVariableId;
+          }
+          if (next.valueSource === "calc" && next.calc) {
+            next = {
+              ...next,
+              calc: {
+                ...next.calc,
+                first: freezeOperand(next.calc.first),
+                steps: (next.calc.steps ?? []).map(freezeOperand)
+              }
+            };
+          }
+          return next;
+        };
+        const freezeCondition = (c) => {
+          if ((c == null ? void 0 : c.compareVariableId) !== variableId) return c;
+          const next = { ...c, value: frozen };
+          delete next.compareVariableId;
+          return next;
+        };
+        const newScenes = { ...state2.scenes };
         for (const sceneId in newScenes) {
           newScenes[sceneId].commands = newScenes[sceneId].commands.filter((cmd) => !(cmd.type === CommandType.SetVariable && cmd.variableId === variableId)).map((cmd) => {
             let newCmd = { ...cmd };
             if (newCmd.conditions) {
-              const filteredConditions = newCmd.conditions.filter((c) => c.variableId !== variableId);
+              const filteredConditions = newCmd.conditions.filter((c) => c.variableId !== variableId).map(freezeCondition);
               if (filteredConditions.length === 0) {
                 delete newCmd.conditions;
               } else {
                 newCmd.conditions = filteredConditions;
               }
             }
+            if (newCmd.type === CommandType.SetVariable) {
+              newCmd = freezeSetVarSpec(newCmd);
+            }
             if (newCmd.type === CommandType.Choice) {
               const newOptions = newCmd.options.map((opt) => {
                 const newOpt = { ...opt };
                 if (newOpt.conditions) {
-                  newOpt.conditions = newOpt.conditions.filter((c) => c.variableId !== variableId);
+                  newOpt.conditions = newOpt.conditions.filter((c) => c.variableId !== variableId).map(freezeCondition);
                   if (newOpt.conditions.length === 0) {
                     delete newOpt.conditions;
                   }
@@ -1817,7 +2083,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       return action2.variableId !== variableId;
                     }
                     return true;
-                  });
+                  }).map(
+                    (action2) => action2.type === UIActionType.SetVariable ? freezeSetVarSpec(action2) : action2
+                  );
                   newOpt.actions = filteredActions;
                 }
                 return newOpt;
@@ -1828,34 +2096,34 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           });
         }
         return {
-          ...state,
+          ...state2,
           variables: remainingVars,
           scenes: newScenes
         };
       }
       default:
-        return state;
+        return state2;
     }
   };
-  const scriptReducer = (state, action) => {
+  const scriptReducer = (state2, action) => {
     switch (action.type) {
       case "ADD_SCRIPT": {
         const { script } = action.payload;
         return {
-          ...state,
+          ...state2,
           scripts: {
-            ...state.scripts || {},
+            ...state2.scripts || {},
             [script.id]: script
           }
         };
       }
       case "UPDATE_SCRIPT": {
         const { scriptId, updates } = action.payload;
-        const scripts = state.scripts || {};
+        const scripts = state2.scripts || {};
         const existing = scripts[scriptId];
-        if (!existing) return state;
+        if (!existing) return state2;
         return {
-          ...state,
+          ...state2,
           scripts: {
             ...scripts,
             [scriptId]: {
@@ -1868,9 +2136,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "DELETE_SCRIPT": {
         const { scriptId } = action.payload;
-        const scripts = state.scripts || {};
+        const scripts = state2.scripts || {};
         const { [scriptId]: _, ...remaining } = scripts;
-        const newScenes = JSON.parse(JSON.stringify(state.scenes));
+        const newScenes = JSON.parse(JSON.stringify(state2.scenes));
         for (const sceneId in newScenes) {
           newScenes[sceneId].commands = newScenes[sceneId].commands.map((cmd) => {
             if (cmd.type === "RunScript" && cmd.scriptId === scriptId) {
@@ -1880,35 +2148,35 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           });
         }
         return {
-          ...state,
+          ...state2,
           scripts: remaining,
           scenes: newScenes
         };
       }
       default:
-        return state;
+        return state2;
     }
   };
   const generateId$2 = () => Math.random().toString(36).substring(2, 9);
-  const commonEventReducer = (state, action) => {
+  const commonEventReducer = (state2, action) => {
     switch (action.type) {
       case "ADD_COMMON_EVENT": {
         const { commonEvent } = action.payload;
         return {
-          ...state,
+          ...state2,
           commonEvents: {
-            ...state.commonEvents || {},
+            ...state2.commonEvents || {},
             [commonEvent.id]: commonEvent
           }
         };
       }
       case "UPDATE_COMMON_EVENT": {
         const { commonEventId, updates } = action.payload;
-        const commonEvents = state.commonEvents || {};
+        const commonEvents = state2.commonEvents || {};
         const existing = commonEvents[commonEventId];
-        if (!existing) return state;
+        if (!existing) return state2;
         return {
-          ...state,
+          ...state2,
           commonEvents: {
             ...commonEvents,
             [commonEventId]: {
@@ -1921,9 +2189,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "DELETE_COMMON_EVENT": {
         const { commonEventId } = action.payload;
-        const commonEvents = state.commonEvents || {};
+        const commonEvents = state2.commonEvents || {};
         const { [commonEventId]: _, ...remaining } = commonEvents;
-        const newScenes = JSON.parse(JSON.stringify(state.scenes));
+        const newScenes = JSON.parse(JSON.stringify(state2.scenes));
         for (const sceneId in newScenes) {
           newScenes[sceneId].commands = newScenes[sceneId].commands.map((cmd) => {
             if (cmd.type === "CallCommonEvent" && cmd.commonEventId === commonEventId) {
@@ -1933,16 +2201,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           });
         }
         return {
-          ...state,
+          ...state2,
           commonEvents: remaining,
           scenes: newScenes
         };
       }
       case "DUPLICATE_COMMON_EVENT": {
         const { commonEventId } = action.payload;
-        const commonEvents = state.commonEvents || {};
+        const commonEvents = state2.commonEvents || {};
         const original = commonEvents[commonEventId];
-        if (!original) return state;
+        if (!original) return state2;
         const now = (/* @__PURE__ */ new Date()).toISOString();
         const newId2 = `ce-${generateId$2()}`;
         const duplicate = {
@@ -1958,7 +2226,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }))
         };
         return {
-          ...state,
+          ...state2,
           commonEvents: {
             ...commonEvents,
             [newId2]: duplicate
@@ -1967,9 +2235,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "ADD_COMMON_EVENT_COMMAND": {
         const { commonEventId, command, index } = action.payload;
-        const commonEvents = state.commonEvents || {};
+        const commonEvents = state2.commonEvents || {};
         const existing = commonEvents[commonEventId];
-        if (!existing) return state;
+        if (!existing) return state2;
         const newCmd = { ...command, id: command.id || `cmd-${generateId$2()}` };
         const commands = [...existing.commands];
         if (index !== void 0 && index >= 0 && index <= commands.length) {
@@ -1978,7 +2246,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           commands.push(newCmd);
         }
         return {
-          ...state,
+          ...state2,
           commonEvents: {
             ...commonEvents,
             [commonEventId]: {
@@ -1991,13 +2259,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "UPDATE_COMMON_EVENT_COMMAND": {
         const { commonEventId, commandIndex, updates } = action.payload;
-        const commonEvents = state.commonEvents || {};
+        const commonEvents = state2.commonEvents || {};
         const existing = commonEvents[commonEventId];
-        if (!existing || commandIndex < 0 || commandIndex >= existing.commands.length) return state;
+        if (!existing || commandIndex < 0 || commandIndex >= existing.commands.length) return state2;
         const commands = [...existing.commands];
         commands[commandIndex] = { ...commands[commandIndex], ...updates };
         return {
-          ...state,
+          ...state2,
           commonEvents: {
             ...commonEvents,
             [commonEventId]: {
@@ -2010,13 +2278,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "DELETE_COMMON_EVENT_COMMAND": {
         const { commonEventId, commandIndex } = action.payload;
-        const commonEvents = state.commonEvents || {};
+        const commonEvents = state2.commonEvents || {};
         const existing = commonEvents[commonEventId];
-        if (!existing || commandIndex < 0 || commandIndex >= existing.commands.length) return state;
+        if (!existing || commandIndex < 0 || commandIndex >= existing.commands.length) return state2;
         const commands = [...existing.commands];
         commands.splice(commandIndex, 1);
         return {
-          ...state,
+          ...state2,
           commonEvents: {
             ...commonEvents,
             [commonEventId]: {
@@ -2029,14 +2297,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "REORDER_COMMON_EVENT_COMMANDS": {
         const { commonEventId, fromIndex, toIndex } = action.payload;
-        const commonEvents = state.commonEvents || {};
+        const commonEvents = state2.commonEvents || {};
         const existing = commonEvents[commonEventId];
-        if (!existing) return state;
+        if (!existing) return state2;
         const commands = [...existing.commands];
         const [moved] = commands.splice(fromIndex, 1);
         commands.splice(toIndex, 0, moved);
         return {
-          ...state,
+          ...state2,
           commonEvents: {
             ...commonEvents,
             [commonEventId]: {
@@ -2049,11 +2317,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "ADD_COMMON_EVENT_PARAMETER": {
         const { commonEventId, parameter } = action.payload;
-        const commonEvents = state.commonEvents || {};
+        const commonEvents = state2.commonEvents || {};
         const existing = commonEvents[commonEventId];
-        if (!existing) return state;
+        if (!existing) return state2;
         return {
-          ...state,
+          ...state2,
           commonEvents: {
             ...commonEvents,
             [commonEventId]: {
@@ -2066,14 +2334,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "UPDATE_COMMON_EVENT_PARAMETER": {
         const { commonEventId, parameterId, updates } = action.payload;
-        const commonEvents = state.commonEvents || {};
+        const commonEvents = state2.commonEvents || {};
         const existing = commonEvents[commonEventId];
-        if (!existing) return state;
+        if (!existing) return state2;
         const parameters = existing.parameters.map(
           (p) => p.id === parameterId ? { ...p, ...updates } : p
         );
         return {
-          ...state,
+          ...state2,
           commonEvents: {
             ...commonEvents,
             [commonEventId]: {
@@ -2086,9 +2354,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "DELETE_COMMON_EVENT_PARAMETER": {
         const { commonEventId, parameterId } = action.payload;
-        const commonEvents = state.commonEvents || {};
+        const commonEvents = state2.commonEvents || {};
         const existing = commonEvents[commonEventId];
-        if (!existing) return state;
+        if (!existing) return state2;
         const stripArg = (cmd) => {
           if (cmd.type === "CallCommonEvent" && cmd.commonEventId === commonEventId && cmd.arguments && parameterId in cmd.arguments) {
             const { [parameterId]: _drop, ...restArgs } = cmd.arguments;
@@ -2097,8 +2365,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           return cmd;
         };
         const newScenes = {};
-        for (const sceneId in state.scenes) {
-          const scene = state.scenes[sceneId];
+        for (const sceneId in state2.scenes) {
+          const scene = state2.scenes[sceneId];
           newScenes[sceneId] = { ...scene, commands: scene.commands.map(stripArg) };
         }
         const updatedEvents = {};
@@ -2112,23 +2380,23 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           updatedAt: (/* @__PURE__ */ new Date()).toISOString()
         };
         return {
-          ...state,
+          ...state2,
           scenes: newScenes,
           commonEvents: updatedEvents
         };
       }
       default:
-        return state;
+        return state2;
     }
   };
-  const pluginReducer = (state, action) => {
+  const pluginReducer = (state2, action) => {
     switch (action.type) {
       case "INSTALL_PLUGIN": {
         const { plugin } = action.payload;
-        const plugins = state.plugins || {};
-        const registry = state.pluginRegistry || {};
+        const plugins = state2.plugins || {};
+        const registry = state2.pluginRegistry || {};
         return {
-          ...state,
+          ...state2,
           plugins: {
             ...plugins,
             [plugin.manifest.id]: plugin
@@ -2147,11 +2415,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "UPDATE_PLUGIN": {
         const { pluginId, manifest, source, resources } = action.payload;
-        const plugins = state.plugins || {};
+        const plugins = state2.plugins || {};
         const existing = plugins[pluginId];
-        if (!existing) return state;
+        if (!existing) return state2;
         return {
-          ...state,
+          ...state2,
           plugins: {
             ...plugins,
             [pluginId]: {
@@ -2166,24 +2434,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "UNINSTALL_PLUGIN": {
         const { pluginId } = action.payload;
-        const plugins = { ...state.plugins || {} };
-        const registry = { ...state.pluginRegistry || {} };
+        const plugins = { ...state2.plugins || {} };
+        const registry = { ...state2.pluginRegistry || {} };
         delete plugins[pluginId];
         delete registry[pluginId];
         return {
-          ...state,
+          ...state2,
           plugins,
           pluginRegistry: registry
         };
       }
       case "ENABLE_PLUGIN": {
         const { pluginId } = action.payload;
-        const plugins = state.plugins || {};
-        const registry = state.pluginRegistry || {};
+        const plugins = state2.plugins || {};
+        const registry = state2.pluginRegistry || {};
         const plugin = plugins[pluginId];
-        if (!plugin) return state;
+        if (!plugin) return state2;
         return {
-          ...state,
+          ...state2,
           plugins: {
             ...plugins,
             [pluginId]: { ...plugin, state: "enabled", lastToggled: (/* @__PURE__ */ new Date()).toISOString() }
@@ -2196,12 +2464,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "DISABLE_PLUGIN": {
         const { pluginId } = action.payload;
-        const plugins = state.plugins || {};
-        const registry = state.pluginRegistry || {};
+        const plugins = state2.plugins || {};
+        const registry = state2.pluginRegistry || {};
         const plugin = plugins[pluginId];
-        if (!plugin) return state;
+        if (!plugin) return state2;
         return {
-          ...state,
+          ...state2,
           plugins: {
             ...plugins,
             [pluginId]: { ...plugin, state: "disabled", lastToggled: (/* @__PURE__ */ new Date()).toISOString() }
@@ -2214,12 +2482,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "UPDATE_PLUGIN_CONFIG": {
         const { pluginId, config } = action.payload;
-        const plugins = state.plugins || {};
-        const registry = state.pluginRegistry || {};
+        const plugins = state2.plugins || {};
+        const registry = state2.pluginRegistry || {};
         const plugin = plugins[pluginId];
-        if (!plugin) return state;
+        if (!plugin) return state2;
         return {
-          ...state,
+          ...state2,
           plugins: {
             ...plugins,
             [pluginId]: { ...plugin, config }
@@ -2232,11 +2500,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "UPDATE_PLUGIN_REGISTRY": {
         const { pluginId, entry } = action.payload;
-        const registry = state.pluginRegistry || {};
+        const registry = state2.pluginRegistry || {};
         const existing = registry[pluginId];
-        if (!existing) return state;
+        if (!existing) return state2;
         return {
-          ...state,
+          ...state2,
           pluginRegistry: {
             ...registry,
             [pluginId]: { ...existing, ...entry }
@@ -2245,10 +2513,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "SET_PLUGIN_STORAGE": {
         const { pluginId, key, value } = action.payload;
-        const storage = state.pluginStorage || {};
+        const storage = state2.pluginStorage || {};
         const pluginBucket = storage[pluginId] || {};
         return {
-          ...state,
+          ...state2,
           pluginStorage: {
             ...storage,
             [pluginId]: { ...pluginBucket, [key]: value }
@@ -2257,36 +2525,36 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "SET_PLUGIN_BUILD_INCLUDED": {
         const { pluginId, included } = action.payload;
-        const plugins = state.plugins || {};
+        const plugins = state2.plugins || {};
         const p = plugins[pluginId];
-        if (!p) return state;
+        if (!p) return state2;
         return {
-          ...state,
+          ...state2,
           plugins: { ...plugins, [pluginId]: { ...p, includeInBuild: included } }
         };
       }
       case "SET_PLUGIN_HIDE_IN_TESTPLAY": {
         const { pluginId, hidden } = action.payload;
-        const plugins = state.plugins || {};
+        const plugins = state2.plugins || {};
         const p = plugins[pluginId];
-        if (!p) return state;
+        if (!p) return state2;
         return {
-          ...state,
+          ...state2,
           plugins: { ...plugins, [pluginId]: { ...p, hideInTestPlay: hidden } }
         };
       }
       case "SET_PLUGIN_RESOURCES": {
         const { pluginId, resources } = action.payload;
-        const plugins = state.plugins || {};
+        const plugins = state2.plugins || {};
         const p = plugins[pluginId];
-        if (!p) return state;
+        if (!p) return state2;
         return {
-          ...state,
+          ...state2,
           plugins: { ...plugins, [pluginId]: { ...p, resources } }
         };
       }
       default:
-        return state;
+        return state2;
     }
   };
   const generateId$1 = () => Math.random().toString(36).substring(2, 9);
@@ -2301,14 +2569,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     isInternal: true
     // hidden from the Variables manager (kept calm); still works by id everywhere
   });
-  const itemReducer = (state, action) => {
+  const itemReducer = (state2, action) => {
     var _a, _b, _c, _d;
     switch (action.type) {
       case "ADD_ITEM": {
         const p = action.payload;
         const itemId = p.id || `item-${generateId$1()}`;
-        const items = state.items || {};
-        let variables = state.variables;
+        const items = state2.items || {};
+        let variables = state2.variables;
         let countVariableId = p.countVariableId;
         if (!countVariableId || !variables[countVariableId]) {
           countVariableId = countVariableId || `var-${generateId$1()}`;
@@ -2337,18 +2605,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           order: p.order ?? Object.keys(items).length
         };
         return {
-          ...state,
+          ...state2,
           variables,
           items: { ...items, [itemId]: newItem }
         };
       }
       case "UPDATE_ITEM": {
         const { itemId, updates } = action.payload;
-        const items = state.items || {};
+        const items = state2.items || {};
         const existing = items[itemId];
-        if (!existing) return state;
+        if (!existing) return state2;
         const merged = { ...existing, ...updates };
-        let variables = state.variables;
+        let variables = state2.variables;
         if (updates.name && existing.countVariableId && variables[existing.countVariableId]) {
           variables = {
             ...variables,
@@ -2356,24 +2624,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           };
         }
         return {
-          ...state,
+          ...state2,
           variables,
           items: { ...items, [itemId]: merged }
         };
       }
       case "DELETE_ITEM": {
         const { itemId, deleteCountVariable } = action.payload;
-        const items = state.items || {};
+        const items = state2.items || {};
         const existing = items[itemId];
-        if (!existing) return state;
+        if (!existing) return state2;
         const { [itemId]: _removed, ...remainingItems } = items;
-        let variables = state.variables;
+        let variables = state2.variables;
         if (deleteCountVariable && existing.countVariableId && variables[existing.countVariableId]) {
           const { [existing.countVariableId]: _v, ...rest } = variables;
           variables = rest;
         }
         return {
-          ...state,
+          ...state2,
           variables,
           items: remainingItems
         };
@@ -2381,180 +2649,180 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "ADD_ITEM_COLLECTION": {
         const p = action.payload;
         const id = p.id || `coll-${generateId$1()}`;
-        const collections = state.itemCollections || {};
+        const collections = state2.itemCollections || {};
         const newCollection = {
           id,
           name: p.name,
           entries: [],
           order: Object.keys(collections).length
         };
-        return { ...state, itemCollections: { ...collections, [id]: newCollection } };
+        return { ...state2, itemCollections: { ...collections, [id]: newCollection } };
       }
       case "UPDATE_ITEM_COLLECTION": {
         const { collectionId, updates } = action.payload;
-        const collections = state.itemCollections || {};
+        const collections = state2.itemCollections || {};
         const existing = collections[collectionId];
-        if (!existing) return state;
+        if (!existing) return state2;
         const merged = { ...existing, ...updates };
-        let variables = state.variables;
+        let variables = state2.variables;
         if (updates.name && updates.name !== existing.name) {
           merged.entries.forEach((e) => {
             var _a2, _b2;
             const v = variables[e.countVariableId];
             if (v) {
-              const itemName = ((_b2 = (_a2 = state.items) == null ? void 0 : _a2[e.itemId]) == null ? void 0 : _b2.name) || "Item";
+              const itemName = ((_b2 = (_a2 = state2.items) == null ? void 0 : _a2[e.itemId]) == null ? void 0 : _b2.name) || "Item";
               variables = { ...variables, [e.countVariableId]: { ...v, name: `${itemName} — ${updates.name}` } };
             }
           });
         }
-        return { ...state, variables, itemCollections: { ...collections, [collectionId]: merged } };
+        return { ...state2, variables, itemCollections: { ...collections, [collectionId]: merged } };
       }
       case "DELETE_ITEM_COLLECTION": {
         const { collectionId, deleteCountVariables } = action.payload;
-        const collections = state.itemCollections || {};
+        const collections = state2.itemCollections || {};
         const existing = collections[collectionId];
-        if (!existing) return state;
+        if (!existing) return state2;
         const { [collectionId]: _removed, ...remaining } = collections;
-        let variables = state.variables;
+        let variables = state2.variables;
         if (deleteCountVariables && !existing.tracksOwnedItems) {
           variables = { ...variables };
           existing.entries.forEach((e) => {
             delete variables[e.countVariableId];
           });
         }
-        return { ...state, variables, itemCollections: remaining };
+        return { ...state2, variables, itemCollections: remaining };
       }
       case "ADD_COLLECTION_ENTRY": {
         const { collectionId, itemId, startQty, scope } = action.payload;
-        const collections = state.itemCollections || {};
+        const collections = state2.itemCollections || {};
         const existing = collections[collectionId];
-        if (!existing) return state;
-        if (existing.entries.some((e) => e.itemId === itemId)) return state;
+        if (!existing) return state2;
+        if (existing.entries.some((e) => e.itemId === itemId)) return state2;
         if (existing.tracksOwnedItems) {
-          const ownedVarId = (_b = (_a = state.items) == null ? void 0 : _a[itemId]) == null ? void 0 : _b.countVariableId;
-          if (!ownedVarId) return state;
+          const ownedVarId = (_b = (_a = state2.items) == null ? void 0 : _a[itemId]) == null ? void 0 : _b.countVariableId;
+          if (!ownedVarId) return state2;
           const entry2 = { itemId, countVariableId: ownedVarId };
-          return { ...state, itemCollections: { ...collections, [collectionId]: { ...existing, entries: [...existing.entries, entry2] } } };
+          return { ...state2, itemCollections: { ...collections, [collectionId]: { ...existing, entries: [...existing.entries, entry2] } } };
         }
         const countVariableId = `var-${generateId$1()}`;
-        const itemName = ((_d = (_c = state.items) == null ? void 0 : _c[itemId]) == null ? void 0 : _d.name) || "Item";
+        const itemName = ((_d = (_c = state2.items) == null ? void 0 : _c[itemId]) == null ? void 0 : _d.name) || "Item";
         const countVar = makeEntryCountVar(countVariableId, `${itemName} — ${existing.name}`, startQty ?? 0, scope);
         const entry = { itemId, countVariableId, startQty: startQty ?? 0 };
         const merged = { ...existing, entries: [...existing.entries, entry] };
         return {
-          ...state,
-          variables: { ...state.variables, [countVariableId]: countVar },
+          ...state2,
+          variables: { ...state2.variables, [countVariableId]: countVar },
           itemCollections: { ...collections, [collectionId]: merged }
         };
       }
       case "UPDATE_COLLECTION_ENTRY": {
         const { collectionId, itemId, updates } = action.payload;
-        const collections = state.itemCollections || {};
+        const collections = state2.itemCollections || {};
         const existing = collections[collectionId];
-        if (!existing) return state;
+        if (!existing) return state2;
         const idx = existing.entries.findIndex((e) => e.itemId === itemId);
-        if (idx < 0) return state;
+        if (idx < 0) return state2;
         const entry = existing.entries[idx];
         const mergedEntry = { ...entry, ...updates };
         const entries = [...existing.entries];
         entries[idx] = mergedEntry;
-        let variables = state.variables;
+        let variables = state2.variables;
         if (updates.startQty !== void 0 && variables[entry.countVariableId]) {
           variables = {
             ...variables,
             [entry.countVariableId]: { ...variables[entry.countVariableId], defaultValue: Math.max(0, Math.floor(updates.startQty) || 0) }
           };
         }
-        return { ...state, variables, itemCollections: { ...collections, [collectionId]: { ...existing, entries } } };
+        return { ...state2, variables, itemCollections: { ...collections, [collectionId]: { ...existing, entries } } };
       }
       case "REMOVE_COLLECTION_ENTRY": {
         const { collectionId, itemId, deleteCountVariable } = action.payload;
-        const collections = state.itemCollections || {};
+        const collections = state2.itemCollections || {};
         const existing = collections[collectionId];
-        if (!existing) return state;
+        if (!existing) return state2;
         const entry = existing.entries.find((e) => e.itemId === itemId);
-        if (!entry) return state;
-        let variables = state.variables;
+        if (!entry) return state2;
+        let variables = state2.variables;
         if (deleteCountVariable !== false && !existing.tracksOwnedItems && variables[entry.countVariableId]) {
           const { [entry.countVariableId]: _v, ...rest } = variables;
           variables = rest;
         }
         return {
-          ...state,
+          ...state2,
           variables,
           itemCollections: { ...collections, [collectionId]: { ...existing, entries: existing.entries.filter((e) => e.itemId !== itemId) } }
         };
       }
       default:
-        return state;
+        return state2;
     }
   };
-  const withSections = (state, sections) => ({ ...state, storyBible: { ...state.storyBible || {}, sections } });
-  const withGlossary = (state, entries, settings) => {
+  const withSections = (state2, sections) => ({ ...state2, storyBible: { ...state2.storyBible || {}, sections } });
+  const withGlossary = (state2, entries, settings) => {
     var _a;
-    return { ...state, glossary: { entries, settings: settings ?? ((_a = state.glossary) == null ? void 0 : _a.settings) } };
+    return { ...state2, glossary: { entries, settings: settings ?? ((_a = state2.glossary) == null ? void 0 : _a.settings) } };
   };
-  const storyBibleReducer = (state, action) => {
+  const storyBibleReducer = (state2, action) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r;
     switch (action.type) {
       case "STORY_BIBLE_ADD_SECTION": {
-        const sections = ((_a = state.storyBible) == null ? void 0 : _a.sections) ?? [];
-        return withSections(state, [...sections, action.payload.section]);
+        const sections = ((_a = state2.storyBible) == null ? void 0 : _a.sections) ?? [];
+        return withSections(state2, [...sections, action.payload.section]);
       }
       case "STORY_BIBLE_UPDATE_SECTION": {
-        const sections = ((_b = state.storyBible) == null ? void 0 : _b.sections) ?? [];
-        if (!sections.some((s) => s.id === action.payload.sectionId)) return state;
-        return withSections(state, sections.map((s) => s.id === action.payload.sectionId ? { ...s, ...action.payload.updates } : s));
+        const sections = ((_b = state2.storyBible) == null ? void 0 : _b.sections) ?? [];
+        if (!sections.some((s) => s.id === action.payload.sectionId)) return state2;
+        return withSections(state2, sections.map((s) => s.id === action.payload.sectionId ? { ...s, ...action.payload.updates } : s));
       }
       case "STORY_BIBLE_DELETE_SECTION": {
-        const sections = ((_c = state.storyBible) == null ? void 0 : _c.sections) ?? [];
-        if (!sections.some((s) => s.id === action.payload.sectionId)) return state;
-        return withSections(state, sections.filter((s) => s.id !== action.payload.sectionId));
+        const sections = ((_c = state2.storyBible) == null ? void 0 : _c.sections) ?? [];
+        if (!sections.some((s) => s.id === action.payload.sectionId)) return state2;
+        return withSections(state2, sections.filter((s) => s.id !== action.payload.sectionId));
       }
       case "STORY_BIBLE_MOVE_SECTION": {
-        const sections = [...((_d = state.storyBible) == null ? void 0 : _d.sections) ?? []];
+        const sections = [...((_d = state2.storyBible) == null ? void 0 : _d.sections) ?? []];
         const i = sections.findIndex((s) => s.id === action.payload.sectionId);
         const j = i + action.payload.direction;
-        if (i < 0 || j < 0 || j >= sections.length) return state;
+        if (i < 0 || j < 0 || j >= sections.length) return state2;
         [sections[i], sections[j]] = [sections[j], sections[i]];
-        return withSections(state, sections);
+        return withSections(state2, sections);
       }
       case "STORY_BIBLE_ADD_SUBSECTION": {
-        const sections = ((_e = state.storyBible) == null ? void 0 : _e.sections) ?? [];
-        if (!sections.some((s) => s.id === action.payload.sectionId)) return state;
-        return withSections(state, sections.map((s) => s.id === action.payload.sectionId ? { ...s, subsections: [...s.subsections || [], action.payload.subsection] } : s));
+        const sections = ((_e = state2.storyBible) == null ? void 0 : _e.sections) ?? [];
+        if (!sections.some((s) => s.id === action.payload.sectionId)) return state2;
+        return withSections(state2, sections.map((s) => s.id === action.payload.sectionId ? { ...s, subsections: [...s.subsections || [], action.payload.subsection] } : s));
       }
       case "STORY_BIBLE_UPDATE_SUBSECTION": {
-        const sections = ((_f = state.storyBible) == null ? void 0 : _f.sections) ?? [];
+        const sections = ((_f = state2.storyBible) == null ? void 0 : _f.sections) ?? [];
         const sec = sections.find((s) => s.id === action.payload.sectionId);
-        if (!((_g = sec == null ? void 0 : sec.subsections) == null ? void 0 : _g.some((ss) => ss.id === action.payload.subsectionId))) return state;
-        return withSections(state, sections.map((s) => s.id === action.payload.sectionId ? { ...s, subsections: s.subsections.map((ss) => ss.id === action.payload.subsectionId ? { ...ss, ...action.payload.updates } : ss) } : s));
+        if (!((_g = sec == null ? void 0 : sec.subsections) == null ? void 0 : _g.some((ss) => ss.id === action.payload.subsectionId))) return state2;
+        return withSections(state2, sections.map((s) => s.id === action.payload.sectionId ? { ...s, subsections: s.subsections.map((ss) => ss.id === action.payload.subsectionId ? { ...ss, ...action.payload.updates } : ss) } : s));
       }
       case "STORY_BIBLE_DELETE_SUBSECTION": {
-        const sections = ((_h = state.storyBible) == null ? void 0 : _h.sections) ?? [];
+        const sections = ((_h = state2.storyBible) == null ? void 0 : _h.sections) ?? [];
         const sec = sections.find((s) => s.id === action.payload.sectionId);
-        if (!((_i = sec == null ? void 0 : sec.subsections) == null ? void 0 : _i.some((ss) => ss.id === action.payload.subsectionId))) return state;
-        return withSections(state, sections.map((s) => s.id === action.payload.sectionId ? { ...s, subsections: s.subsections.filter((ss) => ss.id !== action.payload.subsectionId) } : s));
+        if (!((_i = sec == null ? void 0 : sec.subsections) == null ? void 0 : _i.some((ss) => ss.id === action.payload.subsectionId))) return state2;
+        return withSections(state2, sections.map((s) => s.id === action.payload.sectionId ? { ...s, subsections: s.subsections.filter((ss) => ss.id !== action.payload.subsectionId) } : s));
       }
       case "GLOSSARY_ADD_ENTRY": {
-        const entries = ((_j = state.glossary) == null ? void 0 : _j.entries) ?? {};
-        return withGlossary(state, { ...entries, [action.payload.entry.id]: action.payload.entry });
+        const entries = ((_j = state2.glossary) == null ? void 0 : _j.entries) ?? {};
+        return withGlossary(state2, { ...entries, [action.payload.entry.id]: action.payload.entry });
       }
       case "GLOSSARY_UPDATE_ENTRY": {
-        const entries = ((_k = state.glossary) == null ? void 0 : _k.entries) ?? {};
+        const entries = ((_k = state2.glossary) == null ? void 0 : _k.entries) ?? {};
         const existing = entries[action.payload.entryId];
-        if (!existing) return state;
-        return withGlossary(state, { ...entries, [action.payload.entryId]: { ...existing, ...action.payload.updates, id: action.payload.entryId } });
+        if (!existing) return state2;
+        return withGlossary(state2, { ...entries, [action.payload.entryId]: { ...existing, ...action.payload.updates, id: action.payload.entryId } });
       }
       case "GLOSSARY_DELETE_ENTRY": {
-        const entries = ((_l = state.glossary) == null ? void 0 : _l.entries) ?? {};
-        if (!entries[action.payload.entryId]) return state;
+        const entries = ((_l = state2.glossary) == null ? void 0 : _l.entries) ?? {};
+        if (!entries[action.payload.entryId]) return state2;
         const next = { ...entries };
         delete next[action.payload.entryId];
-        return withGlossary(state, next);
+        return withGlossary(state2, next);
       }
       case "GLOSSARY_IMPORT_ENTRIES": {
-        const entries = { ...((_m = state.glossary) == null ? void 0 : _m.entries) ?? {} };
+        const entries = { ...((_m = state2.glossary) == null ? void 0 : _m.entries) ?? {} };
         const byTerm = new Map(Object.values(entries).map((e) => [e.term.trim().toLowerCase(), e.id]));
         for (const raw of action.payload.entries) {
           if (!((_n = raw == null ? void 0 : raw.term) == null ? void 0 : _n.trim())) continue;
@@ -2568,15 +2836,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             byTerm.set(raw.term.trim().toLowerCase(), id);
           }
         }
-        const settings = action.payload.settings ? { ...((_o = state.glossary) == null ? void 0 : _o.settings) || {}, ...action.payload.settings } : (_p = state.glossary) == null ? void 0 : _p.settings;
-        return withGlossary(state, entries, settings);
+        const settings = action.payload.settings ? { ...((_o = state2.glossary) == null ? void 0 : _o.settings) || {}, ...action.payload.settings } : (_p = state2.glossary) == null ? void 0 : _p.settings;
+        return withGlossary(state2, entries, settings);
       }
       case "GLOSSARY_UPDATE_SETTINGS": {
-        const entries = ((_q = state.glossary) == null ? void 0 : _q.entries) ?? {};
-        return withGlossary(state, entries, { ...((_r = state.glossary) == null ? void 0 : _r.settings) || {}, ...action.payload.updates });
+        const entries = ((_q = state2.glossary) == null ? void 0 : _q.entries) ?? {};
+        return withGlossary(state2, entries, { ...((_r = state2.glossary) == null ? void 0 : _r.settings) || {}, ...action.payload.updates });
       }
       default:
-        return state;
+        return state2;
     }
   };
   const reducers = [
@@ -2593,14 +2861,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     statReducer,
     storyBibleReducer
   ];
-  const rootReducer = (state, action) => {
+  const rootReducer = (state2, action) => {
     for (const reducer of reducers) {
-      const newState = reducer(state, action);
-      if (newState !== state) {
+      const newState = reducer(state2, action);
+      if (newState !== state2) {
         return newState;
       }
     }
-    return state;
+    return state2;
   };
   const DB_NAME = "flourish-vne";
   const DB_VERSION = 1;
@@ -3591,17 +3859,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (!isElectronAssetStore()) return { project, changed: false, migratedCount: 0 };
     const pid = project.id;
     const p = project;
-    const pending = collectAssetFields(p).filter((r) => {
+    const pending2 = collectAssetFields(p).filter((r) => {
       const v = r.obj[r.key];
       return isBase64(v) || isBareRef(v);
     });
-    const total = pending.length;
+    const total = pending2.length;
     let changed = false;
     let migratedCount = 0;
     let bytes = 0;
     let done = 0;
     if (total > 0) onProgress == null ? void 0 : onProgress({ done: 0, total, bytes: 0, label: "" });
-    for (const r of pending) {
+    for (const r of pending2) {
       const v = r.obj[r.key];
       try {
         if (isBase64(v)) {
@@ -3716,6 +3984,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       no: ((variable == null ? void 0 : variable.falseLabel) ?? "").trim() || fallbackFalse
     };
   }
+  function resolveConditionValue(c, variables) {
+    if (c.compareVariableId !== void 0) {
+      const v = variables[c.compareVariableId];
+      if (v !== void 0) return v;
+    }
+    return c.value;
+  }
   function combineConditions(conditions, evalOne) {
     if (!conditions || conditions.length === 0) return true;
     let result = evalOne(conditions[0]);
@@ -3743,27 +4018,28 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (isBandOperator(condition.operator)) {
         return compareBand(defs[condition.variableId], varValue, String(condition.value), condition.operator);
       }
+      const cmpValue = resolveConditionValue(condition, variables);
       switch (condition.operator) {
         case "is true":
           return !!varValue;
         case "is false":
           return !varValue;
         case "==":
-          return String(varValue).toLowerCase() === String(condition.value).toLowerCase();
+          return String(varValue).toLowerCase() === String(cmpValue).toLowerCase();
         case "!=":
-          return String(varValue).toLowerCase() !== String(condition.value).toLowerCase();
+          return String(varValue).toLowerCase() !== String(cmpValue).toLowerCase();
         case ">":
-          return Number(varValue) > Number(condition.value);
+          return Number(varValue) > Number(cmpValue);
         case "<":
-          return Number(varValue) < Number(condition.value);
+          return Number(varValue) < Number(cmpValue);
         case ">=":
-          return Number(varValue) >= Number(condition.value);
+          return Number(varValue) >= Number(cmpValue);
         case "<=":
-          return Number(varValue) <= Number(condition.value);
+          return Number(varValue) <= Number(cmpValue);
         case "contains":
-          return String(varValue).toLowerCase().includes(String(condition.value).toLowerCase());
+          return String(varValue).toLowerCase().includes(String(cmpValue).toLowerCase());
         case "startsWith":
-          return String(varValue).toLowerCase().startsWith(String(condition.value).toLowerCase());
+          return String(varValue).toLowerCase().startsWith(String(cmpValue).toLowerCase());
         default:
           return false;
       }
@@ -4068,6 +4344,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     });
     return result;
   };
+  const resolveCharacterDisplayName = (rawName, variables, project) => {
+    if (!rawName) return "";
+    if (!rawName.includes("{")) return rawName;
+    return interpolateVariables(rawName, variables, project).trim();
+  };
+  const makeDisplayNameResolver = (variables, project) => (raw, fallback) => resolveCharacterDisplayName(raw, variables, project) || fallback;
+  const findCharacterBySpokenName = (spokenName, project, variables) => {
+    const lower = String(spokenName ?? "").toLowerCase();
+    const all = Object.values(project.characters ?? {});
+    return all.find((c) => {
+      var _a;
+      return ((_a = c == null ? void 0 : c.name) == null ? void 0 : _a.toLowerCase()) === lower;
+    }) ?? all.find((c) => resolveCharacterDisplayName(c == null ? void 0 : c.name, variables, project).toLowerCase() === lower);
+  };
   const generateId = () => `opt-${Math.random().toString(36).substring(2, 9)}`;
   const generateBranchId = () => `branch-${Math.random().toString(36).substring(2, 9)}`;
   const createCommand = (type, project, options = {}) => {
@@ -4110,6 +4400,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case CommandType.SetCharacterPose: {
         const command = { type, characterId: firstCharId || "", transition: "fade", duration: 0.3 };
+        return command;
+      }
+      case CommandType.PlayCharacterAnimation: {
+        const command = { type, characterId: firstCharId || "", animationId: null };
         return command;
       }
       case CommandType.Choice: {
@@ -4823,6 +5117,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     title && /* @__PURE__ */ jsxRuntime2.jsx("title", { children: title }),
     /* @__PURE__ */ jsxRuntime2.jsx("path", { d: "M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" })
   ] });
+  const FilmIcon = ({ className, title, ...props }) => /* @__PURE__ */ jsxRuntime2.jsxs("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 20 20", fill: "currentColor", className: `w-5 h-5 ${className || ""}`, ...props, children: [
+    title && /* @__PURE__ */ jsxRuntime2.jsx("title", { children: title }),
+    /* @__PURE__ */ jsxRuntime2.jsx("path", { d: "M3.25 4A2.25 2.25 0 001 6.25v7.5A2.25 2.25 0 003.25 16h13.5A2.25 2.25 0 0019 13.75v-7.5A2.25 2.25 0 0016.75 4H3.25ZM2 9.5h1.25V11H2V9.5ZM2.75 12h.5v1.5h-.5V12Zm1.5 0h.5v1.5h-.5V12ZM5 12h.5v1.5H5V12Zm1.5 0h.5v1.5h-.5V12Zm1.5 0h.5v1.5h-.5V12Zm1.5 0h.5v1.5h-.5V12Zm1.5 0h.5v1.5h-.5V12ZM12 12h.5v1.5h-.5V12Zm1.5 0h.5v1.5h-.5V12Zm1.5 0h.5v1.5h-.5V12Zm1.5 0h.5v1.5h-.5V12ZM2 6.5h1.25V8H2V6.5ZM2.75 5h.5v1.5h-.5V5Zm1.5 0h.5v1.5h-.5V5ZM5 5h.5v1.5H5V5Zm1.5 0h.5v1.5h-.5V5Zm1.5 0h.5v1.5h-.5V5Zm1.5 0h.5v1.5h-.5V5Zm1.5 0h.5v1.5h-.5V5ZM12 5h.5v1.5h-.5V5Zm1.5 0h.5v1.5h-.5V5Zm1.5 0h.5v1.5h-.5V5Zm1.5 0h.5v1.5h-.5V5ZM16.75 9.5H18V11h-1.25V9.5Zm.5 2.5h-.5v1.5h.5V12ZM16.75 5h.5v1.5h-.5V5Z" })
+  ] });
   const buildOrientationTransform = (o) => {
     if (!o) return "";
     const parts = [];
@@ -4832,6 +5130,76 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (sx !== 1 || sy !== 1) parts.push(`scale(${sx}, ${sy})`);
     return parts.join(" ");
   };
+  const cssFontFamily = (family) => {
+    if (!family) return void 0;
+    const f = String(family).trim();
+    if (!f || f.includes(",") || f.startsWith('"') || f.startsWith("'")) return f || void 0;
+    const isBareIdent = /^[A-Za-z_ -￿][A-Za-z0-9_ -￿-]*$/.test(f);
+    return isBareIdent ? f : '"' + f.replace(/"/g, "") + '"';
+  };
+  const analyzeFontComplexity = (buf) => {
+    try {
+      const dv = new DataView(buf);
+      if (buf.byteLength < 12) return null;
+      const ver = dv.getUint32(0, false);
+      if (ver !== 65536 && ver !== 1953658213) return null;
+      const numTables = dv.getUint16(4, false);
+      let glyfLen = 0, maxpOff = -1;
+      for (let i = 0; i < numTables && 12 + i * 16 + 16 <= buf.byteLength; i++) {
+        const off = 12 + i * 16;
+        const tag = String.fromCharCode(dv.getUint8(off), dv.getUint8(off + 1), dv.getUint8(off + 2), dv.getUint8(off + 3));
+        if (tag === "glyf") glyfLen = dv.getUint32(off + 12, false);
+        if (tag === "maxp") maxpOff = dv.getUint32(off + 8, false);
+      }
+      if (!glyfLen || maxpOff < 0 || maxpOff + 6 > buf.byteLength) return null;
+      const glyphs = dv.getUint16(maxpOff + 4, false);
+      if (!glyphs) return null;
+      const avgGlyphBytes = glyfLen / glyphs;
+      return { glyphs, avgGlyphBytes, tooComplex: avgGlyphBytes > 10 * 1024 };
+    } catch {
+      return null;
+    }
+  };
+  const rendererFreezesOnComplexFonts = () => {
+    try {
+      const m = (navigator.userAgent || "").match(/Chrome\/(\d+)/);
+      return !!m && parseInt(m[1], 10) < 130;
+    } catch {
+      return false;
+    }
+  };
+  const refusedFontKeys = /* @__PURE__ */ new Set();
+  const loadedFontKeys = /* @__PURE__ */ new Set();
+  const loadFontOnce = async (family, resolvedUrl) => {
+    if (!family || !resolvedUrl) return false;
+    const key = `${family}|${resolvedUrl.slice(0, 256)}|${resolvedUrl.length}`;
+    if (loadedFontKeys.has(key)) return true;
+    if (refusedFontKeys.has(key)) return false;
+    try {
+      try {
+        if (rendererFreezesOnComplexFonts()) {
+          const res = await fetch(resolvedUrl);
+          if (res.ok) {
+            const info = analyzeFontComplexity(await res.arrayBuffer());
+            if (info == null ? void 0 : info.tooComplex) {
+              refusedFontKeys.add(key);
+              console.error(`Font "${family}" refused: ~${Math.round(info.avgGlyphBytes / 1024)}KB of outline data per glyph would freeze rendering in this app version. Use a simpler version of this font.`);
+              return false;
+            }
+          }
+        }
+      } catch {
+      }
+      const face = new FontFace(family, `url(${resolvedUrl})`);
+      await face.load();
+      document.fonts.add(face);
+      loadedFontKeys.add(key);
+      return true;
+    } catch (error) {
+      console.error(`Failed to load font "${family}":`, error);
+      return false;
+    }
+  };
   const fontSettingsToStyle = (settings) => {
     var _a, _b, _c;
     const px = (n) => `calc(var(--font-scale, 1) * ${n}px)`;
@@ -4839,7 +5207,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       return { fontSize: px(16), color: "#ffffff", textAlign: "left" };
     }
     const style = {
-      fontFamily: settings.family,
+      fontFamily: cssFontFamily(settings.family),
       fontSize: px(settings.size),
       color: settings.color,
       fontWeight: settings.weight,
@@ -4853,6 +5221,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     if ((_c = settings.textBorder) == null ? void 0 : _c.enabled) {
       style.WebkitTextStroke = `${px(settings.textBorder.width)} ${settings.textBorder.color}`;
+      style.paintOrder = "stroke fill";
     }
     return style;
   };
@@ -4884,6 +5253,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     let gradientSpanStyle = null;
     if ((_b = effects.textBorder) == null ? void 0 : _b.enabled) {
       containerStyle.WebkitTextStroke = `${px(effects.textBorder.width)} ${effects.textBorder.color}`;
+      containerStyle.paintOrder = "stroke fill";
     }
     if (hasGradient) {
       const g = effects.textGradient;
@@ -5033,6 +5403,52 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     ]);
   }
+  function isSongUnlocked(entry, variables) {
+    if (!entry.unlockable) return true;
+    if (!entry.unlockVariableId) return true;
+    const val = variables[entry.unlockVariableId];
+    return val === true || val === "true" || val === 1;
+  }
+  function visibleSongs(config, element, variables) {
+    const entries = Object.values((config == null ? void 0 : config.entries) || {});
+    const filtered = element.categoryFilter ? entries.filter((e) => (e.category || "") === element.categoryFilter) : entries;
+    const sorted = filtered.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.name || "").localeCompare(b.name || ""));
+    const withState = sorted.map((e) => ({ ...e, unlocked: isSongUnlocked(e, variables) }));
+    return element.hideLockedSongs ? withState.filter((s) => s.unlocked) : withState;
+  }
+  function formatPlayTime(seconds) {
+    if (!isFinite(seconds) || seconds < 0) return "0:00";
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s < 10 ? "0" : ""}${s}`;
+  }
+  function formatTimeLabel(currentTime, duration) {
+    const cur = formatPlayTime(currentTime);
+    return isFinite(duration) && duration > 0 ? `${cur} / ${formatPlayTime(duration)}` : cur;
+  }
+  function buildPlayOrder(ids, shuffle, currentId) {
+    if (!shuffle) return ids.slice();
+    const rest = ids.filter((id) => id !== currentId);
+    for (let i = rest.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rest[i], rest[j]] = [rest[j], rest[i]];
+    }
+    return currentId && ids.includes(currentId) ? [currentId, ...rest] : rest;
+  }
+  function stepIndex(order, currentId, delta) {
+    if (!order.length) return -1;
+    const cur = currentId ? order.indexOf(currentId) : -1;
+    if (cur === -1) return 0;
+    return (cur + delta + order.length) % order.length;
+  }
+  const GALLERY_PLAYER_EVENT = "vn-music-gallery";
+  const MUSIC_CONTROL_GLYPHS = {
+    playPause: { normal: "▶", active: "⏸" },
+    prevButton: { normal: "⏮" },
+    nextButton: { normal: "⏭" },
+    loopToggle: { normal: "🔁" },
+    shuffleToggle: { normal: "🔀" }
+  };
   const PHONE_GLYPHS = {
     chat: "💬",
     contacts: "👥",
@@ -5186,7 +5602,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return sortedContacts.length === 0 ? /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.5, textAlign: "center", marginTop: 12, fontSize: "0.8em" }, children: "No contacts" }) : sortedContacts.map((c) => {
       const char = project.characters[c.characterId];
       const curls = resolvePhonePortrait(c.avatar, char, assetResolver);
-      const name = c.displayName || (char == null ? void 0 : char.name) || "Unknown";
+      const dn = makeDisplayNameResolver(variables, project);
+      const name = dn(c.displayName || (char == null ? void 0 : char.name), "Unknown");
       const status = c.statusText ? interpolateVariables(c.statusText, variables, project) : "";
       const preview = lastMessageFor(c.characterId);
       return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 12, background: ui.phoneContactRowColor || ui.phoneHistoryRowColor || "rgba(255,255,255,0.05)", color: ui.phoneContactTextColor || ui.phoneHistoryTextColor || "#fff" }, children: [
@@ -5285,6 +5702,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const bodyFont = ui.phoneFont ? fontSettingsToStyle(ui.phoneFont) : {};
       const chatAvatarSize = `${ui.phoneChatAvatarSize ?? 2.2}em`;
       const activeContactId = phone.activeContactId;
+      const dn = makeDisplayNameResolver(variables, project);
       if (!activeContactId) {
         const groups = /* @__PURE__ */ new Map();
         phone.messages.forEach((m, idx) => {
@@ -5295,7 +5713,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const rows = Array.from(groups.entries()).map(([key, entries]) => {
           const contact = key ? (ui.phoneContacts || []).find((c) => c.characterId === key) : void 0;
           const char = key ? project.characters[key] : null;
-          const name = (contact == null ? void 0 : contact.displayName) || (char == null ? void 0 : char.name) || (key ? "?" : ui.phoneMessagesHeader || "Messages");
+          const name = dn((contact == null ? void 0 : contact.displayName) || (char == null ? void 0 : char.name), key ? "?" : ui.phoneMessagesHeader || "Messages");
           const urls = char ? resolvePhonePortrait(contact == null ? void 0 : contact.avatar, char, assetResolver) : [];
           const last = entries[entries.length - 1];
           const preview = last.m.text ? interpolateVariables(last.m.text, variables, project) : last.m.image ? "📷 Photo" : "";
@@ -5313,7 +5731,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           });
           if (!available) return;
           const char = project.characters[c.characterId];
-          rows.push({ key: c.characterId, name: c.displayName || (char == null ? void 0 : char.name) || "?", urls: char ? resolvePhonePortrait(c.avatar, char, assetResolver) : [], preview: ui.phoneMessagesNewHint || "New conversation", unread: 1, recency: Number.MAX_SAFE_INTEGER });
+          rows.push({ key: c.characterId, name: dn(c.displayName || (char == null ? void 0 : char.name), "?"), urls: char ? resolvePhonePortrait(c.avatar, char, assetResolver) : [], preview: ui.phoneMessagesNewHint || "New conversation", unread: 1, recency: Number.MAX_SAFE_INTEGER });
         });
         rows.sort((a, b) => b.recency - a.recency);
         return /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
@@ -5346,7 +5764,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const threadKey = activeContactId === "__misc__" ? "" : activeContactId;
       const threadMessages = phone.messages.filter((m) => phoneThreadKey(m) === threadKey);
       const activeContact = (ui.phoneContacts || []).find((c) => c.characterId === activeContactId);
-      const activeContactName = (activeContact == null ? void 0 : activeContact.displayName) || ((_a = project.characters[activeContactId]) == null ? void 0 : _a.name) || (activeContactId === "__misc__" ? ui.phoneMessagesHeader || "Messages" : "");
+      const activeContactName = dn(
+        (activeContact == null ? void 0 : activeContact.displayName) || ((_a = project.characters[activeContactId]) == null ? void 0 : _a.name),
+        activeContactId === "__misc__" ? ui.phoneMessagesHeader || "Messages" : ""
+      );
       return /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
         activeContactId && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }, children: [
           /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => onOpenThread ? onOpenThread(null) : onAction({ type: UIActionType.ShowPhoneContacts }), title: "Back", style: { background: "transparent", border: "none", cursor: "pointer", color: "inherit", fontSize: "1.1em", lineHeight: 1, padding: "0 4px" }, children: "‹" }),
@@ -5359,7 +5780,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", flexDirection: mine ? "row-reverse" : "row", gap: 6, alignItems: "flex-end" }, children: [
             ui.phoneShowAvatars !== false && !mine && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: portraitUrls, size: chatAvatarSize, fit: ui.phoneChatAvatarFit }),
             /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { maxWidth: "76%" }, children: [
-              !mine && (char == null ? void 0 : char.name) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.75, marginBottom: 1, color: char.color }, children: char.name }),
+              !mine && (char == null ? void 0 : char.name) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.75, marginBottom: 1, color: char.color }, children: dn(char.name, "") }),
               m.image && /* @__PURE__ */ jsxRuntime2.jsx(PhoneMedia, { media: m.image, assetResolver, caption: m.text ? interpolateVariables(m.text, variables, project) : void 0, style: { borderRadius: 14, marginBottom: m.text ? 3 : 0, aspectRatio: "4 / 3" } }),
               m.text && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { padding: "6px 10px", borderRadius: 14, wordBreak: "break-word", background: mine ? ui.phoneOutgoingBubbleColor || "#2f6bff" : ui.phoneIncomingBubbleColor || "#2a2f3a", color: ui.phoneBubbleTextColor || "#fff" }, children: interpolateVariables(m.text, variables, project) })
             ] })
@@ -5389,6 +5810,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     defaultLabel: "Recents",
     render: (ctx) => {
       const { ui, project, phone, assetResolver, variables, playTap, onAction } = ctx;
+      const dn = makeDisplayNameResolver(variables, project);
       const notifs = [...phone.notifications || []].reverse();
       return /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
         notifs.length > 0 && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 4 }, children: [
@@ -5409,7 +5831,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 children: [
                   eurls.length > 0 ? /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: eurls, size: "2em" }) : eIconImg ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: eIconImg, alt: "", style: { width: "2em", height: "2em", objectFit: "contain", flexShrink: 0 } }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "1.3em", flexShrink: 0 }, children: e.icon && PHONE_GLYPHS[e.icon] || "🔔" }),
                   /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
-                    (e.title || (echar == null ? void 0 : echar.name)) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: e.read ? 400 : 700 }, children: e.title || (echar == null ? void 0 : echar.name) }),
+                    (e.title || (echar == null ? void 0 : echar.name)) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: e.read ? 400 : 700 }, children: dn(e.title || (echar == null ? void 0 : echar.name), "") }),
                     /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: interpolateVariables(e.text, variables, project) })
                   ] }),
                   !e.read && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { width: 8, height: 8, borderRadius: 9999, background: ui.phoneBadgeColor || "#ef4444", flexShrink: 0 } })
@@ -5428,7 +5850,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 10, background: ui.phoneHistoryRowColor || "rgba(255,255,255,0.05)", color: ui.phoneHistoryTextColor || "#fff" }, children: [
             /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: purls, size: "2em" }),
             /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
-              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: (caller == null ? void 0 : caller.name) || "Unknown" }),
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: dn(caller == null ? void 0 : caller.name, "Unknown") }),
               /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { fontSize: "0.7em", opacity: 0.8, color: tint }, children: [
                 entry.direction === "outgoing" ? "↗" : icon,
                 " ",
@@ -5458,7 +5880,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (!ac) return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.5, textAlign: "center", marginTop: 12, fontSize: "0.8em" }, children: "No active call" });
       const char = ac.contactId === "player" ? null : project.characters[ac.contactId];
       const contact = ac.contactId === "player" ? void 0 : (ui.phoneContacts || []).find((c) => c.characterId === ac.contactId);
-      const name = (contact == null ? void 0 : contact.displayName) || (char == null ? void 0 : char.name) || "Unknown";
+      const name = makeDisplayNameResolver(variables, project)((contact == null ? void 0 : contact.displayName) || (char == null ? void 0 : char.name), "Unknown");
       const purls = resolvePhonePortrait(ac.portrait || (contact == null ? void 0 : contact.avatar), char, assetResolver);
       const bodyFont = ui.phoneFont ? fontSettingsToStyle(ui.phoneFont) : {};
       const endBtn = (label) => /* @__PURE__ */ jsxRuntime2.jsxs(
@@ -5943,6 +6365,511 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (!poseId || !((_a = char == null ? void 0 : char.poses) == null ? void 0 : _a[poseId])) return void 0;
     return poseId;
   }
+  function isEnhanced(style) {
+    return style === "enhanced";
+  }
+  let webglProbe = null;
+  function webglLikelyAvailable() {
+    var _a;
+    if (webglProbe !== null) return webglProbe;
+    try {
+      const c = document.createElement("canvas");
+      const gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+      webglProbe = !!gl;
+      if (gl) (_a = gl.getExtension("WEBGL_lose_context")) == null ? void 0 : _a.loseContext();
+    } catch {
+      webglProbe = false;
+    }
+    return webglProbe;
+  }
+  function createGlContext(canvas) {
+    const opts = { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false };
+    try {
+      return canvas.getContext("webgl", opts) || canvas.getContext("experimental-webgl", opts);
+    } catch {
+      return null;
+    }
+  }
+  function compileProgram(gl, vsSrc, fsSrc) {
+    const make = (type, src) => {
+      const sh = gl.createShader(type);
+      if (!sh) return null;
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        console.warn("[glFx] shader compile failed:", gl.getShaderInfoLog(sh));
+        gl.deleteShader(sh);
+        return null;
+      }
+      return sh;
+    };
+    const vs = make(gl.VERTEX_SHADER, vsSrc);
+    const fs = make(gl.FRAGMENT_SHADER, fsSrc);
+    if (!vs || !fs) return null;
+    const prog = gl.createProgram();
+    if (!prog) return null;
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.warn("[glFx] program link failed:", gl.getProgramInfoLog(prog));
+      return null;
+    }
+    return prog;
+  }
+  function makeQuad(gl, prog) {
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, "aPos");
+    return () => {
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    };
+  }
+  function sizeCanvas(canvas, cssW, cssH) {
+    const dpr = Math.max(1, Math.min(2, typeof window !== "undefined" && window.devicePixelRatio || 1));
+    const w = Math.max(1, Math.floor(cssW * dpr));
+    const h = Math.max(1, Math.floor(cssH * dpr));
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+    return { w, h, dpr };
+  }
+  const QUAD_VS = `
+attribute vec2 aPos;
+varying vec2 vUv;
+void main() {
+    vUv = aPos * 0.5 + 0.5;
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+`;
+  const DITHER = `
+float vnHash(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+`;
+  const MAX_LIGHTS_PER_PASS = 16;
+  const LIGHTS_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;   // backing-store px
+uniform float uTime;        // seconds
+uniform int uLightCount;
+uniform vec4 uPosSize[${MAX_LIGHTS_PER_PASS}];   // x,y (px), radius (px), brightness 0..1
+uniform vec4 uColorType[${MAX_LIGHTS_PER_PASS}]; // r,g,b, typeId (0 candle, 1 star, 2 bulb)
+uniform vec4 uTwinkle[${MAX_LIGHTS_PER_PASS}];   // mode (0 fade,1 blink,2 chase,3 steady), speed, phase, 0
+${DITHER}
+void main() {
+    // CSS-space pixels: y runs DOWN (vUv.y is up in GL's framebuffer, so flip it).
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y) * uResolution;
+    vec3 acc = vec3(0.0);
+    for (int i = 0; i < ${MAX_LIGHTS_PER_PASS}; i++) {
+        if (i >= uLightCount) break;
+        vec2 center = uPosSize[i].xy;
+        float radius = max(uPosSize[i].z, 1.0);
+        float bright = uPosSize[i].w;
+        vec3 color = uColorType[i].rgb;
+        float typeId = uColorType[i].w;
+        float mode = uTwinkle[i].x;
+        float speed = max(uTwinkle[i].y, 0.001);
+        float phase = uTwinkle[i].z;
+
+        // Twinkle — matches the Classic keyframe rhythms per light type.
+        float t = uTime;
+        float tw = 1.0;
+        if (typeId < 0.5) {
+            // candle: organic flicker (two incommensurate sines + a touch of hash jitter)
+            float w = 6.283 / (1.1 / speed);
+            tw = 0.86 + 0.10 * sin(t * w + phase * 7.0) + 0.06 * sin(t * w * 1.73 + phase * 13.0);
+            center += vec2(sin(t * w * 1.31 + phase * 5.0), cos(t * w * 0.87 + phase * 3.0)) * radius * 0.015;
+        } else if (typeId < 1.5) {
+            // star: slow sparkle
+            float w = 6.283 / (2.2 / speed);
+            tw = 0.72 + 0.28 * sin(t * w + phase * 9.0);
+        } else {
+            // bulb: fade / blink / chase / steady
+            if (mode < 0.5) { float w = 6.283 / (1.6 / speed); tw = 0.62 + 0.38 * sin(t * w + phase * 6.283); }
+            else if (mode < 1.5) { float w = 1.0 / speed; tw = step(0.5, fract(t / w + phase)) * 0.75 + 0.25; }
+            else if (mode < 2.5) { float w = 6.283 / (1.6 / speed); tw = 0.62 + 0.38 * sin(t * w - phase * 6.283); }
+            /* steady: tw = 1 */
+        }
+        float b = bright * tw;
+
+        float d = distance(frag, center) / radius;
+        // Hot core + inverse-square-ish body that smoothsteps to TRUE zero at the radius
+        // (the Classic gradients' "no halo ring" rule), plus a faint wide bloom Classic can't do.
+        float core = exp(-d * d * 34.0) * 1.35;
+        float body = (1.0 / (1.0 + 9.0 * d * d) - 0.1) * smoothstep(1.0, 0.55, d);
+        float glow = max(core, 0.0) + max(body, 0.0);
+        float bloom = 0.05 * max(0.0, 1.0 - d * 0.5);   // reaches ~2× radius, very faint
+        float intensity = b * (glow + bloom);
+
+        vec3 lightCol = mix(vec3(1.0), color, clamp(d * 2.2, 0.0, 1.0)); // white-hot center → color
+        acc += lightCol * intensity;
+    }
+    // Dither, clamp, premultiplied output (canvas is screen-blended by CSS like Classic).
+    float dith = (vnHash(vUv * uResolution) - 0.5) / 255.0;
+    acc = clamp(acc + dith, 0.0, 1.0);
+    float a = clamp(max(acc.r, max(acc.g, acc.b)), 0.0, 1.0);
+    gl_FragColor = vec4(acc * a, a);
+}
+`;
+  const LIGHT_DEFAULT_COLORS = {
+    candle: "#ffb94b",
+    star: "#ffffff",
+    christmas: "#ff3b3b"
+  };
+  const hexToRgb01$1 = (hex) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+    if (!m) return [1, 1, 1];
+    const n = parseInt(m[1], 16);
+    return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
+  };
+  function lightsToUniforms(lights, stageW, stageH, dpr = 1, brightnessScale = 1, startIndex = 0) {
+    const slice = lights.slice(startIndex, startIndex + MAX_LIGHTS_PER_PASS);
+    const base = Math.min(stageW || 800, stageH || 600);
+    const posSize = new Float32Array(MAX_LIGHTS_PER_PASS * 4);
+    const colorType = new Float32Array(MAX_LIGHTS_PER_PASS * 4);
+    const twinkle = new Float32Array(MAX_LIGHTS_PER_PASS * 4);
+    slice.forEach((l, k) => {
+      const i = startIndex + k;
+      const sizePx = Math.max(6, base * 0.05 * (l.size ?? 1));
+      const spd = l.twinkleSpeed && l.twinkleSpeed > 0 ? l.twinkleSpeed : 1;
+      const tw = l.twinkle ?? "fade";
+      const mode = tw === "fade" ? 0 : tw === "blink" ? 1 : tw === "chase" ? 2 : 3;
+      const phase = tw === "chase" ? i % 5 * (0.32 / spd) : i % 7 * 0.13;
+      const [r, g, b] = hexToRgb01$1(l.color || LIGHT_DEFAULT_COLORS[l.type] || "#ffffff");
+      posSize[k * 4] = l.x / 100 * stageW * dpr;
+      posSize[k * 4 + 1] = l.y / 100 * stageH * dpr;
+      posSize[k * 4 + 2] = sizePx * 0.9 * dpr;
+      posSize[k * 4 + 3] = Math.max(0, Math.min(1, (l.brightness ?? 1) * brightnessScale));
+      colorType[k * 4] = r;
+      colorType[k * 4 + 1] = g;
+      colorType[k * 4 + 2] = b;
+      colorType[k * 4 + 3] = l.type === "candle" ? 0 : l.type === "star" ? 1 : 2;
+      twinkle[k * 4] = mode;
+      twinkle[k * 4 + 1] = spd;
+      twinkle[k * 4 + 2] = phase;
+    });
+    return { count: slice.length, posSize, colorType, twinkle };
+  }
+  function lightBatches(lightCount, maxFragmentUniformVectors) {
+    const capacity = Math.max(1, Math.min(MAX_LIGHTS_PER_PASS, Math.floor((maxFragmentUniformVectors - 8) / 3)));
+    return { perPass: capacity, passes: Math.max(1, Math.ceil(lightCount / capacity)) };
+  }
+  const MAX_BEAMS_PER_PASS = 8;
+  const BEAMS_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform int uBeamCount;
+uniform vec4 uBeamA[${MAX_BEAMS_PER_PASS}]; // sourceX,sourceY (px), aimAngle (rad), intensity
+uniform vec4 uBeamB[${MAX_BEAMS_PER_PASS}]; // halfSourceW, halfEndW, lengthPx, falloff 0..1
+uniform vec3 uBeamCol[${MAX_BEAMS_PER_PASS}];
+${DITHER}
+void main() {
+    // CSS-space pixels: y runs DOWN (vUv.y is up in GL's framebuffer, so flip it).
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y) * uResolution;
+    vec3 acc = vec3(0.0);
+    for (int i = 0; i < ${MAX_BEAMS_PER_PASS}; i++) {
+        if (i >= uBeamCount) break;
+        vec2 src = uBeamA[i].xy;
+        float ang = uBeamA[i].z;
+        float inten = uBeamA[i].w;
+        float halfSrc = uBeamB[i].x;
+        float halfEnd = uBeamB[i].y;
+        float len = max(uBeamB[i].z, 1.0);
+        float falloff = clamp(uBeamB[i].w, 0.02, 1.0);
+        // Into beam space: +y runs DOWN the beam (screen-down when angle 0 — matches Classic).
+        vec2 rel = frag - src;
+        float c = cos(ang), s = sin(ang);
+        vec2 p = vec2(c * rel.x - s * rel.y, s * rel.x + c * rel.y);
+        float along = p.y / len;                 // 0 at source → 1 at end
+        if (along < -0.02) continue;
+        // Cone half-width at this depth; soft penumbra scaled by falloff.
+        float halfW = mix(halfSrc, halfEnd, clamp(along, 0.0, 1.0));
+        float edge = abs(p.x) / max(halfW, 1.0);
+        float penumbra = smoothstep(1.0, 1.0 - 0.75 * falloff, edge);
+        // Length falloff mirrors the Classic radial: full → soft → zero past the end.
+        float lengthFade = smoothstep(1.05, 0.55, along) * smoothstep(-0.02, 0.03, along);
+        // A touch brighter along the beam's core axis (volumetric read).
+        float core = 1.0 + 0.35 * (1.0 - edge) * (1.0 - along);
+        acc += uBeamCol[i] * (inten * penumbra * lengthFade * core * 0.85);
+    }
+    float dith = (vnHash(vUv * uResolution + uTime) - 0.5) / 255.0;
+    acc = clamp(acc + dith, 0.0, 1.0);
+    float a = clamp(max(acc.r, max(acc.g, acc.b)), 0.0, 1.0);
+    gl_FragColor = vec4(acc * a, a);
+}
+`;
+  function beamsToUniforms(beams, stageW, stageH, dpr = 1, startIndex = 0) {
+    const slice = beams.slice(startIndex, startIndex + MAX_BEAMS_PER_PASS);
+    const beamA = new Float32Array(MAX_BEAMS_PER_PASS * 4);
+    const beamB = new Float32Array(MAX_BEAMS_PER_PASS * 4);
+    const beamCol = new Float32Array(MAX_BEAMS_PER_PASS * 3);
+    slice.forEach((b, k) => {
+      const [r, g, bl] = (() => {
+        const m = /^#?([0-9a-f]{6})$/i.exec((b.color || "#fff3d6").trim());
+        if (!m) return [1, 0.95, 0.84];
+        const n = parseInt(m[1], 16);
+        return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
+      })();
+      beamA[k * 4] = b.sourceX / 100 * stageW * dpr;
+      beamA[k * 4 + 1] = b.sourceY / 100 * stageH * dpr;
+      beamA[k * 4 + 2] = (b.aimAngle ?? 0) * Math.PI / 180;
+      beamA[k * 4 + 3] = Math.max(0, Math.min(1, b.intensity ?? 0.85));
+      beamB[k * 4] = (b.sourceWidth ?? 8) / 2 / 100 * stageW * dpr;
+      beamB[k * 4 + 1] = (b.beamWidth ?? 45) / 2 / 100 * stageW * dpr;
+      beamB[k * 4 + 2] = (b.height ?? 100) / 100 * stageH * dpr;
+      beamB[k * 4 + 3] = b.falloff ?? 0.5;
+      beamCol[k * 3] = r;
+      beamCol[k * 3 + 1] = g;
+      beamCol[k * 3 + 2] = bl;
+    });
+    return { count: slice.length, beamA, beamB, beamCol };
+  }
+  const FLASHLIGHT_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform vec2 uMouse;      // px
+uniform float uInnerR;    // px — fully lit
+uniform float uOuterR;    // px — darkness begins
+uniform float uDarkness;  // 0..1
+uniform vec3 uDarkColor;
+uniform float uHole;      // 1 = flashlight on (hole visible), 0 = off (solid darkness)
+${DITHER}
+void main() {
+    // CSS-space pixels: y runs DOWN (vUv.y is up in GL's framebuffer, so flip it).
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y) * uResolution;
+    float d = distance(frag, uMouse);
+    // Dithered soft penumbra between inner (clear) and outer (fully dark).
+    float dark = smoothstep(uInnerR, uOuterR, d);
+    // A faint warm rim just inside the light's edge — the "torch glow" Classic can't do.
+    float rim = smoothstep(uOuterR, uInnerR, d) * smoothstep(uInnerR * 0.35, uInnerR, d) * 0.12;
+    float a = uDarkness * mix(1.0, dark, uHole);
+    float dith = (vnHash(vUv * uResolution) - 0.5) / 255.0;
+    a = clamp(a + dith, 0.0, 1.0);
+    vec3 col = uDarkColor * a + vec3(1.0, 0.82, 0.5) * rim * uHole * (1.0 - a);
+    gl_FragColor = vec4(col, a);
+}
+`;
+  function flashlightToUniforms(p, stageW, stageH, dpr = 1) {
+    const base = Math.min(stageW || 800, stageH || 600);
+    const litR = Math.max(2, p.radius) / 100 * base;
+    const soft = Math.max(0.02, Math.min(1, p.softness));
+    const inner = litR * (1 - soft * 0.55);
+    const outer = litR * (1 + soft * 0.9);
+    const m = /^#?([0-9a-f]{6})$/i.exec((p.color || "#000000").trim());
+    const n = m ? parseInt(m[1], 16) : 0;
+    return {
+      mouse: [p.mouseX * dpr, p.mouseY * dpr],
+      innerR: inner * dpr,
+      outerR: outer * dpr,
+      darkness: Math.max(0, Math.min(1, p.darkness)),
+      darkColor: [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255],
+      hole: p.on ? 1 : 0
+    };
+  }
+  const ATMOS_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;   // 0..1
+uniform vec3 uColor;
+uniform vec2 uDrift;        // uv/sec
+uniform float uScale;       // noise cells across the width
+uniform float uContrast;    // shaping exponent
+uniform float uBandY;       // 0..1 — vertical center of the band (fog sits low)
+uniform float uBandSoft;    // band softness (1 = no banding, fills screen)
+${DITHER}
+float vnNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    float a = vnHash(i);
+    float b = vnHash(i + vec2(1.0, 0.0));
+    float c = vnHash(i + vec2(0.0, 1.0));
+    float d = vnHash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+float fbm(vec2 p) {
+    float v = 0.0;
+    float amp = 0.55;
+    for (int i = 0; i < 3; i++) {
+        v += amp * vnNoise(p);
+        p = p * 2.03 + vec2(17.7, 9.2);
+        amp *= 0.5;
+    }
+    return v;
+}
+void main() {
+    vec2 uv = vUv;
+    float aspect = uResolution.x / max(uResolution.y, 1.0);
+    vec2 p = vec2(uv.x * aspect, 1.0 - uv.y) * uScale + uDrift * uTime;
+    // Mild domain warp for billowy shapes.
+    float w = fbm(p * 0.5 + vec2(uTime * 0.02, 0.0));
+    float n = fbm(p + vec2(w * 1.6, w * 0.8));
+    n = pow(clamp(n * 1.25, 0.0, 1.0), uContrast);
+    // Vertical band shaping (fog hugs the ground; haze fills; smoke rises).
+    float band = 1.0 - clamp(abs((1.0 - uv.y) - uBandY) / max(uBandSoft, 0.05), 0.0, 1.0);
+    band = band * band * (3.0 - 2.0 * band);
+    float a = clamp(n * band * uIntensity, 0.0, 0.92);
+    float dith = (vnHash(uv * uResolution) - 0.5) / 255.0;
+    a = clamp(a + dith, 0.0, 1.0);
+    gl_FragColor = vec4(uColor * a, a);
+}
+`;
+  function atmosphereConfig(type, speed = 1, wind = 0.5) {
+    const drift = 0.012 * speed * (0.5 + wind);
+    if (type === "fog") return { drift: [drift, 2e-3 * speed], scale: 3.2, contrast: 1.35, bandY: 0.16, bandSoft: 0.55, baseAlpha: 0.8, defaultColor: "#cdd6e0" };
+    if (type === "haze") return { drift: [drift * 0.6, 0], scale: 2.2, contrast: 1, bandY: 0.5, bandSoft: 1, baseAlpha: 0.55, defaultColor: "#c9cfd8" };
+    return { drift: [drift * 0.8, -0.01 * speed], scale: 4, contrast: 1.7, bandY: 0.3, bandSoft: 0.8, baseAlpha: 0.85, defaultColor: "#4a4a52" };
+  }
+  const FS_BY_KIND = {
+    lights: LIGHTS_FS,
+    beams: BEAMS_FS,
+    flashlight: FLASHLIGHT_FS,
+    atmosphere: ATMOS_FS
+  };
+  const hexToRgb01 = (hex, fallback) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec((hex || "").trim());
+    if (!m) return fallback;
+    const n = parseInt(m[1], 16);
+    return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
+  };
+  const GlFxCanvas = ({ kind, getParams, width, height, className, style, children }) => {
+    const canvasRef = React2.useRef(null);
+    const paramsRef = React2.useRef(getParams);
+    paramsRef.current = getParams;
+    const [failed, setFailed] = React2.useState(false);
+    React2.useEffect(() => {
+      if (failed) return;
+      const canvas = canvasRef.current;
+      if (!canvas || width <= 0 || height <= 0) return;
+      const gl = createGlContext(canvas);
+      if (!gl) {
+        setFailed(true);
+        return;
+      }
+      const prog = compileProgram(gl, QUAD_VS, FS_BY_KIND[kind]);
+      if (!prog) {
+        setFailed(true);
+        return;
+      }
+      const bindQuad = makeQuad(gl, prog);
+      const loc = (name) => gl.getUniformLocation(prog, name);
+      const maxVectors = gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) || 64;
+      let raf = 0;
+      let disposed = false;
+      let lost = false;
+      const started = performance.now();
+      const frame = () => {
+        if (disposed || lost) return;
+        const { w, h, dpr } = sizeCanvas(canvas, width, height);
+        gl.viewport(0, 0, w, h);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.useProgram(prog);
+        bindQuad();
+        gl.enable(gl.BLEND);
+        const t = (performance.now() - started) / 1e3;
+        const p = paramsRef.current();
+        if (p.kind === "lights") {
+          gl.blendFunc(gl.ONE, gl.ONE);
+          gl.uniform2f(loc("uResolution"), w, h);
+          gl.uniform1f(loc("uTime"), t);
+          const { perPass, passes } = lightBatches(p.lights.length, Math.min(maxVectors, MAX_LIGHTS_PER_PASS * 3 + 8));
+          for (let pass = 0; pass < passes; pass++) {
+            const u = lightsToUniforms(p.lights, p.stageW, p.stageH, dpr, 1, pass * perPass);
+            if (u.count === 0) continue;
+            gl.uniform1i(loc("uLightCount"), u.count);
+            gl.uniform4fv(loc("uPosSize"), u.posSize);
+            gl.uniform4fv(loc("uColorType"), u.colorType);
+            gl.uniform4fv(loc("uTwinkle"), u.twinkle);
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+          }
+        } else if (p.kind === "beams") {
+          gl.blendFunc(gl.ONE, gl.ONE);
+          gl.uniform2f(loc("uResolution"), w, h);
+          gl.uniform1f(loc("uTime"), t);
+          const passes = Math.max(1, Math.ceil(p.beams.length / MAX_BEAMS_PER_PASS));
+          for (let pass = 0; pass < passes; pass++) {
+            const u = beamsToUniforms(p.beams, p.stageW, p.stageH, dpr, pass * MAX_BEAMS_PER_PASS);
+            if (u.count === 0) continue;
+            gl.uniform1i(loc("uBeamCount"), u.count);
+            gl.uniform4fv(loc("uBeamA"), u.beamA);
+            gl.uniform4fv(loc("uBeamB"), u.beamB);
+            gl.uniform3fv(loc("uBeamCol"), u.beamCol);
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+          }
+        } else if (p.kind === "flashlight") {
+          gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          const u = flashlightToUniforms(p, p.stageW, p.stageH, dpr);
+          gl.uniform2f(loc("uResolution"), w, h);
+          gl.uniform1f(loc("uTime"), t);
+          gl.uniform2f(loc("uMouse"), u.mouse[0], u.mouse[1]);
+          gl.uniform1f(loc("uInnerR"), u.innerR);
+          gl.uniform1f(loc("uOuterR"), u.outerR);
+          gl.uniform1f(loc("uDarkness"), u.darkness);
+          gl.uniform3f(loc("uDarkColor"), u.darkColor[0], u.darkColor[1], u.darkColor[2]);
+          gl.uniform1f(loc("uHole"), u.hole);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        } else {
+          gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          const cfg = atmosphereConfig(p.type, p.speed ?? 1, p.wind ?? 0.5);
+          const col = hexToRgb01(p.color || cfg.defaultColor, [0.8, 0.84, 0.88]);
+          gl.uniform2f(loc("uResolution"), w, h);
+          gl.uniform1f(loc("uTime"), t);
+          gl.uniform1f(loc("uIntensity"), Math.max(0, Math.min(1, p.intensity)) * cfg.baseAlpha);
+          gl.uniform3f(loc("uColor"), col[0], col[1], col[2]);
+          gl.uniform2f(loc("uDrift"), cfg.drift[0], cfg.drift[1]);
+          gl.uniform1f(loc("uScale"), cfg.scale);
+          gl.uniform1f(loc("uContrast"), cfg.contrast);
+          gl.uniform1f(loc("uBandY"), cfg.bandY);
+          gl.uniform1f(loc("uBandSoft"), cfg.bandSoft);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        }
+        raf = requestAnimationFrame(frame);
+      };
+      const onLost = (e) => {
+        e.preventDefault();
+        lost = true;
+        cancelAnimationFrame(raf);
+      };
+      const onRestored = () => {
+        setFailed(true);
+      };
+      canvas.addEventListener("webglcontextlost", onLost);
+      canvas.addEventListener("webglcontextrestored", onRestored);
+      raf = requestAnimationFrame(frame);
+      return () => {
+        var _a;
+        disposed = true;
+        cancelAnimationFrame(raf);
+        canvas.removeEventListener("webglcontextlost", onLost);
+        canvas.removeEventListener("webglcontextrestored", onRestored);
+        try {
+          (_a = gl.getExtension("WEBGL_lose_context")) == null ? void 0 : _a.loseContext();
+        } catch {
+        }
+      };
+    }, [kind, width, height, failed]);
+    if (failed) return /* @__PURE__ */ jsxRuntime2.jsx(jsxRuntime2.Fragment, { children });
+    return /* @__PURE__ */ jsxRuntime2.jsx(
+      "canvas",
+      {
+        ref: canvasRef,
+        "aria-hidden": true,
+        className: className || "vnfx-canvas",
+        style
+      }
+    );
+  };
   const SAMPLE_MAX = 128;
   const SAMPLE_MIN_MS = 300;
   const GRID_COLS = 24;
@@ -7558,7 +8485,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       imgUrl && /* @__PURE__ */ jsxRuntime2.jsx("img", { src: imgUrl, alt: "", draggable: false, style: { maxWidth: `${40 * scale}vmin`, maxHeight: `${30 * scale}vmin`, objectFit: "contain", pointerEvents: "none" } }),
       cfg.text && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
         fontSize: (cfg.fontSize ?? 48) * scale,
-        fontFamily: cfg.fontFamily || void 0,
+        fontFamily: cssFontFamily(cfg.fontFamily) || void 0,
         color: cfg.color || "#ffffff",
         fontWeight: cfg.bold === false ? "normal" : "bold",
         fontStyle: cfg.italic ? "italic" : "normal",
@@ -7789,7 +8716,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return (
       // game.fontFamily cascades to ALL mini-game text (title/instructions/labels/keycaps/cutscene/
       // Skip/pips…); per-message fonts still override via MessageBody. Absent = inherit app default.
-      /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", inset: 0, background: game.backgroundColor || "rgba(0,0,0,0.75)", display: "flex", flexDirection: "column", userSelect: "none", fontFamily: game.fontFamily || void 0 }, children: [
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", inset: 0, background: game.backgroundColor || "rgba(0,0,0,0.75)", display: "flex", flexDirection: "column", userSelect: "none", fontFamily: cssFontFamily(game.fontFamily) || void 0 }, children: [
         bgUrl && /* @__PURE__ */ jsxRuntime2.jsx("img", { src: bgUrl, alt: "", draggable: false, style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" } }),
         /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "relative", zIndex: 2, padding: "14px 18px 8px", textAlign: "center", color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.8)", pointerEvents: "none" }, children: [
           (game.title || game.name) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: 22, fontWeight: 700 }, children: game.title || game.name }),
@@ -7946,6 +8873,225 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return command.characterId ?? null;
   }
+  const MIN_AUDIO_SPEED = 0.25;
+  const MAX_AUDIO_SPEED = 4;
+  const clampSpeed = (speed) => Math.min(MAX_AUDIO_SPEED, Math.max(MIN_AUDIO_SPEED, speed));
+  function resolveAudioAdjust(perUse, assetDefault) {
+    const speed = (perUse == null ? void 0 : perUse.speed) ?? (assetDefault == null ? void 0 : assetDefault.speed);
+    const reverse = (perUse == null ? void 0 : perUse.reverse) ?? (assetDefault == null ? void 0 : assetDefault.reverse);
+    const keepPitch = (perUse == null ? void 0 : perUse.keepPitch) ?? (assetDefault == null ? void 0 : assetDefault.keepPitch);
+    if (speed === void 0 && reverse === void 0 && keepPitch === void 0) return null;
+    const out = {};
+    if (speed !== void 0) out.speed = speed;
+    if (reverse !== void 0) out.reverse = reverse;
+    if (keepPitch !== void 0) out.keepPitch = keepPitch;
+    return out;
+  }
+  function applyAudioAdjust(el, adjust) {
+    try {
+      const rate = (adjust == null ? void 0 : adjust.speed) !== void 0 ? clampSpeed(adjust.speed) : 1;
+      const keepPitch = (adjust == null ? void 0 : adjust.speed) !== void 0 ? !!adjust.keepPitch : true;
+      el.defaultPlaybackRate = rate;
+      el.playbackRate = rate;
+      if ("mozPreservesPitch" in el) el.mozPreservesPitch = keepPitch;
+      if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = keepPitch;
+      if ("preservesPitch" in el) el.preservesPitch = keepPitch;
+    } catch {
+    }
+  }
+  let sharedCtx = null;
+  const getSharedAudioContext = () => {
+    try {
+      if (!sharedCtx) sharedCtx = new (window.AudioContext || window.webkitAudioContext)();
+      return sharedCtx;
+    } catch {
+      return null;
+    }
+  };
+  const isElectronRenderer = () => {
+    try {
+      return /\bElectron\//.test(navigator.userAgent || "");
+    } catch {
+      return false;
+    }
+  };
+  const isRiffWave = (buf) => {
+    try {
+      const dv = new DataView(buf);
+      return buf.byteLength >= 12 && dv.getUint32(0, false) === 1380533830 && dv.getUint32(8, false) === 1463899717;
+    } catch {
+      return false;
+    }
+  };
+  const parseWavHeader = (buf) => {
+    try {
+      const dv = new DataView(buf);
+      if (buf.byteLength < 44) return null;
+      if (dv.getUint32(0, false) !== 1380533830 || dv.getUint32(8, false) !== 1463899717) return null;
+      let pos = 12;
+      let fmt = null;
+      let dataStart = -1, dataLen = 0;
+      while (pos + 8 <= buf.byteLength) {
+        const id = dv.getUint32(pos, false);
+        const size = dv.getUint32(pos + 4, true);
+        if (id === 1718449184 && size >= 16) {
+          fmt = {
+            codec: dv.getUint16(pos + 8, true),
+            channels: Math.max(1, dv.getUint16(pos + 10, true)),
+            rate: dv.getUint32(pos + 12, true),
+            bits: dv.getUint16(pos + 22, true)
+          };
+          if (fmt.codec === 65534 && size >= 40) fmt.codec = dv.getUint16(pos + 32, true);
+        } else if (id === 1684108385) {
+          dataStart = pos + 8;
+          dataLen = Math.min(size, buf.byteLength - dataStart);
+        }
+        pos += 8 + size + (size & 1);
+      }
+      if (!fmt || dataStart < 0 || dataLen <= 0 || fmt.rate < 4e3 || fmt.rate > 384e3) return null;
+      const kind = fmt.codec === 1 && fmt.bits === 16 ? "pcm16" : fmt.codec === 1 && fmt.bits === 8 ? "pcm8" : fmt.codec === 1 && fmt.bits === 24 ? "pcm24" : fmt.codec === 1 && fmt.bits === 32 ? "pcm32i" : fmt.codec === 3 && fmt.bits === 32 ? "f32" : null;
+      if (!kind) return null;
+      const frameBytes = fmt.bits / 8 * fmt.channels;
+      return {
+        channels: fmt.channels,
+        rate: fmt.rate,
+        bits: fmt.bits,
+        dataStart,
+        frames: Math.floor(dataLen / frameBytes),
+        frameBytes,
+        kind
+      };
+    } catch {
+      return null;
+    }
+  };
+  const readPcmAt = (dv, kind, off) => {
+    switch (kind) {
+      case "pcm16":
+        return dv.getInt16(off, true) / 32768;
+      case "pcm8":
+        return (dv.getUint8(off) - 128) / 128;
+      case "pcm24": {
+        const u = dv.getUint8(off) | dv.getUint8(off + 1) << 8 | dv.getUint8(off + 2) << 16;
+        return (u >= 8388608 ? u - 16777216 : u) / 8388608;
+      }
+      case "pcm32i":
+        return dv.getInt32(off, true) / 2147483648;
+      default:
+        return dv.getFloat32(off, true);
+    }
+  };
+  const readWavSample = (dv, info, f) => readPcmAt(dv, info.kind, info.dataStart + f * info.frameBytes);
+  const decodeWavPcm = (buf) => {
+    const info = parseWavHeader(buf);
+    if (!info) return null;
+    try {
+      const dv = new DataView(buf);
+      const samples = new Float32Array(info.frames);
+      for (let f = 0; f < info.frames; f++) samples[f] = readWavSample(dv, info, f);
+      return { sampleRate: info.rate, samples };
+    } catch {
+      return null;
+    }
+  };
+  const readWavSampleCh = (dv, info, f, ch) => readPcmAt(dv, info.kind, info.dataStart + f * info.frameBytes + info.bits / 8 * ch);
+  const decodeWavPcmChannels = (buf) => {
+    const info = parseWavHeader(buf);
+    if (!info) return null;
+    try {
+      const dv = new DataView(buf);
+      const channels = [];
+      for (let c = 0; c < info.channels; c++) {
+        const samples = new Float32Array(info.frames);
+        for (let f = 0; f < info.frames; f++) samples[f] = readWavSampleCh(dv, info, f, c);
+        channels.push(samples);
+      }
+      return { sampleRate: info.rate, channels };
+    } catch {
+      return null;
+    }
+  };
+  const MAX_REVERSE_BYTES = 4 * 1024 * 1024;
+  const cache$1 = /* @__PURE__ */ new Map();
+  const pending$1 = /* @__PURE__ */ new Map();
+  let chain = Promise.resolve();
+  const peekReversedUrl = (src) => cache$1.get(src);
+  const getReversedUrl = (src) => {
+    if (cache$1.has(src)) return Promise.resolve(cache$1.get(src));
+    const inFlight = pending$1.get(src);
+    if (inFlight) return inFlight;
+    const job = chain.then(() => buildReversed(src)).catch(() => null).then((url) => {
+      cache$1.set(src, url);
+      pending$1.delete(src);
+      return url;
+    });
+    chain = job.catch(() => {
+    });
+    pending$1.set(src, job);
+    return job;
+  };
+  const buildReversed = async (src) => {
+    const res = await fetch(src);
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength > MAX_REVERSE_BYTES) return null;
+    let sampleRate;
+    let channels;
+    const wav = decodeWavPcmChannels(buf);
+    if (wav) {
+      sampleRate = wav.sampleRate;
+      channels = wav.channels;
+    } else {
+      if (isRiffWave(buf)) return null;
+      if (isElectronRenderer()) return null;
+      const ctx = getSharedAudioContext();
+      if (!ctx) return null;
+      const decoded = await ctx.decodeAudioData(buf.slice(0));
+      sampleRate = decoded.sampleRate;
+      channels = [];
+      for (let c = 0; c < decoded.numberOfChannels; c++) channels.push(decoded.getChannelData(c));
+    }
+    if (!channels.length || !channels[0].length) return null;
+    const reversed = channels.map((ch) => {
+      const out = new Float32Array(ch.length);
+      for (let i = 0, j = ch.length - 1; i < ch.length; i++, j--) out[i] = ch[j];
+      return out;
+    });
+    return URL.createObjectURL(new Blob([encodeWavPcm16(reversed, sampleRate)], { type: "audio/wav" }));
+  };
+  const encodeWavPcm16 = (channels, sampleRate) => {
+    var _a;
+    const numCh = channels.length;
+    const frames = ((_a = channels[0]) == null ? void 0 : _a.length) ?? 0;
+    const dataLen = frames * numCh * 2;
+    const buf = new ArrayBuffer(44 + dataLen);
+    const dv = new DataView(buf);
+    const writeStr = (off2, s) => {
+      for (let i = 0; i < s.length; i++) dv.setUint8(off2 + i, s.charCodeAt(i));
+    };
+    writeStr(0, "RIFF");
+    dv.setUint32(4, 36 + dataLen, true);
+    writeStr(8, "WAVE");
+    writeStr(12, "fmt ");
+    dv.setUint32(16, 16, true);
+    dv.setUint16(20, 1, true);
+    dv.setUint16(22, numCh, true);
+    dv.setUint32(24, sampleRate, true);
+    dv.setUint32(28, sampleRate * numCh * 2, true);
+    dv.setUint16(32, numCh * 2, true);
+    dv.setUint16(34, 16, true);
+    writeStr(36, "data");
+    dv.setUint32(40, dataLen, true);
+    let off = 44;
+    for (let f = 0; f < frames; f++) {
+      for (let c = 0; c < numCh; c++) {
+        const v = Math.max(-1, Math.min(1, channels[c][f] ?? 0));
+        dv.setInt16(off, v < 0 ? v * 32768 : v * 32767, true);
+        off += 2;
+      }
+    }
+    return buf;
+  };
   const BUILTINS = /* @__PURE__ */ new Set(["fade", "dissolve", "iris-out", "wipe-right", "slide-left"]);
   function transitionHalfHasContent(half) {
     return !!(half && (half.assetId || half.frameIds && half.frameIds.length > 0));
@@ -8240,6 +9386,48 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       } }, l.id);
     }) });
   };
+  const EnhancedFlashlightOverlay = ({ effect, width, height }) => {
+    const mouseRef = React2.useRef(null);
+    const hostRef = React2.useRef(null);
+    React2.useEffect(() => {
+      const onMove = (e) => {
+        var _a;
+        const rect = (_a = hostRef.current) == null ? void 0 : _a.getBoundingClientRect();
+        if (!rect) return;
+        mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      };
+      window.addEventListener("pointermove", onMove);
+      return () => window.removeEventListener("pointermove", onMove);
+    }, []);
+    const darkness = clamp01(effect.intensity ?? 0);
+    if (darkness <= 0) return null;
+    const radius01 = ep(effect.params, "radius");
+    const radiusPct = (0.12 + radius01 * 0.38) * 100;
+    const softness = ep(effect.params, "softness");
+    return /* @__PURE__ */ jsxRuntime2.jsx("div", { ref: hostRef, className: "absolute inset-0", children: /* @__PURE__ */ jsxRuntime2.jsx(
+      GlFxCanvas,
+      {
+        kind: "flashlight",
+        width,
+        height,
+        getParams: () => {
+          const m = mouseRef.current || { x: width / 2, y: height / 2 };
+          return {
+            kind: "flashlight",
+            stageW: width,
+            stageH: height,
+            mouseX: m.x,
+            mouseY: m.y,
+            radius: radiusPct,
+            softness,
+            darkness,
+            on: true,
+            color: effect.color || "#000000"
+          };
+        }
+      }
+    ) });
+  };
   const FlashlightOverlay = ({ effect, minDim }) => {
     const ref = React2.useRef(null);
     const darkness = clamp01(effect.intensity ?? 0);
@@ -8272,7 +9460,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     height,
     className
   }) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x;
     const normalized = React2.useMemo(() => normalizeOverlayEffects(effects), [effects]);
     const safeWidth = Math.max(0, Math.min(width, 4096));
     const safeHeight = Math.max(0, Math.min(height, 4096));
@@ -8815,15 +10003,75 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           "aria-hidden": true
         }
       ),
-      haze && clamp01(haze.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: hazeCanvasRef, className: "vnfx-canvas", "aria-hidden": true }),
-      fog && clamp01(fog.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: fogCanvasRef, className: "vnfx-canvas", "aria-hidden": true }),
-      smoke && clamp01(smoke.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: smokeCanvasRef, className: "vnfx-canvas", "aria-hidden": true }),
+      haze && clamp01(haze.intensity) > 0 && (isEnhanced(haze.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(
+        GlFxCanvas,
+        {
+          kind: "atmosphere",
+          width: safeWidth,
+          height: safeHeight,
+          style: ((_v = haze.params) == null ? void 0 : _v.blendMode) && haze.params.blendMode !== "normal" ? { mixBlendMode: haze.params.blendMode } : void 0,
+          getParams: () => ({ kind: "atmosphere", type: "haze", intensity: clamp01(haze.intensity), color: haze.color, speed: ep(haze.params, "speed", 1), wind: ep(haze.params, "windStrength") })
+        }
+      ) : /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: hazeCanvasRef, className: "vnfx-canvas", "aria-hidden": true })),
+      fog && clamp01(fog.intensity) > 0 && (isEnhanced(fog.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(
+        GlFxCanvas,
+        {
+          kind: "atmosphere",
+          width: safeWidth,
+          height: safeHeight,
+          style: ((_w = fog.params) == null ? void 0 : _w.blendMode) && fog.params.blendMode !== "normal" ? { mixBlendMode: fog.params.blendMode } : void 0,
+          getParams: () => ({ kind: "atmosphere", type: "fog", intensity: clamp01(fog.intensity), color: fog.color, speed: ep(fog.params, "speed", 1), wind: ep(fog.params, "windStrength") })
+        }
+      ) : /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: fogCanvasRef, className: "vnfx-canvas", "aria-hidden": true })),
+      smoke && clamp01(smoke.intensity) > 0 && (isEnhanced(smoke.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(
+        GlFxCanvas,
+        {
+          kind: "atmosphere",
+          width: safeWidth,
+          height: safeHeight,
+          style: ((_x = smoke.params) == null ? void 0 : _x.blendMode) && smoke.params.blendMode !== "normal" ? { mixBlendMode: smoke.params.blendMode } : void 0,
+          getParams: () => ({ kind: "atmosphere", type: "smoke", intensity: clamp01(smoke.intensity), color: smoke.color, speed: ep(smoke.params, "speed", 1), wind: ep(smoke.params, "windStrength") })
+        }
+      ) : /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: smokeCanvasRef, className: "vnfx-canvas", "aria-hidden": true })),
       fireworks && clamp01(fireworks.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: fireworksCanvasRef, className: "vnfx-canvas", style: { mixBlendMode: "screen" }, "aria-hidden": true }),
       spotlight && clamp01(spotlight.intensity) > 0 && (() => {
         var _a2;
         const darkness = clamp01(spotlight.intensity);
         const beams = ((_a2 = spotlight.params) == null ? void 0 : _a2.beams) ?? [];
         const cl = (v, lo, hi) => Math.max(lo, Math.min(hi, isNaN(v) ? lo : v));
+        if (isEnhanced(spotlight.effectStyle) && webglLikelyAvailable()) {
+          return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 overflow-hidden", children: [
+            /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { background: `rgba(0,0,0,${darkness})` } }),
+            /* @__PURE__ */ jsxRuntime2.jsx(
+              GlFxCanvas,
+              {
+                kind: "beams",
+                width: safeWidth,
+                height: safeHeight,
+                style: { mixBlendMode: "screen" },
+                getParams: () => {
+                  var _a3;
+                  return {
+                    kind: "beams",
+                    stageW: safeWidth,
+                    stageH: safeHeight,
+                    beams: (((_a3 = spotlight.params) == null ? void 0 : _a3.beams) ?? []).map((bm) => ({
+                      sourceX: cl(bm.sourceX, 0, 100),
+                      sourceY: cl(bm.sourceY, 0, 100),
+                      aimAngle: bm.aimAngle ?? 0,
+                      intensity: 0.9,
+                      beamWidth: bm.beamWidth ?? 45,
+                      sourceWidth: bm.sourceWidth ?? 8,
+                      height: bm.height ?? 100,
+                      falloff: bm.falloff ?? 0.5,
+                      color: bm.color
+                    }))
+                  };
+                }
+              }
+            )
+          ] });
+        }
         return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 overflow-hidden", children: [
           /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { background: `rgba(0,0,0,${darkness})` } }),
           beams.map((bm) => {
@@ -8840,14 +10088,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           })
         ] });
       })(),
-      lightsFx && clamp01(lightsFx.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", children: /* @__PURE__ */ jsxRuntime2.jsx(
-        LightsLayer,
-        {
-          lights: (((_v = lightsFx.params) == null ? void 0 : _v.lights) ?? []).map((l) => ({ ...l, brightness: (l.brightness ?? 1) * clamp01(lightsFx.intensity) })),
-          stageW: safeWidth,
-          stageH: safeHeight
-        }
-      ) }),
+      lightsFx && clamp01(lightsFx.intensity) > 0 && (() => {
+        var _a2;
+        const scaled = (((_a2 = lightsFx.params) == null ? void 0 : _a2.lights) ?? []).map((l) => ({ ...l, brightness: (l.brightness ?? 1) * clamp01(lightsFx.intensity) }));
+        return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", children: isEnhanced(lightsFx.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(
+          GlFxCanvas,
+          {
+            kind: "lights",
+            width: safeWidth,
+            height: safeHeight,
+            style: { mixBlendMode: "screen" },
+            getParams: () => ({ kind: "lights", lights: scaled, stageW: safeWidth, stageH: safeHeight }),
+            children: /* @__PURE__ */ jsxRuntime2.jsx(LightsLayer, { lights: scaled, stageW: safeWidth, stageH: safeHeight })
+          }
+        ) : /* @__PURE__ */ jsxRuntime2.jsx(LightsLayer, { lights: scaled, stageW: safeWidth, stageH: safeHeight }) });
+      })(),
       lightning && clamp01(lightning.intensity) > 0 && (() => {
         const cycle = (14 - ep(lightning.params, "speed") * 11).toFixed(2);
         const { r, g, b } = parseColor(lightning.color, { r: 234, g: 242, b: 255 });
@@ -8868,7 +10123,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { backgroundColor: `rgb(${r},${g},${b})`, opacity: 0, animation: `vnsfx-lightning ${cycle}s linear infinite` } })
         ] });
       })(),
-      flashlight && clamp01(flashlight.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx(FlashlightOverlay, { effect: flashlight, minDim }),
+      flashlight && clamp01(flashlight.intensity) > 0 && (isEnhanced(flashlight.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(EnhancedFlashlightOverlay, { effect: flashlight, width: safeWidth, height: safeHeight }) : /* @__PURE__ */ jsxRuntime2.jsx(FlashlightOverlay, { effect: flashlight, minDim })),
       pluginEffects.map(({ effect, def }) => /* @__PURE__ */ jsxRuntime2.jsx(
         PluginEffectCanvas,
         {
@@ -9373,9 +10628,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const rec = ((_a = project.images) == null ? void 0 : _a[ref.id]) || ((_b = project.backgrounds) == null ? void 0 : _b[ref.id]);
     return (rec == null ? void 0 : rec.imageUrl) || null;
   }
-  async function buildCursorValue(url, size, hotPreset, hotX, hotY, fallback, cacheKey) {
+  async function buildCursorValue(url, size, hotPreset, hotX, hotY, fallback, cacheKey2) {
     const px = Math.max(8, Math.min(CURSOR_MAX_SIZE, size || CURSOR_DEFAULT_SIZE));
-    const key = cacheKey ? `${cacheKey}|${px}|${hotPreset}|${hotX}|${hotY}` : "";
+    const key = cacheKey2 ? `${cacheKey2}|${px}|${hotPreset}|${hotX}|${hotY}` : "";
     if (key && cache.has(key)) return cache.get(key);
     const finish = (v) => {
       if (key) cache.set(key, v);
@@ -9803,15 +11058,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return { hasEntries: true, findMatches };
   }
   const MAX_ANALYZE_BYTES = 6 * 1024 * 1024;
-  let sharedCtx = null;
-  const getCtx = () => {
-    try {
-      if (!sharedCtx) sharedCtx = new (window.AudioContext || window.webkitAudioContext)();
-      return sharedCtx;
-    } catch {
-      return null;
-    }
-  };
+  const getCtx = getSharedAudioContext;
   const HOP_MS = 10;
   const BRIDGE_MS = 140;
   const MIN_SEG_MS = 60;
@@ -9840,45 +11087,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   }
   function wavEnvelope(buf) {
     try {
+      const info = parseWavHeader(buf);
+      if (!info) return null;
       const dv = new DataView(buf);
-      if (buf.byteLength < 44) return null;
-      if (dv.getUint32(0, false) !== 1380533830 || dv.getUint32(8, false) !== 1463899717) return null;
-      let pos = 12;
-      let fmt = null;
-      let dataStart = -1, dataLen = 0;
-      while (pos + 8 <= buf.byteLength) {
-        const id = dv.getUint32(pos, false);
-        const size = dv.getUint32(pos + 4, true);
-        if (id === 1718449184 && size >= 16) {
-          fmt = {
-            codec: dv.getUint16(pos + 8, true),
-            channels: Math.max(1, dv.getUint16(pos + 10, true)),
-            rate: dv.getUint32(pos + 12, true),
-            bits: dv.getUint16(pos + 22, true)
-          };
-          if (fmt.codec === 65534 && size >= 40) fmt.codec = dv.getUint16(pos + 32, true);
-        } else if (id === 1684108385) {
-          dataStart = pos + 8;
-          dataLen = Math.min(size, buf.byteLength - dataStart);
-        }
-        pos += 8 + size + (size & 1);
-      }
-      if (!fmt || dataStart < 0 || dataLen <= 0 || fmt.rate < 4e3 || fmt.rate > 384e3) return null;
-      const pcm16 = fmt.codec === 1 && fmt.bits === 16;
-      const pcm8 = fmt.codec === 1 && fmt.bits === 8;
-      const f32 = fmt.codec === 3 && fmt.bits === 32;
-      if (!pcm16 && !pcm8 && !f32) return null;
-      const bytesPer = fmt.bits / 8;
-      const frameBytes = bytesPer * fmt.channels;
-      const frames = Math.floor(dataLen / frameBytes);
-      const hopFrames = Math.max(1, Math.round(fmt.rate * HOP_MS / 1e3));
-      const env = new Float32Array(Math.ceil(frames / hopFrames));
+      const hopFrames = Math.max(1, Math.round(info.rate * HOP_MS / 1e3));
+      const env = new Float32Array(Math.ceil(info.frames / hopFrames));
       for (let e = 0; e < env.length; e++) {
         let sum = 0;
-        const from = e * hopFrames, to = Math.min(frames, from + hopFrames);
+        const from = e * hopFrames, to = Math.min(info.frames, from + hopFrames);
         for (let f = from; f < to; f++) {
-          const off = dataStart + f * frameBytes;
-          const v = pcm16 ? dv.getInt16(off, true) / 32768 : pcm8 ? (dv.getUint8(off) - 128) / 128 : dv.getFloat32(off, true);
+          const v = readWavSample(dv, info, f);
           sum += v * v;
         }
         env[e] = Math.sqrt(sum / Math.max(1, to - from));
@@ -9901,6 +11119,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         let env = wavEnvelope(buf);
         const isRiff = buf.byteLength >= 4 && new DataView(buf).getUint32(0, false) === 1380533830;
         if (!env && isRiff) return null;
+        if (!env && /\bElectron\//.test(navigator.userAgent || "")) return null;
         if (!env) {
           const ctx = getCtx();
           if (!ctx) return null;
@@ -9962,7 +11181,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       );
       return "set";
     }
-    if (operator === "random" && variableType !== "number") {
+    if ((operator === "random" || operator === "addRandom" || operator === "subtractRandom") && variableType !== "number") {
       console.warn(
         `[SetVariable] Operator "${operator}" is not valid for ${variableType} variable "${variableName}". Forcing operator to "set".`
       );
@@ -10024,9 +11243,23 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "subtract":
         return finish(toNumeric(currentValue) - toNumeric(changeValStr));
       case "random": {
+        const min = randomMin ?? boundMin ?? 0;
+        const max = randomMax ?? boundMax ?? 100;
+        return finish(Math.floor(Math.random() * (max - min + 1)) + min);
+      }
+      // Adjust the CURRENT value by a random amount in [randomMin, randomMax] — unlike
+      // 'random', which replaces the value outright (a user asked for random gains/losses).
+      case "addRandom": {
         const min = randomMin ?? 0;
         const max = randomMax ?? 100;
-        return finish(Math.floor(Math.random() * (max - min + 1)) + min);
+        const amount = Math.floor(Math.random() * (max - min + 1)) + min;
+        return finish(toNumeric(currentValue) + amount);
+      }
+      case "subtractRandom": {
+        const min = randomMin ?? 0;
+        const max = randomMax ?? 100;
+        const amount = Math.floor(Math.random() * (max - min + 1)) + min;
+        return finish(toNumeric(currentValue) - amount);
       }
       case "set":
       default:
@@ -10047,6 +11280,69 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         return finish(coerceValueToType(changeValue, variableType));
     }
+  };
+  const resolveOperand = (operand, variables) => {
+    if (!operand) return NaN;
+    if (operand.source === "variable") {
+      return operand.variableId !== void 0 ? Number(variables[operand.variableId]) : NaN;
+    }
+    return typeof operand.value === "number" ? operand.value : NaN;
+  };
+  const resolveSetVariableValue = (spec, variables) => {
+    if (spec.valueSource === "variable") {
+      if (spec.valueVariableId !== void 0) {
+        const v = variables[spec.valueVariableId];
+        if (v !== void 0) return v;
+      }
+      return spec.value ?? "";
+    }
+    if (spec.valueSource === "calc" && spec.calc) {
+      const calc = spec.calc;
+      let acc = resolveOperand(calc.first, variables);
+      if (!Number.isFinite(acc)) {
+        const typed = Number(spec.value);
+        acc = Number.isFinite(typed) && String(spec.value).trim() !== "" ? typed : 0;
+      }
+      for (const step of calc.steps ?? []) {
+        const operand = resolveOperand(step, variables);
+        if (!Number.isFinite(operand)) continue;
+        switch (step.op) {
+          case "add":
+            acc += operand;
+            break;
+          case "subtract":
+            acc -= operand;
+            break;
+          case "multiply":
+            acc *= operand;
+            break;
+          case "divide":
+            if (operand === 0) continue;
+            acc /= operand;
+            break;
+          case "percentOf":
+            acc *= operand / 100;
+            break;
+        }
+        if (!Number.isFinite(acc)) {
+          acc = 0;
+          break;
+        }
+      }
+      switch (calc.round ?? "nearest") {
+        case "nearest":
+          acc = Math.round(acc);
+          break;
+        case "down":
+          acc = Math.floor(acc);
+          break;
+        case "up":
+          acc = Math.ceil(acc);
+          break;
+      }
+      return Number.isFinite(acc) ? acc : 0;
+    }
+    return spec.value;
   };
   const PRESET_X = {
     "left": 25,
@@ -10087,6 +11383,106 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return result;
   }
+  const PAUSE_RE = /\[pause(?:\s+(\d+(?:\.\d+)?))?\]/gi;
+  const DEFAULT_PAUSE_MS = 400;
+  const parseDialogueTextCodes = (raw) => {
+    const segments = [];
+    const pausesMs = [];
+    let last = 0;
+    PAUSE_RE.lastIndex = 0;
+    for (let m = PAUSE_RE.exec(raw); m; m = PAUSE_RE.exec(raw)) {
+      segments.push(raw.slice(last, m.index));
+      pausesMs.push(m[1] !== void 0 ? Math.max(0, parseFloat(m[1]) * 1e3) : DEFAULT_PAUSE_MS);
+      last = m.index + m[0].length;
+    }
+    segments.push(raw.slice(last));
+    return { segments, pausesMs };
+  };
+  const stripDialogueTextCodes = (raw) => parseDialogueTextCodes(raw).segments.join("");
+  const processDialogueText = (raw, interpolate) => {
+    const { segments, pausesMs } = parseDialogueTextCodes(raw);
+    let cleanText = "";
+    const pauses = [];
+    segments.forEach((segment, i) => {
+      cleanText += interpolate(segment);
+      if (i < pausesMs.length) pauses.push({ index: cleanText.length, ms: pausesMs[i] });
+    });
+    return { cleanText, pauses };
+  };
+  const smartJoin = (prev, next) => {
+    if (!prev || !next) return prev + next;
+    const nextStartsWord = /[\p{L}\p{N}]/u.test(next[0]);
+    const prevEndsJoiner = /[\s\p{Pd}([{«"'‘“]$/u.test(prev);
+    return nextStartsWord && !prevEndsJoiner ? `${prev} ${next}` : prev + next;
+  };
+  const DEFAULT_PUNCTUATION_PACING = { commaMs: 150, sentenceMs: 300, ellipsisMs: 450 };
+  const COMMA_CLASS = /* @__PURE__ */ new Set([",", ";", ":"]);
+  const SENTENCE_CLASS = /* @__PURE__ */ new Set([".", "!", "?"]);
+  const CLOSERS = /* @__PURE__ */ new Set(['"', "”", "’", "'", ")", "]", "}", "»"]);
+  const DIGIT = /[0-9]/;
+  const punctuationPauses = (cleanText, cfg) => {
+    const out = [];
+    let i = 0;
+    while (i < cleanText.length) {
+      const ch = cleanText[i];
+      const isComma = COMMA_CLASS.has(ch);
+      const isSentence = SENTENCE_CLASS.has(ch);
+      const isEllipsisChar = ch === "…";
+      if (!isComma && !isSentence && !isEllipsisChar) {
+        i++;
+        continue;
+      }
+      if ((ch === "." || ch === "," || ch === ":") && DIGIT.test(cleanText[i - 1] ?? "") && DIGIT.test(cleanText[i + 1] ?? "")) {
+        i++;
+        continue;
+      }
+      let dots = 0;
+      let strongest = "comma";
+      let j = i;
+      while (j < cleanText.length) {
+        const c = cleanText[j];
+        if (c === "…") {
+          strongest = "ellipsis";
+          j++;
+          continue;
+        }
+        if (c === ".") {
+          dots++;
+          if (dots >= 2) strongest = "ellipsis";
+          else if (strongest === "comma") strongest = "sentence";
+          j++;
+          continue;
+        }
+        if (SENTENCE_CLASS.has(c)) {
+          if (strongest === "comma") strongest = "sentence";
+          j++;
+          continue;
+        }
+        if (COMMA_CLASS.has(c)) {
+          j++;
+          continue;
+        }
+        break;
+      }
+      while (j < cleanText.length && CLOSERS.has(cleanText[j])) j++;
+      if (j < cleanText.length) {
+        const ms = strongest === "ellipsis" ? cfg.ellipsisMs : strongest === "sentence" ? cfg.sentenceMs : cfg.commaMs;
+        if (ms > 0) out.push({ index: j, ms });
+      }
+      i = j;
+    }
+    return out;
+  };
+  const walkToAppendGroupHead = (commands, index) => {
+    if (!commands) return index;
+    let i = Math.max(0, Math.min(index, commands.length - 1));
+    while (i > 0) {
+      const cmd = commands[i];
+      if ((cmd == null ? void 0 : cmd.type) === CommandType.Dialogue && cmd.append) i--;
+      else break;
+    }
+    return i;
+  };
   const handleDialogue = (command, context) => {
     const { project } = context;
     const resolvedCharacterId = resolveCommandCharacterId(command, project, context.playerState.variables) || command.characterId;
@@ -10094,10 +11490,43 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const playerName = command.characterSource === "player" ? resolvePlayerCharacterName(project, context.playerState.variables) : null;
     const voiceAudioId = command.voiceAudioId || (char == null ? void 0 : char.defaultVoiceId) || null;
     const textEffect = command.textEffect || (char == null ? void 0 : char.textEffect) || void 0;
+    const blip = command.typingBlip === "silent" ? null : command.typingBlip ?? (voiceAudioId ? null : char == null ? void 0 : char.typingBlip) ?? null;
     if (voiceAudioId) {
       const voiceVol = context.settings.voiceVolume ?? 1;
       if (context.playVoice) context.playVoice(voiceAudioId, voiceVol);
       else context.playSound(voiceAudioId, voiceVol);
+    }
+    if (command.append) {
+      return {
+        advance: false,
+        uiStatePatch: (prev) => {
+          const prevDialogue = prev.dialogue;
+          if (!prevDialogue) {
+            return {
+              isWaitingForInput: true,
+              dialogue: freshDialogue(command, context, { playerName, char, resolvedCharacterId, voiceAudioId, textEffect, blip })
+            };
+          }
+          return {
+            isWaitingForInput: true,
+            dialogue: {
+              ...prevDialogue,
+              text: smartJoin(prevDialogue.text, command.text),
+              // The new part starts here (a smart-joined seam space belongs to
+              // the instantly-revealed prefix).
+              appendRevealFrom: smartJoin(prevDialogue.text, command.text).length - command.text.length,
+              appendPauseMs: Math.max(0, (command.appendPause ?? DEFAULT_PAUSE_MS / 1e3) * 1e3),
+              // This part's own voice/blip/timer take over while it types.
+              voiceAudioId,
+              blip,
+              noPunctuationPauses: command.noPunctuationPauses,
+              timeLimit: command.timeLimit,
+              timeLimitLocked: command.timeLimitLocked,
+              showTimer: command.showTimer
+            }
+          };
+        }
+      };
     }
     return {
       advance: false,
@@ -10105,22 +11534,31 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       updates: {
         uiState: {
           isWaitingForInput: true,
-          dialogue: {
-            text: command.text,
-            characterName: playerName || (char == null ? void 0 : char.name) || "Narrator",
-            characterColor: (char == null ? void 0 : char.color) || "#FFFFFF",
-            characterId: resolvedCharacterId || null,
-            voiceAudioId,
-            textEffect,
-            textboxThemeId: command.textboxThemeId ?? null,
-            textSpeed: command.textSpeed,
-            // Per-line auto-advance timer (counts from typewriter completion).
-            timeLimit: command.timeLimit,
-            timeLimitLocked: command.timeLimitLocked,
-            showTimer: command.showTimer
-          }
+          dialogue: freshDialogue(command, context, { playerName, char, resolvedCharacterId, voiceAudioId, textEffect, blip })
         }
       }
+    };
+  };
+  const freshDialogue = (command, context, r) => {
+    var _a, _b;
+    return {
+      text: command.text,
+      // Names may hold {Variable} tokens — resolved AT SPEAK TIME (the backlog keeps
+      // this snapshot: a line spoken by "???" stays "???" after the reveal). A name
+      // resolving to empty falls through to 'Narrator' → the name box hides.
+      characterName: r.playerName || resolveCharacterDisplayName((_a = r.char) == null ? void 0 : _a.name, context.runtimeVariables ?? context.playerState.variables, context.project) || "Narrator",
+      characterColor: ((_b = r.char) == null ? void 0 : _b.color) || "#FFFFFF",
+      characterId: r.resolvedCharacterId || null,
+      voiceAudioId: r.voiceAudioId,
+      textEffect: r.textEffect,
+      textboxThemeId: command.textboxThemeId ?? null,
+      textSpeed: command.textSpeed,
+      // Per-line auto-advance timer (counts from typewriter completion).
+      timeLimit: command.timeLimit,
+      timeLimitLocked: command.timeLimitLocked,
+      showTimer: command.showTimer,
+      blip: r.blip,
+      noPunctuationPauses: command.noPunctuationPauses
     };
   };
   const handleSetVariable = (command, context) => {
@@ -10141,11 +11579,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       variable.name,
       originalOperator
     );
+    const changeValue = resolveSetVariableValue(
+      command,
+      context.runtimeVariables ?? playerState.variables
+    );
     const newVal = calculateVariableValue(
       effectiveOperator,
       variable.type,
       currentVal,
-      command.value,
+      changeValue,
       command.randomMin,
       command.randomMax,
       wasCoerced ? originalOperator : void 0,
@@ -10481,31 +11923,46 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const imageUrls = [];
     const videoUrls = [];
     const videoTrims = [];
+    const imageBoxes = [];
+    const videoBoxes = [];
     let hasVideo = false;
     let videoLoop = false;
     const base = characterBaseArtForPose(charData, poseId);
     if (base.videoUrl) {
       videoUrls.push(wrap(base.videoUrl));
       videoTrims.push({ start: base.trimStart, end: base.trimEnd });
+      videoBoxes.push(null);
       hasVideo = true;
       videoLoop = !!base.loop;
     } else if (base.imageUrl) {
       imageUrls.push(wrap(base.imageUrl));
+      imageBoxes.push(null);
     }
-    Object.values(charData.layers).forEach((layer) => {
+    const hidden = poseHiddenLayerIds(charData, poseId);
+    layerOrderForPose(charData, poseId).forEach((layer) => {
+      if (hidden.has(layer.id)) return;
       const assetId = layerSelections[layer.id];
       const asset = assetId ? layer.assets[assetId] : null;
       const art = asset ? assetArtForPose(asset, poseId) : null;
+      const box = asset ? normalizeLayerBox(resolveLayerBox(layer, asset, poseId)) ?? null : null;
       if (art == null ? void 0 : art.videoUrl) {
         videoUrls.push(wrap(art.videoUrl));
         videoTrims.push({});
+        videoBoxes.push(box);
         hasVideo = true;
         videoLoop = videoLoop || !!art.loop;
       } else if (art == null ? void 0 : art.imageUrl) {
         imageUrls.push(wrap(art.imageUrl));
+        imageBoxes.push(box);
       }
     });
-    return { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop };
+    return { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes };
+  }
+  function boxFieldsForStage(imageBoxes, videoBoxes) {
+    return {
+      ...imageBoxes.some(Boolean) ? { imageBoxes } : {},
+      ...videoBoxes.some(Boolean) ? { videoBoxes } : {}
+    };
   }
   function handleShowCharacter(command, context) {
     const { project, playerState, activeEffectTimeoutsRef, advance, setPlayerState } = context;
@@ -10574,7 +12031,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     });
     const poseId = resolvePoseId(charData, command.poseId);
-    const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, layerSelections, wrap, poseId);
+    const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes } = buildCharacterMedia(charData, layerSelections, wrap, poseId);
     let finalPosition = command.endPosition || command.position;
     const startPosition = command.startPosition;
     const requestedTransition = command.transition;
@@ -10592,6 +12049,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       imageUrls: existingSameChar.imageUrls,
       videoUrls: existingSameChar.videoUrls,
       videoTrims: existingSameChar.videoTrims,
+      // The old pose's Pose Studio geometry must ride along or the fading ghost snaps to
+      // whole-box mid-crossfade.
+      ...boxFieldsForStage(existingSameChar.imageBoxes || [], existingSameChar.videoBoxes || []),
       isVideo: existingSameChar.isVideo,
       videoLoop: existingSameChar.videoLoop,
       expressionId: existingSameChar.expressionId,
@@ -10622,6 +12082,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       imageUrls,
       videoUrls,
       videoTrims,
+      ...boxFieldsForStage(imageBoxes, videoBoxes),
       isVideo: hasVideo,
       videoLoop,
       expressionId: command.expressionId,
@@ -10756,7 +12217,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         (command.layers || []).forEach(({ layerId, assetId }) => {
           selections[layerId] = assetId || null;
         });
-        const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, selections, wrap, resolvePoseId(charData, cur.poseId));
+        const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes } = buildCharacterMedia(charData, selections, wrap, resolvePoseId(charData, cur.poseId));
         return {
           characters: {
             ...prev.characters,
@@ -10765,12 +12226,41 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               imageUrls,
               videoUrls,
               videoTrims,
+              // Explicit set-or-clear: `...cur` above would otherwise keep STALE geometry
+              // when the rebuilt composite has none. undefined serializes to absence.
+              imageBoxes: imageBoxes.some(Boolean) ? imageBoxes : void 0,
+              videoBoxes: videoBoxes.some(Boolean) ? videoBoxes : void 0,
               isVideo: hasVideo,
               videoLoop,
               layerSelections: selections,
               // Optional crossfade of the character to the new look; otherwise an instant swap.
               transition: useTransition ? { type: command.transition, duration: command.duration ?? 0.3, action: "show" } : null
             }
+          }
+        };
+      }
+    };
+  }
+  function handlePlayCharacterAnimation(command, context) {
+    var _a;
+    const { project, playerState } = context;
+    const characterId = resolveCommandCharacterId(command, project, playerState.variables) || command.characterId;
+    const charData = characterId ? project.characters[characterId] : void 0;
+    const onStage = characterId ? playerState.stageState.characters[characterId] : void 0;
+    if (!charData || !onStage) {
+      return { advance: true };
+    }
+    const animationId = command.animationId && ((_a = charData.animations) == null ? void 0 : _a[command.animationId]) ? command.animationId : null;
+    return {
+      advance: true,
+      stagePatch: (prev) => {
+        const cur = prev.characters[characterId];
+        if (!cur) return {};
+        return {
+          characters: {
+            ...prev.characters,
+            // Explicit set-or-clear: absence (stopped) must serialize to a MISSING field.
+            [characterId]: { ...cur, activeManualAnimationId: animationId ?? void 0 }
           }
         };
       }
@@ -10792,7 +12282,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       stagePatch: (prev) => {
         const cur = prev.characters[characterId];
         if (!cur) return {};
-        const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, cur.layerSelections || {}, wrap, poseId);
+        const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes } = buildCharacterMedia(charData, cur.layerSelections || {}, wrap, poseId);
         return {
           characters: {
             ...prev.characters,
@@ -10801,6 +12291,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               imageUrls,
               videoUrls,
               videoTrims,
+              // Explicit set-or-clear (see SetCharacterLayer note).
+              imageBoxes: imageBoxes.some(Boolean) ? imageBoxes : void 0,
+              videoBoxes: videoBoxes.some(Boolean) ? videoBoxes : void 0,
               isVideo: hasVideo,
               videoLoop,
               ...poseId ? { poseId } : { poseId: void 0 },
@@ -11183,7 +12676,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     advance();
     return { advance: false };
   }
+  const musicChannelAdjust = (adjust) => {
+    if (!adjust || adjust.speed === void 0) return null;
+    const out = { speed: adjust.speed };
+    if (adjust.keepPitch !== void 0) out.keepPitch = adjust.keepPitch;
+    return out;
+  };
   function handlePlayMusic(command, context) {
+    var _a, _b;
     const { assetResolver, musicAudioRef, fadeAudio, settings, playerState, setPlayerState } = context;
     console.log("[PlayMusic] Starting music command", { audioId: command.audioId, loop: command.loop });
     const url = assetResolver(command.audioId, "audio");
@@ -11199,9 +12699,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const currentSrcPath = audio.src ? new URL(audio.src, window.location.href).pathname : null;
     const newSrcPath = url ? new URL(url, window.location.href).pathname : null;
     const isNewTrack = currentSrcPath !== newSrcPath;
+    const adjust = musicChannelAdjust(resolveAudioAdjust(command.audioAdjust, (_b = (_a = context.project.audio) == null ? void 0 : _a[command.audioId]) == null ? void 0 : _b.audioAdjust));
     console.log("[PlayMusic] Audio setup", { isNewTrack, currentSrc: audio.src, newUrl: url, paused: audio.paused });
     if (!isNewTrack && !audio.paused) {
       console.log("[PlayMusic] Same track already playing, updating state only");
+      applyAudioAdjust(audio, adjust);
       return {
         advance: true,
         updates: {
@@ -11210,7 +12712,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             audioId: command.audioId,
             loop: command.loop,
             isPlaying: true,
-            volume: command.volume
+            volume: command.volume,
+            ...adjust ? { adjust } : { adjust: void 0 }
           }
         }
       };
@@ -11220,7 +12723,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       loop: command.loop,
       currentTime: 0,
       isPlaying: true,
-      volume: command.volume
+      volume: command.volume,
+      ...adjust ? { adjust } : {}
     };
     const startPlayback = () => {
       try {
@@ -11230,6 +12734,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       console.log("[PlayMusic] Starting playback");
       audio.loop = command.loop;
+      applyAudioAdjust(audio, adjust);
       audio.volume = 0;
       audio.play().then(() => {
         console.log("[PlayMusic] Audio playing, starting fade-in");
@@ -11242,6 +12747,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (isNewTrack) {
       audio.src = url;
       audio.load();
+      applyAudioAdjust(audio, adjust);
       audio.addEventListener("canplaythrough", startPlayback, { once: true });
       audio.addEventListener("error", (e) => {
         console.error("[PlayMusic] Music load failed:", e);
@@ -11280,7 +12786,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   function handlePlaySoundEffect(command, context) {
     const { playSound } = context;
     try {
-      playSound(command.audioId, command.volume, command.loop);
+      playSound(command.audioId, command.volume, command.loop, command.audioAdjust ?? null);
     } catch (e) {
       console.error("Failed to play sound effect:", e);
     }
@@ -11841,7 +13347,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const found = Object.entries(chars).find(([, c]) => {
         var _a2;
         return ((_a2 = c == null ? void 0 : c.name) == null ? void 0 : _a2.toLowerCase()) === lower;
-      });
+      }) ?? Object.entries(chars).find(([, c]) => resolveCharacterDisplayName(c == null ? void 0 : c.name, context.variables, context.project).toLowerCase() === lower);
       return found == null ? void 0 : found[0];
     };
     const resolveExpressionId = (charId, nameOrId) => {
@@ -12511,6 +14017,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (isNewTrack) {
         audio.src = url;
         audio.load();
+        applyAudioAdjust(audio, null);
         audio.addEventListener("canplaythrough", startPlayback, { once: true });
       } else if (audio.paused) {
         startPlayback();
@@ -12538,9 +14045,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         onJumpToLabel: () => {
         },
         onShowDialogue: (characterName, text) => {
-          const match = Object.values(project.characters).find((c) => c.name.toLowerCase() === characterName.toLowerCase());
+          const match = findCharacterBySpokenName(characterName || "", project, variableUpdates);
+          const displayName = match ? resolveCharacterDisplayName(match.name, variableUpdates, project) : characterName || "";
           dialogueUpdate = {
-            characterName: characterName || "Narrator",
+            characterName: displayName || "Narrator",
             characterColor: (match == null ? void 0 : match.color) || "#FFFFFF",
             characterId: (match == null ? void 0 : match.id) || null,
             text
@@ -12787,11 +14295,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   function captureCurrentValues(command, context) {
     const effectiveId = command.targetType === "screen" ? "__screen__" : command.targetId;
     const resting = TweenManager.getRestingValues(effectiveId, command.targetType);
-    const state = context.playerState.stageState;
+    const state2 = context.playerState.stageState;
     const current = {};
     switch (command.targetType) {
       case "character": {
-        const char = state.characters[command.targetId];
+        const char = state2.characters[command.targetId];
         if (!char) break;
         const pos = typeof char.position === "object" ? char.position : PRESET_COORDS[char.position] ?? { x: 50, y: 10 };
         if (command.x !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? pos.x;
@@ -12801,7 +14309,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         break;
       }
       case "image": {
-        const img = state.imageOverlays.find((o) => o.id === command.targetId);
+        const img = state2.imageOverlays.find((o) => o.id === command.targetId);
         if (!img) break;
         if (command.x !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? img.x;
         if (command.y !== void 0) current.y = (resting == null ? void 0 : resting.y) ?? img.y;
@@ -12814,7 +14322,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         break;
       }
       case "text": {
-        const txt = state.textOverlays.find((o) => o.id === command.targetId);
+        const txt = state2.textOverlays.find((o) => o.id === command.targetId);
         if (!txt) break;
         if (command.x !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? txt.x;
         if (command.y !== void 0) current.y = (resting == null ? void 0 : resting.y) ?? txt.y;
@@ -12825,7 +14333,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         break;
       }
       case "button": {
-        const btn = state.buttonOverlays.find((o) => o.id === command.targetId);
+        const btn = state2.buttonOverlays.find((o) => o.id === command.targetId);
         if (!btn) break;
         if (command.x !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? btn.x;
         if (command.y !== void 0) current.y = (resting == null ? void 0 : resting.y) ?? btn.y;
@@ -12838,7 +14346,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         break;
       }
       case "movie": {
-        let base = (state.movieOverlays || []).find((o) => o.commandId === command.targetId);
+        let base = (state2.movieOverlays || []).find((o) => o.commandId === command.targetId);
         if (!base) {
           for (const scene of Object.values(context.project.scenes)) {
             const c = (scene.commands || []).find((cc) => cc.id === command.targetId);
@@ -12860,9 +14368,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         break;
       }
       case "screen": {
-        if (command.zoom !== void 0) current.scaleX = (resting == null ? void 0 : resting.scaleX) ?? state.screen.zoom;
-        if (command.panX !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? state.screen.panX;
-        if (command.panY !== void 0) current.y = (resting == null ? void 0 : resting.y) ?? state.screen.panY;
+        if (command.zoom !== void 0) current.scaleX = (resting == null ? void 0 : resting.scaleX) ?? state2.screen.zoom;
+        if (command.panX !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? state2.screen.panX;
+        if (command.panY !== void 0) current.y = (resting == null ? void 0 : resting.y) ?? state2.screen.panY;
         break;
       }
     }
@@ -13045,7 +14553,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const ev = project.variables[ea.variableId];
           if (!ev) continue;
           const { effectiveOperator } = normalizeSetVariableOperatorByType(ev.type, ev.name, ea.operator);
-          vars[ea.variableId] = calculateVariableValue(effectiveOperator, ev.type, vars[ea.variableId], ea.value, ea.randomMin, ea.randomMax, void 0, ev.min, ev.max);
+          const changeValue = resolveSetVariableValue(ea, vars);
+          vars[ea.variableId] = calculateVariableValue(effectiveOperator, ev.type, vars[ea.variableId], changeValue, ea.randomMin, ea.randomMax, void 0, ev.min, ev.max);
         } else if (eff.type === UIActionType.ResetVariable) {
           const ev = project.variables[eff.variableId];
           if (ev) vars[eff.variableId] = ev.defaultValue;
@@ -13543,6 +15052,285 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }, [targetId, targetType]);
     return values;
   }
+  const useTypewriter = (text, speed, msPerCharOverride, opts) => {
+    const [displayText, setDisplayText] = React2.useState("");
+    const hasFinished = displayText.length === text.length;
+    const optsRef = React2.useRef(opts);
+    optsRef.current = opts;
+    const skipRef = React2.useRef(() => {
+    });
+    React2.useEffect(() => {
+      var _a, _b, _c, _d;
+      const startAt = Math.max(0, Math.min(((_a = optsRef.current) == null ? void 0 : _a.startAt) ?? 0, text.length));
+      setDisplayText(text.substring(0, startAt));
+      if (!text || startAt >= text.length) return;
+      const pauseAt = /* @__PURE__ */ new Map();
+      for (const p of ((_b = optsRef.current) == null ? void 0 : _b.pauses) ?? []) {
+        pauseAt.set(p.index, (pauseAt.get(p.index) ?? 0) + p.ms);
+      }
+      let pos = startAt;
+      let timer = null;
+      let stopped = false;
+      const hadInitialDelay = (((_c = optsRef.current) == null ? void 0 : _c.initialDelayMs) ?? 0) > 0;
+      let inInitialDelay = true;
+      const step = () => {
+        var _a2, _b2;
+        if (stopped || pos >= text.length) return;
+        inInitialDelay = false;
+        const revealIndex = pos;
+        pos++;
+        setDisplayText(text.substring(0, pos));
+        try {
+          (_b2 = (_a2 = optsRef.current) == null ? void 0 : _a2.onReveal) == null ? void 0 : _b2.call(_a2, revealIndex);
+        } catch {
+        }
+        if (pos < text.length) timer = setTimeout(step, delayFor(pos));
+      };
+      const delayFor = (index) => (msPerCharOverride ?? 1e3 / speed) + (pauseAt.get(index) ?? 0);
+      skipRef.current = () => {
+        if (hadInitialDelay && inInitialDelay && !stopped) {
+          if (timer) clearTimeout(timer);
+          inInitialDelay = false;
+          timer = setTimeout(step, 0);
+          return;
+        }
+        stopped = true;
+        if (timer) clearTimeout(timer);
+        setDisplayText(text);
+      };
+      timer = setTimeout(step, delayFor(startAt) + (((_d = optsRef.current) == null ? void 0 : _d.initialDelayMs) ?? 0));
+      return () => {
+        stopped = true;
+        if (timer) clearTimeout(timer);
+      };
+    }, [text, speed, msPerCharOverride]);
+    const skip = () => skipRef.current();
+    return { displayText, skip, hasFinished };
+  };
+  const MAX_BLIP_BYTES = 1 * 1024 * 1024;
+  const bufferCache = /* @__PURE__ */ new Map();
+  const pending = /* @__PURE__ */ new Map();
+  let builtinBeep = null;
+  let builtinBeepRev = null;
+  const cacheKey = (url, reverse) => reverse ? url + "|rev" : url;
+  const ELEMENT_POOL_SIZE = 3;
+  const elementPools = /* @__PURE__ */ new Map();
+  const playElementBlip = (url, opts) => {
+    try {
+      let pool = elementPools.get(url);
+      if (!pool) {
+        pool = { els: [], next: 0 };
+        elementPools.set(url, pool);
+      }
+      let el = pool.els.find((e) => e.paused || e.ended);
+      if (!el) {
+        if (pool.els.length < ELEMENT_POOL_SIZE) {
+          el = new Audio(url);
+          if ("mozPreservesPitch" in el) el.mozPreservesPitch = false;
+          if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = false;
+          if ("preservesPitch" in el) el.preservesPitch = false;
+          pool.els.push(el);
+        } else {
+          el = pool.els[pool.next % pool.els.length];
+          pool.next++;
+        }
+      }
+      el.volume = Math.max(0, Math.min(1, (opts == null ? void 0 : opts.volume) ?? 1));
+      const wobble = Math.max(0, Math.min(0.5, (opts == null ? void 0 : opts.pitchWobble) ?? 0));
+      const speed = (opts == null ? void 0 : opts.speed) !== void 0 ? clampSpeed(opts.speed) : 1;
+      el.playbackRate = speed * (wobble > 0 ? 1 + (Math.random() * 2 - 1) * wobble : 1);
+      try {
+        el.currentTime = 0;
+      } catch {
+      }
+      el.play().catch(() => {
+      });
+    } catch {
+    }
+  };
+  const getBuiltinBeep = (ctx, reverse) => {
+    try {
+      if (reverse && builtinBeepRev) return builtinBeepRev;
+      if (!reverse && builtinBeep) return builtinBeep;
+      const rate = ctx.sampleRate;
+      const dur = 0.06;
+      const buf = ctx.createBuffer(1, Math.floor(rate * dur), rate);
+      const data = buf.getChannelData(0);
+      const freq = 640;
+      for (let i = 0; i < data.length; i++) {
+        const t = i / rate;
+        const square = Math.sign(Math.sin(2 * Math.PI * freq * t));
+        const decay = Math.exp(-t * 42);
+        data[i] = square * decay * 0.28;
+      }
+      if (reverse) {
+        data.reverse();
+        builtinBeepRev = buf;
+      } else builtinBeep = buf;
+      return buf;
+    } catch {
+      return null;
+    }
+  };
+  const decodeUrl = async (url, reverse) => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const bytes = await res.arrayBuffer();
+      if (bytes.byteLength > MAX_BLIP_BYTES) return null;
+      const wav = decodeWavPcm(bytes);
+      if (wav) {
+        const ctx = getSharedAudioContext();
+        if (!ctx) return null;
+        if (reverse) wav.samples.reverse();
+        const buf = ctx.createBuffer(1, wav.samples.length, wav.sampleRate);
+        buf.getChannelData(0).set(wav.samples);
+        return buf;
+      }
+      if (isRiffWave(bytes)) return null;
+      if (reverse) {
+        const rev = await getReversedUrl(url);
+        if (rev) elementUrlOverride.set(cacheKey(url, true), rev);
+      }
+      return "element";
+    } catch {
+      return null;
+    }
+  };
+  const elementUrlOverride = /* @__PURE__ */ new Map();
+  const prepareBlipBuffer = (url, reverse) => {
+    if (url === null) {
+      const ctx = getSharedAudioContext();
+      if (ctx) getBuiltinBeep(ctx, reverse);
+      return;
+    }
+    const key = cacheKey(url, reverse);
+    if (bufferCache.has(key)) return Promise.resolve(bufferCache.get(key));
+    if (pending.has(key)) return pending.get(key);
+    const p = decodeUrl(url, reverse).then((buf) => {
+      bufferCache.set(key, buf);
+      pending.delete(key);
+      return buf;
+    });
+    pending.set(key, p);
+    return p;
+  };
+  const playBlip = (url, opts) => {
+    try {
+      const key = url !== null ? cacheKey(url, opts == null ? void 0 : opts.reverse) : null;
+      if (url !== null && key !== null && bufferCache.get(key) === "element") {
+        playElementBlip(elementUrlOverride.get(key) ?? url, opts);
+        return;
+      }
+      const ctx = getSharedAudioContext();
+      if (!ctx) return;
+      const cached = url === null ? getBuiltinBeep(ctx, opts == null ? void 0 : opts.reverse) : bufferCache.get(key);
+      if (!cached || cached === "element") {
+        if (url !== null) prepareBlipBuffer(url, opts == null ? void 0 : opts.reverse);
+        return;
+      }
+      const buf = cached;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const wobble = Math.max(0, Math.min(0.5, (opts == null ? void 0 : opts.pitchWobble) ?? 0));
+      const speed = (opts == null ? void 0 : opts.speed) !== void 0 ? clampSpeed(opts.speed) : 1;
+      const rate = speed * (wobble > 0 ? 1 + (Math.random() * 2 - 1) * wobble : 1);
+      if (rate !== 1) src.playbackRate.value = rate;
+      const gain = ctx.createGain();
+      gain.gain.value = Math.max(0, Math.min(1, (opts == null ? void 0 : opts.volume) ?? 1));
+      src.connect(gain);
+      gain.connect(ctx.destination);
+      src.start();
+    } catch {
+    }
+  };
+  const blipIndicesFor = (cleanText, cfg) => {
+    const out = /* @__PURE__ */ new Set();
+    const mode = cfg.mode ?? "letter";
+    const skipPunct = cfg.skipPunctuation !== false;
+    const everyN = Math.max(1, Math.round(cfg.everyN ?? (mode === "letter" ? 2 : 1)));
+    const eligible = (ch) => skipPunct ? /[\p{L}\p{N}]/u.test(ch) : !/\s/.test(ch);
+    if (mode === "word") {
+      let inWord = false;
+      for (let i = 0; i < cleanText.length; i++) {
+        const isSpace = /\s/.test(cleanText[i]);
+        if (!isSpace && !inWord && eligible(cleanText[i])) out.add(i);
+        inWord = !isSpace;
+      }
+      return out;
+    }
+    let count = 0;
+    for (let i = 0; i < cleanText.length; i++) {
+      if (!eligible(cleanText[i])) continue;
+      if (count % everyN === 0) out.add(i);
+      count++;
+    }
+    return out;
+  };
+  const state = { characterId: null, lastRevealAt: 0 };
+  const SPEECH_DECAY_MS = 150;
+  const noteSpeechReveal = (characterId) => {
+    state.characterId = characterId ?? null;
+    state.lastRevealAt = performance.now();
+  };
+  const clearSpeech = (characterId) => {
+    if (characterId === void 0 || state.characterId === characterId) {
+      state.characterId = null;
+      state.lastRevealAt = 0;
+    }
+  };
+  const isSpeakingNow = (characterId, now = performance.now()) => state.characterId === characterId && now - state.lastRevealAt < SPEECH_DECAY_MS;
+  const sortedKeys = (keys) => [...keys].sort((a, b) => a.atMs - b.atMs);
+  function frameAssetAt(anim, tMs) {
+    const out = /* @__PURE__ */ new Map();
+    const dur = Math.max(1, anim.durationMs || 1);
+    const t = anim.loop ? (tMs % dur + dur) % dur : Math.min(Math.max(0, tMs), dur);
+    for (const track of anim.tracks || []) {
+      if (!(track == null ? void 0 : track.layerId)) continue;
+      let current = null;
+      for (const key of sortedKeys(track.keys || [])) {
+        if (key.atMs <= t) current = key;
+        else break;
+      }
+      if (current) out.set(track.layerId, current.assetId);
+    }
+    return out;
+  }
+  function applyAnimationFrame(selections, anim, tMs) {
+    const frame = frameAssetAt(anim, tMs);
+    if (frame.size === 0) return selections;
+    let changed = false;
+    const next = { ...selections };
+    frame.forEach((assetId, layerId) => {
+      if (next[layerId] !== assetId) {
+        next[layerId] = assetId;
+        changed = true;
+      }
+    });
+    return changed ? next : selections;
+  }
+  function animationFrameUrls(charData, anims, poseId) {
+    var _a, _b;
+    const urls = /* @__PURE__ */ new Set();
+    for (const anim of anims) {
+      for (const track of (anim == null ? void 0 : anim.tracks) || []) {
+        const layer = (_a = charData.layers) == null ? void 0 : _a[track == null ? void 0 : track.layerId];
+        if (!layer) continue;
+        for (const key of track.keys || []) {
+          if (!(key == null ? void 0 : key.assetId)) continue;
+          const asset = (_b = layer.assets) == null ? void 0 : _b[key.assetId];
+          if (!asset) continue;
+          const art = assetArtForPose(asset, poseId ?? void 0);
+          if (art == null ? void 0 : art.imageUrl) urls.add(art.imageUrl);
+        }
+      }
+    }
+    return [...urls];
+  }
+  function autoAnimationsOf(charData) {
+    if (!(charData == null ? void 0 : charData.animations)) return [];
+    return Object.values(charData.animations).filter((a) => a && (a.trigger === "always" || a.trigger === "idle" || a.trigger === "speaking"));
+  }
   function getHueFromHex(hex) {
     const match = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
     if (!match) return 0;
@@ -13611,6 +15399,95 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     };
     img.src = url;
   });
+  const vnGalleryPlayer = {
+    audio: null,
+    // created lazily on first click (gesture-safe)
+    entryId: null,
+    playing: false,
+    keepPlaying: false,
+    // owning element's onLeave === 'keepPlaying'
+    loop: false,
+    shuffle: false,
+    /** Current play order over the unlocked songs (entry ids + resolved urls), so the
+     *  module-level 'ended' auto-advance works even with no element mounted. */
+    order: [],
+    volume: 0.8,
+    // last applied settings.musicVolume
+    fadeTimer: 0
+  };
+  function galleryPlayerEmit() {
+    try {
+      window.dispatchEvent(new CustomEvent(GALLERY_PLAYER_EVENT));
+    } catch {
+    }
+  }
+  function galleryPlayGuardedPlay(a) {
+    a.play().then(() => {
+      vnGalleryPlayer.playing = true;
+      galleryPlayerEmit();
+    }).catch(() => {
+      vnGalleryPlayer.playing = false;
+      galleryPlayerEmit();
+    });
+  }
+  function galleryPlayEntry(entryId) {
+    const song = vnGalleryPlayer.order.find((o) => o.entryId === entryId);
+    if (!song || !song.url) return;
+    if (!vnGalleryPlayer.audio) {
+      const a = new Audio();
+      a.addEventListener("ended", () => {
+        if (vnGalleryPlayer.loop && vnGalleryPlayer.entryId) {
+          galleryPlayEntry(vnGalleryPlayer.entryId);
+          return;
+        }
+        const ids = vnGalleryPlayer.order.map((o) => o.entryId);
+        const next = stepIndex(ids, vnGalleryPlayer.entryId, 1);
+        if (next >= 0 && ids.length > 1) galleryPlayEntry(ids[next]);
+        else {
+          vnGalleryPlayer.playing = false;
+          galleryPlayerEmit();
+        }
+      });
+      vnGalleryPlayer.audio = a;
+    }
+    const audio = vnGalleryPlayer.audio;
+    if (vnGalleryPlayer.fadeTimer) {
+      clearInterval(vnGalleryPlayer.fadeTimer);
+      vnGalleryPlayer.fadeTimer = 0;
+    }
+    audio.src = song.url;
+    audio.load();
+    applyAudioAdjust(audio, null);
+    audio.loop = false;
+    audio.volume = Math.max(0, Math.min(1, vnGalleryPlayer.volume));
+    vnGalleryPlayer.entryId = entryId;
+    galleryPlayGuardedPlay(audio);
+  }
+  function stopGalleryPlayer(fadeSec = 0.35) {
+    const a = vnGalleryPlayer.audio;
+    vnGalleryPlayer.playing = false;
+    vnGalleryPlayer.entryId = null;
+    vnGalleryPlayer.keepPlaying = false;
+    if (a && !a.paused) {
+      if (vnGalleryPlayer.fadeTimer) clearInterval(vnGalleryPlayer.fadeTimer);
+      const steps = Math.max(1, Math.round(fadeSec * 1e3 / 50));
+      const dropPer = a.volume / steps;
+      vnGalleryPlayer.fadeTimer = setInterval(() => {
+        const next = a.volume - dropPer;
+        if (next <= 0.01) {
+          clearInterval(vnGalleryPlayer.fadeTimer);
+          vnGalleryPlayer.fadeTimer = 0;
+          a.pause();
+          a.src = "";
+        } else {
+          a.volume = next;
+        }
+      }, 50);
+    } else if (a) {
+      a.src = "";
+    }
+    galleryPlayerEmit();
+  }
   function isRuntimeDebugEnabled() {
     try {
       return window.localStorage.getItem("flourish:runtimeDebug") === "1";
@@ -13829,7 +15706,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       top: `${ty}%`,
       ...isSlideTransition ? _orient ? { transform: _orient } : {} : { transform: `translate(-50%, -50%) ${_orient}`.trim() },
       fontSize: `${tFontSize * ovScale}px`,
-      fontFamily: overlay.fontFamily,
+      fontFamily: cssFontFamily(overlay.fontFamily),
       color: tColor,
       fontWeight: overlay.fontWeight || "normal",
       fontStyle: overlay.fontStyle || "normal",
@@ -14298,27 +16175,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     );
   };
-  const useTypewriter = (text, speed, msPerCharOverride) => {
-    const [displayText, setDisplayText] = React2.useState("");
-    const hasFinished = displayText.length === text.length;
-    React2.useEffect(() => {
-      setDisplayText("");
-      if (!text) return;
-      const interval = setInterval(() => {
-        setDisplayText((prev) => {
-          if (prev.length < text.length) {
-            return text.substring(0, prev.length + 1);
-          } else {
-            clearInterval(interval);
-            return prev;
-          }
-        });
-      }, msPerCharOverride ?? 1e3 / speed);
-      return () => clearInterval(interval);
-    }, [text, speed, msPerCharOverride]);
-    const skip = () => setDisplayText(text);
-    return { displayText, skip, hasFinished };
-  };
   const useStageSize = (ref) => {
     const [size, setSize] = React2.useState({ width: 0, height: 0 });
     const [element, setElement] = React2.useState(null);
@@ -14448,25 +16304,25 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return null;
   };
-  const mergeAppearanceStatePrimary = (element, state) => {
-    if (!state.primaryColor && !state.image) return element;
+  const mergeAppearanceStatePrimary = (element, state2) => {
+    if (!state2.primaryColor && !state2.image) return element;
     const el = { ...element };
-    if (state.primaryColor) {
+    if (state2.primaryColor) {
       if (el.type === UIElementType.Meter) {
-        el.fillColor = state.primaryColor;
+        el.fillColor = state2.primaryColor;
         el.fillColorEnd = void 0;
       } else if (el.type === UIElementType.Text) {
-        el.font = { ...el.font || {}, color: state.primaryColor };
+        el.font = { ...el.font || {}, color: state2.primaryColor };
       } else if (el.type === UIElementType.Button) {
-        el.backgroundColor = state.primaryColor;
+        el.backgroundColor = state2.primaryColor;
       }
     }
-    if (state.image) {
+    if (state2.image) {
       if (el.type === UIElementType.Image) {
-        el.background = { type: "image", assetId: state.image.id };
-        el.image = state.image;
+        el.background = { type: "image", assetId: state2.image.id };
+        el.image = state2.image;
       } else if (el.type === UIElementType.Button) {
-        el.image = state.image;
+        el.image = state2.image;
       }
     }
     return el;
@@ -14482,10 +16338,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return null;
   };
-  const DialogueBox = ({ dialogue, settings, projectUI, onFinished, variables, project, reactiveState, timerPaused, uiPalette, voiceRef }) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
+  const DialogueBox = ({ dialogue, settings, projectUI, onFinished, variables, project, reactiveState, timerPaused, uiPalette, voiceRef, autoContinue, isSkipping }) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
     if (!dialogue) return null;
-    const interpolatedText = interpolateVariables(dialogue.text, variables, project);
+    const { cleanText: interpolatedText, pauses: inlinePauses } = React2.useMemo(
+      () => processDialogueText(dialogue.text, (s) => interpolateVariables(s, variables, project)),
+      [dialogue.text, variables, project]
+    );
+    const appendStartAt = dialogue.appendRevealFrom && dialogue.appendRevealFrom > 0 ? processDialogueText(dialogue.text.slice(0, dialogue.appendRevealFrom), (s) => interpolateVariables(s, variables, project)).cleanText.length : 0;
     const effectiveTextSpeed = dialogue.textSpeed != null && dialogue.textSpeed > 0 ? dialogue.textSpeed : settings.textSpeed;
     const compiledGlossary = React2.useMemo(() => compileGlossary(project.glossary), [project.glossary]);
     const glossaryMatches = React2.useMemo(() => {
@@ -14526,8 +16386,64 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       return () => clearInterval(id);
     }, [dialogue.text, dialogue.voiceAudioId, wantVoicePacing]);
     const pacedMsPerChar = wantVoicePacing && voiceDurationMs && interpolatedText.length > 0 ? Math.max(8, Math.min(200, voiceDurationMs * 0.92 / interpolatedText.length)) : null;
-    const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, effectiveTextSpeed, pacedMsPerChar);
-    const timeLimit = dialogue.timeLimit && dialogue.timeLimit > 0 ? dialogue.timeLimit : 0;
+    const blipCfg = dialogue.blip ?? null;
+    const blipUrl = React2.useMemo(() => {
+      if (!blipCfg) return void 0;
+      if (!blipCfg.audioId) return null;
+      const asset = project.audio[blipCfg.audioId];
+      return asset ? resolveFieldUrl(project.id, asset.audioUrl) : void 0;
+    }, [blipCfg, project]);
+    const blipIndices = React2.useMemo(
+      () => blipCfg && blipUrl !== void 0 ? blipIndicesFor(interpolatedText, blipCfg) : null,
+      [blipCfg, blipUrl, interpolatedText]
+    );
+    React2.useEffect(() => {
+      var _a2;
+      if (blipCfg && blipUrl !== void 0) prepareBlipBuffer(blipUrl, (_a2 = blipCfg.audioAdjust) == null ? void 0 : _a2.reverse);
+    }, [blipCfg, blipUrl]);
+    const punctCfg = projectUI.dialoguePunctuationPacing;
+    const punctPauses = React2.useMemo(() => {
+      if (!(punctCfg == null ? void 0 : punctCfg.enabled) || dialogue.noPunctuationPauses || pacedMsPerChar != null) return [];
+      return punctuationPauses(interpolatedText, {
+        commaMs: punctCfg.commaMs ?? DEFAULT_PUNCTUATION_PACING.commaMs,
+        sentenceMs: punctCfg.sentenceMs ?? DEFAULT_PUNCTUATION_PACING.sentenceMs,
+        ellipsisMs: punctCfg.ellipsisMs ?? DEFAULT_PUNCTUATION_PACING.ellipsisMs
+      });
+    }, [punctCfg, dialogue.noPunctuationPauses, pacedMsPerChar, interpolatedText]);
+    const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, effectiveTextSpeed, pacedMsPerChar, {
+      startAt: appendStartAt,
+      initialDelayMs: appendStartAt > 0 ? dialogue.appendPauseMs ?? 0 : 0,
+      pauses: punctPauses.length ? [...inlinePauses, ...punctPauses] : inlinePauses,
+      onReveal: (index) => {
+        var _a2, _b2;
+        noteSpeechReveal(dialogue.characterId);
+        if (!blipIndices) return;
+        if (isSkipping) return;
+        if (blipIndices.has(index)) {
+          playBlip(blipUrl, {
+            volume: (settings.voiceVolume ?? 1) * (blipCfg.volume ?? 1),
+            pitchWobble: blipCfg.pitchWobble ?? 0,
+            speed: (_a2 = blipCfg.audioAdjust) == null ? void 0 : _a2.speed,
+            reverse: (_b2 = blipCfg.audioAdjust) == null ? void 0 : _b2.reverse
+          });
+        }
+      }
+    });
+    React2.useEffect(() => {
+      if (hasFinished) clearSpeech(dialogue.characterId);
+    }, [hasFinished, dialogue.characterId]);
+    React2.useEffect(() => () => clearSpeech(), []);
+    const autoContinueFiredRef = React2.useRef(false);
+    React2.useEffect(() => {
+      autoContinueFiredRef.current = false;
+    }, [dialogue.text]);
+    React2.useEffect(() => {
+      if (autoContinue && hasFinished && !timerPaused && !autoContinueFiredRef.current) {
+        autoContinueFiredRef.current = true;
+        onFinished();
+      }
+    }, [autoContinue, hasFinished, timerPaused]);
+    const timeLimit = dialogue.timeLimit && dialogue.timeLimit > 0 && !autoContinue ? dialogue.timeLimit : 0;
     const timerLocked = !!(timeLimit && dialogue.timeLimitLocked);
     const [timerRemaining, setTimerRemaining] = React2.useState(0);
     React2.useEffect(() => {
@@ -14570,6 +16486,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return;
       }
       if (hasFinished) {
+        if (autoContinue) {
+          if (!autoContinueFiredRef.current) {
+            autoContinueFiredRef.current = true;
+            onFinished();
+          }
+          return;
+        }
         onFinished();
       } else if (settings.enableSkip) {
         skip();
@@ -14610,7 +16533,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const characterFontItalic = character == null ? void 0 : character.fontItalic;
     const dialogueTextStyle = {
       ...fontSettingsToStyle((charTb == null ? void 0 : charTb.dialogueTextFont) ?? projectUI.dialogueTextFont),
-      ...characterFont ? { fontFamily: characterFont } : {},
+      ...characterFont ? { fontFamily: cssFontFamily(characterFont) } : {},
       ...characterFontSize ? { fontSize: `calc(var(--font-scale, 1) * ${characterFontSize}px)` } : {},
       ...characterFontWeight ? { fontWeight: characterFontWeight } : {},
       ...characterFontItalic ? { fontStyle: "italic" } : {},
@@ -14683,7 +16606,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     }
     const hasCustomImage = dialogueBoxUrl || dialogueBorderUrl;
-    const showNamebox = dialogue.characterName !== "Narrator" && !(reactiveState == null ? void 0 : reactiveState.hideNamebox);
+    const showNamebox = !!((_k = dialogue.characterName) == null ? void 0 : _k.trim()) && dialogue.characterName !== "Narrator" && !(reactiveState == null ? void 0 : reactiveState.hideNamebox);
     const nameFont = (charTb == null ? void 0 : charTb.dialogueNameFont) ?? projectUI.dialogueNameFont;
     const nameStyle = {
       ...fontSettingsToStyle(nameFont),
@@ -14692,8 +16615,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const nameboxBgStyle = nameboxImageUrl ? { ...buildImageBackgroundStyle(nameboxImageUrl, nameboxSizeMode), borderRadius: scalePx(nameboxBorderRadius), transition: reactiveTransition } : { backgroundColor: hexToRgba(nameboxColor, nameboxOpacity), borderRadius: scalePx(nameboxBorderRadius), transition: reactiveTransition };
     const dialogueBgColor = hexToRgba(dialogueColor, dialogueOpacity);
     const dialogueImageStyle = dialogueBoxUrl && !isDialogueBoxVideo ? buildImageBackgroundStyle(dialogueBoxUrl, dialogueSizeMode, dialogueSlice) : {};
-    const gameW = ((_k = project.gameResolution) == null ? void 0 : _k.width) || 1920;
-    const gameH = ((_l = project.gameResolution) == null ? void 0 : _l.height) || 1080;
+    const gameW = ((_l = project.gameResolution) == null ? void 0 : _l.width) || 1920;
+    const gameH = ((_m = project.gameResolution) == null ? void 0 : _m.height) || 1080;
     const dialogueHPct = dialogueBoxHeight ? dialogueBoxHeight * 100 / gameH : 20;
     const dialogueXPct = projectUI.dialogueBoxX ?? (100 - dialogueBoxWidth) / 2;
     const bmPct = dialogueBoxBottomMargin * 100 / gameH;
@@ -14819,12 +16742,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         height: "1em",
                         marginLeft: "2px",
                         verticalAlign: "text-bottom",
-                        backgroundColor: dialogueTextStyle.color || ((_m = projectUI.dialogueTextFont) == null ? void 0 : _m.color) || "#FFFFFF",
+                        backgroundColor: dialogueTextStyle.color || ((_n = projectUI.dialogueTextFont) == null ? void 0 : _n.color) || "#FFFFFF",
                         animation: "vnCursorBlink 0.8s step-end infinite",
                         opacity: 0.85
                       } })
                     ] }),
-                    hasFinished && !timerLocked && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
+                    hasFinished && !timerLocked && !autoContinue && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
                       position: "absolute",
                       bottom: "8px",
                       right: "12px",
@@ -14848,7 +16771,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     GlossaryTooltip,
                     {
                       entry: glossaryHoverEntry,
-                      accentColor: glossaryHoverEntry.color || ((_o = (_n = project.glossary) == null ? void 0 : _n.settings) == null ? void 0 : _o.defaultColor) || "#7ee7ff",
+                      accentColor: glossaryHoverEntry.color || ((_p = (_o = project.glossary) == null ? void 0 : _o.settings) == null ? void 0 : _p.defaultColor) || "#7ee7ff",
                       x: glossaryHover.x,
                       y: glossaryHover.y
                     }
@@ -15209,9 +17132,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const slotHoverBorderColor = el.slotHoverBorderColor || "#38bdf8";
     const slotHeaderColor = el.slotHeaderColor || "#7dd3fc";
     const slotTextColor = el.slotTextColor || "#e2e8f0";
-    const emptySlotStyle = el.emptySlotFont ? { ...fontSettingsToStyle(el.emptySlotFont), textAlign: void 0 } : { color: el.emptySlotTextColor || "#a0aec0", fontSize: baseFont.fontSize, fontFamily: baseFont.fontFamily };
-    const navBtnStyle = el.navButtonFont ? { ...fontSettingsToStyle(el.navButtonFont), textAlign: void 0, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: "4px", padding: "2px 10px" } : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize, fontWeight: "bold", backgroundColor: "rgba(255,255,255,0.1)", borderRadius: "4px", padding: "2px 10px" };
-    const pageIndicatorStyle = el.pageIndicatorFont ? { ...fontSettingsToStyle(el.pageIndicatorFont), textAlign: void 0 } : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize };
+    const emptySlotStyle = el.emptySlotFont ? { ...fontSettingsToStyle(el.emptySlotFont), textAlign: void 0 } : { color: el.emptySlotTextColor || "#a0aec0", fontSize: baseFont.fontSize, fontFamily: cssFontFamily(baseFont.fontFamily) };
+    const navBtnStyle = el.navButtonFont ? { ...fontSettingsToStyle(el.navButtonFont), textAlign: void 0, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: "4px", padding: "2px 10px" } : { color: slotHeaderColor, fontFamily: cssFontFamily(baseFont.fontFamily), fontSize: baseFont.fontSize, fontWeight: "bold", backgroundColor: "rgba(255,255,255,0.1)", borderRadius: "4px", padding: "2px 10px" };
+    const pageIndicatorStyle = el.pageIndicatorFont ? { ...fontSettingsToStyle(el.pageIndicatorFont), textAlign: void 0 } : { color: slotHeaderColor, fontFamily: cssFontFamily(baseFont.fontFamily), fontSize: baseFont.fontSize };
     const prevLabel = el.prevButtonText ?? "◀ Prev";
     const nextLabel = el.nextButtonText ?? "Next ▶";
     const storageWarningBanner = storageBroken ? /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
@@ -15223,7 +17146,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       marginBottom: 8,
       color: "#fca5a5",
       fontSize: 13,
-      fontFamily: baseFont.fontFamily,
+      fontFamily: cssFontFamily(baseFont.fontFamily),
       textAlign: "center"
     }, children: "⚠ Saving to this device isn't working (it may be out of space). Your saves will only last until you close the game. Free up space, then save again." }) : null;
     const renderEraseControl = (i) => /* @__PURE__ */ jsxRuntime2.jsx(
@@ -15272,7 +17195,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             if (!url) return null;
             return /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", style: { ...box, objectFit: p.objectFit || "contain" } }, p.id);
           }
-          const fontStyle = p.font ? fontSettingsToStyle(p.font) : { color: slotTextColor, fontSize: baseFont.fontSize, fontFamily: baseFont.fontFamily };
+          const fontStyle = p.font ? fontSettingsToStyle(p.font) : { color: slotTextColor, fontSize: baseFont.fontSize, fontFamily: cssFontFamily(baseFont.fontFamily) };
           const align = fontStyle.textAlign;
           return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...box, ...fontStyle, display: "flex", alignItems: "center", justifyContent: align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start", whiteSpace: "pre-wrap" }, children: formatSlotText(p.text || "", i + 1, slotData) }, p.id);
         }),
@@ -15324,7 +17247,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 color: slotHeaderColor,
                 fontWeight: "bold",
                 fontSize: baseFont.fontSize,
-                fontFamily: baseFont.fontFamily,
+                fontFamily: cssFontFamily(baseFont.fontFamily),
                 textShadow: "0 2px 4px rgba(0,0,0,0.7)",
                 zIndex: 10
               }, children: [
@@ -15414,7 +17337,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     toggleKey: c.toggleKey,
     affectsDialogue: c.affectsDialogue !== false,
     on: true,
-    conditions: c.liveConditions ? c.conditions ?? null : null
+    conditions: c.liveConditions ? c.conditions ?? null : null,
+    // Effect style rides the shared constructor so ALL entry points (command, script bridge,
+    // Show Spotlight action) carry it. Absent = Classic.
+    ...c.effectStyle === "enhanced" ? { effectStyle: "enhanced" } : {}
   });
   const TIMER_VAR_MUTATION_TYPES = /* @__PURE__ */ new Set([
     UIActionType.SetVariable,
@@ -15733,7 +17659,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             {
               style: {
                 fontSize: `calc(var(--font-scale, 1) * ${(((_a = el.font) == null ? void 0 : _a.size) || 16) * 0.8}px)`,
-                fontFamily: ((_b = el.font) == null ? void 0 : _b.family) || "Inter, system-ui, sans-serif",
+                fontFamily: cssFontFamily((_b = el.font) == null ? void 0 : _b.family) || "Inter, system-ui, sans-serif",
                 fontWeight: ((_c = el.font) == null ? void 0 : _c.weight) || "normal",
                 fontStyle: ((_d = el.font) == null ? void 0 : _d.italic) ? "italic" : "normal",
                 color: ((_e = el.font) == null ? void 0 : _e.color) || "#f1f5f9",
@@ -15769,7 +17695,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 style: {
                   flex: 1,
                   fontSize: `calc(var(--font-scale, 1) * ${((_f = el.font) == null ? void 0 : _f.size) || 16}px)`,
-                  fontFamily: ((_g = el.font) == null ? void 0 : _g.family) || "Inter, system-ui, sans-serif",
+                  fontFamily: cssFontFamily((_g = el.font) == null ? void 0 : _g.family) || "Inter, system-ui, sans-serif",
                   fontWeight: ((_h = el.font) == null ? void 0 : _h.weight) || "normal",
                   fontStyle: ((_i = el.font) == null ? void 0 : _i.italic) ? "italic" : "normal",
                   color: ((_j = el.font) == null ? void 0 : _j.color) || "#f1f5f9",
@@ -15963,6 +17889,243 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             children: entries.map((entry, idx) => renderThumb(entry, idx, false))
           }
         )
+      }
+    );
+  };
+  const MusicGalleryPlayerElement = ({ element, songs, project, assetResolver, musicVolume }) => {
+    var _a;
+    const [, forceRender] = React2.useReducer((n) => n + 1, 0);
+    React2.useEffect(() => {
+      const onChange = () => forceRender();
+      window.addEventListener(GALLERY_PLAYER_EVENT, onChange);
+      const tick = setInterval(() => {
+        if (vnGalleryPlayer.playing) forceRender();
+      }, 250);
+      return () => {
+        window.removeEventListener(GALLERY_PLAYER_EVENT, onChange);
+        clearInterval(tick);
+      };
+    }, []);
+    React2.useEffect(() => {
+      vnGalleryPlayer.volume = musicVolume;
+      if (vnGalleryPlayer.audio && !vnGalleryPlayer.fadeTimer) {
+        vnGalleryPlayer.audio.volume = Math.max(0, Math.min(1, musicVolume));
+      }
+    }, [musicVolume]);
+    const unlocked = songs.filter((s) => s.unlocked);
+    const currentSong = vnGalleryPlayer.entryId ? songs.find((s) => s.id === vnGalleryPlayer.entryId) || null : null;
+    const audio = vnGalleryPlayer.audio;
+    const currentTime = audio && vnGalleryPlayer.entryId ? audio.currentTime : 0;
+    const duration = audio && vnGalleryPlayer.entryId ? audio.duration : NaN;
+    const rebuildOrder = (keepCurrentFirst) => {
+      const ids = buildPlayOrder(unlocked.map((s) => s.id), vnGalleryPlayer.shuffle, keepCurrentFirst ? vnGalleryPlayer.entryId : null);
+      vnGalleryPlayer.order = ids.map((id) => {
+        const song = unlocked.find((s) => s.id === id);
+        return { entryId: id, url: song ? assetResolver(song.audioId, "audio") || "" : "" };
+      }).filter((o) => !!o.url);
+    };
+    const playSong = (song) => {
+      if (!song.unlocked || !song.audioId) return;
+      vnGalleryPlayer.keepPlaying = element.onLeave === "keepPlaying";
+      rebuildOrder(false);
+      galleryPlayEntry(song.id);
+    };
+    const togglePlayPause = () => {
+      if (!audio || !vnGalleryPlayer.entryId) {
+        if (unlocked.length) playSong(unlocked[0]);
+        return;
+      }
+      if (audio.paused) {
+        galleryPlayGuardedPlay(audio);
+      } else {
+        audio.pause();
+        vnGalleryPlayer.playing = false;
+        galleryPlayerEmit();
+      }
+    };
+    const step = (delta) => {
+      if (!vnGalleryPlayer.order.length) {
+        if (unlocked.length) playSong(unlocked[0]);
+        return;
+      }
+      if (delta === -1 && audio && audio.currentTime > 3 && vnGalleryPlayer.entryId) {
+        audio.currentTime = 0;
+        return;
+      }
+      const ids = vnGalleryPlayer.order.map((o) => o.entryId);
+      const next = stepIndex(ids, vnGalleryPlayer.entryId, delta);
+      if (next >= 0) {
+        vnGalleryPlayer.keepPlaying = element.onLeave === "keepPlaying";
+        galleryPlayEntry(ids[next]);
+      }
+    };
+    const toggleLoop = () => {
+      vnGalleryPlayer.loop = !vnGalleryPlayer.loop;
+      galleryPlayerEmit();
+    };
+    const toggleShuffle = () => {
+      vnGalleryPlayer.shuffle = !vnGalleryPlayer.shuffle;
+      rebuildOrder(true);
+      galleryPlayerEmit();
+    };
+    const seekTo = (clientX, box) => {
+      if (!audio || !isFinite(audio.duration) || audio.duration <= 0) return;
+      const ratio = Math.max(0, Math.min(1, (clientX - box.left) / box.width));
+      try {
+        audio.currentTime = ratio * audio.duration;
+      } catch {
+      }
+      forceRender();
+    };
+    const artUrl = (song) => {
+      var _a2;
+      if (!song) return null;
+      const own = song.artworkAssetId ? assetResolver(song.artworkAssetId, "image") : null;
+      const fallback = ((_a2 = project.musicGallery) == null ? void 0 : _a2.defaultArtworkAssetId) ? assetResolver(project.musicGallery.defaultArtworkAssetId, "image") : null;
+      return own || fallback;
+    };
+    const controlGlyph = (part) => {
+      const g = MUSIC_CONTROL_GLYPHS[part.partType];
+      if (!g) return "?";
+      const active = part.partType === "playPause" && vnGalleryPlayer.playing || part.partType === "loopToggle" && vnGalleryPlayer.loop || part.partType === "shuffleToggle" && vnGalleryPlayer.shuffle;
+      return active && g.active ? g.active : g.normal;
+    };
+    const controlActive = (part) => part.partType === "playPause" && vnGalleryPlayer.playing || part.partType === "loopToggle" && vnGalleryPlayer.loop || part.partType === "shuffleToggle" && vnGalleryPlayer.shuffle;
+    const controlClick = (part) => {
+      switch (part.partType) {
+        case "playPause":
+          togglePlayPause();
+          break;
+        case "prevButton":
+          step(-1);
+          break;
+        case "nextButton":
+          step(1);
+          break;
+        case "loopToggle":
+          toggleLoop();
+          break;
+        case "shuffleToggle":
+          toggleShuffle();
+          break;
+      }
+    };
+    const renderPart = (part) => {
+      var _a2, _b;
+      const baseText = part.font ? fontSettingsToStyle(part.font) : { color: part.color || "#e2e8f0", fontSize: 13 };
+      switch (part.partType) {
+        case "artwork": {
+          const url = artUrl(currentSong);
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full overflow-hidden", style: { background: part.backgroundColor || "rgba(0,0,0,0.35)", borderRadius: part.borderRadius }, children: url ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", className: "w-full h-full", style: { objectFit: part.objectFit || "cover" }, draggable: false }) : /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "w-full h-full flex flex-col items-center justify-center", style: { color: part.color || "#94a3b8" }, children: [
+            /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "200%" }, children: "♪" }),
+            !currentSong && /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-[10px] opacity-80", children: element.noSongText || "Pick a song" })
+          ] }) });
+        }
+        case "songTitle":
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full flex items-center overflow-hidden", style: { ...baseText, fontWeight: part.font ? void 0 : "bold" }, children: currentSong ? currentSong.name : element.noSongText || "Pick a song" });
+        case "artistName":
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full flex items-center overflow-hidden", style: { ...baseText, opacity: 0.75 }, children: (currentSong == null ? void 0 : currentSong.artist) || "" });
+        case "timeLabel":
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full flex items-center justify-center", style: baseText, children: formatTimeLabel(currentTime, duration) });
+        case "seekBar": {
+          const progress = isFinite(duration) && duration > 0 ? currentTime / duration : 0;
+          const track = part.trackColor || "rgba(148,163,184,0.35)";
+          const fill = part.color || "#38bdf8";
+          const thumb = part.thumbColor || "#e2e8f0";
+          return /* @__PURE__ */ jsxRuntime2.jsx(
+            "div",
+            {
+              className: "w-full h-full flex items-center",
+              style: { cursor: "var(--vn-cursor-hand, pointer)", touchAction: "none" },
+              onPointerDown: (e) => {
+                const box = e.currentTarget.getBoundingClientRect();
+                seekTo(e.clientX, box);
+                const move = (ev) => seekTo(ev.clientX, box);
+                const up = () => {
+                  window.removeEventListener("pointermove", move);
+                  window.removeEventListener("pointerup", up);
+                };
+                window.addEventListener("pointermove", move);
+                window.addEventListener("pointerup", up);
+              },
+              children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "w-full relative", style: { height: "40%", minHeight: 4, borderRadius: 999, background: track }, children: [
+                /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute left-0 top-0 h-full", style: { width: `${progress * 100}%`, borderRadius: 999, background: fill } }),
+                /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute", style: { left: `${progress * 100}%`, top: "50%", transform: "translate(-50%, -50%)", width: 10, height: 10, borderRadius: "50%", background: thumb } })
+              ] })
+            }
+          );
+        }
+        case "songList": {
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full overflow-y-auto flex flex-col", style: { gap: part.rowGap ?? 4, background: part.backgroundColor }, children: songs.map((song) => {
+            const isCurrent = song.id === vnGalleryPlayer.entryId;
+            const locked = !song.unlocked;
+            const rowArt = locked ? null : artUrl(song);
+            return /* @__PURE__ */ jsxRuntime2.jsxs(
+              "button",
+              {
+                type: "button",
+                onClick: () => !locked && playSong(song),
+                className: "flex items-center gap-2 px-2 py-1 flex-shrink-0 text-left w-full",
+                style: {
+                  background: isCurrent ? part.playingRowColor || "rgba(56,189,248,0.25)" : part.rowColor || "rgba(255,255,255,0.05)",
+                  borderRadius: part.borderRadius ?? 6,
+                  border: "none",
+                  // Tailwind preflight sets button{cursor:pointer} — locked rows must
+                  // suppress the hand INLINE or the pointer betrays them.
+                  cursor: locked ? "var(--vn-cursor-normal, default)" : "var(--vn-cursor-hand, pointer)"
+                },
+                children: [
+                  (part.showArtworkInList ?? true) && /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "flex items-center justify-center flex-shrink-0 overflow-hidden", style: { width: 18, height: 18, borderRadius: 4, background: "rgba(0,0,0,0.3)", color: part.color || "#94a3b8", fontSize: 10 }, children: locked ? "🔒" : rowArt ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: rowArt, alt: "", className: "w-full h-full", style: { objectFit: "cover" }, draggable: false }) : "♪" }),
+                  /* @__PURE__ */ jsxRuntime2.jsxs("span", { className: "flex-1 min-w-0", children: [
+                    /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "block truncate", style: { ...baseText, fontSize: baseText.fontSize || 12, ...locked ? { color: element.lockedColor || "rgba(148,163,184,0.6)" } : {} }, children: locked ? element.lockedText || "???" : song.name }),
+                    (part.showArtistInList ?? false) && !locked && song.artist && /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "block truncate", style: { ...baseText, fontSize: 10, opacity: 0.6 }, children: song.artist })
+                  ] }),
+                  isCurrent && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { color: part.color || "#38bdf8", fontSize: 10 }, children: "▶" })
+                ]
+              },
+              song.id
+            );
+          }) });
+        }
+        default: {
+          const active = controlActive(part);
+          const normalUrl = ((_a2 = part.image) == null ? void 0 : _a2.id) ? assetResolver(part.image.id, "image") : null;
+          const activeUrl = ((_b = part.imageActive) == null ? void 0 : _b.id) ? assetResolver(part.imageActive.id, "image") : null;
+          const url = active ? activeUrl || normalUrl : normalUrl;
+          return /* @__PURE__ */ jsxRuntime2.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: () => controlClick(part),
+              className: "w-full h-full flex items-center justify-center",
+              style: {
+                background: part.backgroundColor || "transparent",
+                borderRadius: part.borderRadius,
+                border: "none",
+                cursor: "var(--vn-cursor-hand, pointer)",
+                // inline: Tailwind preflight rule
+                opacity: (part.partType === "loopToggle" || part.partType === "shuffleToggle") && !active ? 0.55 : 1
+              },
+              children: url ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", className: "max-w-full max-h-full", style: { objectFit: "contain" }, draggable: false }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { color: part.color || "#e2e8f0", fontSize: "min(4vh, 20px)", lineHeight: 1 }, children: controlGlyph(part) })
+            }
+          );
+        }
+      }
+    };
+    const bgUrl = ((_a = element.backgroundImage) == null ? void 0 : _a.id) ? assetResolver(element.backgroundImage.id, "image") : null;
+    return /* @__PURE__ */ jsxRuntime2.jsxs(
+      "div",
+      {
+        className: "w-full h-full relative overflow-hidden",
+        style: {
+          backgroundColor: element.hideBackgroundPanel ? "transparent" : element.backgroundColor || "rgba(15, 23, 42, 0.92)",
+          borderRadius: element.borderRadius ?? 12,
+          pointerEvents: "auto"
+        },
+        children: [
+          bgUrl && !element.hideBackgroundPanel && /* @__PURE__ */ jsxRuntime2.jsx("img", { src: bgUrl, alt: "", className: "absolute inset-0 w-full h-full pointer-events-none", style: { objectFit: "cover" }, draggable: false }),
+          (element.parts || []).filter((p) => p.visible !== false).map((p) => /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute", style: { left: `${p.x}%`, top: `${p.y}%`, width: `${p.width}%`, height: `${p.height}%` }, children: renderPart(p) }, p.id))
+        ]
       }
     );
   };
@@ -16351,7 +18514,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             border: `1px solid ${element.borderColor || "#475569"}`,
             borderRight: "none",
             color: (font == null ? void 0 : font.color) || "#fff",
-            fontFamily: font == null ? void 0 : font.fontFamily,
+            fontFamily: cssFontFamily(font == null ? void 0 : font.fontFamily),
             fontSize: font == null ? void 0 : font.fontSize
           },
           placeholder: element.placeholder || "",
@@ -16747,7 +18910,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 "div",
                 {
                   className: "w-full h-full flex items-center justify-center text-white pointer-events-none",
-                  style: elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, fontWeight: elFont.bold ? "bold" : "normal", fontStyle: elFont.italic ? "italic" : "normal", color: elFont.color || "#fff" } : {},
+                  style: elFont ? { fontFamily: cssFontFamily(elFont.fontFamily), fontSize: elFont.fontSize, fontWeight: elFont.bold ? "bold" : "normal", fontStyle: elFont.italic ? "italic" : "normal", color: elFont.color || "#fff" } : {},
                   children: project ? interpolateVariables(elText, variables, project) : elText
                 }
               ) : elType === "button" ? /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "w-full h-full relative flex items-center justify-center pointer-events-none", children: [
@@ -16756,7 +18919,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   "span",
                   {
                     className: "relative z-10 text-white text-sm font-semibold",
-                    style: elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, color: elFont.color || "#fff" } : {},
+                    style: elFont ? { fontFamily: cssFontFamily(elFont.fontFamily), fontSize: elFont.fontSize, color: elFont.color || "#fff" } : {},
                     children: project ? interpolateVariables(elText, variables, project) : elText
                   }
                 )
@@ -17014,6 +19177,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const transitionStyle = isClosing ? {} : getTransitionStyle(element.transitionIn, element.transitionDuration, element.transitionDelay, element.transitionFade, element.transitionDistance);
       const isDisabled = !!(element.disabledConditions && element.disabledConditions.length > 0 && evaluateConditions2(element.disabledConditions, variables2));
       const combinedFilter = [isDisabled ? "grayscale(0.6)" : "", stateFilter || ""].filter(Boolean).join(" ") || void 0;
+      const baseOrientation = buildOrientationTransform(element);
       const style = {
         position: "absolute",
         left: `${element.x}%`,
@@ -17025,11 +19189,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         // will paint over non-composited siblings at the same z-index — which made buttons
         // vanish behind a parallaxed video bg. Promoting elements keeps normal z-order.
         // `stateExtraTransform` (appearance-state scale/rotation) composes on top.
-        transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)${parallaxTransform(element.parallaxDepth)} translateZ(0)${stateExtraTransform}`,
+        transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)${parallaxTransform(element.parallaxDepth)} translateZ(0)${baseOrientation ? " " + baseOrientation : ""}${stateExtraTransform}`,
         // The entrance keyframes read these so their end state lands EXACTLY on this element's
         // anchor (they used to hardcode -50%,-50% and snap on completion for any other anchor).
+        // --vn-el-rot/-sx/-sy carry the author's rotation/flip through entrances the same way.
         ["--vn-el-tx"]: `-${element.anchorX * 100}%`,
         ["--vn-el-ty"]: `-${element.anchorY * 100}%`,
+        ["--vn-el-rot"]: `${element.rotation || 0}deg`,
+        ["--vn-el-sx"]: element.flipX ? -1 : 1,
+        ["--vn-el-sy"]: element.flipY ? -1 : 1,
         overflow: "hidden",
         // Prevent content overflow when using cover
         // Author-controlled stacking. Default 0 → insertion order (back-compat).
@@ -17351,7 +19519,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             imageUrls.push(resolveFieldUrl(project2.id, previewBase.imageUrl) || previewBase.imageUrl);
           }
           const defaultExpression = el.expressionId ? character.expressions[el.expressionId] : null;
-          Object.entries(character.layers).forEach(([layerId, layer]) => {
+          const previewImageBoxes = imageUrls.map(() => null);
+          const previewVideoBoxes = videoUrls.map(() => null);
+          const previewHidden = poseHiddenLayerIds(character, previewPoseId);
+          layerOrderForPose(character, previewPoseId).forEach((layer) => {
+            const layerId = layer.id;
+            if (previewHidden.has(layerId)) return;
             let variableId = el.layerVariableMap[layerId];
             if (!variableId && el.characterSource === "player" && variables2) {
               const matches = Object.entries(project2.variables).filter(([vid, v]) => v.type === "string" && String(variables2[vid] || "") in layer.assets);
@@ -17382,13 +19555,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             if (asset) {
               const art = assetArtForPose(asset, previewPoseId);
+              const pieceBox = normalizeLayerBox(resolveLayerBox(layer, asset, previewPoseId)) ?? null;
               if (art.videoUrl) {
                 videoUrls.push(resolveFieldUrl(project2.id, art.videoUrl) || art.videoUrl);
                 videoTrims.push({});
+                previewVideoBoxes.push(pieceBox);
                 hasVideo = true;
                 videoLoop = videoLoop || !!art.loop;
               } else if (art.imageUrl) {
                 imageUrls.push(resolveFieldUrl(project2.id, art.imageUrl) || art.imageUrl);
+                previewImageBoxes.push(pieceBox);
               }
             }
           });
@@ -17409,7 +19585,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 trimEnd: (_b3 = videoTrims[index]) == null ? void 0 : _b3.end,
                 playsInline: true,
                 className: "absolute top-0 left-0 w-full h-full object-contain",
-                style: { zIndex: index }
+                style: { zIndex: index, ...layerBoxStyle(previewVideoBoxes[index]) }
               },
               index
             );
@@ -17419,7 +19595,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               src: url,
               alt: "",
               className: "absolute top-0 left-0 w-full h-full object-contain",
-              style: { zIndex: index }
+              style: { zIndex: index, ...layerBoxStyle(previewImageBoxes[index]) }
             },
             index
           )) }) }, el.id);
@@ -17446,7 +19622,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     backgroundColor: el.backgroundColor || "#1e293b",
                     color: ((_o = el.font) == null ? void 0 : _o.color) || "#f1f5f9",
                     fontSize: `calc(var(--font-scale, 1) * ${((_p = el.font) == null ? void 0 : _p.size) || 16}px)`,
-                    fontFamily: ((_q = el.font) == null ? void 0 : _q.family) || "Inter, system-ui, sans-serif",
+                    fontFamily: cssFontFamily((_q = el.font) == null ? void 0 : _q.family) || "Inter, system-ui, sans-serif",
                     fontWeight: ((_r = el.font) == null ? void 0 : _r.weight) || "normal",
                     fontStyle: ((_s = el.font) == null ? void 0 : _s.italic) ? "italic" : "normal",
                     border: `2px solid ${el.borderColor || "#475569"}`,
@@ -17484,7 +19660,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     backgroundColor: el.backgroundColor || "#1e293b",
                     color: ((_u = el.font) == null ? void 0 : _u.color) || "#f1f5f9",
                     fontSize: `calc(var(--font-scale, 1) * ${((_v = el.font) == null ? void 0 : _v.size) || 16}px)`,
-                    fontFamily: ((_w = el.font) == null ? void 0 : _w.family) || "Inter, system-ui, sans-serif",
+                    fontFamily: cssFontFamily((_w = el.font) == null ? void 0 : _w.family) || "Inter, system-ui, sans-serif",
                     fontWeight: ((_x = el.font) == null ? void 0 : _x.weight) || "normal",
                     fontStyle: ((_y = el.font) == null ? void 0 : _y.italic) ? "italic" : "normal",
                     border: `2px solid ${el.borderColor || "#475569"}`,
@@ -17544,7 +19720,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     style: {
                       color: el.labelColor || "#f1f5f9",
                       fontSize: `calc(var(--font-scale, 1) * ${((_z = el.font) == null ? void 0 : _z.size) || 16}px)`,
-                      fontFamily: ((_A = el.font) == null ? void 0 : _A.family) || "Inter, system-ui, sans-serif",
+                      fontFamily: cssFontFamily((_A = el.font) == null ? void 0 : _A.family) || "Inter, system-ui, sans-serif",
                       fontWeight: ((_B = el.font) == null ? void 0 : _B.weight) || "normal",
                       fontStyle: ((_C = el.font) == null ? void 0 : _C.italic) ? "italic" : "normal",
                       cursor: "var(--vn-cursor-hand, pointer)",
@@ -17566,28 +19742,38 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const czPoseId = resolvePoseId(character, el.poseId);
           const imageUrls = [];
           const videoUrls = [];
+          const czImageBoxes = [];
+          const czVideoBoxes = [];
           let hasVideo = false, videoLoop = false;
           const czBase = characterBaseArtForPose(character, czPoseId);
           if (czBase.videoUrl) {
             videoUrls.push(resolveFieldUrl(project2.id, czBase.videoUrl) || czBase.videoUrl);
+            czVideoBoxes.push(null);
             hasVideo = true;
             videoLoop = !!czBase.loop;
           } else if (czBase.imageUrl) {
             imageUrls.push(resolveFieldUrl(project2.id, czBase.imageUrl) || czBase.imageUrl);
+            czImageBoxes.push(null);
           }
-          Object.entries(character.layers).forEach(([layerId, layer]) => {
+          const czHidden = poseHiddenLayerIds(character, czPoseId);
+          layerOrderForPose(character, czPoseId).forEach((layer) => {
+            const layerId = layer.id;
+            if (czHidden.has(layerId)) return;
             const cat = (el.categories || []).find((c) => c.layerId === layerId);
             let assetId = null;
             if (cat) assetId = String(variables2[cat.variableId] ?? "") || null;
             if (!assetId && fallbackExpr) assetId = fallbackExpr.layerConfiguration[layerId] || null;
             const asset = assetId ? layer.assets[assetId] : null;
             const art = asset ? assetArtForPose(asset, czPoseId) : null;
+            const pieceBox = asset ? normalizeLayerBox(resolveLayerBox(layer, asset, czPoseId)) ?? null : null;
             if (art == null ? void 0 : art.videoUrl) {
               videoUrls.push(resolveFieldUrl(project2.id, art.videoUrl) || art.videoUrl);
+              czVideoBoxes.push(pieceBox);
               hasVideo = true;
               videoLoop = videoLoop || !!art.loop;
             } else if (art == null ? void 0 : art.imageUrl) {
               imageUrls.push(resolveFieldUrl(project2.id, art.imageUrl) || art.imageUrl);
+              czImageBoxes.push(pieceBox);
             }
           });
           const swatchSize = el.swatchSize ?? 48;
@@ -17600,7 +19786,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const buttonTextColor = el.buttonTextColor || "#ffffff";
           const labelStyle = { ...fontSettingsToStyle(el.font), lineHeight: 1.2 };
           const assetUrlOf = (a) => a.imageUrl ? resolveFieldUrl(project2.id, a.imageUrl) || a.imageUrl : a.videoUrl ? resolveFieldUrl(project2.id, a.videoUrl) || a.videoUrl : null;
-          const previewNode = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "relative w-full h-full", children: hasVideo && videoUrls.length > 0 ? videoUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("video", { src: u, autoPlay: true, muted: true, loop: videoLoop, playsInline: true, className: "absolute inset-0 w-full h-full object-contain", style: { zIndex: i } }, i)) : imageUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", className: "absolute inset-0 w-full h-full object-contain", style: { zIndex: i } }, i)) });
+          const previewNode = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "relative w-full h-full", children: hasVideo && videoUrls.length > 0 ? videoUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("video", { src: u, autoPlay: true, muted: true, loop: videoLoop, playsInline: true, className: "absolute inset-0 w-full h-full object-contain", style: { zIndex: i, ...layerBoxStyle(czVideoBoxes[i]) } }, i)) : imageUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", className: "absolute inset-0 w-full h-full object-contain", style: { zIndex: i, ...layerBoxStyle(czImageBoxes[i]) } }, i)) });
           const catIdxOfVar = /* @__PURE__ */ new Map();
           (el.categories || []).forEach((c, i) => catIdxOfVar.set(c.variableId, i));
           const catRefs = (el.categories || []).map((c) => {
@@ -17795,7 +19981,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }
             };
             return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", left: 0, top: 0, width: "100%", height: "100%", zIndex: style.zIndex, opacity: style.opacity, pointerEvents: "none" }, children: [
-              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: previewBoxStyle, children: /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "relative w-full h-full", children: hasVideo && videoUrls.length > 0 ? videoUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("video", { src: u, autoPlay: true, muted: true, loop: videoLoop, playsInline: true, className: "absolute inset-0 w-full h-full object-contain", style: { zIndex: i, objectPosition: "bottom" } }, i)) : imageUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", className: "absolute inset-0 w-full h-full object-contain", style: { zIndex: i, objectPosition: "bottom" } }, i)) }) }),
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: previewBoxStyle, children: /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "relative w-full h-full", children: hasVideo && videoUrls.length > 0 ? videoUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("video", { src: u, autoPlay: true, muted: true, loop: videoLoop, playsInline: true, className: "absolute inset-0 w-full h-full object-contain", style: { zIndex: i, objectPosition: "bottom", ...layerBoxStyle(czVideoBoxes[i]) } }, i)) : imageUrls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", className: "absolute inset-0 w-full h-full object-contain", style: { zIndex: i, objectPosition: "bottom", ...layerBoxStyle(czImageBoxes[i]) } }, i)) }) }),
               kr && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: pickersBoxStyle, children: pickersNode })
             ] }, el.id);
           }
@@ -17852,6 +20038,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               project: project2,
               assetResolver,
               viewerPortalRef: screenRootRef
+            }
+          ) }, el.id);
+        }
+        case UIElementType.MusicGallery: {
+          const el = element;
+          const gallerySongs = visibleSongs(project2.musicGallery, el, variables2);
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { style, children: /* @__PURE__ */ jsxRuntime2.jsx(
+            MusicGalleryPlayerElement,
+            {
+              element: el,
+              songs: gallerySongs,
+              project: project2,
+              assetResolver,
+              musicVolume: settings.musicVolume
             }
           ) }, el.id);
         }
@@ -18501,7 +20701,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     );
   };
   const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false, startAt = null, startScreenId = null }) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
     const { project } = useProject();
     const toast = useToast();
     const notify = React2.useCallback((message, type = "info") => {
@@ -18580,6 +20780,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     })();
     const scenePaused = !!pausingOverlayScreen;
     const [showVarWatcher, setShowVarWatcher] = React2.useState(false);
+    const [showLocation, setShowLocation] = React2.useState(false);
     const [, setTweenTick] = React2.useState(0);
     React2.useEffect(() => {
       const unsub = TweenManager.subscribe(() => {
@@ -18665,27 +20866,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         for (const fontId in projectFonts) {
           const font = projectFonts[fontId];
           if ((font == null ? void 0 : font.fontUrl) && (font == null ? void 0 : font.fontFamily)) {
-            try {
-              const fontFace = new FontFace(font.fontFamily, `url(${resolveFieldUrl(project.id, font.fontUrl)})`);
-              await fontFace.load();
-              document.fonts.add(fontFace);
-              runtimeDebugLog(`✓ Loaded project font: ${font.fontFamily}`);
-            } catch (error) {
-              console.error(`Failed to load project font ${(font == null ? void 0 : font.name) || fontId}:`, error);
-            }
+            await loadFontOnce(font.fontFamily, resolveFieldUrl(project.id, font.fontUrl) || font.fontUrl);
           }
         }
         for (const charId in project.characters) {
           const char = project.characters[charId];
           if (char.fontUrl && char.fontFamily) {
-            try {
-              const fontFace = new FontFace(char.fontFamily, `url(${resolveFieldUrl(project.id, char.fontUrl)})`);
-              await fontFace.load();
-              document.fonts.add(fontFace);
-              runtimeDebugLog(`✓ Loaded custom font: ${char.fontFamily}`);
-            } catch (error) {
-              console.error(`Failed to load custom font for ${char.name}:`, error);
-            }
+            await loadFontOnce(char.fontFamily, resolveFieldUrl(project.id, char.fontUrl) || char.fontUrl);
           }
         }
       };
@@ -19035,13 +21222,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const fRadius = resolveVarNumber(fVars, flashlight.radiusVariableId, flashlight.radius, { min: 1, max: 100 });
         const fDarkness = resolveVarNumber(fVars, flashlight.darknessVariableId, flashlight.darkness, { min: 0, max: 1 });
         const radiusPx = fRadius / 100 * Math.min(rect.width, rect.height);
-        el.style.background = flashlightBg(mx, my, radiusPx, flashlight.softness, hexToRgba(flashlight.color, fDarkness * 100));
+        flashlightMouseRef.current = { x: mx, y: my };
+        if (!isEnhanced(flashlight.effectStyle)) {
+          el.style.background = flashlightBg(mx, my, radiusPx, flashlight.softness, hexToRgba(flashlight.color, fDarkness * 100));
+        }
       };
       window.addEventListener("mousemove", onMove);
       return () => window.removeEventListener("mousemove", onMove);
     }, [flashlight == null ? void 0 : flashlight.on, flashlight == null ? void 0 : flashlight.radius, flashlight == null ? void 0 : flashlight.softness, flashlight == null ? void 0 : flashlight.darkness, flashlight == null ? void 0 : flashlight.color]);
     const [spotlights, setSpotlights] = React2.useState({});
     const spotlightRefs = React2.useRef(/* @__PURE__ */ new Map());
+    const spotlightLiveAngles = React2.useRef(/* @__PURE__ */ new Map());
+    const flashlightMouseRef = React2.useRef(null);
     const spotToggleKeys = Object.values(spotlights).map((s) => s.toggleKey || "").join(",");
     React2.useEffect(() => {
       if (!Object.values(spotlights).some((s) => s.toggleKey)) return;
@@ -19080,6 +21272,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const vx = e.clientX - rect.left - spx, vy = e.clientY - rect.top - spy;
           let A = Math.atan2(vx, vy) * 180 / Math.PI;
           A = Math.max(s.aimAngle - s.swivelMax, Math.min(s.aimAngle + s.swivelMax, A));
+          spotlightLiveAngles.current.set(id, A);
           el.style.transform = `rotate(${-A}deg)`;
         }
       };
@@ -19424,6 +21617,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const loadGame = (slotNumber) => {
       var _a2;
       (_a2 = coverageRef.current) == null ? void 0 : _a2.resetCursor();
+      stopGalleryPlayer(0);
       clearPhoneTimers();
       stopRingtone();
       activeCallCmdRef.current = null;
@@ -19448,7 +21642,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       menuMusicUrlRef.current = null;
       const doLoad = async () => {
-        var _a3, _b2, _c2, _d2, _e2, _f2;
+        var _a3, _b2, _c2, _d2, _e2, _f2, _g2;
         const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
         const saveData = saves[slotNumber];
         if (!saveData) return;
@@ -19464,7 +21658,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           mode: "playing",
           currentSceneId: saveData.playerStateData.currentSceneId,
           currentCommands: saveData.playerStateData.currentCommands || ((_a3 = project.scenes[saveData.playerStateData.currentSceneId]) == null ? void 0 : _a3.commands) || [],
-          currentIndex: saveData.playerStateData.currentIndex ?? 0,
+          // A save made mid-way through an appended dialogue group resumes from the group's
+          // FIRST line — otherwise the earlier parts of the box would be missing.
+          currentIndex: walkToAppendGroupHead(
+            saveData.playerStateData.currentCommands || ((_b2 = project.scenes[saveData.playerStateData.currentSceneId]) == null ? void 0 : _b2.commands) || [],
+            saveData.playerStateData.currentIndex ?? 0
+          ),
           commandStack: saveData.playerStateData.commandStack || [],
           variables: saveData.playerStateData.variables,
           stageState: saveData.playerStateData.stageState,
@@ -19476,7 +21675,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           // palette→UI restyle survives save/load
           history: [],
           savedInputs: {},
-          uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: savedPhone ? { ...savedPhone, threadLastRead: seededThreadLastRead, typing: null, outgoingCall: null, activeCall: ((_b2 = savedPhone.activeCall) == null ? void 0 : _b2.phase) === "active" ? savedPhone.activeCall : null } : null },
+          uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: savedPhone ? { ...savedPhone, threadLastRead: seededThreadLastRead, typing: null, outgoingCall: null, activeCall: ((_c2 = savedPhone.activeCall) == null ? void 0 : _c2.phase) === "active" ? savedPhone.activeCall : null } : null },
           musicState: saveData.playerStateData.musicState
         });
         setScreenStack([]);
@@ -19490,13 +21689,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         fastForwardTargetRef.current = null;
         backwardReplayRef.current = null;
         setIsJustLoaded(true);
-        const savedCall = (_c2 = saveData.playerStateData.phone) == null ? void 0 : _c2.incomingCall;
+        const savedCall = (_d2 = saveData.playerStateData.phone) == null ? void 0 : _d2.incomingCall;
         if ((savedCall == null ? void 0 : savedCall.phase) === "ringing" && savedCall.cmd) rearmIncomingCall(savedCall.cmd);
-        const savedActive = (_d2 = saveData.playerStateData.phone) == null ? void 0 : _d2.activeCall;
-        if ((savedActive == null ? void 0 : savedActive.phase) === "active" && !((_e2 = savedActive.pendingReplies) == null ? void 0 : _e2.length)) {
+        const savedActive = (_e2 = saveData.playerStateData.phone) == null ? void 0 : _e2.activeCall;
+        if ((savedActive == null ? void 0 : savedActive.phase) === "active" && !((_f2 = savedActive.pendingReplies) == null ? void 0 : _f2.length)) {
           pushPhoneTimer(playNextCallLine, 900);
         }
-        if ((savedPhone == null ? void 0 : savedPhone.activeTextConvo) && !((_f2 = savedPhone.pendingReplies) == null ? void 0 : _f2.length)) {
+        if ((savedPhone == null ? void 0 : savedPhone.activeTextConvo) && !((_g2 = savedPhone.pendingReplies) == null ? void 0 : _g2.length)) {
           pushPhoneTimer(playNextTextLine, 900);
         }
         try {
@@ -19510,6 +21709,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       var _a2, _b2, _c2;
       (_a2 = coverageRef.current) == null ? void 0 : _a2.resetCursor();
       stopAndResetMusic();
+      stopGalleryPlayer(0);
       clearPhoneTimers();
       stopRingtone();
       activeCallCmdRef.current = null;
@@ -19543,27 +21743,28 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           if (isBandOperator(condition.operator)) {
             return compareBand(project.variables[condition.variableId], varValue, String(condition.value), condition.operator);
           }
+          const cmpValue = resolveConditionValue(condition, initialVariables);
           switch (condition.operator) {
             case "is true":
               return !!varValue;
             case "is false":
               return !varValue;
             case "==":
-              return String(varValue).toLowerCase() == String(condition.value).toLowerCase();
+              return String(varValue).toLowerCase() == String(cmpValue).toLowerCase();
             case "!=":
-              return String(varValue).toLowerCase() != String(condition.value).toLowerCase();
+              return String(varValue).toLowerCase() != String(cmpValue).toLowerCase();
             case ">":
-              return Number(varValue) > Number(condition.value);
+              return Number(varValue) > Number(cmpValue);
             case "<":
-              return Number(varValue) < Number(condition.value);
+              return Number(varValue) < Number(cmpValue);
             case ">=":
-              return Number(varValue) >= Number(condition.value);
+              return Number(varValue) >= Number(cmpValue);
             case "<=":
-              return Number(varValue) <= Number(condition.value);
+              return Number(varValue) <= Number(cmpValue);
             case "contains":
-              return String(varValue).toLowerCase().includes(String(condition.value).toLowerCase());
+              return String(varValue).toLowerCase().includes(String(cmpValue).toLowerCase());
             case "startsWith":
-              return String(varValue).toLowerCase().startsWith(String(condition.value).toLowerCase());
+              return String(varValue).toLowerCase().startsWith(String(cmpValue).toLowerCase());
             default:
               return false;
           }
@@ -19602,7 +21803,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       backwardReplayRef.current = null;
       if (hasOverride) {
         const cmds = ((_c2 = project.scenes[startSceneId]) == null ? void 0 : _c2.commands) || [];
-        const idx = Math.max(0, Math.min(startOverride.index, Math.max(0, cmds.length - 1)));
+        const idx = walkToAppendGroupHead(cmds, Math.max(0, Math.min(startOverride.index, Math.max(0, cmds.length - 1))));
         fastForwardTargetRef.current = idx > 0 ? idx : null;
       }
     }, [project, stopAndResetMusic, menuVariables]);
@@ -19630,7 +21831,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         if (!targetScene) return;
         const cmds = targetScene.commands || [];
         const requested = typeof detail.commandIndex === "number" ? detail.commandIndex : 0;
-        const idx = Math.max(0, Math.min(requested, Math.max(0, cmds.length - 1)));
+        const idx = walkToAppendGroupHead(cmds, Math.max(0, Math.min(requested, Math.max(0, cmds.length - 1))));
         const fastForward = detail.fastForward !== false && idx > 0;
         fastForwardTargetRef.current = fastForward ? idx : null;
         const startIndex = fastForward ? 0 : idx;
@@ -19706,7 +21907,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (!conditions || conditions.length === 0) {
         return true;
       }
-      return combineConditions(conditions, (condition) => {
+      return combineConditions(conditions, (rawCondition) => {
+        const condition = rawCondition.compareVariableId !== void 0 && !isBandOperator(rawCondition.operator) ? { ...rawCondition, value: resolveConditionValue(rawCondition, variables) } : rawCondition;
         const varValue = variables[condition.variableId];
         const projectVar = project.variables[condition.variableId];
         const effectiveVarValue = varValue !== void 0 ? varValue : projectVar ? projectVar.defaultValue : void 0;
@@ -20032,10 +22234,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const openS = hasOpen ? transitionHalfDuration(def.open) : 0;
         const holdS = Math.max(0, def.holdDuration ?? 0);
         const playHalfSfx = (half) => {
+          var _a2, _b2;
           const url = half.sfxId ? assetResolver(half.sfxId, "audio") : null;
           if (!url) return;
           try {
-            const a = new Audio(url);
+            const shaped = resolveAudioAdjust(null, half.sfxId ? (_b2 = (_a2 = project.audio) == null ? void 0 : _a2[half.sfxId]) == null ? void 0 : _b2.audioAdjust : null);
+            let playUrl = url;
+            if (shaped == null ? void 0 : shaped.reverse) {
+              const cached = peekReversedUrl(url);
+              if (cached === void 0) getReversedUrl(url);
+              else if (cached) playUrl = cached;
+            }
+            const a = new Audio(playUrl);
+            applyAudioAdjust(a, shaped);
             a.volume = Number.isFinite(settings.sfxVolume) ? settings.sfxVolume : 0.8;
             a.play().catch(() => {
             });
@@ -20086,12 +22297,42 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         setSceneTransitionFading(false);
       }, duration * 1e3);
     }, [project.scenes, project.customTransitions, assetResolver, settings.sfxVolume, stopAllSfx]);
+    const [galleryEpoch, setGalleryEpoch] = React2.useState(0);
     React2.useEffect(() => {
-      var _a2;
+      const onGalleryChange = () => setGalleryEpoch((n) => n + 1);
+      window.addEventListener(GALLERY_PLAYER_EVENT, onGalleryChange);
+      return () => window.removeEventListener(GALLERY_PLAYER_EVENT, onGalleryChange);
+    }, []);
+    const screenAllowsGalleryMusic = React2.useCallback((screen) => {
+      if (!screen) return false;
+      if (screen.allowGalleryMusic === true) return true;
+      return Object.values(screen.elements || {}).some((e) => e.type === UIElementType.MusicGallery);
+    }, []);
+    React2.useEffect(() => {
+      if (!vnGalleryPlayer.playing && !vnGalleryPlayer.entryId) return;
+      const topScreenId = (playerState == null ? void 0 : playerState.mode) === "playing" ? hudStack.length > 0 ? hudStack[hudStack.length - 1] : null : screenStack.length > 0 ? screenStack[screenStack.length - 1] : null;
+      const topScreen = topScreenId ? project.uiScreens[topScreenId] : null;
+      const hostsGallery = !!topScreen && Object.values(topScreen.elements || {}).some((e) => e.type === UIElementType.MusicGallery);
+      const allowed = hostsGallery || vnGalleryPlayer.keepPlaying && screenAllowsGalleryMusic(topScreen);
+      if (!allowed) stopGalleryPlayer();
+    }, [screenStack, hudStack, playerState == null ? void 0 : playerState.mode, project.uiScreens, screenAllowsGalleryMusic, galleryEpoch]);
+    React2.useEffect(() => () => {
+      stopGalleryPlayer(0);
+    }, []);
+    React2.useEffect(() => {
+      var _a2, _b2, _c2;
       if ((playerState == null ? void 0 : playerState.mode) === "playing") {
         const audio2 = musicAudioRef.current;
         if (!audio2) return;
         const topHudId = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+        const topHudScreen = topHudId ? project.uiScreens[topHudId] : null;
+        if (vnGalleryPlayer.playing && screenAllowsGalleryMusic(topHudScreen)) {
+          if (!hudMusicTakeoverRef.current) {
+            hudMusicTakeoverRef.current = { url: audio2.src || null, time: audio2.currentTime || 0, wasPlaying: !audio2.paused };
+          }
+          if (!audio2.paused) fadeAudio(audio2, 0, 0.35, () => audio2.pause());
+          return;
+        }
         const hudMusic = topHudId ? (_a2 = project.uiScreens[topHudId]) == null ? void 0 : _a2.music : null;
         const hudUrl = (hudMusic == null ? void 0 : hudMusic.audioId) ? assetResolver(hudMusic.audioId, "audio") : null;
         if (hudUrl) {
@@ -20108,9 +22349,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               hudMusicTakeoverRef.current = { url: audio2.src || null, time: audio2.currentTime || 0, wasPlaying: !audio2.paused };
             }
             const playHud = () => {
+              var _a3, _b3;
               if (!hudMusicTakeoverRef.current) return;
               audio2.src = hudUrl;
               audio2.load();
+              applyAudioAdjust(audio2, musicChannelAdjust(resolveAudioAdjust(hudMusic == null ? void 0 : hudMusic.audioAdjust, (_b3 = (_a3 = project.audio) == null ? void 0 : _a3[hudMusic.audioId]) == null ? void 0 : _b3.audioAdjust)));
               audio2.loop = true;
               audio2.play().then(() => {
                 fadeAudio(audio2, (hudMusic.volume ?? 1) * settings.musicVolume, 0.5);
@@ -20136,6 +22379,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             if (saved.url && (ms == null ? void 0 : ms.audioId)) {
               audio2.src = saved.url;
               audio2.load();
+              applyAudioAdjust(audio2, ms.adjust ?? null);
               audio2.loop = ms.loop;
               try {
                 audio2.currentTime = saved.time;
@@ -20169,11 +22413,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         menuMusicUrlRef.current = null;
         return;
       }
+      if (vnGalleryPlayer.playing && screenAllowsGalleryMusic(activeScreen)) {
+        if (!audio.paused) {
+          fadeAudio(audio, 0, 0.4, () => audio.pause());
+        }
+        menuMusicUrlRef.current = null;
+        return;
+      }
       const musicInfo = activeScreen.music;
       if ((playerState == null ? void 0 : playerState.mode) === "paused" && musicInfo.policy === "continue") {
         return;
       }
       const newAudioUrl = (musicInfo == null ? void 0 : musicInfo.audioId) ? assetResolver(musicInfo.audioId, "audio") : null;
+      const screenAdjust = (musicInfo == null ? void 0 : musicInfo.audioId) ? musicChannelAdjust(resolveAudioAdjust(musicInfo.audioAdjust, (_c2 = (_b2 = project.audio) == null ? void 0 : _b2[musicInfo.audioId]) == null ? void 0 : _c2.audioAdjust)) : null;
       const normalize2 = (value) => {
         if (!value) return null;
         try {
@@ -20200,33 +22452,36 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }).catch((e) => {
           console.error("Menu music play failed:", e);
           if (!userGestureDetectedRef.current) {
-            queuedMusicRef.current = { url: newAudioUrl, loop: true, fadeDuration: 0.5 };
+            queuedMusicRef.current = { url: newAudioUrl, loop: true, fadeDuration: 0.5, adjust: screenAdjust };
           }
         });
       };
       if (currentSrcNormalized !== newSrcNormalized) {
         audio.src = newAudioUrl;
         audio.load();
+        applyAudioAdjust(audio, screenAdjust);
         startPlayback();
       } else if (audio.paused) {
+        applyAudioAdjust(audio, screenAdjust);
         startPlayback();
       } else {
         menuMusicUrlRef.current = newAudioUrl;
       }
-    }, [screenStack, hudStack, playerState == null ? void 0 : playerState.mode, project.uiScreens, assetResolver, settings.musicVolume, fadeAudio]);
+    }, [screenStack, hudStack, playerState == null ? void 0 : playerState.mode, project.uiScreens, assetResolver, settings.musicVolume, fadeAudio, galleryEpoch, screenAllowsGalleryMusic]);
     React2.useEffect(() => {
       var _a2, _b2, _c2;
       if (!musicAudioRef.current) return;
       if (hudMusicTakeoverRef.current) return;
+      if (vnGalleryPlayer.playing) return;
       const safeVol = Number.isFinite(settings.musicVolume) ? settings.musicVolume : 0.8;
       const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
       const screenVol = ((_a2 = activeScreen == null ? void 0 : activeScreen.music) == null ? void 0 : _a2.volume) ?? 1;
       const commandVol = !((_b2 = activeScreen == null ? void 0 : activeScreen.music) == null ? void 0 : _b2.audioId) && typeof ((_c2 = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _c2.volume) === "number" ? playerState.musicState.volume : safeVol;
       musicAudioRef.current.volume = Math.max(0, Math.min(1, screenVol * commandVol));
-    }, [settings.musicVolume, screenStack, project.uiScreens, (_g = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _g.volume]);
+    }, [settings.musicVolume, screenStack, project.uiScreens, (_g = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _g.volume, galleryEpoch]);
     const prewarmedImagesRef = React2.useRef([]);
     React2.useEffect(() => {
-      var _a2, _b2, _c2, _d2, _e2, _f2, _g2;
+      var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2;
       if (!playerState || playerState.mode !== "playing") return;
       const urls = /* @__PURE__ */ new Set();
       const addDeep = (node, depth) => {
@@ -20274,6 +22529,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           case "ShowImage": {
             const im = cmd.imageId ? ((_f2 = project.images) == null ? void 0 : _f2[cmd.imageId]) || ((_g2 = project.backgrounds) == null ? void 0 : _g2[cmd.imageId]) : null;
             if (im == null ? void 0 : im.imageUrl) urls.add(im.imageUrl);
+            break;
+          }
+          case "PlaySoundEffect": {
+            const shaped = resolveAudioAdjust(cmd.audioAdjust, cmd.audioId ? (_i2 = (_h2 = project.audio) == null ? void 0 : _h2[cmd.audioId]) == null ? void 0 : _i2.audioAdjust : null);
+            if ((shaped == null ? void 0 : shaped.reverse) && cmd.audioId) {
+              const u = assetResolver(cmd.audioId, "audio");
+              if (u) getReversedUrl(u);
+            }
             break;
           }
         }
@@ -20396,7 +22659,104 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         alive = false;
       };
     }, [(_h = playerState == null ? void 0 : playerState.stageState) == null ? void 0 : _h.characters]);
+    const animFrameSelectionsRef = React2.useRef(/* @__PURE__ */ new Map());
+    const animIdleScheduleRef = React2.useRef(/* @__PURE__ */ new Map());
+    const [, bumpAnimEpoch] = React2.useReducer((x) => x + 1, 0);
     React2.useEffect(() => {
+      var _a2;
+      const chars = (_a2 = playerState == null ? void 0 : playerState.stageState) == null ? void 0 : _a2.characters;
+      if (!chars || playerState.mode !== "playing") {
+        animFrameSelectionsRef.current = /* @__PURE__ */ new Map();
+        return;
+      }
+      const animated = [];
+      for (const c of Object.values(chars)) {
+        if (!c || c.isVideo) continue;
+        const charData = project.characters[c.charId];
+        if (!(charData == null ? void 0 : charData.animations)) continue;
+        const anims = [
+          ...autoAnimationsOf(charData),
+          ...c.activeManualAnimationId && charData.animations[c.activeManualAnimationId] ? [charData.animations[c.activeManualAnimationId]] : []
+        ];
+        if (anims.length) animated.push({ char: c, charData, anims });
+      }
+      if (!animated.length) {
+        animFrameSelectionsRef.current = /* @__PURE__ */ new Map();
+        return;
+      }
+      for (const { char, charData, anims } of animated) {
+        const urls = animationFrameUrls(charData, anims, char.poseId).map((u) => resolveFieldUrl(project.id, u) || u);
+        urls.filter((u) => !vnLoadedImages.has(u)).forEach((u) => {
+          vnWarmImage(u);
+        });
+      }
+      let raf = 0;
+      let last = 0;
+      const epoch = performance.now();
+      const tick = (now) => {
+        var _a3, _b2;
+        raf = requestAnimationFrame(tick);
+        if (now - last < 33) return;
+        last = now;
+        const nextMap = /* @__PURE__ */ new Map();
+        for (const { char, charData, anims } of animated) {
+          const frameUrls = animationFrameUrls(charData, anims, char.poseId).map((u) => resolveFieldUrl(project.id, u) || u);
+          if (frameUrls.some((u) => !vnLoadedImages.has(u))) continue;
+          const baseSel = char.layerSelections ?? ((_b2 = (_a3 = charData.expressions) == null ? void 0 : _a3[char.expressionId]) == null ? void 0 : _b2.layerConfiguration) ?? {};
+          let sel = baseSel;
+          for (const anim of anims) {
+            const key = `${char.charId}:${anim.id}`;
+            if (anim.trigger === "always" || char.activeManualAnimationId === anim.id) {
+              sel = applyAnimationFrame(sel, anim, now - epoch);
+            } else if (anim.trigger === "speaking") {
+              if (isSpeakingNow(char.charId, now)) {
+                const start = animIdleScheduleRef.current.get(key) ?? now;
+                if (!animIdleScheduleRef.current.has(key)) animIdleScheduleRef.current.set(key, now);
+                sel = applyAnimationFrame(sel, { ...anim, loop: true }, now - start);
+              } else {
+                animIdleScheduleRef.current.delete(key);
+              }
+            } else if (anim.trigger === "idle") {
+              const startAt2 = animIdleScheduleRef.current.get(key);
+              if (startAt2 === void 0) {
+                const min = anim.idleMinMs ?? 2e3, max = anim.idleMaxMs ?? 6e3;
+                animIdleScheduleRef.current.set(key, now + min + Math.random() * Math.max(0, max - min));
+              } else if (now >= startAt2) {
+                const t = now - startAt2;
+                if (t <= Math.max(1, anim.durationMs)) {
+                  sel = applyAnimationFrame(sel, anim, t);
+                } else {
+                  animIdleScheduleRef.current.delete(key);
+                }
+              }
+            }
+          }
+          if (sel !== baseSel) nextMap.set(char.charId, sel);
+        }
+        const prev = animFrameSelectionsRef.current;
+        let changed = prev.size !== nextMap.size;
+        if (!changed) {
+          for (const [k, v] of nextMap) {
+            const pv = prev.get(k);
+            if (!pv || Object.keys(v).some((lk) => v[lk] !== pv[lk])) {
+              changed = true;
+              break;
+            }
+          }
+        }
+        if (changed) {
+          animFrameSelectionsRef.current = nextMap;
+          bumpAnimEpoch();
+        }
+      };
+      raf = requestAnimationFrame(tick);
+      return () => {
+        cancelAnimationFrame(raf);
+        animFrameSelectionsRef.current = /* @__PURE__ */ new Map();
+      };
+    }, [(_i = playerState == null ? void 0 : playerState.stageState) == null ? void 0 : _i.characters, playerState == null ? void 0 : playerState.mode, project]);
+    React2.useEffect(() => {
+      var _a2, _b2;
       const audio = ambientNoiseAudioRef.current;
       const activeScreenId = screenStack.length > 0 ? screenStack[screenStack.length - 1] : hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
       const activeScreen = activeScreenId ? project.uiScreens[activeScreenId] : null;
@@ -20444,12 +22804,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           console.error("[Ambient] Play failed:", e);
         });
       };
+      const ambientAdjust = musicChannelAdjust(resolveAudioAdjust(ambientInfo.audioAdjust, (_b2 = (_a2 = project.audio) == null ? void 0 : _a2[ambientInfo.audioId]) == null ? void 0 : _b2.audioAdjust));
       if (currentSrcNormalized !== newSrcNormalized) {
         if (!audio) return;
         audio.src = newAudioUrl;
         audio.load();
+        applyAudioAdjust(audio, ambientAdjust);
         startAmbientPlayback();
       } else if (audio && audio.paused) {
+        applyAudioAdjust(audio, ambientAdjust);
         startAmbientPlayback();
       } else {
         menuAmbientUrlRef.current = newAudioUrl;
@@ -20499,6 +22862,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           audio.src = queued.url;
           audio.loop = queued.loop;
           audio.load();
+          applyAudioAdjust(audio, queued.adjust ?? null);
           audio.play().then(() => {
             fadeAudio(audio, settings.musicVolume, queued.fadeDuration);
             queuedMusicRef.current = null;
@@ -20521,6 +22885,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const url = assetResolver(musicState.audioId, "audio");
           if (url) {
             audio.src = url;
+            applyAudioAdjust(audio, musicState.adjust ?? null);
             audio.loop = musicState.loop;
             audio.currentTime = musicState.currentTime;
             audio.play().then(() => {
@@ -20555,6 +22920,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const url = assetResolver(currentAudioId, "audio");
       if (!url) return;
       audio.src = url;
+      applyAudioAdjust(audio, musicState.adjust ?? null);
       audio.loop = musicState.loop;
       audio.currentTime = musicState.currentTime || 0;
       if (musicState.isPlaying) {
@@ -20562,7 +22928,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           fadeAudio(audio, typeof musicState.volume === "number" ? musicState.volume : settings.musicVolume, 0.3);
         }).catch((e) => console.error("[Music Sync] Failed to play restored music:", e));
       }
-    }, [(_i = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _i.audioId, playerState == null ? void 0 : playerState.mode, isJustLoaded, assetResolver, fadeAudio, settings.musicVolume]);
+    }, [(_j = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _j.audioId, playerState == null ? void 0 : playerState.mode, isJustLoaded, assetResolver, fadeAudio, settings.musicVolume]);
     const stopSfx = React2.useCallback((audioId, fadeDuration) => {
       const fade = typeof fadeDuration === "number" && fadeDuration > 0 ? fadeDuration : 0;
       const matched = sfxPoolRef.current.filter((e) => !audioId || e.audioId === audioId);
@@ -20608,7 +22974,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }, 30);
       });
     }, []);
-    const playSound = React2.useCallback((soundId, volume, loop) => {
+    const playSound = React2.useCallback((soundId, volume, loop, adjust) => {
+      var _a2, _b2;
       runtimeDebugLog("[SFX] playSound called with soundId:", soundId, "volume:", volume, "loop:", loop);
       if (!soundId) return null;
       try {
@@ -20618,40 +22985,55 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           runtimeDebugWarn(`[SFX] No audio URL found for soundId: ${soundId}`);
           return null;
         }
-        runtimeDebugLog("[SFX] Creating HTMLAudio element for playback");
-        const audio = new Audio(url);
-        audio.loop = !!loop;
-        audio.volume = (typeof volume === "number" ? Math.max(0, Math.min(1, volume)) : 1) * (Number.isFinite(settings.sfxVolume) ? settings.sfxVolume : 0.8);
-        if (!loop) {
-          const oneShots = sfxPoolRef.current.filter((e) => !e.audio.loop);
-          if (oneShots.length >= MAX_SIMULTANEOUS_SFX) {
-            const oldest = oneShots[0];
-            sfxPoolRef.current = sfxPoolRef.current.filter((e) => e !== oldest);
-            try {
-              oldest == null ? void 0 : oldest.audio.pause();
-              if (oldest) oldest.audio.currentTime = 0;
-            } catch (e) {
+        const shaped = resolveAudioAdjust(adjust, (_b2 = (_a2 = project.audio) == null ? void 0 : _a2[soundId]) == null ? void 0 : _b2.audioAdjust);
+        const spawn = (playUrl) => {
+          runtimeDebugLog("[SFX] Creating HTMLAudio element for playback");
+          const audio = new Audio(playUrl);
+          audio.loop = !!loop;
+          applyAudioAdjust(audio, shaped);
+          audio.volume = (typeof volume === "number" ? Math.max(0, Math.min(1, volume)) : 1) * (Number.isFinite(settings.sfxVolume) ? settings.sfxVolume : 0.8);
+          if (!loop) {
+            const oneShots = sfxPoolRef.current.filter((e) => !e.audio.loop);
+            if (oneShots.length >= MAX_SIMULTANEOUS_SFX) {
+              const oldest = oneShots[0];
+              sfxPoolRef.current = sfxPoolRef.current.filter((e) => e !== oldest);
+              try {
+                oldest == null ? void 0 : oldest.audio.pause();
+                if (oldest) oldest.audio.currentTime = 0;
+              } catch (e) {
+              }
             }
           }
+          sfxPoolRef.current.push({ audio, audioId: soundId });
+          runtimeDebugLog("[SFX] Playing audio, volume:", audio.volume);
+          audio.play().then(() => {
+            runtimeDebugLog("[SFX] Audio playback started successfully");
+          }).catch((e) => {
+            console.error("[SFX] Audio playback failed:", e);
+          });
+          audio.addEventListener("ended", () => {
+            runtimeDebugLog("[SFX] Audio playback ended");
+            sfxPoolRef.current = sfxPoolRef.current.filter((e) => e.audio !== audio);
+          }, { once: true });
+          return audio;
+        };
+        if (shaped == null ? void 0 : shaped.reverse) {
+          const cached = peekReversedUrl(url);
+          if (cached === void 0) {
+            getReversedUrl(url).then((rev) => {
+              spawn(rev || url);
+            });
+            return null;
+          }
+          return spawn(cached || url);
         }
-        sfxPoolRef.current.push({ audio, audioId: soundId });
-        runtimeDebugLog("[SFX] Playing audio, volume:", audio.volume);
-        audio.play().then(() => {
-          runtimeDebugLog("[SFX] Audio playback started successfully");
-        }).catch((e) => {
-          console.error("[SFX] Audio playback failed:", e);
-        });
-        audio.addEventListener("ended", () => {
-          runtimeDebugLog("[SFX] Audio playback ended");
-          sfxPoolRef.current = sfxPoolRef.current.filter((e) => e.audio !== audio);
-        }, { once: true });
-        return audio;
+        return spawn(url);
       } catch (outerError) {
         console.error("[SFX] Critical error in playSound:", outerError);
         console.error("[SFX] Error stack:", outerError instanceof Error ? outerError.stack : "N/A");
         return null;
       }
-    }, [assetResolver, settings.sfxVolume]);
+    }, [assetResolver, settings.sfxVolume, project.audio]);
     const stopVoice = React2.useCallback(() => {
       const a = currentVoiceRef.current;
       if (a) {
@@ -20665,24 +23047,40 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       currentVoiceRef.current = null;
     }, []);
     const playVoice = React2.useCallback((soundId, voiceVol) => {
+      var _a2, _b2;
       stopVoice();
       if (!soundId) return null;
       try {
         const url = assetResolver(soundId, "audio");
         if (!url) return null;
-        const audio = new Audio(url);
-        audio.volume = typeof voiceVol === "number" ? Math.max(0, Math.min(1, voiceVol)) : 1;
-        currentVoiceRef.current = audio;
-        audio.play().catch((e) => console.error("[Voice] playback failed:", e));
-        audio.addEventListener("ended", () => {
-          if (currentVoiceRef.current === audio) currentVoiceRef.current = null;
-        }, { once: true });
-        return audio;
+        const shaped = resolveAudioAdjust(null, (_b2 = (_a2 = project.audio) == null ? void 0 : _a2[soundId]) == null ? void 0 : _b2.audioAdjust);
+        const spawn = (playUrl) => {
+          const audio = new Audio(playUrl);
+          applyAudioAdjust(audio, shaped);
+          audio.volume = typeof voiceVol === "number" ? Math.max(0, Math.min(1, voiceVol)) : 1;
+          currentVoiceRef.current = audio;
+          audio.play().catch((e) => console.error("[Voice] playback failed:", e));
+          audio.addEventListener("ended", () => {
+            if (currentVoiceRef.current === audio) currentVoiceRef.current = null;
+          }, { once: true });
+          return audio;
+        };
+        if (shaped == null ? void 0 : shaped.reverse) {
+          const cached = peekReversedUrl(url);
+          if (cached === void 0) {
+            getReversedUrl(url).then((rev) => {
+              if (currentVoiceRef.current === null) spawn(rev || url);
+            });
+            return null;
+          }
+          return spawn(cached || url);
+        }
+        return spawn(url);
       } catch (e) {
         console.error("[Voice] error:", e);
         return null;
       }
-    }, [assetResolver, stopVoice]);
+    }, [assetResolver, stopVoice, project.audio]);
     React2.useEffect(() => {
       var _a2;
       if (sfxMasterGainRef.current) {
@@ -20731,8 +23129,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           onJumpToLabel: () => {
           },
           onShowDialogue: (characterName, text) => {
-            const match = Object.values(project.characters).find((c) => c.name.toLowerCase() === (characterName || "").toLowerCase());
-            updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, dialogue: { characterName: characterName || "Narrator", characterColor: (match == null ? void 0 : match.color) || "#FFFFFF", characterId: (match == null ? void 0 : match.id) || null, text } } } : null);
+            const match = findCharacterBySpokenName(characterName || "", project, variableUpdates);
+            const displayName = match ? resolveCharacterDisplayName(match.name, variableUpdates, project) : characterName || "";
+            updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, dialogue: { characterName: displayName || "Narrator", characterColor: (match == null ? void 0 : match.color) || "#FFFFFF", characterId: (match == null ? void 0 : match.id) || null, text } } } : null);
           },
           onPlaySFX: (nameOrId, volume) => {
             playSound(resolveAudioId(nameOrId), volume);
@@ -20848,6 +23247,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           },
           setPlayerState: updatePlayerState,
           activeEffectTimeoutsRef,
+          // Same accumulated map the ctx's playerState carries — so a from-a-variable /
+          // calculation value sees this tick's earlier parallel writes too.
+          runtimeVariables: { ...ps.variables, ...varAccum || {} },
           evaluateConditions: evaluateConditions2,
           notify
         });
@@ -20858,12 +23260,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             return ((_a3 = e.name) == null ? void 0 : _a3.toLowerCase()) === String(idOrName).toLowerCase();
           });
         };
-        const runCalledCe = (idOrName, depth, chain) => {
+        const runCalledCe = (idOrName, depth, chain2) => {
           var _a3, _b3;
           if (depth > PARALLEL_CALL_MAX_DEPTH) return;
           const target = resolveCe(idOrName);
-          if (!target || !target.enabled || chain.has(target.id)) return;
-          const nextChain = new Set(chain);
+          if (!target || !target.enabled || chain2.has(target.id)) return;
+          const nextChain = new Set(chain2);
           nextChain.add(target.id);
           for (const c of target.commands || []) {
             if (c.type === CommandType.Wait) continue;
@@ -21336,6 +23738,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           advance,
           setPlayerState: updatePlayerState,
           activeEffectTimeoutsRef,
+          // Merged view (dirty UI writes included) for handlers that READ other variables.
+          runtimeVariables: getRuntimeVariables(),
           evaluateConditions: evaluateConditions2,
           notify,
           isStandalone
@@ -21385,6 +23789,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 break;
               case "SetCharacterPose":
                 result = handleSetCharacterPose(cmd, hctx);
+                break;
+              case "PlayCharacterAnimation":
+                result = handlePlayCharacterAnimation(cmd, hctx);
                 break;
               case "ShowText":
                 result = handleShowText(cmd, hctx);
@@ -21443,10 +23850,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 result = handleSellItemCommand(cmd, hctx);
                 break;
               case "PlaceLights":
-                result = { advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null }) };
+                result = { advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null, lightsStyle: cmd.effectStyle === "enhanced" ? "enhanced" : null }) };
                 break;
               case "ClearLights":
-                result = { advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null }) };
+                result = { advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null, lightsStyle: null }) };
                 break;
               case "CreditRoll": {
                 setActiveCreditRoll(cmd);
@@ -21503,7 +23910,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     toggleKey: cmd.toggleKey,
                     affectsDialogue: cmd.affectsDialogue !== false,
                     darkWhenOff: cmd.darkWhenOff === true,
-                    on: true
+                    on: true,
+                    ...cmd.effectStyle === "enhanced" ? { effectStyle: "enhanced" } : {}
                   });
                   if (cmd.sfxId) playSound(cmd.sfxId);
                 } else {
@@ -21582,7 +23990,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 return;
               }
               case "SetScreenOverlayEffect": {
-                updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: cmd.effectType, intensity: cmd.intensity, intensityVariableId: cmd.intensityVariableId ?? null, variant: cmd.variant, color: cmd.color, params: cmd.params }) } } } : p);
+                updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: cmd.effectType, intensity: cmd.intensity, intensityVariableId: cmd.intensityVariableId ?? null, variant: cmd.variant, color: cmd.color, params: cmd.params, ...cmd.effectStyle === "enhanced" ? { effectStyle: "enhanced" } : {} }) } } } : p);
                 const overlayDur = cmd.duration ?? 0;
                 if (overlayDur > 0) {
                   const effType = cmd.effectType;
@@ -21744,7 +24152,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   }
                 }
               }
-              if (result.updates || result.stagePatch) {
+              if (result.updates || result.stagePatch || result.uiStatePatch) {
                 const isSceneChange = ((_c3 = result.updates) == null ? void 0 : _c3.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId;
                 updatePlayerState((p) => {
                   var _a5, _b5, _c4, _d4, _e3, _f3, _g3, _h3, _i3, _j3;
@@ -21759,16 +24167,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   if (result.stagePatch) {
                     nextStage = { ...nextStage ?? p.stageState, ...result.stagePatch(p.stageState) };
                   }
+                  let nextUi = ((_d4 = result.updates) == null ? void 0 : _d4.uiState) !== void 0 ? { ...p.uiState, ...result.updates.uiState } : void 0;
+                  if (result.uiStatePatch) {
+                    nextUi = { ...nextUi ?? p.uiState, ...result.uiStatePatch(nextUi ?? p.uiState) };
+                  }
                   return {
                     ...p,
-                    ...((_d4 = result.updates) == null ? void 0 : _d4.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
-                    ...((_e3 = result.updates) == null ? void 0 : _e3.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
-                    ...((_f3 = result.updates) == null ? void 0 : _f3.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
-                    ...((_g3 = result.updates) == null ? void 0 : _g3.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
-                    ...((_h3 = result.updates) == null ? void 0 : _h3.variables) !== void 0 || isSceneChange ? { variables: mergedVariables } : {},
+                    ...((_e3 = result.updates) == null ? void 0 : _e3.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
+                    ...((_f3 = result.updates) == null ? void 0 : _f3.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
+                    ...((_g3 = result.updates) == null ? void 0 : _g3.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
+                    ...((_h3 = result.updates) == null ? void 0 : _h3.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
+                    ...((_i3 = result.updates) == null ? void 0 : _i3.variables) !== void 0 || isSceneChange ? { variables: mergedVariables } : {},
                     ...nextStage !== void 0 ? { stageState: nextStage } : {},
-                    ...((_i3 = result.updates) == null ? void 0 : _i3.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {},
-                    ...((_j3 = result.updates) == null ? void 0 : _j3.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}
+                    ...((_j3 = result.updates) == null ? void 0 : _j3.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {},
+                    ...nextUi !== void 0 ? { uiState: nextUi } : {}
                   };
                 });
                 if (((_d3 = result.updates) == null ? void 0 : _d3.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId) {
@@ -21910,6 +24322,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }
               case CommandType.SetCharacterPose: {
                 const result = handleSetCharacterPose(command2, commandContext);
+                applyResult(result);
+                break;
+              }
+              case CommandType.PlayCharacterAnimation: {
+                const result = handlePlayCharacterAnimation(command2, commandContext);
                 applyResult(result);
                 break;
               }
@@ -22294,11 +24711,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }
               case CommandType.PlaceLights: {
                 const cmd = command2;
-                applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null, lightsConditions: cmd.liveConditions ? cmd.conditions ?? null : null }) });
+                applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters, lightsBrightnessVariableId: cmd.brightnessVariableId ?? null, lightsStyle: cmd.effectStyle === "enhanced" ? "enhanced" : null, lightsConditions: cmd.liveConditions ? cmd.conditions ?? null : null }) });
                 break;
               }
               case CommandType.ClearLights: {
-                applyResult({ advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null, lightsConditions: null }) });
+                applyResult({ advance: true, stagePatch: () => ({ lights: [], lightsBrightnessVariableId: null, lightsStyle: null, lightsConditions: null }) });
                 break;
               }
               case CommandType.ShowPhone: {
@@ -22386,7 +24803,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     on: true,
                     // Live Evaluation: keep the flashlight registered and show/hide it as
                     // these conditions flip (renderer re-checks every render).
-                    conditions: cmd.liveConditions ? cmd.conditions ?? null : null
+                    conditions: cmd.liveConditions ? cmd.conditions ?? null : null,
+                    ...cmd.effectStyle === "enhanced" ? { effectStyle: "enhanced" } : {}
                   });
                   if (cmd.sfxId) playSound(cmd.sfxId);
                 } else {
@@ -22424,6 +24842,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         variant: cmd.variant,
                         color: cmd.color,
                         params: cmd.params,
+                        ...cmd.effectStyle === "enhanced" ? { effectStyle: "enhanced" } : {},
                         // Live Evaluation: the effect stays registered and renders only
                         // while these conditions hold (re-checked every render).
                         conditions: cmd.liveConditions ? cmd.conditions ?? void 0 : void 0
@@ -22695,7 +25114,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       executeAtIndex(command, playerState.currentIndex);
     }, [playerState, project, assetResolver, playSound, playVoice, evaluateConditions2, fadeAudio, settings.musicVolume, startNewGame, stopAndResetMusic, stopAllSfx, stopSfx, hudStack]);
     const handleDialogueAdvance = () => {
-      var _a2, _b2, _c2;
+      var _a2, _b2, _c2, _d2;
       if (scenePaused) return;
       if (((_b2 = (_a2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _a2.incomingCall) == null ? void 0 : _b2.phase) === "ringing" && playerState.uiState.phone.incomingCall.modal) return;
       if (((_c2 = scriptInputResolverRef.current) == null ? void 0 : _c2.kind) === "dialogue") {
@@ -22706,7 +25125,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         r.resolve(void 0);
         return;
       }
-      stopVoice();
+      {
+        const ps = playerStateRef.current;
+        const nextCmd = ps ? (_d2 = project.scenes[ps.currentSceneId]) == null ? void 0 : _d2.commands[ps.currentIndex + 1] : void 0;
+        const nextIsVoicelessAppend = (nextCmd == null ? void 0 : nextCmd.type) === CommandType.Dialogue && nextCmd.append && !nextCmd.voiceAudioId;
+        if (!nextIsVoicelessAppend) stopVoice();
+      }
       updatePlayerState((p) => {
         if (!p || !p.uiState.dialogue) return p;
         const scene = project.scenes[p.currentSceneId];
@@ -22721,6 +25145,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             // Keep dialogue open!
           };
         }
+        const nextIsAppend = (nextCmd == null ? void 0 : nextCmd.type) === CommandType.Dialogue && nextCmd.append && evaluateConditions2(nextCmd.conditions, mergeDirtyUiVariables(p.variables));
+        if (nextIsAppend) {
+          return {
+            ...p,
+            currentIndex: p.currentIndex + 1,
+            uiState: {
+              ...p.uiState,
+              isWaitingForInput: false,
+              isSkipping: false,
+              // Remember where the group started — history/skip-back land there.
+              dialogue: { ...p.uiState.dialogue, groupStartIndex: p.uiState.dialogue.groupStartIndex ?? p.currentIndex }
+            }
+          };
+        }
         const historyEntry = {
           timestamp: Date.now(),
           type: "dialogue",
@@ -22728,7 +25166,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           characterColor: p.uiState.dialogue.characterColor,
           text: p.uiState.dialogue.text,
           sceneId: p.currentSceneId,
-          commandIndex: p.currentIndex,
+          // An appended group is ONE backlog line — record where it BEGAN.
+          commandIndex: p.uiState.dialogue.groupStartIndex ?? p.currentIndex,
           // Full state snapshots for backward navigation
           stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
           variablesSnapshot: { ...p.variables },
@@ -22798,11 +25237,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               const effectiveOperator = normalizeSetVariableOperator(variable.type, variable.name, originalOperator);
               const wasCoercedOperator = originalOperator !== effectiveOperator;
               const currentVal = newState.variables[setVarAction.variableId];
+              const changeValue = resolveSetVariableValue(
+                setVarAction,
+                mergeDirtyUiVariables(newState.variables)
+              );
               const newVal = calculateVariableValue(
                 effectiveOperator,
                 variable.type,
                 currentVal,
-                setVarAction.value,
+                changeValue,
                 setVarAction.randomMin,
                 setVarAction.randomMax,
                 wasCoercedOperator ? originalOperator : void 0,
@@ -23703,12 +26146,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const originalOperator = setVarAction.operator;
         const effectiveOperator = normalizeSetVariableOperator(variable.type, variable.name, originalOperator);
         const wasCoercedOperator = originalOperator !== effectiveOperator;
-        const computeNewValue = (currentVal) => {
+        const computeNewValue = (currentVal, readVars) => {
+          const changeValue = resolveSetVariableValue(setVarAction, readVars);
           return calculateVariableValue(
             effectiveOperator,
             variable.type,
             currentVal,
-            setVarAction.value,
+            changeValue,
             setVarAction.randomMin,
             setVarAction.randomMax,
             wasCoercedOperator ? originalOperator : void 0,
@@ -23720,8 +26164,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           if (playerState) {
             uiDirtyVariableIdsRef.current.add(setVarAction.variableId);
             setUiVariables((prev) => {
+              var _a3;
               const currentVal = prev[setVarAction.variableId];
-              const newVal = computeNewValue(currentVal);
+              const newVal = computeNewValue(
+                currentVal,
+                mergeDirtyUiVariables(((_a3 = playerStateRef.current) == null ? void 0 : _a3.variables) ?? {})
+              );
               runtimeDebugLog("[SetVariable] Details (uiVariables):", {
                 variable: variable.name,
                 variableId: setVarAction.variableId,
@@ -23738,7 +26186,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           } else {
             setMenuVariables((prev) => {
               const currentVal = prev[setVarAction.variableId] ?? variable.defaultValue;
-              const newVal = computeNewValue(currentVal);
+              const menuView = {};
+              for (const v of Object.values(project.variables)) {
+                menuView[v.id] = prev[v.id] ?? v.defaultValue;
+              }
+              const newVal = computeNewValue(currentVal, menuView);
               runtimeDebugLog("[SetVariable] Details (menu):", {
                 variable: variable.name,
                 variableId: setVarAction.variableId,
@@ -23800,13 +26252,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const soundAction = action;
         if (soundAction.audioId) {
           runtimeDebugLog("[PlaySound] action triggered:", soundAction.audioId, "volume:", soundAction.volume, "loop:", soundAction.loop);
-          playSound(soundAction.audioId, soundAction.volume, soundAction.loop);
+          playSound(soundAction.audioId, soundAction.volume, soundAction.loop, soundAction.audioAdjust ?? null);
         }
       } else if (action.type === UIActionType.PlayMusic) {
         const a = action;
         if (a.audioId) {
-          const cmd = { type: CommandType.PlayMusic, audioId: a.audioId, loop: a.loop ?? true, fadeDuration: a.fadeDuration ?? 1, volume: a.volume };
-          const r = handlePlayMusic(cmd, { playerState: playerStateRef.current, assetResolver, musicAudioRef, fadeAudio, settings, setPlayerState: updatePlayerState });
+          const cmd = { type: CommandType.PlayMusic, audioId: a.audioId, loop: a.loop ?? true, fadeDuration: a.fadeDuration ?? 1, volume: a.volume, audioAdjust: a.audioAdjust };
+          const r = handlePlayMusic(cmd, { project, playerState: playerStateRef.current, assetResolver, musicAudioRef, fadeAudio, settings, setPlayerState: updatePlayerState });
           if ((_j2 = r.updates) == null ? void 0 : _j2.musicState) updatePlayerState((p) => p ? { ...p, musicState: { ...p.musicState, ...r.updates.musicState } } : p);
         }
       } else if (action.type === UIActionType.StopMusic) {
@@ -24502,7 +26954,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (!active) return;
       const id = window.setInterval(() => patchActiveCall((ac) => ac.phase === "active" ? { elapsedMs: ac.elapsedMs + 1e3 } : {}), 1e3);
       return () => window.clearInterval(id);
-    }, [(_k = (_j = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _j.activeCall) == null ? void 0 : _k.phase, playerState == null ? void 0 : playerState.mode]);
+    }, [(_l = (_k = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _k.activeCall) == null ? void 0 : _l.phase, playerState == null ? void 0 : playerState.mode]);
     const notifEntry = (ph, e) => {
       const list = ph.notifications || [];
       return [...list, { ...e, id: `nt-${Date.now()}-${list.length}`, order: list.length }];
@@ -24630,7 +27082,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const log2 = ph.callLog || [];
         const entry = { id: `call-${Date.now()}`, callerId: cmd.callerId, status: outcome, portrait: cmd.portrait, order: log2.length, direction: "incoming" };
         const missed = outcome === "missed";
-        const callerName = cmd.callerId === "player" ? "" : ((_a3 = project.characters[cmd.callerId]) == null ? void 0 : _a3.name) || "";
+        const callerName = cmd.callerId === "player" ? "" : resolveCharacterDisplayName((_a3 = project.characters[cmd.callerId]) == null ? void 0 : _a3.name, mergeDirtyUiVariables(p.variables), project);
         return { ...p, uiState: { ...p.uiState, phone: {
           ...ph,
           incomingCall: null,
@@ -24673,7 +27125,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           callTimeoutRef.current = window.setTimeout(() => resolveIncomingCall("missed"), callRingRemainingRef.current);
         }
       }
-    }, [playerState == null ? void 0 : playerState.mode, (_m = (_l = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _l.incomingCall) == null ? void 0 : _m.phase]);
+    }, [playerState == null ? void 0 : playerState.mode, (_n = (_m = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _m.incomingCall) == null ? void 0 : _n.phase]);
     const handleVariableChange = (variableId, value) => {
       runtimeDebugLog("[handleVariableChange] Called with:", { variableId, value, hasPlayerState: !!playerState });
       if (playerState) {
@@ -25058,17 +27510,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const renderStage = () => {
       var _a2, _b2, _c2, _d2, _e2, _f2, _g2;
       if (!playerState) return null;
-      const state = playerState.stageState;
+      const state2 = playerState.stageState;
       const liveVars = mergeDirtyUiVariables(playerState.variables);
       const liveShown = (o) => !o.live || !o.conditions || evaluateConditions2(o.conditions, liveVars);
-      const matchedBgLayer = (state.backgroundLayers || []).filter((l) => !l.conditions || evaluateConditions2(l.conditions, liveVars)).slice(-1)[0];
-      const effBgUrl = matchedBgLayer ? matchedBgLayer.url : state.backgroundUrl;
-      const effBgColor = matchedBgLayer ? matchedBgLayer.color : state.backgroundColor;
-      const effBgIsVideo = matchedBgLayer ? matchedBgLayer.isVideo : state.backgroundIsVideo;
-      const effBgLoop = matchedBgLayer ? matchedBgLayer.loop : state.backgroundLoop;
-      const effBgTrimStart = matchedBgLayer ? matchedBgLayer.trimStart : state.backgroundTrimStart;
-      const effBgTrimEnd = matchedBgLayer ? matchedBgLayer.trimEnd : state.backgroundTrimEnd;
-      const effBgDepth = (matchedBgLayer ? matchedBgLayer.parallaxDepth : state.backgroundParallaxDepth) ?? 0;
+      const matchedBgLayer = (state2.backgroundLayers || []).filter((l) => !l.conditions || evaluateConditions2(l.conditions, liveVars)).slice(-1)[0];
+      const effBgUrl = matchedBgLayer ? matchedBgLayer.url : state2.backgroundUrl;
+      const effBgColor = matchedBgLayer ? matchedBgLayer.color : state2.backgroundColor;
+      const effBgIsVideo = matchedBgLayer ? matchedBgLayer.isVideo : state2.backgroundIsVideo;
+      const effBgLoop = matchedBgLayer ? matchedBgLayer.loop : state2.backgroundLoop;
+      const effBgTrimStart = matchedBgLayer ? matchedBgLayer.trimStart : state2.backgroundTrimStart;
+      const effBgTrimEnd = matchedBgLayer ? matchedBgLayer.trimEnd : state2.backgroundTrimEnd;
+      const effBgDepth = (matchedBgLayer ? matchedBgLayer.parallaxDepth : state2.backgroundParallaxDepth) ?? 0;
       const sceneParallaxIntensity = ((_b2 = (_a2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _a2.parallax) == null ? void 0 : _b2.intensity) ?? 1;
       const bgParallaxScale = (depth) => {
         if (!depth) return 1;
@@ -25096,12 +27548,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const shakeClass = activeShakeRef.current ? "shake" : "";
       const intensityPx = activeShakeRef.current ? activeShakeRef.current.intensity * 1.5 : 0;
       const screenTween = TweenManager.getCurrentValues("__screen__", "screen");
-      const tweenedZoom = (screenTween == null ? void 0 : screenTween.scaleX) ?? state.screen.zoom;
-      const tweenedPanX = (screenTween == null ? void 0 : screenTween.x) ?? state.screen.panX;
-      const tweenedPanY = (screenTween == null ? void 0 : screenTween.y) ?? state.screen.panY;
-      const panZoomStyle = { transform: `scale(${tweenedZoom}) translate(${tweenedPanX}%, ${tweenedPanY}%)`, transition: screenTween ? "none" : `transform ${state.screen.transitionDuration}s ease-in-out`, width: "100%", height: "100%" };
+      const tweenedZoom = (screenTween == null ? void 0 : screenTween.scaleX) ?? state2.screen.zoom;
+      const tweenedPanX = (screenTween == null ? void 0 : screenTween.x) ?? state2.screen.panX;
+      const tweenedPanY = (screenTween == null ? void 0 : screenTween.y) ?? state2.screen.panY;
+      const panZoomStyle = { transform: `scale(${tweenedZoom}) translate(${tweenedPanX}%, ${tweenedPanY}%)`, transition: screenTween ? "none" : `transform ${state2.screen.transitionDuration}s ease-in-out`, width: "100%", height: "100%" };
       const shakeIntensityStyle = activeShakeRef.current ? { "--shake-intensity-x": `${intensityPx}px`, "--shake-intensity-y": `${intensityPx * 0.7}px` } : {};
-      const tintStyle = { backgroundColor: state.screen.tint, opacity: resolveVarNumber(liveVars, state.screen.tintOpacityVariableId, state.screen.tintOpacity ?? 100, { min: 0, max: 100 }) / 100, transition: `background-color ${state.screen.transitionDuration}s ease-in-out, opacity ${state.screen.transitionDuration}s ease-in-out` };
+      const tintStyle = { backgroundColor: state2.screen.tint, opacity: resolveVarNumber(liveVars, state2.screen.tintOpacityVariableId, state2.screen.tintOpacity ?? 100, { min: 0, max: 100 }) / 100, transition: `background-color ${state2.screen.transitionDuration}s ease-in-out, opacity ${state2.screen.transitionDuration}s ease-in-out` };
       const dnc = project.dayNightCycle;
       const sceneDN = (_c2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _c2.dayNight;
       const dnActive = !!((dnc == null ? void 0 : dnc.enabled) && ((_d2 = dnc.phases) == null ? void 0 : _d2.length) && (sceneDN == null ? void 0 : sceneDN.mode) !== "off");
@@ -25163,7 +27615,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", style: { zIndex: 0, ...dnBgFilterStyle, ...sceneGlitchFilterStyle }, children: inner });
               })(),
               playerState == null ? void 0 : playerState.uiState.transitionElement,
-              (state.backgroundStack || []).map((plane) => {
+              (state2.backgroundStack || []).map((plane) => {
                 if (!plane.url && !plane.color) return null;
                 const planeMedia = plane.url ? plane.isVideo ? /* @__PURE__ */ jsxRuntime2.jsx(TrimmedVideo, { src: plane.url || void 0, autoPlay: true, muted: true, loop: plane.loop, trimStart: plane.trimStart, trimEnd: plane.trimEnd, playsInline: true, className: "absolute w-full h-full object-cover" }) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: plane.url, alt: "background layer", className: "absolute w-full h-full object-cover" }) : null;
                 const d = plane.parallaxDepth ?? 0;
@@ -25188,7 +27640,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", style: { zIndex: plane.layer ?? 0, backgroundColor: plane.color, animation: anim, ...dnBgFilterStyle, ...sceneGlitchFilterStyle }, children: planeInner }, plane.commandId);
               }),
               dnBg && dnBg.overlayColor !== "transparent" && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none", style: { zIndex: 3, backgroundColor: dnBg.overlayColor, transition: `background-color ${dnTrans}s ease-in-out` } }),
-              state.movieOverlays && state.movieOverlays.length > 0 && state.movieOverlays.map((movie, idx) => {
+              state2.movieOverlays && state2.movieOverlays.length > 0 && state2.movieOverlays.map((movie, idx) => {
                 if (!movie.url) return null;
                 const isCustom = movie.objectFit === "custom";
                 const movieAnim = movieEntryAnim(movie.transition, movie.transitionDuration);
@@ -25244,7 +27696,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }),
               (() => {
                 var _a3;
-                const allChars = Object.values(state.characters).filter((c) => liveShown(c) || isLiveFade(c)).map((c) => isLiveFade(c) && !liveShown(c) ? { ...c, __liveHidden: true } : c);
+                const allChars = Object.values(state2.characters).filter((c) => liveShown(c) || isLiveFade(c)).map((c) => isLiveFade(c) && !liveShown(c) ? { ...c, __liveHidden: true } : c);
                 const arranged = project.autoArrangeCharacters ? computeArrangedPositions(allChars.filter((c) => !c.charId.startsWith("__ghost")).map((c) => ({ id: c.charId, position: c.position }))) : null;
                 const emphasisOn = !!project.ui.speakerEmphasisEnabled;
                 const emphasisSpeakerId = emphasisOn ? ((_a3 = playerState.uiState.dialogue) == null ? void 0 : _a3.characterId) ?? null : null;
@@ -25252,6 +27704,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 const emphasisScale = project.ui.speakerEmphasisScale ?? 1.04;
                 return allChars.map((char) => {
                   var _a4, _b3, _c3;
+                  const animSel = animFrameSelectionsRef.current.get(char.charId);
+                  if (animSel && !char.isVideo) {
+                    const animCharData = project.characters[char.charId];
+                    if (animCharData) {
+                      const wrapUrl = (u) => resolveFieldUrl(project.id, u) || u;
+                      const media = buildCharacterMedia(animCharData, animSel, wrapUrl, char.poseId);
+                      char = { ...char, animBaseImageUrls: char.imageUrls, imageUrls: media.imageUrls, ...boxFieldsForStage(media.imageBoxes, media.videoBoxes) };
+                    }
+                  }
                   let transitionClass = "";
                   let animationDuration = "1s";
                   let slideStyle = {};
@@ -25435,7 +27896,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   combinedFilter || combinedFilterAnimation || flickerAnimation || !!dnSpriteTint && !char.isVideo;
                   const spriteContent = /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
                     char.isVideo && char.videoUrls ? char.videoUrls.map((url, index) => {
-                      var _a5, _b4, _c4, _d3;
+                      var _a5, _b4, _c4, _d3, _e3;
                       return /* @__PURE__ */ jsxRuntime2.jsx(
                         TrimmedVideo,
                         {
@@ -25447,59 +27908,36 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                           trimEnd: (_d3 = (_c4 = char.videoTrims) == null ? void 0 : _c4[index]) == null ? void 0 : _d3.end,
                           playsInline: true,
                           className: "absolute top-0 left-0 w-full h-full object-contain",
-                          style: { zIndex: index }
+                          style: { zIndex: index, ...layerBoxStyle((_e3 = char.videoBoxes) == null ? void 0 : _e3[index]) }
                         },
                         index
                       );
-                    }) : char.imageUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx(
-                      "img",
-                      {
-                        src: url,
-                        alt: "",
-                        className: "absolute top-0 left-0 w-full h-full object-contain",
-                        style: { zIndex: index }
-                      },
-                      index
-                    )),
-                    dnSpriteTint && !char.isVideo && char.imageUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx("div", { "aria-hidden": true, style: {
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                      zIndex: index,
-                      backgroundColor: dnSpriteTint.color,
-                      opacity: dnSpriteTint.opacity,
-                      mixBlendMode: "multiply",
-                      pointerEvents: "none",
-                      WebkitMaskImage: `url("${url}")`,
-                      maskImage: `url("${url}")`,
-                      WebkitMaskSize: "contain",
-                      maskSize: "contain",
-                      WebkitMaskRepeat: "no-repeat",
-                      maskRepeat: "no-repeat",
-                      WebkitMaskPosition: "center",
-                      maskPosition: "center",
-                      transition: `opacity ${dnTrans}s ease-in-out, background-color ${dnTrans}s ease-in-out`
-                    } }, `dn-tint-${index}`)),
-                    charGlitch && !char.isVideo && charGlitch.colors.map((rimColor, ci) => {
-                      const g = charGlitch;
-                      const push = 7 * Math.max(0.2, Math.min(3, g.rimSize));
-                      const dir = [[-1, 0], [1, 0], [0, -1], [1, 1], [-1, 1], [0, 1]][ci % 6];
-                      const dur = 1.1 / g.speed;
-                      return char.imageUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx("div", { "aria-hidden": true, style: {
+                    }) : char.imageUrls.map((url, index) => {
+                      var _a5;
+                      return /* @__PURE__ */ jsxRuntime2.jsx(
+                        "img",
+                        {
+                          src: url,
+                          alt: "",
+                          className: "absolute top-0 left-0 w-full h-full object-contain",
+                          style: { zIndex: index, ...layerBoxStyle((_a5 = char.imageBoxes) == null ? void 0 : _a5[index]) }
+                        },
+                        index
+                      );
+                    }),
+                    dnSpriteTint && !char.isVideo && char.imageUrls.map((url, index) => {
+                      var _a5;
+                      return /* @__PURE__ */ jsxRuntime2.jsx("div", { "aria-hidden": true, style: {
                         position: "absolute",
                         top: 0,
                         left: 0,
                         width: "100%",
                         height: "100%",
-                        zIndex: -(g.colors.length - ci),
-                        // behind every sprite layer
+                        zIndex: index,
+                        backgroundColor: dnSpriteTint.color,
+                        opacity: dnSpriteTint.opacity,
+                        mixBlendMode: "multiply",
                         pointerEvents: "none",
-                        backgroundColor: rimColor,
-                        transform: `translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + 0.015 * Math.max(0.2, Math.min(3, g.rimSize))).toFixed(3)})`,
-                        animation: `vnfx-glitch-bands-flicker ${dur.toFixed(2)}s steps(1, end) infinite`,
-                        animationDelay: `${(dur / g.colors.length * ci).toFixed(2)}s`,
                         WebkitMaskImage: `url("${url}")`,
                         maskImage: `url("${url}")`,
                         WebkitMaskSize: "contain",
@@ -25507,8 +27945,45 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         WebkitMaskRepeat: "no-repeat",
                         maskRepeat: "no-repeat",
                         WebkitMaskPosition: "center",
-                        maskPosition: "center"
-                      } }, `glitch-rim-${ci}-${index}`));
+                        maskPosition: "center",
+                        transition: `opacity ${dnTrans}s ease-in-out, background-color ${dnTrans}s ease-in-out`,
+                        ...layerBoxStyle((_a5 = char.imageBoxes) == null ? void 0 : _a5[index])
+                      } }, `dn-tint-${index}`);
+                    }),
+                    charGlitch && !char.isVideo && charGlitch.colors.map((rimColor, ci) => {
+                      const g = charGlitch;
+                      const push = 7 * Math.max(0.2, Math.min(3, g.rimSize));
+                      const dir = [[-1, 0], [1, 0], [0, -1], [1, 1], [-1, 1], [0, 1]][ci % 6];
+                      const dur = 1.1 / g.speed;
+                      return char.imageUrls.map((url, index) => {
+                        var _a5;
+                        const pieceBox = (_a5 = char.imageBoxes) == null ? void 0 : _a5[index];
+                        const boxStyle = layerBoxStyle(pieceBox);
+                        const boxTf = layerBoxTransform(pieceBox);
+                        return /* @__PURE__ */ jsxRuntime2.jsx("div", { "aria-hidden": true, style: {
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          height: "100%",
+                          zIndex: -(g.colors.length - ci),
+                          // behind every sprite layer
+                          pointerEvents: "none",
+                          backgroundColor: rimColor,
+                          animation: `vnfx-glitch-bands-flicker ${dur.toFixed(2)}s steps(1, end) infinite`,
+                          animationDelay: `${(dur / g.colors.length * ci).toFixed(2)}s`,
+                          WebkitMaskImage: `url("${url}")`,
+                          maskImage: `url("${url}")`,
+                          WebkitMaskSize: "contain",
+                          maskSize: "contain",
+                          WebkitMaskRepeat: "no-repeat",
+                          maskRepeat: "no-repeat",
+                          WebkitMaskPosition: "center",
+                          maskPosition: "center",
+                          ...boxStyle,
+                          transform: `${boxTf ? boxTf + " " : ""}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + 0.015 * Math.max(0.2, Math.min(3, g.rimSize))).toFixed(3)})`
+                        } }, `glitch-rim-${ci}-${index}`);
+                      });
                     }),
                     charGlitch && !char.isVideo && charGlitch.colors.map((pxColor, ci) => {
                       const g = charGlitch;
@@ -25517,30 +27992,37 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       const dir = [[1, -1], [-1, 1], [1, 1], [-1, -1], [0, -1], [1, 0]][ci % 6];
                       const dur = 1.1 / g.speed * 0.7;
                       const blockPx = Math.round(36 + 26 * Math.min(1.5, g.intensity));
-                      return char.imageUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx("div", { "aria-hidden": true, style: {
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: "100%",
-                        // Further back than the rims, so the pixels flash BEYOND the rim edge.
-                        zIndex: -(g.colors.length + 1) - ci,
-                        pointerEvents: "none",
-                        backgroundImage: deadPixelTile(pxColor, 13 + ci * 37),
-                        backgroundSize: `${blockPx}px ${blockPx}px`,
-                        imageRendering: "pixelated",
-                        transform: `translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + (0.035 + ci * 0.012) * rim).toFixed(3)})`,
-                        animation: `vnfx-glitch-bands-flicker ${dur.toFixed(2)}s steps(1, end) infinite`,
-                        animationDelay: `${(dur / g.colors.length * ci + dur * 0.31).toFixed(2)}s`,
-                        WebkitMaskImage: `url("${url}")`,
-                        maskImage: `url("${url}")`,
-                        WebkitMaskSize: "contain",
-                        maskSize: "contain",
-                        WebkitMaskRepeat: "no-repeat",
-                        maskRepeat: "no-repeat",
-                        WebkitMaskPosition: "center",
-                        maskPosition: "center"
-                      } }, `glitch-px-${ci}-${index}`));
+                      return char.imageUrls.map((url, index) => {
+                        var _a5;
+                        const pieceBox = (_a5 = char.imageBoxes) == null ? void 0 : _a5[index];
+                        const boxStyle = layerBoxStyle(pieceBox);
+                        const boxTf = layerBoxTransform(pieceBox);
+                        return /* @__PURE__ */ jsxRuntime2.jsx("div", { "aria-hidden": true, style: {
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          height: "100%",
+                          // Further back than the rims, so the pixels flash BEYOND the rim edge.
+                          zIndex: -(g.colors.length + 1) - ci,
+                          pointerEvents: "none",
+                          backgroundImage: deadPixelTile(pxColor, 13 + ci * 37),
+                          backgroundSize: `${blockPx}px ${blockPx}px`,
+                          imageRendering: "pixelated",
+                          animation: `vnfx-glitch-bands-flicker ${dur.toFixed(2)}s steps(1, end) infinite`,
+                          animationDelay: `${(dur / g.colors.length * ci + dur * 0.31).toFixed(2)}s`,
+                          WebkitMaskImage: `url("${url}")`,
+                          maskImage: `url("${url}")`,
+                          WebkitMaskSize: "contain",
+                          maskSize: "contain",
+                          WebkitMaskRepeat: "no-repeat",
+                          maskRepeat: "no-repeat",
+                          WebkitMaskPosition: "center",
+                          maskPosition: "center",
+                          ...boxStyle,
+                          transform: `${boxTf ? boxTf + " " : ""}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + (0.035 + ci * 0.012) * rim).toFixed(3)})`
+                        } }, `glitch-px-${ci}-${index}`);
+                      });
                     }),
                     charGlitch && /* @__PURE__ */ jsxRuntime2.jsx("svg", { width: "0", height: "0", style: { position: "absolute" }, "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntime2.jsx("defs", { children: /* @__PURE__ */ jsxRuntime2.jsxs("filter", { id: `vnfx-charglitch-${char.charId}`, x: "-20%", y: "-10%", width: "140%", height: "120%", children: [
                       /* @__PURE__ */ jsxRuntime2.jsx("feTurbulence", { type: "fractalNoise", baseFrequency: "0.002 0.1", numOctaves: "1", seed: "11", result: "noise", children: /* @__PURE__ */ jsxRuntime2.jsx("animate", { attributeName: "seed", values: "11;37;73;5;11", dur: `${(4.4 / charGlitch.speed).toFixed(2)}s`, calcMode: "discrete", repeatCount: "indefinite" }) }),
@@ -25621,12 +28103,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       },
                       children: wrappedContent
                     },
-                    char.transition ? `${char.charId}-${char.expressionId}-${char.imageUrls.join(",")}-${char.transition.action}` : char.charId
+                    char.transition ? `${char.charId}-${char.expressionId}-${(char.animBaseImageUrls ?? char.imageUrls).join(",")}-${char.transition.action}` : char.charId
                   );
                 });
               })(),
               (() => {
-                const pEffects = state.particleEffects;
+                const pEffects = state2.particleEffects;
                 const hasParticles = pEffects && Object.keys(pEffects).length > 0;
                 if (hasParticles) {
                   const resolvedEffects = Object.fromEntries(Object.entries(pEffects).map(([tag, entry]) => {
@@ -25651,12 +28133,26 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 }
                 return null;
               })(),
-              state.lights && state.lights.length > 0 && (!((_g2 = state.lightsConditions) == null ? void 0 : _g2.length) || evaluateConditions2(state.lightsConditions, liveVars)) && (() => {
-                const lb = state.lightsBrightnessVariableId ? resolveVarNumber(liveVars, state.lightsBrightnessVariableId, 1, { min: 0, max: 2 }) : 1;
-                const lights = lb === 1 ? state.lights : state.lights.map((l) => ({ ...l, brightness: (l.brightness ?? 1) * lb }));
-                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none", style: { zIndex: state.lightsAbove ? 40 : 4 }, children: /* @__PURE__ */ jsxRuntime2.jsx(LightsLayer, { lights, stageW: stageSize.width, stageH: stageSize.height }) });
+              state2.lights && state2.lights.length > 0 && (!((_g2 = state2.lightsConditions) == null ? void 0 : _g2.length) || evaluateConditions2(state2.lightsConditions, liveVars)) && (() => {
+                const lb = state2.lightsBrightnessVariableId ? resolveVarNumber(liveVars, state2.lightsBrightnessVariableId, 1, { min: 0, max: 2 }) : 1;
+                const lights = lb === 1 ? state2.lights : state2.lights.map((l) => ({ ...l, brightness: (l.brightness ?? 1) * lb }));
+                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none", style: { zIndex: state2.lightsAbove ? 40 : 4 }, children: isEnhanced(state2.lightsStyle) ? (
+                  // Enhanced (WebGL glow) — Classic <LightsLayer> rides as the
+                  // automatic fallback wherever WebGL can't run.
+                  /* @__PURE__ */ jsxRuntime2.jsx(
+                    GlFxCanvas,
+                    {
+                      kind: "lights",
+                      width: stageSize.width,
+                      height: stageSize.height,
+                      style: { mixBlendMode: "screen" },
+                      getParams: () => ({ kind: "lights", lights, stageW: stageSize.width, stageH: stageSize.height }),
+                      children: /* @__PURE__ */ jsxRuntime2.jsx(LightsLayer, { lights, stageW: stageSize.width, stageH: stageSize.height })
+                    }
+                  )
+                ) : /* @__PURE__ */ jsxRuntime2.jsx(LightsLayer, { lights, stageW: stageSize.width, stageH: stageSize.height }) });
               })(),
-              state.textOverlays.filter((o) => liveShown(o) || isLiveFade(o)).map((rawOverlay) => {
+              state2.textOverlays.filter((o) => liveShown(o) || isLiveFade(o)).map((rawOverlay) => {
                 const overlay = isLiveFade(rawOverlay) && !liveShown(rawOverlay) ? { ...rawOverlay, __liveHidden: true } : rawOverlay;
                 const liveText = overlay.live && overlay.rawText !== void 0 ? interpolateVariables(overlay.rawText, liveVars, project) : overlay.text;
                 return /* @__PURE__ */ jsxRuntime2.jsx(
@@ -25668,7 +28164,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   overlay.id
                 );
               }),
-              state.imageOverlays.filter((o) => liveShown(o) || isLiveFade(o)).map((rawOverlay) => {
+              state2.imageOverlays.filter((o) => liveShown(o) || isLiveFade(o)).map((rawOverlay) => {
                 const overlay = isLiveFade(rawOverlay) && !liveShown(rawOverlay) ? { ...rawOverlay, __liveHidden: true } : rawOverlay;
                 return /* @__PURE__ */ jsxRuntime2.jsx(
                   ImageOverlayElement,
@@ -25679,7 +28175,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   overlay.id
                 );
               }),
-              state.buttonOverlays.filter((o) => liveShown(o) || isLiveFade(o)).map((rawOverlay) => {
+              state2.buttonOverlays.filter((o) => liveShown(o) || isLiveFade(o)).map((rawOverlay) => {
                 const overlay = isLiveFade(rawOverlay) && !liveShown(rawOverlay) ? { ...rawOverlay, __liveHidden: true } : rawOverlay;
                 return /* @__PURE__ */ jsxRuntime2.jsx(
                   ButtonOverlayElement,
@@ -25731,7 +28227,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   overlay.id
                 );
               }),
-              (state.hotSpotOverlays || []).map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(
+              (state2.hotSpotOverlays || []).map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(
                 HotSpotOverlayElement,
                 {
                   overlay,
@@ -26025,7 +28521,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               ] }),
               /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "flex-1 min-w-0", children: [
                 entry.type === "dialogue" && entry.characterName && entry.characterName !== "Narrator" && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "font-semibold text-sm mb-0.5", style: { color: entry.characterColor || "#94a3b8" }, children: entry.characterName }),
-                /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "text-white/90 text-sm leading-relaxed", children: entry.type === "choice" ? entry.choiceText || entry.text : entry.type === "textInput" ? `"${entry.inputValue}"` : entry.text }),
+                /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "text-white/90 text-sm leading-relaxed", children: entry.type === "choice" ? entry.choiceText || entry.text : entry.type === "textInput" ? `"${entry.inputValue}"` : stripDialogueTextCodes(entry.text || "") }),
                 entry.type === "choice" && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "text-blue-400/70 text-xs mt-1 font-medium", children: "Selected choice" }),
                 entry.type === "textInput" && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "text-emerald-400/70 text-xs mt-1 font-medium", children: "Text input" })
               ] })
@@ -26387,7 +28883,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               reactiveState: pickReactiveTextboxState(project.ui.dialogueReactiveStates, playerState.variables, evaluateConditions2),
               timerPaused: scenePaused || !!uiState.choices || !!uiState.textInput || !!uiState.showHistory,
               uiPalette: playerState.uiPaletteOverride,
-              voiceRef: currentVoiceRef
+              voiceRef: currentVoiceRef,
+              isSkipping: !!uiState.isSkipping,
+              autoContinue: (() => {
+                var _a3;
+                const nextCmd = (_a3 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _a3.commands[playerState.currentIndex + 1];
+                return (nextCmd == null ? void 0 : nextCmd.type) === CommandType.Dialogue && !!nextCmd.append && evaluateConditions2(nextCmd.conditions, mergeDirtyUiVariables(playerState.variables));
+              })()
             }
           )
         ] }),
@@ -26468,6 +28970,28 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const fVars = playerState == null ? void 0 : playerState.variables;
             const fRadius = resolveVarNumber(fVars, flashlight.radiusVariableId, flashlight.radius, { min: 1, max: 100 });
             const fDarkness = resolveVarNumber(fVars, flashlight.darknessVariableId, flashlight.darkness, { min: 0, max: 1 });
+            if (isEnhanced(flashlight.effectStyle)) {
+              const fl = flashlight;
+              return /* @__PURE__ */ jsxRuntime2.jsx("div", { ref: flashlightOverlayRef, className: "absolute inset-0 pointer-events-none", style: { zIndex: fl.affectsDialogue ? 45 : 15 }, children: /* @__PURE__ */ jsxRuntime2.jsx(
+                GlFxCanvas,
+                {
+                  kind: "flashlight",
+                  width: playContainerSize.width,
+                  height: playContainerSize.height,
+                  getParams: () => {
+                    var _a3;
+                    const vars = (_a3 = playerStateRef.current) == null ? void 0 : _a3.variables;
+                    const r = resolveVarNumber(vars, fl.radiusVariableId, fl.radius, { min: 1, max: 100 });
+                    const d = resolveVarNumber(vars, fl.darknessVariableId, fl.darkness, { min: 0, max: 1 });
+                    const m = flashlightMouseRef.current || { x: playContainerSize.width / 2, y: playContainerSize.height / 2 };
+                    return { kind: "flashlight", stageW: playContainerSize.width, stageH: playContainerSize.height, mouseX: m.x, mouseY: m.y, radius: r, softness: fl.softness, darkness: d, on: fl.on, color: fl.color };
+                  },
+                  children: /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: {
+                    background: fl.on ? flashlightBg(playContainerSize.width / 2, playContainerSize.height / 2, fRadius / 100 * Math.min(playContainerSize.width || 1280, playContainerSize.height || 720), fl.softness, hexToRgba(fl.color, fDarkness * 100)) : hexToRgba(fl.color, fDarkness * 100)
+                  } })
+                }
+              ) });
+            }
             return /* @__PURE__ */ jsxRuntime2.jsx(
               "div",
               {
@@ -26491,9 +29015,67 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const maxIntensity = Math.max(...active.map(([, s]) => Math.max(0, Math.min(1, s.intensity))));
             const affectsDialogue = active.some(([, s]) => s.affectsDialogue);
             const vpMin = typeof window !== "undefined" ? Math.min(window.innerWidth, window.innerHeight) : 720;
+            const classicBeams = active.filter(([, s]) => !isEnhanced(s.effectStyle));
+            const enhancedBeams = active.filter(([, s]) => isEnhanced(s.effectStyle));
             return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 pointer-events-none overflow-hidden", style: { zIndex: affectsDialogue ? 45 : 15 }, children: [
               !flashActive && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { background: hexToRgba("#000000", maxIntensity * 100) } }),
-              active.map(([id, s]) => {
+              enhancedBeams.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx(
+                GlFxCanvas,
+                {
+                  kind: "beams",
+                  width: playContainerSize.width,
+                  height: playContainerSize.height,
+                  style: { mixBlendMode: "screen" },
+                  getParams: () => ({
+                    kind: "beams",
+                    stageW: playContainerSize.width,
+                    stageH: playContainerSize.height,
+                    beams: enhancedBeams.map(([id, s]) => ({
+                      sourceX: s.sourceX,
+                      sourceY: s.sourceY,
+                      // Live swivel angle (mouse-follow) when present, else the authored aim.
+                      aimAngle: spotlightLiveAngles.current.get(id) ?? s.aimAngle,
+                      intensity: s.intensity,
+                      beamWidth: s.beamWidth,
+                      sourceWidth: s.sourceWidth,
+                      height: s.height,
+                      falloff: s.falloff,
+                      color: s.color
+                    }))
+                  }),
+                  children: enhancedBeams.map(([id, s]) => {
+                    const half = Math.max(2, Math.min(100, s.beamWidth)) / 2;
+                    const len = Math.max(5, Math.min(200, s.height));
+                    const srcHalf = Math.max(0, Math.min(60, s.sourceWidth)) / 2;
+                    const inner = Math.round(Math.max(0, Math.min(1, 1 - s.falloff)) * 100);
+                    const blurPx = Math.round((0.015 + Math.max(0, Math.min(1, s.falloff)) * 0.05) * vpMin);
+                    const sx = s.sourceX, sy = s.sourceY;
+                    return /* @__PURE__ */ jsxRuntime2.jsx(
+                      "div",
+                      {
+                        ref: (el) => {
+                          spotlightRefs.current.set(id, el);
+                        },
+                        className: "absolute inset-0",
+                        style: {
+                          mixBlendMode: "screen",
+                          transformOrigin: `${sx}% ${sy}%`,
+                          transform: `rotate(${-s.aimAngle}deg)`,
+                          transition: s.followMouse ? "none" : "transform 0.15s ease-out",
+                          filter: `blur(${blurPx}px)`,
+                          willChange: "transform"
+                        },
+                        children: /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: {
+                          clipPath: `polygon(${sx - srcHalf}% ${sy}%, ${sx + srcHalf}% ${sy}%, ${sx + half}% ${sy + len}%, ${sx - half}% ${sy + len}%)`,
+                          background: `radial-gradient(120% ${len}% at ${sx}% ${sy}%, ${hexToRgba(s.color, 95)} 0%, ${hexToRgba(s.color, 55)} ${inner}%, ${hexToRgba(s.color, 0)} 100%)`
+                        } })
+                      },
+                      id
+                    );
+                  })
+                }
+              ),
+              classicBeams.map(([id, s]) => {
                 const half = Math.max(2, Math.min(100, s.beamWidth)) / 2;
                 const len = Math.max(5, Math.min(200, s.height));
                 const srcHalf = Math.max(0, Math.min(60, s.sourceWidth)) / 2;
@@ -26809,44 +29391,44 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                    The *NoFade variants slide WITHOUT fading — a user asked for exactly this: the box
                    arrives whole and eases to a stop, no ghosting in. */
                 @keyframes elementTransitionslideUp {
-                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) + var(--vn-el-dist, 70%))); }
-                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) + var(--vn-el-dist, 70%))) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideDown {
-                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) - var(--vn-el-dist, 20%))); }
-                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) - var(--vn-el-dist, 20%))) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideLeft {
-                    from { opacity: 0; transform: translate(calc(var(--vn-el-tx, -50%) + var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)); }
-                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { opacity: 0; transform: translate(calc(var(--vn-el-tx, -50%) + var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideRight {
-                    from { opacity: 0; transform: translate(calc(var(--vn-el-tx, -50%) - var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)); }
-                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { opacity: 0; transform: translate(calc(var(--vn-el-tx, -50%) - var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionscale {
-                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(0.5); }
-                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(1); }
+                    from { opacity: 0; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(0.5) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { opacity: 1; transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(1) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideUpNoFade {
-                    from { transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) + var(--vn-el-dist, 70%))); }
-                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) + var(--vn-el-dist, 70%))) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideDownNoFade {
-                    from { transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) - var(--vn-el-dist, 20%))); }
-                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { transform: translate(var(--vn-el-tx, -50%), calc(var(--vn-el-ty, -50%) - var(--vn-el-dist, 20%))) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideLeftNoFade {
-                    from { transform: translate(calc(var(--vn-el-tx, -50%) + var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)); }
-                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { transform: translate(calc(var(--vn-el-tx, -50%) + var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionslideRightNoFade {
-                    from { transform: translate(calc(var(--vn-el-tx, -50%) - var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)); }
-                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)); }
+                    from { transform: translate(calc(var(--vn-el-tx, -50%) - var(--vn-el-dist, 30%)), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 @keyframes elementTransitionscaleNoFade {
-                    from { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(0.5); }
-                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(1); }
+                    from { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(0.5) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
+                    to { transform: translate(var(--vn-el-tx, -50%), var(--vn-el-ty, -50%)) scale(1) rotate(var(--vn-el-rot, 0deg)) scale(var(--vn-el-sx, 1), var(--vn-el-sy, 1)); }
                 }
                 /* Appearance-state image swap crossfade (new image fades in over the old) */
                 @keyframes vnImgCrossfade {
@@ -27118,7 +29700,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     100% { background-position: 0% 0%; }
                 }
             ` }),
-      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, "data-vn-play-root": true, className: "relative overflow-hidden", style: { cursor: "var(--vn-cursor-normal, default)", width: `min(100vw, calc(100vh * ${((_n = project.gameResolution) == null ? void 0 : _n.width) || 1920} / ${((_o = project.gameResolution) == null ? void 0 : _o.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_p = project.gameResolution) == null ? void 0 : _p.height) || 1080} / ${((_q = project.gameResolution) == null ? void 0 : _q.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_r = project.gameResolution) == null ? void 0 : _r.width) || 1920) : 1, ...screenGlitch ? { filter: "url(#vnfx-stage-glitch)" } : {} }, children: [
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, "data-vn-play-root": true, className: "relative overflow-hidden", style: { cursor: "var(--vn-cursor-normal, default)", width: `min(100vw, calc(100vh * ${((_o = project.gameResolution) == null ? void 0 : _o.width) || 1920} / ${((_p = project.gameResolution) == null ? void 0 : _p.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_q = project.gameResolution) == null ? void 0 : _q.height) || 1080} / ${((_r = project.gameResolution) == null ? void 0 : _r.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_s = project.gameResolution) == null ? void 0 : _s.width) || 1920) : 1, ...screenGlitch ? { filter: "url(#vnfx-stage-glitch)" } : {} }, children: [
         /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `[data-vn-play-root] .cursor-pointer { cursor: var(--vn-cursor-hand, pointer) !important; }` }),
         screenGlitch && /* @__PURE__ */ jsxRuntime2.jsx(StageGlitchFilterDef, { effect: screenGlitch }),
         (playerState == null ? void 0 : playerState.mode) === "playing" ? renderStage() : null,
@@ -27318,7 +29900,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           );
         })()
       ] }),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_s = playerState.uiState.phone) == null ? void 0 : _s.open) && /* @__PURE__ */ jsxRuntime2.jsx(
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_t = playerState.uiState.phone) == null ? void 0 : _t.open) && /* @__PURE__ */ jsxRuntime2.jsx(
         PhonePanel,
         {
           ui: project.ui,
@@ -27437,7 +30019,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         ) });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_u = (_t = playerState.uiState.phone) == null ? void 0 : _t.notification) == null ? void 0 : _u.visible) && !playerState.uiState.phone.open && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_v = (_u = playerState.uiState.phone) == null ? void 0 : _u.notification) == null ? void 0 : _v.visible) && !playerState.uiState.phone.open && (() => {
         const n = playerState.uiState.phone.notification;
         const nchar = !n.senderId || n.senderId === "player" ? null : project.characters[n.senderId];
         const nurls = resolvePhonePortrait(n.portrait, nchar, assetResolver);
@@ -27457,7 +30039,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             children: [
               nurls.length > 0 ? /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: nurls, size: "2.4em" }) : nIconImg ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: nIconImg, alt: "", style: { width: "2.4em", height: "2.4em", objectFit: "contain", flexShrink: 0 } }) : n.icon ? /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "1.6em", flexShrink: 0 }, children: PHONE_GLYPHS[n.icon] || "🔔" }) : null,
               /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
-                (n.title || (nchar == null ? void 0 : nchar.name)) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontWeight: 700, fontSize: "0.85em" }, children: n.title || (nchar == null ? void 0 : nchar.name) }),
+                (n.title || (nchar == null ? void 0 : nchar.name)) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontWeight: 700, fontSize: "0.85em" }, children: makeDisplayNameResolver(screenVariables, project)(n.title || (nchar == null ? void 0 : nchar.name), "") }),
                 /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.85em", opacity: 0.92, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: interpolateVariables(n.text, screenVariables, project) })
               ] }),
               /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "1.2em" }, children: n.title ? "🔔" : "💬" })
@@ -27465,7 +30047,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         );
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_w = (_v = playerState.uiState.phone) == null ? void 0 : _v.incomingCall) == null ? void 0 : _w.phase) === "ringing" && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_x = (_w = playerState.uiState.phone) == null ? void 0 : _w.incomingCall) == null ? void 0 : _x.phase) === "ringing" && (() => {
         const call = playerState.uiState.phone.incomingCall;
         const cchar = call.callerId === "player" ? null : project.characters[call.callerId];
         const curls = resolvePhonePortrait(call.portrait, cchar, assetResolver);
@@ -27489,7 +30071,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const bgImg = project.ui.phoneCallBgImage ? assetResolver(project.ui.phoneCallBgImage.id, "image") : null;
           return /* @__PURE__ */ jsxRuntime2.jsxs("div", { onClick: (e) => e.stopPropagation(), style: { position: "absolute", inset: 0, zIndex: 80, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, color: "#fff", background: bgImg ? `url(${bgImg}) center/cover no-repeat` : project.ui.phoneCallBgColor || "rgba(8,10,14,0.96)", animation: "fade-in 0.25s ease-out" }, children: [
             /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...project.ui.phoneCallPortraitX != null || project.ui.phoneCallPortraitY != null ? { position: "absolute", left: `${project.ui.phoneCallPortraitX ?? 50}%`, top: `${project.ui.phoneCallPortraitY ?? 18}%` } : { position: "relative" }, width: `${project.ui.phoneCallPortraitSize ?? 22}%`, aspectRatio: "1", borderRadius: shape === "circle" ? "9999px" : "16px", overflow: "hidden", background: "rgba(255,255,255,0.06)" }, children: curls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: project.ui.phoneCallPortraitFit || "cover", objectPosition: project.ui.phoneCallPortraitPosition || "center" } }, i)) }),
-            /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { textAlign: "center", ...nameStyle }, children: (cchar == null ? void 0 : cchar.name) || "Unknown" }),
+            /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { textAlign: "center", ...nameStyle }, children: makeDisplayNameResolver(screenVariables, project)(cchar == null ? void 0 : cchar.name, "Unknown") }),
             /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.7, fontSize: "0.9em" }, children: "Incoming call…" }),
             /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 48, marginTop: 8 }, children: [
               declineBtn,
@@ -27501,7 +30083,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 10, alignItems: "center" }, children: [
             /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: curls, size: "2.6em" }),
             /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { minWidth: 0 }, children: [
-              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...nameStyle, fontSize: "1em" }, children: (cchar == null ? void 0 : cchar.name) || "Unknown" }),
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...nameStyle, fontSize: "1em" }, children: makeDisplayNameResolver(screenVariables, project)(cchar == null ? void 0 : cchar.name, "Unknown") }),
               /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.7, fontSize: "0.75em" }, children: "Incoming call…" })
             ] })
           ] }),
@@ -27511,7 +30093,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ] })
         ] });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_x = playerState.uiState.phone) == null ? void 0 : _x.outgoingCall) && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_y = playerState.uiState.phone) == null ? void 0 : _y.outgoingCall) && (() => {
         const oc = playerState.uiState.phone.outgoingCall;
         const contact = (project.ui.phoneContacts || []).find((c) => c.characterId === oc.contactId);
         const ochar = project.characters[oc.contactId];
@@ -27521,7 +30103,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const nameStyle = project.ui.phoneCallNameFont ? fontSettingsToStyle(project.ui.phoneCallNameFont) : { fontSize: "1.5em", fontWeight: 700 };
         return /* @__PURE__ */ jsxRuntime2.jsxs("div", { onClick: (e) => e.stopPropagation(), style: { position: "absolute", inset: 0, zIndex: 80, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, color: "#fff", background: bgImg ? `url(${bgImg}) center/cover no-repeat` : project.ui.phoneCallBgColor || "rgba(8,10,14,0.96)", animation: "fade-in 0.25s ease-out" }, children: [
           /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...project.ui.phoneCallPortraitX != null || project.ui.phoneCallPortraitY != null ? { position: "absolute", left: `${project.ui.phoneCallPortraitX ?? 50}%`, top: `${project.ui.phoneCallPortraitY ?? 18}%` } : { position: "relative" }, width: `${project.ui.phoneCallPortraitSize ?? 22}%`, aspectRatio: "1", borderRadius: shape === "circle" ? "9999px" : "16px", overflow: "hidden", background: "rgba(255,255,255,0.06)" }, children: ourls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: project.ui.phoneCallPortraitFit || "cover", objectPosition: project.ui.phoneCallPortraitPosition || "center" } }, i)) }),
-          /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { textAlign: "center", ...nameStyle }, children: (contact == null ? void 0 : contact.displayName) || (ochar == null ? void 0 : ochar.name) || "Unknown" }),
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { textAlign: "center", ...nameStyle }, children: makeDisplayNameResolver(screenVariables, project)((contact == null ? void 0 : contact.displayName) || (ochar == null ? void 0 : ochar.name), "Unknown") }),
           /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.7, fontSize: "0.9em" }, children: "Calling…" }),
           /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: endOutgoingCall, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 6, background: "transparent", border: "none", cursor: "var(--vn-cursor-hand, pointer)", color: "#fff", fontSize: "0.85em", marginTop: 8 }, children: [
             /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { width: "3em", height: "3em", borderRadius: "9999px", background: project.ui.phoneCallDeclineColor || "#ef4444", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3em" }, children: "⊘" }),
@@ -27529,7 +30111,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ] })
         ] });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_y = playerState.uiState.phone) == null ? void 0 : _y.unread) && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_z = playerState.uiState.phone) == null ? void 0 : _z.unread) && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
         const bx = project.ui.phoneBadgeX ?? 95;
         const by = project.ui.phoneBadgeY ?? 4;
         const unreadCount = (playerState.uiState.phone.notifications || []).filter((e) => !e.read).length;
@@ -27571,6 +30153,42 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             ]
           }
         ),
+        /* @__PURE__ */ jsxRuntime2.jsxs(
+          "button",
+          {
+            onClick: () => setShowLocation((s) => !s),
+            className: `flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border shadow-lg ${showLocation ? "bg-sky-500/90 border-sky-400/60 text-white" : "bg-slate-800/80 border-slate-600/60 text-slate-100 hover:bg-slate-700/90"}`,
+            title: "Location — see which scene and screen you're looking at while you play. (Editor only — not shown in exported games.)",
+            children: [
+              /* @__PURE__ */ jsxRuntime2.jsx(FilmIcon, { className: "w-4 h-4 flex-shrink-0" }),
+              /* @__PURE__ */ jsxRuntime2.jsx("span", { children: "Location" })
+            ]
+          }
+        ),
+        showLocation && (() => {
+          var _a2;
+          const scene = playerState ? project.scenes[playerState.currentSceneId] : null;
+          const stepInfo = playerState && playerState.mode !== "menu" && ((_a2 = playerState.currentCommands) == null ? void 0 : _a2.length) ? `step ${Math.min(playerState.currentIndex + 1, playerState.currentCommands.length)} of ${playerState.currentCommands.length}` : null;
+          const menuNames = screenStack.map((id) => {
+            var _a3;
+            return (_a3 = project.uiScreens[id]) == null ? void 0 : _a3.name;
+          }).filter(Boolean);
+          const hudNames = hudStack.map((id) => {
+            var _a3;
+            return (_a3 = project.uiScreens[id]) == null ? void 0 : _a3.name;
+          }).filter(Boolean);
+          const row = (label, value) => /* @__PURE__ */ jsxRuntime2.jsxs("li", { className: "flex items-baseline justify-between gap-3", children: [
+            /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-slate-400 flex-shrink-0", children: label }),
+            /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-white text-right truncate", title: typeof value === "string" ? value : void 0, children: value })
+          ] });
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full border border-white/10 shadow-xl", children: /* @__PURE__ */ jsxRuntime2.jsxs("ul", { className: "space-y-1", children: [
+            scene && (playerState == null ? void 0 : playerState.mode) !== "menu" && row("Scene", scene.name),
+            stepInfo && row("", /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-slate-400 font-normal", children: stepInfo })),
+            menuNames.length > 0 && row(menuNames.length > 1 ? "Screens" : "Screen", menuNames.join(" → ")),
+            (playerState == null ? void 0 : playerState.mode) === "playing" && hudNames.length > 0 && row(hudNames.length > 1 ? "Overlays" : "Overlay", hudNames.join(" → ")),
+            !scene && menuNames.length === 0 && hudNames.length === 0 && /* @__PURE__ */ jsxRuntime2.jsx("li", { className: "text-slate-400 italic", children: "Nothing playing yet." })
+          ] }) });
+        })(),
         showVarWatcher && (() => {
           const defs = Object.values(project.variables);
           if (defs.length === 0) return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full border border-white/10 shadow-xl", children: /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "text-slate-400 italic", children: "No variables yet — add some in the Variables tab." }) });
@@ -27650,7 +30268,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         /* @__PURE__ */ jsxRuntime2.jsx(
           "img",
           {
-            src: assetResolver(((_z = carriedItem.icon) == null ? void 0 : _z.id) || null, "image") || "",
+            src: assetResolver(((_A = carriedItem.icon) == null ? void 0 : _A.id) || null, "image") || "",
             alt: "",
             draggable: false,
             className: "fixed z-[10052] pointer-events-none select-none",

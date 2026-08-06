@@ -39,12 +39,17 @@ export function describeConditions(
     return conditions.map((c, i) => {
         const v = variables[c.variableId];
         const name = v?.name || 'a variable';
-        const body = describeOne(v, c, name);
+        const body = describeOne(v, c, name, variables);
         return i === 0 ? body : `${c.connector ?? 'and'} ${body}`;
     }).join(' ');
 }
 
-function describeOne(v: VNVariable | undefined, c: VNCondition, name: string): string {
+function describeOne(
+    v: VNVariable | undefined,
+    c: VNCondition,
+    name: string,
+    variables: Record<string, VNVariable | undefined>
+): string {
     if (c.operator === 'is true' || c.operator === 'is false') {
         const { yes, no } = resolveBoolLabels(v, 'on', 'off');
         return `${name} is ${c.operator === 'is true' ? yes : no}`;
@@ -58,7 +63,28 @@ function describeOne(v: VNVariable | undefined, c: VNCondition, name: string): s
         if (c.operator === 'atLeastBand') return `${name} is ${band.name} or better`;
         return `${name} is below ${band.name}`;
     }
+    if (c.compareVariableId !== undefined) {
+        const otherName = variables[c.compareVariableId]?.name;
+        return `${name} ${OP_TEXT[c.operator]} ${otherName || 'a variable that no longer exists'}`;
+    }
     return `${name} ${OP_TEXT[c.operator]} ${c.value ?? ''}`.trim();
+}
+
+/**
+ * The single place a condition's comparison value is resolved. `compareVariableId` set →
+ * that variable's CURRENT value; dangling id → fall back to the literal `value` (today's
+ * behavior — a broken reference never changes what an old project did). Band operators
+ * never consult this (their `value` is a band id and the editor never sets both).
+ */
+export function resolveConditionValue(
+    c: VNCondition,
+    variables: Record<string, string | number | boolean | undefined>
+): string | number | boolean | undefined {
+    if (c.compareVariableId !== undefined) {
+        const v = variables[c.compareVariableId];
+        if (v !== undefined) return v;
+    }
+    return c.value;
 }
 
 /**

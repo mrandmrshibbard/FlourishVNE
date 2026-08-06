@@ -1,6 +1,7 @@
 import { ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand, SetCharacterPoseCommand } from '../../../features/scene/types';
-import { VNCharacterLayer } from '../../../features/character/types';
+import { VNCharacterLayer, VNLayerBox } from '../../../features/character/types';
 import { assetArtForPose, characterBaseArtForPose, resolvePoseId } from '../../../features/character/poseArt';
+import { layerOrderForPose, poseHiddenLayerIds, resolveLayerBox, normalizeLayerBox } from '../../../features/character/layout';
 import { VNID } from '../../../types';
 import { CommandContext, CommandResult } from './types';
 import { TweenManager } from '../systems/tweenManager';
@@ -17,25 +18,52 @@ export function buildCharacterMedia(
   layerSelections: Record<VNID, VNID | null>,
   wrap: (u: string) => string,
   poseId?: VNID,
-): { imageUrls: string[]; videoUrls: string[]; videoTrims: Array<{ start?: number; end?: number }>; hasVideo: boolean; videoLoop: boolean } {
+): {
+  imageUrls: string[]; videoUrls: string[]; videoTrims: Array<{ start?: number; end?: number }>;
+  hasVideo: boolean; videoLoop: boolean;
+  /** Pose Studio geometry, parallel to imageUrls/videoUrls (base entry = null = whole box).
+   *  All-null when the character has no layout — callers then OMIT the fields entirely so
+   *  box-less stage state and saves stay byte-identical. */
+  imageBoxes: Array<VNLayerBox | null>; videoBoxes: Array<VNLayerBox | null>;
+} {
   const imageUrls: string[] = [];
   const videoUrls: string[] = [];
   // Parallel to videoUrls: the base sprite carries its own [start,end] trim; layer asset
   // videos have no trim field yet → an empty slice (whole video).
   const videoTrims: Array<{ start?: number; end?: number }> = [];
+  // Pose Studio: where each piece sits (parallel to the url arrays; null = whole box).
+  const imageBoxes: Array<VNLayerBox | null> = [];
+  const videoBoxes: Array<VNLayerBox | null> = [];
   let hasVideo = false;
   let videoLoop = false;
   const base = characterBaseArtForPose(charData, poseId);
-  if (base.videoUrl) { videoUrls.push(wrap(base.videoUrl)); videoTrims.push({ start: base.trimStart, end: base.trimEnd }); hasVideo = true; videoLoop = !!base.loop; }
-  else if (base.imageUrl) { imageUrls.push(wrap(base.imageUrl)); }
-  (Object.values(charData.layers) as VNCharacterLayer[]).forEach(layer => {
+  if (base.videoUrl) { videoUrls.push(wrap(base.videoUrl)); videoTrims.push({ start: base.trimStart, end: base.trimEnd }); videoBoxes.push(null); hasVideo = true; videoLoop = !!base.loop; }
+  else if (base.imageUrl) { imageUrls.push(wrap(base.imageUrl)); imageBoxes.push(null); }
+  // Pose Studio order (per-pose front/back) + per-pose hidden pieces; box-less/order-less
+  // characters take exactly the legacy path (base Record order, nothing skipped).
+  const hidden = poseHiddenLayerIds(charData, poseId);
+  layerOrderForPose(charData, poseId).forEach(layer => {
+    if (hidden.has(layer.id)) return;
     const assetId = layerSelections[layer.id];
     const asset = assetId ? layer.assets[assetId] : null;
     const art = asset ? assetArtForPose(asset, poseId) : null;
-    if (art?.videoUrl) { videoUrls.push(wrap(art.videoUrl)); videoTrims.push({}); hasVideo = true; videoLoop = videoLoop || !!art.loop; }
-    else if (art?.imageUrl) { imageUrls.push(wrap(art.imageUrl)); }
+    const box = asset ? (normalizeLayerBox(resolveLayerBox(layer, asset, poseId)) ?? null) : null;
+    if (art?.videoUrl) { videoUrls.push(wrap(art.videoUrl)); videoTrims.push({}); videoBoxes.push(box); hasVideo = true; videoLoop = videoLoop || !!art.loop; }
+    else if (art?.imageUrl) { imageUrls.push(wrap(art.imageUrl)); imageBoxes.push(box); }
   });
-  return { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop };
+  return { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes };
+}
+
+/** Attach the box arrays to a stage entry ONLY when something actually has a box — box-less
+ *  games' stage state (and their saves) stay byte-identical. */
+export function boxFieldsForStage(
+  imageBoxes: Array<VNLayerBox | null>,
+  videoBoxes: Array<VNLayerBox | null>,
+): { imageBoxes?: Array<VNLayerBox | null>; videoBoxes?: Array<VNLayerBox | null> } {
+  return {
+    ...(imageBoxes.some(Boolean) ? { imageBoxes } : {}),
+    ...(videoBoxes.some(Boolean) ? { videoBoxes } : {}),
+  };
 }
 
 /**
@@ -155,7 +183,7 @@ export function handleShowCharacter(
 
   // Pose: only honored when the character defines it (unknown/deleted ids = Default pose).
   const poseId = resolvePoseId(charData, command.poseId);
-  const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, layerSelections, wrap, poseId);
+  const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes } = buildCharacterMedia(charData, layerSelections, wrap, poseId);
 
   // For slide transitions, use endPosition if specified, otherwise use position
   let finalPosition = command.endPosition || command.position;
@@ -191,6 +219,9 @@ export function handleShowCharacter(
     imageUrls: existingSameChar!.imageUrls,
     videoUrls: existingSameChar!.videoUrls,
     videoTrims: existingSameChar!.videoTrims,
+    // The old pose's Pose Studio geometry must ride along or the fading ghost snaps to
+    // whole-box mid-crossfade.
+    ...boxFieldsForStage(existingSameChar!.imageBoxes || [], existingSameChar!.videoBoxes || []),
     isVideo: existingSameChar!.isVideo,
     videoLoop: existingSameChar!.videoLoop,
     expressionId: existingSameChar!.expressionId,
@@ -223,6 +254,7 @@ export function handleShowCharacter(
     imageUrls,
     videoUrls,
     videoTrims,
+    ...boxFieldsForStage(imageBoxes, videoBoxes),
     isVideo: hasVideo,
     videoLoop,
     expressionId: command.expressionId,
@@ -403,7 +435,7 @@ export function handleSetCharacterLayer(
       const selections: Record<VNID, VNID | null> = { ...(cur.layerSelections || {}) };
       (command.layers || []).forEach(({ layerId, assetId }) => { selections[layerId] = assetId || null; });
       // Rebuild in the character's CURRENT pose — a blush toggle mid-pose must not snap art back.
-      const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, selections, wrap, resolvePoseId(charData, cur.poseId));
+      const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes } = buildCharacterMedia(charData, selections, wrap, resolvePoseId(charData, cur.poseId));
       return {
         characters: {
           ...prev.characters,
@@ -412,6 +444,10 @@ export function handleSetCharacterLayer(
             imageUrls,
             videoUrls,
             videoTrims,
+            // Explicit set-or-clear: `...cur` above would otherwise keep STALE geometry
+            // when the rebuilt composite has none. undefined serializes to absence.
+            imageBoxes: imageBoxes.some(Boolean) ? imageBoxes : undefined,
+            videoBoxes: videoBoxes.some(Boolean) ? videoBoxes : undefined,
             isVideo: hasVideo,
             videoLoop,
             layerSelections: selections,
@@ -429,6 +465,42 @@ export function handleSetCharacterLayer(
  * expression, position, scale and effects all stay exactly as they are — only the ART changes,
  * because layer selection is by asset id and ids are pose-agnostic.
  */
+/**
+ * Play Animation: start (or stop) one of the character's frame animations. Presentation only —
+ * the stage's animation clock reads `activeManualAnimationId` and swaps layer frames locally,
+ * so nothing else about the stage entry changes. `animationId` null/absent = stop.
+ * Persists in saves (rides stage state), so a looping animation resumes after load.
+ */
+export function handlePlayCharacterAnimation(
+  command: import('../../../features/scene/types').PlayCharacterAnimationCommand,
+  context: CommandContext
+): CommandResult {
+  const { project, playerState } = context;
+  const characterId = resolveCommandCharacterId(command as any, project, playerState.variables) || command.characterId;
+  const charData = characterId ? project.characters[characterId] : undefined;
+  const onStage = characterId ? playerState.stageState.characters[characterId] : undefined;
+  if (!charData || !onStage) {
+    // Character not on stage — nothing to animate.
+    return { advance: true };
+  }
+  // Unknown/deleted animation behaves like stop — degrade, never break.
+  const animationId = command.animationId && charData.animations?.[command.animationId] ? command.animationId : null;
+  return {
+    advance: true,
+    stagePatch: (prev) => {
+      const cur = prev.characters[characterId];
+      if (!cur) return {};
+      return {
+        characters: {
+          ...prev.characters,
+          // Explicit set-or-clear: absence (stopped) must serialize to a MISSING field.
+          [characterId]: { ...cur, activeManualAnimationId: animationId ?? undefined },
+        },
+      };
+    },
+  };
+}
+
 export function handleSetCharacterPose(
   command: SetCharacterPoseCommand,
   context: CommandContext
@@ -450,7 +522,7 @@ export function handleSetCharacterPose(
     stagePatch: (prev) => {
       const cur = prev.characters[characterId];
       if (!cur) return {};
-      const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop } = buildCharacterMedia(charData, cur.layerSelections || {}, wrap, poseId);
+      const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes } = buildCharacterMedia(charData, cur.layerSelections || {}, wrap, poseId);
       return {
         characters: {
           ...prev.characters,
@@ -459,6 +531,9 @@ export function handleSetCharacterPose(
             imageUrls,
             videoUrls,
             videoTrims,
+            // Explicit set-or-clear (see SetCharacterLayer note).
+            imageBoxes: imageBoxes.some(Boolean) ? imageBoxes : undefined,
+            videoBoxes: videoBoxes.some(Boolean) ? videoBoxes : undefined,
             isVideo: hasVideo,
             videoLoop,
             ...(poseId ? { poseId } : { poseId: undefined }),

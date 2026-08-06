@@ -52,10 +52,11 @@ export interface Range { lo: number; hi: number }
 
 /** One thing a scene does to the variable. `optional` = it might not happen (a condition, a choice). */
 export interface FlowOp {
-    kind: 'add' | 'set' | 'random';
+    kind: 'add' | 'set' | 'random' | 'addRange';
     /** For add: the delta (negative for a subtract). For set: the value. */
     value: number;
-    /** For random. */
+    /** For random (the value range it SETS) and addRange (the DELTA range it shifts by —
+     *  subtractRandom arrives as a negated addRange). */
     lo?: number;
     hi?: number;
     optional: boolean;
@@ -113,6 +114,7 @@ export function applyOps(start: Range, ops: FlowOp[], variable: VNVariable): Ran
         let next: Range;
         if (op.kind === 'add') next = { lo: r.lo + op.value, hi: r.hi + op.value };
         else if (op.kind === 'set') next = { lo: op.value, hi: op.value };
+        else if (op.kind === 'addRange') next = { lo: r.lo + (op.lo ?? 0), hi: r.hi + (op.hi ?? 0) };
         else next = { lo: op.lo ?? 0, hi: op.hi ?? 0 };
         // "Might not happen" means the OLD range is still possible alongside the new one.
         r = clamp(op.optional ? (union(r, next) as Range) : next, variable);
@@ -122,12 +124,30 @@ export function applyOps(start: Range, ops: FlowOp[], variable: VNVariable): Ran
 
 // ── reading the ops out of a scene ───────────────────────────────────────────
 
-const opFromSetVariable = (c: any, optional: boolean): FlowOp | null => {
+const opFromSetVariable = (c: any, optional: boolean, defs?: Record<string, VNVariable>): FlowOp | null => {
+    // Value from another variable or a calculation: the delta is not a static number, and
+    // returning null here would silently DROP the op — the scene would look like it never touches
+    // the variable, and the analysis would then claim gates dead that aren't (the header's worst
+    // failure). Emit an honest op instead: the source variable's own bounds when it has them,
+    // otherwise "could be anything" (±Infinity), which flows into the `unbounded` guard so the
+    // dead-gate analysis abstains rather than lies. (TextInput uses the same idiom below.)
+    if ((c.valueSource === 'variable' || c.valueSource === 'calc') &&
+        (c.operator === 'set' || c.operator === 'add' || c.operator === 'subtract')) {
+        const src = c.valueSource === 'variable' && c.valueVariableId ? defs?.[c.valueVariableId] : undefined;
+        const lo = src?.min !== undefined ? src.min : -Infinity;
+        const hi = src?.max !== undefined ? src.max : Infinity;
+        if (c.operator === 'set') return { kind: 'random', value: 0, lo, hi, optional };
+        if (c.operator === 'add') return { kind: 'addRange', value: 0, lo, hi, optional };
+        return { kind: 'addRange', value: 0, lo: -hi, hi: -lo, optional }; // subtract
+    }
     const n = Number(c.value);
     switch (c.operator) {
         case 'add': return Number.isFinite(n) ? { kind: 'add', value: n, optional } : null;
         case 'subtract': return Number.isFinite(n) ? { kind: 'add', value: -n, optional } : null;
         case 'random': return { kind: 'random', value: 0, lo: Number(c.randomMin ?? 0), hi: Number(c.randomMax ?? 100), optional };
+        case 'addRandom': return { kind: 'addRange', value: 0, lo: Number(c.randomMin ?? 0), hi: Number(c.randomMax ?? 100), optional };
+        // subtractRandom shifts DOWN by [min..max] → as a delta range that's [-max, -min].
+        case 'subtractRandom': return { kind: 'addRange', value: 0, lo: -Number(c.randomMax ?? 100), hi: -Number(c.randomMin ?? 0), optional };
         case 'set': return Number.isFinite(n) ? { kind: 'set', value: n, optional } : null;
         default: return null;
     }
@@ -142,7 +162,7 @@ const opFromSetVariable = (c: any, optional: boolean): FlowOp | null => {
  *   • it hangs off a choice option (the player picks exactly one, so across the whole choice the
  *     effect is a union — which is what marking each one optional gives us)
  */
-function readOps(commands: VNCommand[], variableId: VNID): FlowOp[] {
+function readOps(commands: VNCommand[], variableId: VNID, defs?: Record<string, VNVariable>): FlowOp[] {
     const ops: FlowOp[] = [];
     let branchDepth = 0;
 
@@ -156,7 +176,7 @@ function readOps(commands: VNCommand[], variableId: VNID): FlowOp[] {
         const conditional = branchDepth > 0 || (Array.isArray(c.conditions) && c.conditions.length > 0);
 
         if (type === CommandType.SetVariable && c.variableId === variableId) {
-            const op = opFromSetVariable(c, conditional);
+            const op = opFromSetVariable(c, conditional, defs);
             if (op) ops.push(op);
         }
 
@@ -165,7 +185,7 @@ function readOps(commands: VNCommand[], variableId: VNID): FlowOp[] {
             for (const opt of (c.options ?? []) as any[]) {
                 for (const a of (opt?.actions ?? []) as any[]) {
                     if (a?.type === UIActionType.SetVariable && a.variableId === variableId) {
-                        const op = opFromSetVariable(a, true);
+                        const op = opFromSetVariable(a, true, defs);
                         if (op) ops.push(op);
                     }
                 }
@@ -177,7 +197,7 @@ function readOps(commands: VNCommand[], variableId: VNID): FlowOp[] {
             const list = Array.isArray(c[key]) ? c[key] : (c[key] ? [c[key]] : []);
             for (const a of list as any[]) {
                 if (a?.type === UIActionType.SetVariable && a.variableId === variableId) {
-                    const op = opFromSetVariable(a, true);
+                    const op = opFromSetVariable(a, true, defs);
                     if (op) ops.push(op);
                 }
             }
@@ -213,6 +233,9 @@ function summarise(ops: FlowOp[], variable: VNVariable): string {
 
 /** Could `range` ever satisfy this condition? Only `false` when it PROVABLY cannot. */
 function canSatisfy(cond: VNCondition, range: Range, variable: VNVariable): boolean {
+    // Compared against ANOTHER variable: a single-variable range model can never prove that
+    // impossible — never claim such a gate dead.
+    if (cond.compareVariableId !== undefined) return true;
     if (!Number.isFinite(range.lo) || !Number.isFinite(range.hi)) return true;   // unknown → don't warn
 
     if (isBandOperator(cond.operator)) {
@@ -304,7 +327,7 @@ export function computeVariableFlow(project: VNProject, graph: StoryGraph, varia
             : node.kind === 'commonEvent' ? (((project as any).commonEvents ?? {})[node.id]?.commands ?? [])
             : [];
         if (!commands.length) continue;
-        const ops = readOps(commands, variableId);
+        const ops = readOps(commands, variableId, project.variables);
         if (ops.length) opsByNode.set(node.key, ops);
         const conds = readConditions(commands, variableId);
         if (conds.length) condsByNode.set(node.key, conds);

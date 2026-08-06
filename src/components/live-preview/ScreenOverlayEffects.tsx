@@ -10,6 +10,8 @@ import {
 } from '../../types';
 import { pluginManager } from '../../features/plugins/PluginManagerService';
 import type { CustomEffectDefinition } from '../../types/plugins';
+import { isEnhanced, webglLikelyAvailable } from './fx/glFx';
+import GlFxCanvas from './fx/GlFxCanvas';
 
 export interface ScreenOverlayEffectsProps {
   effects?: VNScreenOverlayEffect[];
@@ -370,6 +372,48 @@ export const LightsLayer: React.FC<{ lights: VNScreenLight[]; stageW: number; st
 /** Mouse-following darkness with a clear circle at the cursor — the screen-attached version of the
  *  scene Flashlight. Intensity = darkness; params.radius sizes the lit circle, params.softness
  *  feathers its edge. Listens on window (the overlay itself is pointer-events: none). */
+/** Enhanced (WebGL) variant of the screen-attached flashlight: same params, shader-drawn
+ *  darkness + dithered hole + warm rim; mouse rides a ref (no repaints). Only mounted when
+ *  the module probe says WebGL exists, so no fallback children are needed here. */
+const EnhancedFlashlightOverlay: React.FC<{ effect: VNScreenOverlayEffect; width: number; height: number }> = ({ effect, width, height }) => {
+    const mouseRef = useRef<{ x: number; y: number } | null>(null);
+    const hostRef = useRef<HTMLDivElement | null>(null);
+    useEffect(() => {
+        const onMove = (e: PointerEvent) => {
+            const rect = hostRef.current?.getBoundingClientRect();
+            if (!rect) return;
+            mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        };
+        window.addEventListener('pointermove', onMove);
+        return () => window.removeEventListener('pointermove', onMove);
+    }, []);
+    const darkness = clamp01(effect.intensity ?? 0);
+    if (darkness <= 0) return null;
+    // Classic radius semantics: lit radius = minDim*(0.12 + radius01*0.38) → express as the
+    // scene-flashlight percent so flashlightToUniforms reproduces it.
+    const radius01 = ep(effect.params, 'radius');
+    const radiusPct = (0.12 + radius01 * 0.38) * 100;
+    const softness = ep(effect.params, 'softness');
+    return (
+        <div ref={hostRef} className="absolute inset-0">
+            <GlFxCanvas
+                kind="flashlight"
+                width={width}
+                height={height}
+                getParams={() => {
+                    const m = mouseRef.current || { x: width / 2, y: height / 2 };
+                    return {
+                        kind: 'flashlight', stageW: width, stageH: height,
+                        mouseX: m.x, mouseY: m.y,
+                        radius: radiusPct, softness, darkness,
+                        on: true, color: effect.color || '#000000',
+                    };
+                }}
+            />
+        </div>
+    );
+};
+
 const FlashlightOverlay: React.FC<{ effect: VNScreenOverlayEffect; minDim: number }> = ({ effect, minDim }) => {
     const ref = useRef<HTMLDivElement | null>(null);
     const darkness = clamp01(effect.intensity ?? 0);
@@ -1073,19 +1117,40 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
         />
       )}
 
-      {/* Haze (drawn under fog/smoke as a faint veil) */}
+      {/* Haze / Fog / Smoke. Enhanced = fbm shader. NOTE: the enhanced↔classic choice is made
+          per MOUNT with the module WebGL probe (not GlFxCanvas's children fallback) because
+          the classic cloud sims attach to their canvases in effects that would not re-run
+          after a late fallback — the probe guarantees the classic canvas + sim mount together. */}
       {haze && clamp01(haze.intensity) > 0 && (
-        <canvas ref={hazeCanvasRef} className="vnfx-canvas" aria-hidden />
+        (isEnhanced(haze.effectStyle) && webglLikelyAvailable()) ? (
+          <GlFxCanvas kind="atmosphere" width={safeWidth} height={safeHeight}
+            style={haze.params?.blendMode && haze.params.blendMode !== 'normal' ? { mixBlendMode: haze.params.blendMode } : undefined}
+            getParams={() => ({ kind: 'atmosphere', type: 'haze', intensity: clamp01(haze.intensity), color: haze.color, speed: ep(haze.params, 'speed', 1), wind: ep(haze.params, 'windStrength') })} />
+        ) : (
+          <canvas ref={hazeCanvasRef} className="vnfx-canvas" aria-hidden />
+        )
       )}
 
       {/* Fog */}
       {fog && clamp01(fog.intensity) > 0 && (
-        <canvas ref={fogCanvasRef} className="vnfx-canvas" aria-hidden />
+        (isEnhanced(fog.effectStyle) && webglLikelyAvailable()) ? (
+          <GlFxCanvas kind="atmosphere" width={safeWidth} height={safeHeight}
+            style={fog.params?.blendMode && fog.params.blendMode !== 'normal' ? { mixBlendMode: fog.params.blendMode } : undefined}
+            getParams={() => ({ kind: 'atmosphere', type: 'fog', intensity: clamp01(fog.intensity), color: fog.color, speed: ep(fog.params, 'speed', 1), wind: ep(fog.params, 'windStrength') })} />
+        ) : (
+          <canvas ref={fogCanvasRef} className="vnfx-canvas" aria-hidden />
+        )
       )}
 
       {/* Smoke */}
       {smoke && clamp01(smoke.intensity) > 0 && (
-        <canvas ref={smokeCanvasRef} className="vnfx-canvas" aria-hidden />
+        (isEnhanced(smoke.effectStyle) && webglLikelyAvailable()) ? (
+          <GlFxCanvas kind="atmosphere" width={safeWidth} height={safeHeight}
+            style={smoke.params?.blendMode && smoke.params.blendMode !== 'normal' ? { mixBlendMode: smoke.params.blendMode } : undefined}
+            getParams={() => ({ kind: 'atmosphere', type: 'smoke', intensity: clamp01(smoke.intensity), color: smoke.color, speed: ep(smoke.params, 'speed', 1), wind: ep(smoke.params, 'windStrength') })} />
+        ) : (
+          <canvas ref={smokeCanvasRef} className="vnfx-canvas" aria-hidden />
+        )
       )}
 
       {/* Fireworks (continuous show) — additive glow */}
@@ -1100,6 +1165,22 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
         const darkness = clamp01(spotlight.intensity);
         const beams = spotlight.params?.beams ?? [];
         const cl = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, isNaN(v) ? lo : v));
+        if (isEnhanced(spotlight.effectStyle) && webglLikelyAvailable()) {
+          return (
+            <div className="absolute inset-0 overflow-hidden">
+              <div className="absolute inset-0" style={{ background: `rgba(0,0,0,${darkness})` }} />
+              <GlFxCanvas kind="beams" width={safeWidth} height={safeHeight} style={{ mixBlendMode: 'screen' }}
+                getParams={() => ({
+                  kind: 'beams', stageW: safeWidth, stageH: safeHeight,
+                  beams: (spotlight.params?.beams ?? []).map(bm => ({
+                    sourceX: cl(bm.sourceX, 0, 100), sourceY: cl(bm.sourceY, 0, 100), aimAngle: bm.aimAngle ?? 0,
+                    intensity: 0.9, beamWidth: bm.beamWidth ?? 45, sourceWidth: bm.sourceWidth ?? 8,
+                    height: bm.height ?? 100, falloff: bm.falloff ?? 0.5, color: bm.color,
+                  })),
+                })} />
+            </div>
+          );
+        }
         return (
           <div className="absolute inset-0 overflow-hidden">
             <div className="absolute inset-0" style={{ background: `rgba(0,0,0,${darkness})` }} />
@@ -1124,15 +1205,21 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
       })()}
 
       {/* Placed lights — twinkling light points; intensity = master brightness (⚡-dimmable). */}
-      {lightsFx && clamp01(lightsFx.intensity) > 0 && (
-        <div className="absolute inset-0 overflow-hidden">
-          <LightsLayer
-            lights={(lightsFx.params?.lights ?? []).map(l => ({ ...l, brightness: (l.brightness ?? 1) * clamp01(lightsFx.intensity) }))}
-            stageW={safeWidth}
-            stageH={safeHeight}
-          />
-        </div>
-      )}
+      {lightsFx && clamp01(lightsFx.intensity) > 0 && (() => {
+        const scaled = (lightsFx.params?.lights ?? []).map(l => ({ ...l, brightness: (l.brightness ?? 1) * clamp01(lightsFx.intensity) }));
+        return (
+          <div className="absolute inset-0 overflow-hidden">
+            {(isEnhanced(lightsFx.effectStyle) && webglLikelyAvailable()) ? (
+              <GlFxCanvas kind="lights" width={safeWidth} height={safeHeight} style={{ mixBlendMode: 'screen' }}
+                getParams={() => ({ kind: 'lights', lights: scaled, stageW: safeWidth, stageH: safeHeight })}>
+                <LightsLayer lights={scaled} stageW={safeWidth} stageH={safeHeight} />
+              </GlFxCanvas>
+            ) : (
+              <LightsLayer lights={scaled} stageW={safeWidth} stageH={safeHeight} />
+            )}
+          </div>
+        );
+      })()}
 
       {/* Lightning — a continuous storm: long dark gaps broken by quick double-flashes. The outer
           div scales the peak by intensity (the keyframes own the element opacity — same trap as
@@ -1164,7 +1251,9 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
       {/* Flashlight — mouse-following darkness with a lit circle at the cursor. Above everything
           so the darkness swallows the other effects too, exactly like the scene version. */}
       {flashlight && clamp01(flashlight.intensity) > 0 && (
-        <FlashlightOverlay effect={flashlight} minDim={minDim} />
+        (isEnhanced(flashlight.effectStyle) && webglLikelyAvailable())
+          ? <EnhancedFlashlightOverlay effect={flashlight} width={safeWidth} height={safeHeight} />
+          : <FlashlightOverlay effect={flashlight} minDim={minDim} />
       )}
 
       {/* Plugin-registered custom effects (visual pipeline) */}

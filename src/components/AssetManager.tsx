@@ -15,6 +15,7 @@ import { formatBytes, LARGE_ASSET_WARN_BYTES } from '../utils/projectAssetSize';
 import { ingestUpload, resolveFieldUrl, refToRelPath, getProjectAssetSizes, isElectronAssetStore } from '../utils/assetStore';
 import TrimmedVideo from './ui/TrimmedVideo';
 import VideoTrimFields from './ui/VideoTrimFields';
+import AudioAdjustFields from './ui/AudioAdjustFields';
 import { AssetType } from '../features/assets/state/assetReducer';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1291,6 +1292,22 @@ const AssetInspector: React.FC<{
                             </div>
                         </div>
                         <audio src={resolveFieldUrl(project.id, asset.audioUrl) || undefined} controls className="w-full" />
+                    </div>
+                )}
+                {/* Default sound shaping — shape this sound once; every use inherits it unless a
+                    command/action sets its own. Reverse only takes effect on SFX/voice uses (the
+                    music channel plays forward by design). */}
+                {asset.audioUrl && (
+                    <div className="bg-[var(--bg-primary)] rounded-lg p-3">
+                        <h4 className="text-xs font-semibold text-[var(--text-muted)] mb-2 uppercase tracking-wider">{t('defaultShaping', 'Default sound shaping')}</h4>
+                        <AudioAdjustFields
+                            value={asset.audioAdjust}
+                            onChange={next => onUpdate({ audioAdjust: next })}
+                            allowReverse
+                            project={project}
+                            audioId={asset.id}
+                        />
+                        <p className="text-[10px] text-[var(--text-muted)] mt-1">{t('defaultShapingHint', 'Applies wherever this sound is used, unless a command or button sets its own. "Play backwards" only affects sound effects and voices — music always plays forward.')}</p>
                     </div>
                 )}
 

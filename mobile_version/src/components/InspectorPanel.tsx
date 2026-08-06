@@ -71,7 +71,7 @@ const InspectorPanel: React.FC<InspectorPanelProps> = ({
             const selectedElement = activeScreen.elements[lastId] as VNUIElement | undefined;
 
             // Dispatch on element type. Hot spots → HotSpotProperties.
-            // Image maps + draggable elements → InteractiveElementProperties.
+            // Interactive Images + draggable elements → InteractiveElementProperties.
             // Everything else → the standard UIElementInspector.
             if (selectedElement) {
                 const targetable = (Object.values(activeScreen.elements || {}) as VNUIElement[])

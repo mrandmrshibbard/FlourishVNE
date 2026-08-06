@@ -20,6 +20,7 @@ import { VNMiniGameConfig, VNMiniGameStage, VNMiniGameStageType, VNMiniGameMessa
 import { useProject } from '../contexts/ProjectContext';
 import { createDefaultMiniGame, createDefaultStage } from '../utils/miniGameFactory';
 import { resolveFieldUrl } from '../utils/assetStore';
+import { cssFontFamily } from '../utils/styleUtils';
 import MiniGameFrame from './live-preview/minigames/MiniGameFrame';
 import { useImageBox } from './live-preview/minigames/useImageBox';
 import { sliceCellStyle } from './live-preview/minigames/sliceStyles';
@@ -265,7 +266,7 @@ const FontSelect: React.FC<{
     return (
         <Select value={value || ''} onChange={(e: any) => onChange(e.target.value || undefined)}>
             <option value="">{defaultLabel || t('miniGames.msgFontDefault', 'Default')}</option>
-            {projectFonts.map(f => <option key={f.id} value={f.fontFamily} style={{ fontFamily: f.fontFamily }}>{f.name}</option>)}
+            {projectFonts.map(f => <option key={f.id} value={f.fontFamily} style={{ fontFamily: cssFontFamily(f.fontFamily) }}>{f.name}</option>)}
             <option value="serif">Serif</option>
             <option value="monospace">Monospace</option>
             <option value="cursive">Cursive</option>

@@ -1,7 +1,10 @@
 import { VNID } from '../../types';
 
 export type VNVariableType = 'string' | 'number' | 'boolean';
-export type VNSetVariableOperator = 'set' | 'add' | 'subtract' | 'random';
+/** 'random' SETS the variable to a random number in [randomMin, randomMax];
+ *  'addRandom'/'subtractRandom' ADJUST the current value by a random amount in that range
+ *  (user request: random gains/losses without wiping the current value). */
+export type VNSetVariableOperator = 'set' | 'add' | 'subtract' | 'random' | 'addRandom' | 'subtractRandom';
 
 /**
  * Variable scope determines lifetime and persistence behaviour.

@@ -1,5 +1,15 @@
-import { PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand } from '../../../features/scene/types';
+import { PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand, VNAudioAdjust } from '../../../features/scene/types';
 import { CommandContext, CommandResult } from './types';
+import { resolveAudioAdjust, applyAudioAdjust } from '../../../utils/audioAdjust';
+
+/** The music channel honors speed/keep-pitch ONLY — reverse is refused there (owner decision:
+ *  a looping reversed music file would decode megabytes of PCM; SFX/voice get reverse instead). */
+export const musicChannelAdjust = (adjust: VNAudioAdjust | null): VNAudioAdjust | null => {
+    if (!adjust || adjust.speed === undefined) return null;
+    const out: VNAudioAdjust = { speed: adjust.speed };
+    if (adjust.keepPitch !== undefined) out.keepPitch = adjust.keepPitch;
+    return out;
+};
 
 /**
  * Handles playing background music with fade in/out
@@ -29,12 +39,17 @@ export function handlePlayMusic(
   const currentSrcPath = audio.src ? new URL(audio.src, window.location.href).pathname : null;
   const newSrcPath = url ? new URL(url, window.location.href).pathname : null;
   const isNewTrack = currentSrcPath !== newSrcPath;
-  
+
+  // Per-use over asset-default shaping; music honors speed/keep-pitch only. Applied on EVERY
+  // branch (even same-track) so re-running the command with a new speed takes effect.
+  const adjust = musicChannelAdjust(resolveAudioAdjust(command.audioAdjust, (context.project.audio as any)?.[command.audioId]?.audioAdjust));
+
   console.log('[PlayMusic] Audio setup', { isNewTrack, currentSrc: audio.src, newUrl: url, paused: audio.paused });
-  
+
   // If it's the same track and already playing, just update state and continue
   if (!isNewTrack && !audio.paused) {
     console.log('[PlayMusic] Same track already playing, updating state only');
+    applyAudioAdjust(audio, adjust);
     return {
       advance: true,
       updates: {
@@ -44,6 +59,7 @@ export function handlePlayMusic(
           loop: command.loop,
           isPlaying: true,
           volume: command.volume,
+          ...(adjust ? { adjust } : { adjust: undefined }),
         },
       },
     };
@@ -56,6 +72,7 @@ export function handlePlayMusic(
     currentTime: 0,
     isPlaying: true,
     volume: command.volume,
+    ...(adjust ? { adjust } : {}),
   };
   
   // Start playback asynchronously
@@ -67,6 +84,7 @@ export function handlePlayMusic(
     } catch { if (audio.src !== url) return; }
     console.log('[PlayMusic] Starting playback');
     audio.loop = command.loop;
+    applyAudioAdjust(audio, adjust);   // same-track path never went through src=/load
     audio.volume = 0; // Start at 0 for fade-in
     
     audio.play().then(() => {
@@ -82,6 +100,7 @@ export function handlePlayMusic(
   if (isNewTrack) {
     audio.src = url;
     audio.load();
+    applyAudioAdjust(audio, adjust);   // after load() — load snaps rate back to the default
     audio.addEventListener('canplaythrough', startPlayback, { once: true });
     audio.addEventListener('error', (e) => {
       console.error("[PlayMusic] Music load failed:", e);
@@ -140,7 +159,8 @@ export function handlePlaySoundEffect(
   const { playSound } = context;
 
   try {
-    playSound(command.audioId, command.volume, command.loop);
+    // Per-use shaping rides along; playSound merges the asset default underneath it.
+    playSound(command.audioId, command.volume, command.loop, command.audioAdjust ?? null);
   } catch (e) {
     console.error('Failed to play sound effect:', e);
   }

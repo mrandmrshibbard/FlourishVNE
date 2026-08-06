@@ -1,7 +1,7 @@
 import { VNID, VNPosition, VNTransition, VNContentBox } from '../../types';
 export type { VNContentBox } from '../../types';
 import { VNSetVariableOperator } from '../variables/types';
-import { JumpToSceneAction, SetVariableAction, VNTextAlign, VNVAlign, VNCondition, VNUIAction, VNParallaxSettings } from '../../types/shared';
+import { JumpToSceneAction, SetVariableAction, VNTextAlign, VNVAlign, VNCondition, VNUIAction, VNParallaxSettings, VNValueCalc } from '../../types/shared';
 import type { VNScreenOverlayEffectType, VNSnowAshVariant } from '../../types';
 import type { EasingType } from '../../components/live-preview/systems/easingFunctions';
 import type { PhonePortraitSource } from '../ui/types';
@@ -49,6 +49,7 @@ export enum CommandType {
     HideCharacter = 'HideCharacter',
     SetCharacterLayer = 'SetCharacterLayer',
     SetCharacterPose = 'SetCharacterPose',
+    PlayCharacterAnimation = 'PlayCharacterAnimation',
     Choice = 'Choice',
     BranchStart = 'BranchStart',
     BranchElseIf = 'BranchElseIf',
@@ -173,7 +174,7 @@ interface BaseCommand {
     modifiers?: CommandModifiers;
     /**
      * Stage stacking order for visual commands (ShowImage/ShowCharacter/ShowText/
-     * ShowButton/PlayMovie/hot spots/image maps). Higher = nearer the viewer. Optional;
+     * ShowButton/PlayMovie/hot spots/Interactive Images). Higher = nearer the viewer. Optional;
      * when undefined the visual uses its default type-band order (back-compat, no
      * migration). Confined to the scene stage — never overlaps the dialogue/HUD bands.
      */
@@ -228,6 +229,17 @@ export interface DialogueCommand extends BaseCommand {
     timeLimitLocked?: boolean;
     /** Show a countdown bar on the dialogue box while the timer runs (default false). */
     showTimer?: boolean;
+    /** ADD this text to the previous line's box instead of replacing it — the previous text stays
+     *  and the new part types out after `appendPause`. Sequences of appended lines build
+     *  comedy/dramatic timing in one accumulating box. Additive-optional. */
+    append?: boolean;
+    /** Seconds to wait before an appended part types out (default 0.4). Only used with `append`. */
+    appendPause?: number;
+    /** Per-line typing-sound override: a config to use for this line only, or 'silent' to turn the
+     *  speaker's typing sound off for this line. Unset = the character's own typing sound. */
+    typingBlip?: import('../character/types').VNTypingBlip | 'silent';
+    /** Opt this line out of the project's automatic punctuation pauses. Additive-optional. */
+    noPunctuationPauses?: boolean;
 }
 
 export interface SetBackgroundCommand extends BaseCommand {
@@ -353,6 +365,19 @@ export interface SetCharacterPoseCommand extends BaseCommand {
     poseId?: VNID;
     transition?: VNTransition;  // optional crossfade ('instant'/undefined = swap)
     duration?: number;          // transition duration in seconds (default 0.3)
+}
+
+/** Start (or stop) one of a character's frame animations from the Animation Studio.
+ *  Meant for animations whose trigger is "When told to (command)" — the animation keeps
+ *  playing (looping ones loop) until another Play Character Animation stops or replaces it,
+ *  the character is hidden, or the scene ends. Player-facing name: "Play Animation". */
+export interface PlayCharacterAnimationCommand extends BaseCommand {
+    type: CommandType.PlayCharacterAnimation;
+    characterId: VNID;
+    /** ⟨Player's Character⟩ targeting, matching Show Character. Additive-optional. */
+    characterSource?: 'fixed' | 'player';
+    /** The animation to play. null/absent = stop whatever manual animation is playing. */
+    animationId?: VNID | null;
 }
 
 // Choice actions now support all UI button actions for maximum flexibility
@@ -489,6 +514,11 @@ export interface SetVariableCommand extends BaseCommand {
     value: string | number | boolean;
     randomMin?: number; // For random operator - minimum value (inclusive)
     randomMax?: number; // For random operator - maximum value (inclusive)
+    /** Absent = the typed `value` (always the case for old projects). 'variable' reads
+     *  `valueVariableId`'s current value; 'calc' works `calc` out left to right. Number vars only. */
+    valueSource?: 'variable' | 'calc';
+    valueVariableId?: VNID;
+    calc?: VNValueCalc;
 }
 
 export interface TextInputCommand extends BaseCommand {
@@ -517,12 +547,26 @@ export interface JumpToLabelCommand extends BaseCommand {
     labelId: string;
 }
 
+/** Per-use sound shaping (Round 3). All fields optional; absence = play the file as-is
+ *  (byte-identical for untouched commands). `speed` is clamped to 0.25–4 at runtime.
+ *  `reverse` is honored on SFX/voice/one-shots ONLY — never the music channel. */
+export interface VNAudioAdjust {
+    /** Playback speed multiplier (1 = normal). */
+    speed?: number;
+    /** Play the clip backwards (SFX/voice only — refused on music). */
+    reverse?: boolean;
+    /** Keep the original pitch while the speed changes. */
+    keepPitch?: boolean;
+}
+
 export interface PlayMusicCommand extends BaseCommand {
     type: CommandType.PlayMusic;
     audioId: VNID;
     loop: boolean;
     fadeDuration: number; // in seconds
     volume?: number; // optional per-command volume override (0-1)
+    /** Speed/keep-pitch only — `reverse` is ignored on the music channel. */
+    audioAdjust?: VNAudioAdjust;
 }
 export interface StopMusicCommand extends BaseCommand {
     type: CommandType.StopMusic;
@@ -532,6 +576,8 @@ export interface PlaySoundEffectCommand extends BaseCommand {
     type: CommandType.PlaySoundEffect;
     audioId: VNID;
     volume?: number; // optional per-sfx volume (0-1)
+    /** Per-use speed/reverse/keep-pitch (absent = as-is). */
+    audioAdjust?: VNAudioAdjust;
     /** Loop the sound until a Stop Sound Effect command (or, when live, until its condition fails). */
     loop?: boolean;
     // NOTE: `conditions` + `liveConditions` (on BaseCommand) drive live evaluation — when
@@ -714,6 +760,9 @@ export interface PlaceLightsCommand extends BaseCommand {
     /** LIVE binding: a number variable used as a brightness MULTIPLIER for all placed lights
      *  (0-2; 1 = as authored) — e.g. candles dimming as a "power" variable drains. Additive. */
     brightnessVariableId?: VNID | null;
+    /** Effect style: only 'enhanced' (WebGL glow) is ever stored; ABSENT = Classic = exactly
+     *  today's rendering. Falls back to Classic automatically where WebGL is unavailable. */
+    effectStyle?: 'enhanced';
 }
 
 export interface ClearLightsCommand extends BaseCommand {
@@ -746,6 +795,8 @@ export interface FlashlightCommand extends BaseCommand {
      *  revealing it — for dark rooms. The darkness only ends via a Flashlight → Turn off command.
      *  Default false (off reveals the scene). */
     darkWhenOff?: boolean;
+    /** Effect style: only 'enhanced' (WebGL glow) is ever stored; ABSENT = Classic. */
+    effectStyle?: 'enhanced';
 }
 
 export interface SpotlightCommand extends BaseCommand {
@@ -782,6 +833,8 @@ export interface SpotlightCommand extends BaseCommand {
     sfxId?: VNID | null;
     /** When false, the dialogue box stays fully lit above the darkness (default true = it dims too). */
     affectsDialogue?: boolean;
+    /** Effect style: only 'enhanced' (WebGL glow) is ever stored; ABSENT = Classic. */
+    effectStyle?: 'enhanced';
 }
 
 export interface SetScreenOverlayEffectCommand extends BaseCommand {
@@ -800,6 +853,9 @@ export interface SetScreenOverlayEffectCommand extends BaseCommand {
     duration?: number;
     /** Optional per-effect parameters */
     params?: import('../../types/screen-effects').VNEffectParams;
+    /** Effect style: only 'enhanced' is ever stored; ABSENT = Classic. Round 1 honors it for
+     *  fog/haze/smoke only (other effect types ignore it). */
+    effectStyle?: 'enhanced';
 }
 export interface ShowScreenCommand extends BaseCommand {
     type: CommandType.ShowScreen;
@@ -1194,7 +1250,7 @@ export interface CallCommonEventCommand extends BaseCommand {
     arguments?: Record<VNID, string | number | boolean>;
 }
 
-/** A clickable region within an image map */
+/** A clickable region within an Interactive Image */
 export interface draggableImageElementRegion {
     id: VNID;
     name: string;
@@ -1337,7 +1393,7 @@ export interface MoveCharacterCommand extends BaseCommand {
 }
 
 export type VNCommand =
-  | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand | SetCharacterLayerCommand | SetCharacterPoseCommand
+  | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand | SetCharacterLayerCommand | SetCharacterPoseCommand | PlayCharacterAnimationCommand
     | ChoiceCommand | BranchStartCommand | BranchElseIfCommand | BranchElseCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
   | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | StopMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand

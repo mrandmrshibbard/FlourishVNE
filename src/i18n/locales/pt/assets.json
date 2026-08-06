@@ -84,5 +84,7 @@
   "toastAcross": " em {{cats}}",
   "toastReplaced": "Recurso substituído — todas as referências preservadas",
   "toastReplaceFailed": "Falha ao substituir o recurso",
-  "toastFolderExists": "Já existe uma pasta chamada \"{{name}}\" aqui"
+  "toastFolderExists": "Já existe uma pasta chamada \"{{name}}\" aqui",
+  "defaultShaping": "Ajuste padrão do som",
+  "defaultShapingHint": "Vale para todos os usos deste som, a menos que um comando ou botão defina o seu próprio. \"Tocar ao contrário\" só afeta efeitos sonoros e vozes — a música sempre toca normalmente."
 }

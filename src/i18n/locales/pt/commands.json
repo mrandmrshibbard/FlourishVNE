@@ -3,6 +3,7 @@
   "branchAlwaysRuns": "sempre executa",
   "paletteTitle": "Eventos",
   "dragToAdd": "Arraste para adicionar o evento {{name}}",
+  "clickToAdd": "Adicionar à cena — depois do comando selecionado, ou no final",
   "categories": {
     "Story": "História",
     "Characters": "Personagens",
@@ -60,6 +61,7 @@
     "RunScript": "Executar Script",
     "CallCommonEvent": "Chamar Evento Comum",
     "Group": "Grupo",
-    "SetCharacterPose": "Mudar Pose"
+    "SetCharacterPose": "Mudar Pose",
+    "PlayCharacterAnimation": "Tocar Animação"
   }
 }

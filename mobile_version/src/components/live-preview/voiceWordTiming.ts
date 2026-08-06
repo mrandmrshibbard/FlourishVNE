@@ -25,13 +25,9 @@
  *  of MP3 or ~1 min of WAV — beyond any voice line; decoding bigger risks renderer OOM. */
 const MAX_ANALYZE_BYTES = 6 * 1024 * 1024;
 
-let sharedCtx: AudioContext | null = null;
-const getCtx = (): AudioContext | null => {
-    try {
-        if (!sharedCtx) sharedCtx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
-        return sharedCtx;
-    } catch { return null; }
-};
+import { getSharedAudioContext, parseWavHeader, readWavSample } from './wavPcm';
+
+const getCtx = getSharedAudioContext;
 
 const HOP_MS = 10;          // envelope resolution
 const BRIDGE_MS = 140;      // pauses shorter than this stay inside one speech segment
@@ -76,48 +72,18 @@ function findSpeechSegments(env: Float32Array): Segment[] {
  */
 function wavEnvelope(buf: ArrayBuffer): Float32Array | null {
     try {
+        // Header walk + sample reading shared with letter blips (wavPcm.ts) — same contract,
+        // same byteRate-ignoring safety. The envelope math below is unchanged.
+        const info = parseWavHeader(buf);
+        if (!info) return null;
         const dv = new DataView(buf);
-        if (buf.byteLength < 44) return null;
-        if (dv.getUint32(0, false) !== 0x52494646 || dv.getUint32(8, false) !== 0x57415645) return null; // RIFF/WAVE
-        let pos = 12;
-        let fmt: { codec: number; channels: number; rate: number; bits: number } | null = null;
-        let dataStart = -1, dataLen = 0;
-        while (pos + 8 <= buf.byteLength) {
-            const id = dv.getUint32(pos, false);
-            const size = dv.getUint32(pos + 4, true);
-            if (id === 0x666d7420 && size >= 16) { // 'fmt '
-                fmt = {
-                    codec: dv.getUint16(pos + 8, true),
-                    channels: Math.max(1, dv.getUint16(pos + 10, true)),
-                    rate: dv.getUint32(pos + 12, true),
-                    bits: dv.getUint16(pos + 22, true),
-                };
-                // WAVE_FORMAT_EXTENSIBLE: real codec sits in the sub-format GUID's first word.
-                if (fmt.codec === 0xfffe && size >= 40) fmt.codec = dv.getUint16(pos + 32, true);
-            } else if (id === 0x64617461) { // 'data'
-                dataStart = pos + 8;
-                dataLen = Math.min(size, buf.byteLength - dataStart);
-            }
-            pos += 8 + size + (size & 1); // chunks are word-aligned
-        }
-        if (!fmt || dataStart < 0 || dataLen <= 0 || fmt.rate < 4000 || fmt.rate > 384000) return null;
-        const pcm16 = fmt.codec === 1 && fmt.bits === 16;
-        const pcm8 = fmt.codec === 1 && fmt.bits === 8;
-        const f32 = fmt.codec === 3 && fmt.bits === 32;
-        if (!pcm16 && !pcm8 && !f32) return null; // compressed-in-WAV → native decoder path
-        const bytesPer = fmt.bits / 8;
-        const frameBytes = bytesPer * fmt.channels;
-        const frames = Math.floor(dataLen / frameBytes);
-        const hopFrames = Math.max(1, Math.round((fmt.rate * HOP_MS) / 1000));
-        const env = new Float32Array(Math.ceil(frames / hopFrames));
+        const hopFrames = Math.max(1, Math.round((info.rate * HOP_MS) / 1000));
+        const env = new Float32Array(Math.ceil(info.frames / hopFrames));
         for (let e = 0; e < env.length; e++) {
             let sum = 0;
-            const from = e * hopFrames, to = Math.min(frames, from + hopFrames);
+            const from = e * hopFrames, to = Math.min(info.frames, from + hopFrames);
             for (let f = from; f < to; f++) {
-                const off = dataStart + f * frameBytes; // first channel only
-                const v = pcm16 ? dv.getInt16(off, true) / 32768
-                    : pcm8 ? (dv.getUint8(off) - 128) / 128
-                    : dv.getFloat32(off, true);
+                const v = readWavSample(dv, info, f); // first channel only
                 sum += v * v;
             }
             env[e] = Math.sqrt(sum / Math.max(1, to - from));
@@ -151,6 +117,11 @@ function getClipSpeech(url: string): Promise<ClipSpeech | null> {
                 // decoder — that's exactly the crash class. Skip analysis for it instead.
                 const isRiff = buf.byteLength >= 4 && new DataView(buf).getUint32(0, false) === 0x52494646;
                 if (!env && isRiff) return null;
+
+                // Under Electron the native decoder ALSO segfaults on COMPRESSED audio when
+                // contextIsolation is on (0xC0000005, reproduced 2026-08-06) — skip analysis
+                // there; voiced lines fall back to plain typewriter pacing.
+                if (!env && /\bElectron\//.test(navigator.userAgent || '')) return null;
 
                 // Compressed formats (mp3/ogg/…): the native decoder, size-capped + serialized.
                 if (!env) {

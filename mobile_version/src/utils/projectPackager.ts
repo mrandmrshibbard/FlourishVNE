@@ -539,7 +539,7 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
                 }
             };
             // Video base sprite (was never packed — video-based characters broke on transfer).
-            await packCharArt((character as any).baseVideoUrl, singleCharFolder, 'base_video', `assets/characters/${charId}`, rel => { (character as any).baseVideoUrl = rel; }, `characters:${charId}:baseVideo`);
+            await packCharArt((character as any).baseVideoUrl, singleCharFolder, `${charId}_base_video`, `assets/characters/${charId}`, rel => { (character as any).baseVideoUrl = rel; }, `characters:${charId}:baseVideo`);
             // Character Poses: each pose's own base art.
             for (const poseId in ((character as any).poses || {})) {
                 const pose = (character as any).poses[poseId];
@@ -551,7 +551,7 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
             if (character.baseImageUrl) {
                 if (character.baseImageUrl.startsWith('data:')) {
                     const { blob, mimeType } = await dataUrlToBlob(character.baseImageUrl);
-                    const filename = `base.${mimeToExtension(mimeType)}`;
+                    const filename = `${charId}_base.${mimeToExtension(mimeType)}`;
                     singleCharFolder.file(filename, blob);
                     character.baseImageUrl = `assets/characters/${charId}/${filename}`;
                     addEmbedded('characters', character.baseImageUrl);
@@ -559,7 +559,7 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
                     const fetched = await fetchUrlToBlob(character.baseImageUrl);
                     if (fetched) {
                         const { blob, mimeType } = fetched;
-                        const filename = `base.${mimeToExtension(mimeType)}`;
+                        const filename = `${charId}_base.${mimeToExtension(mimeType)}`;
                         singleCharFolder.file(filename, blob);
                         character.baseImageUrl = `assets/characters/${charId}/${filename}`;
                         addEmbedded('characters', character.baseImageUrl);
@@ -574,7 +574,7 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
                 if (character.fontUrl.startsWith('data:')) {
                     const { blob, mimeType } = await dataUrlToBlob(character.fontUrl);
                     const ext = mimeType === 'font/otf' ? 'otf' : 'ttf';
-                    const filename = `font.${ext}`;
+                    const filename = `${charId}_font.${ext}`;
                     singleCharFolder.file(filename, blob);
                     character.fontUrl = `assets/characters/${charId}/${filename}`;
                     addEmbedded('characters', character.fontUrl);
@@ -583,8 +583,8 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
                     if (fetched) {
                         const { blob } = fetched;
                         // Determine extension from URL or default to ttf
-                        const ext = character.fontUrl.toLowerCase().endsWith('.otf') ? 'otf' : 'ttf';
-                        const filename = `font.${ext}`;
+                        const ext = character.fontUrl.toLowerCase().includes('.otf') ? 'otf' : 'ttf';
+                        const filename = `${charId}_font.${ext}`;
                         singleCharFolder.file(filename, blob);
                         character.fontUrl = `assets/characters/${charId}/${filename}`;
                         addEmbedded('characters', character.fontUrl);

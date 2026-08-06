@@ -1301,6 +1301,45 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                             onFontChange={(prop, value) => onUpdate({ dialogueTextFont: { ...((ui.dialogueTextFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
                         />
                     </div>
+                    {/* ── Automatic punctuation pacing ── */}
+                    <div className="border-t border-[var(--border-subtle)] mt-2 pt-2">
+                        <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                            <input type="checkbox" checked={ui.dialoguePunctuationPacing?.enabled ?? false}
+                                onChange={e => {
+                                    if (!e.target.checked) {
+                                        // Off with nothing customized → remove the key entirely (byte-identity).
+                                        const cur = ui.dialoguePunctuationPacing;
+                                        const hasCustom = cur && (cur.commaMs !== undefined || cur.sentenceMs !== undefined || cur.ellipsisMs !== undefined);
+                                        onUpdate({ dialoguePunctuationPacing: hasCustom ? { ...cur, enabled: false } : undefined });
+                                    } else {
+                                        onUpdate({ dialoguePunctuationPacing: { ...(ui.dialoguePunctuationPacing || {}), enabled: true } });
+                                    }
+                                }} className="cursor-pointer" />
+                            {t('inGameUi.punctuationPacing', 'Pause at Punctuation while text types')}
+                        </label>
+                        <p className="text-[10px] text-[var(--text-muted)] mt-1">{t('inGameUi.punctuationPacingHint', 'Small holds after commas, longer after sentence ends, longest after “…” — dialogue reads naturally without typing [pause] codes. Voiced lines with voice-paced text keep the clip’s timing.')}</p>
+                        {ui.dialoguePunctuationPacing?.enabled && (
+                            <div className="grid grid-cols-3 gap-1.5 mt-1.5">
+                                {([
+                                    ['commaMs', t('inGameUi.punctuationCommaMs', 'At commas (ms)'), 150],
+                                    ['sentenceMs', t('inGameUi.punctuationSentenceMs', 'At . ! ? (ms)'), 300],
+                                    ['ellipsisMs', t('inGameUi.punctuationEllipsisMs', 'At … (ms)'), 450],
+                                ] as const).map(([key, label, def]) => (
+                                    <label key={key} className="block text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                                        {label}
+                                        <input type="number" min="0" step="50"
+                                            value={ui.dialoguePunctuationPacing?.[key] ?? ''}
+                                            placeholder={String(def)}
+                                            onChange={e => {
+                                                const n = parseInt(e.target.value, 10);
+                                                onUpdate({ dialoguePunctuationPacing: { ...(ui.dialoguePunctuationPacing || {}), enabled: true, [key]: Number.isFinite(n) && n >= 0 ? n : undefined } });
+                                            }}
+                                            className="w-full bg-[var(--bg-primary)] text-white p-1 rounded-md border border-[var(--border-default)] text-xs mt-0.5" />
+                                    </label>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </CollapsibleSection>
 
                 <CollapsibleSection title={t('inGameUi.groupSpeakerEmphasis', 'Speaker emphasis')}>

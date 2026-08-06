@@ -244,6 +244,19 @@ export interface VNProjectUI {
     /** On voiced lines, pace the typewriter so the reveal finishes together with the clip
      *  (per-line textSpeed overrides still win). Off by default. */
     voicePacedText?: boolean;
+    /** Auto-pauses at punctuation while dialogue types — a small hold after commas, a longer one
+     *  after sentence ends, longest after "…" — so dialogue reads naturally without hand-typed
+     *  [pause] codes. ABSENT = off (today's behavior). Skipped on voice-paced lines (the clip
+     *  drives timing) and on lines with "No automatic punctuation pauses". Additive-optional. */
+    dialoguePunctuationPacing?: {
+        enabled?: boolean;
+        /** Hold after , ; : (ms, default 150). */
+        commaMs?: number;
+        /** Hold after . ! ? (ms, default 300). */
+        sentenceMs?: number;
+        /** Hold after … or 2+ dots (ms, default 450). */
+        ellipsisMs?: number;
+    };
     choiceButtonImage: UIAsset | null;
     choiceButtonBorderImage: UIAsset | null;
     choiceBorderPadding?: number; // px of border visible around the background (default 8)
@@ -647,6 +660,9 @@ export enum UIElementType {
     Checkbox = 'Checkbox',
     AssetCycler = 'AssetCycler',
     CGGallery = 'CGGallery',
+    /** Unlockable-songs music player: song list + cover art + transport controls, all
+     *  freely designable parts (see UIMusicGalleryElement). Songs live on project.musicGallery. */
+    MusicGallery = 'MusicGallery',
     Inventory = 'Inventory',
     HotSpot = 'HotSpot',
     draggableImageElement = 'draggableImageElement',
@@ -703,6 +719,13 @@ interface BaseUIElement {
     layer?: number;
     /** Parallax depth (0/undefined = locked). The screen's `parallax` setting drives it. */
     parallaxDepth?: number;
+    /** Spin the whole element, in degrees (positive = clockwise). Rotates the visuals AND the
+     *  clickable area together. Additive-optional: absent/0 = no rotation, exactly as before. */
+    rotation?: number;
+    /** Mirror the element left↔right. Additive-optional. */
+    flipX?: boolean;
+    /** Mirror the element top↕bottom. Additive-optional. */
+    flipY?: boolean;
     /** When true, the element's rendered media is fit (object-contain, undistorted) to its box
      *  and BOTH the visible footprint and the clickable area shrink to the fitted art — so there
      *  is no empty/letterbox margin (visible dead-space or stray click target) around it.
@@ -727,7 +750,7 @@ interface BaseUIElement {
     transitionOnReveal?: boolean;
     // ─── Hot zone interactivity (any element can opt in) ─── //
     /** Marks an element as "born" inside the hot zone system. Migrated hot zone elements,
-     *  quick-added draggable / hot spot / image map entries, and any element the user
+     *  quick-added draggable / hot spot / Interactive Image entries, and any element the user
      *  treats as interactive carry this flag. The flag keeps the element pinned to the
      *  hot zone overlay + inspector even if `draggable` is toggled off — so users can't
      *  accidentally orphan a hot zone element by unchecking one box. */
@@ -1065,6 +1088,96 @@ export interface UICGGalleryElement extends BaseUIElement {
     hideBackgroundPanel?: boolean;
 }
 
+/** The placeable pieces of a Music Gallery player. */
+export type MusicPlayerPartType =
+    | 'songList'      // scrolling list of songs (locked ones shown per lockedText/lockedColor)
+    | 'artwork'       // cover art of the current song
+    | 'songTitle'     // current song's title
+    | 'artistName'    // current song's "By …" line
+    | 'playPause'     // ▶ / ⏸ toggle
+    | 'prevButton'    // ⏮ previous song (restarts current song when it's been playing a while)
+    | 'nextButton'    // ⏭ next song
+    | 'seekBar'       // draggable progress bar
+    | 'timeLabel'     // "1:23 / 3:45"
+    | 'loopToggle'    // 🔁 repeat the current song
+    | 'shuffleToggle';// 🔀 shuffle the unlocked songs
+
+/** One placeable piece inside a Music Gallery player. Coordinates are PERCENT of the ELEMENT
+ *  box (mirrors UISlotDesignPart, which is % of the slot box), so the design scales with the
+ *  element. All styling fields additive-optional — absent = the built-in look. */
+export interface UIMusicPlayerPart {
+    id: string;
+    partType: MusicPlayerPartType;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    /** Untick to hide this piece without losing its placement (default true = shown). */
+    visible?: boolean;
+    /** Main color: control glyph / seek fill / list text fallback. */
+    color?: string;
+    /** Backdrop behind this piece (buttons, list panel, artwork frame). */
+    backgroundColor?: string;
+    /** Corner rounding in px for this piece's box. */
+    borderRadius?: number;
+    /** Font for text pieces (title/artist/time) and list rows. */
+    font?: VNFontSettings;
+    /** The author's own picture for a control's normal state (replaces the built-in glyph). */
+    image?: UIAsset | null;
+    /** Picture for the control's "on" state (pause showing / loop on / shuffle on). */
+    imageActive?: UIAsset | null;
+    /** How artwork fills its box (artwork piece only). Default 'cover'. */
+    objectFit?: 'contain' | 'cover' | 'fill';
+    // ── songList extras ──
+    /** Vertical gap between rows in px. */
+    rowGap?: number;
+    /** Idle row background. */
+    rowColor?: string;
+    /** Background of the row whose song is playing. */
+    playingRowColor?: string;
+    /** Show a little cover thumbnail on each row (default true). */
+    showArtworkInList?: boolean;
+    /** Show the artist under each row's title (default false). */
+    showArtistInList?: boolean;
+    // ── seekBar extras ──
+    /** Unfilled track color. */
+    trackColor?: string;
+    /** Drag-handle color. */
+    thumbColor?: string;
+}
+
+/** Music Gallery — an unlockable-songs music player. The songs themselves are managed in
+ *  Settings → Music Gallery (project.musicGallery); this element renders them as a fully
+ *  author-designable player (parts freely placed inside the element box). */
+export interface UIMusicGalleryElement extends BaseUIElement {
+    type: UIElementType.MusicGallery;
+    /** The player's pieces (positions are % of the element box). */
+    parts: UIMusicPlayerPart[];
+    /** Panel color behind everything. */
+    backgroundColor?: string;
+    /** Author's own art behind everything (asset ref). */
+    backgroundImage?: UIAsset | null;
+    /** Panel corner rounding in px. */
+    borderRadius?: number;
+    /** Remove the panel entirely (lets the screen show through). */
+    hideBackgroundPanel?: boolean;
+    /** Filter songs by category (empty = show all). */
+    categoryFilter?: string;
+    /** Text shown for songs the player hasn't unlocked (e.g. "???"). */
+    lockedText?: string;
+    /** Tint for locked rows. */
+    lockedColor?: string;
+    /** Hide locked songs entirely instead of showing them locked. Default false. */
+    hideLockedSongs?: boolean;
+    /** Text where the title/artwork sit before any song is picked. */
+    noSongText?: string;
+    /** What happens to a playing song when the player leaves this screen:
+     *  'stop' (default) = stop it and let the next screen's own music take over;
+     *  'keepPlaying' = the song keeps playing over screens that allow it
+     *  (VNUIScreen.allowGalleryMusic). */
+    onLeave?: 'stop' | 'keepPlaying';
+}
+
 /** Inventory Grid — auto-renders the player's owned items (from project.items) in a CSS grid:
  *  icon + name + live quantity, with an optional Use button. Data-driven like the CG gallery, so
  *  there's no per-item hand placement. */
@@ -1198,7 +1311,7 @@ export interface UIItemElement extends BaseUIElement {
     pickupOnce?: boolean;
 }
 
-/** Image map — an image with clickable polygon/rect/circle regions. */
+/** Interactive Image — an image with clickable polygon/rect/circle regions. */
 export interface UIdraggableImageElementElement extends BaseUIElement {
     type: UIElementType.draggableImageElement;
     image: UIAsset | null;
@@ -1368,7 +1481,7 @@ export interface UITimerElement extends BaseUIElement {
 
 export type VNUIElement =
     | UIButtonElement | UITextElement | UIImageElement | UISaveSlotGridElement
-    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement | UICGGalleryElement | UIInventoryGridElement
+    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement | UICGGalleryElement | UIMusicGalleryElement | UIInventoryGridElement
     | UIHotSpotElement | UIdraggableImageElementElement | UIMeterElement | UICustomizerElement | UITimerElement | UIItemElement | UICustomElement;
 
 /** An extra background plane on a screen (for multi-plane parallax backdrops). */
@@ -1398,8 +1511,11 @@ export interface VNUIScreen {
     /** Optional editor-only category (color/grouping). Unset → inferred. Additive-optional. */
     category?: VNScreenCategory;
     background: { type: 'color', value: string, opacity?: number } | { type: 'image' | 'video', assetId: VNID | null, loop?: boolean, trimStart?: number, trimEnd?: number, opacity?: number };
-    music: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
-    ambientNoise: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
+    music: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number, audioAdjust?: import('../scene/types').VNAudioAdjust };
+    ambientNoise: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number, audioAdjust?: import('../scene/types').VNAudioAdjust };
+    /** Let a Music Gallery song that's set to "keep playing" continue over this screen
+     *  instead of this screen's own music. Additive-optional (absent = no). */
+    allowGalleryMusic?: boolean;
     elements: Record<VNID, VNUIElement>;
     effects?: VNScreenOverlayEffect[];
     transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'crossfade';

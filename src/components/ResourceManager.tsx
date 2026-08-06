@@ -17,6 +17,7 @@ import ConfirmationModal from './ui/ConfirmationModal';
 import FontEditor from './ui/FontEditor';
 import { FormField, Select } from './ui/Form';
 import AssetSelector from './ui/AssetSelector';
+import { sanitizeFontFamily, loadFontOnce, cssFontFamily, analyzeFontComplexity, rendererFreezesOnComplexFonts } from '../utils/styleUtils';
 
 const Section: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }> = ({ title, icon, children, defaultOpen = false }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -276,7 +277,17 @@ const ResourceManager: React.FC<{
             const file: File | undefined = e.target?.files?.[0];
             if (!file) return;
 
-            const baseName = file.name.replace(/\.(ttf|otf)$/i, '').trim() || 'Custom Font';
+            // Family names must be CSS-safe: dots/parentheses make new FontFace() THROW, so a
+            // font registered under such a name silently never loads (all its text falls back).
+            const baseName = sanitizeFontFamily(file.name.replace(/\.(ttf|otf)$/i, ''));
+            if (file.size > 20 * 1024 * 1024) {
+                toast.warning(`This font is very large (${Math.round(file.size / 1024 / 1024)} MB) — it will make your project file much bigger and saving slower. A subsetted version of the font would work better.`);
+            }
+            const complexity = analyzeFontComplexity(await file.arrayBuffer());
+            if (complexity?.tooComplex && rendererFreezesOnComplexFonts()) {
+                toast.error(`This font can't be used — its letters are drawn with extremely detailed outlines (about ${Math.round(complexity.avgGlyphBytes / 1024)} KB per letter) that would freeze the app. If the font has a simpler version, use that one.`);
+                return;
+            }
             const dataUrl = await fileToBase64(file);
 
             const newId = `font-${Math.random().toString(36).substring(2, 9)}`;
@@ -284,8 +295,8 @@ const ResourceManager: React.FC<{
                 Object.values((project as any).fonts || {}).map((f: any) => (f?.fontFamily || '').toLowerCase())
             );
             let fontFamily = baseName;
-            if (existingFamilies.has(fontFamily.toLowerCase())) {
-                fontFamily = `${baseName} (${newId})`;
+            for (let n = 2; existingFamilies.has(fontFamily.toLowerCase()); n++) {
+                fontFamily = `${baseName}-${n}`;
             }
 
             const newFont: VNProjectFont = {
@@ -305,6 +316,10 @@ const ResourceManager: React.FC<{
                     },
                 } as any,
             });
+
+            // Register immediately so the new font renders without a reload (deduped — the
+            // editor's font effect will also see this font and must not re-parse it).
+            await loadFontOnce(fontFamily, dataUrl);
         };
         input.click();
     };
@@ -616,7 +631,7 @@ const ResourceManager: React.FC<{
                                     {projectFontsArray.map((f) => (
                                         <div key={f.id} className="flex items-center justify-between bg-[var(--bg-primary)]/40 border border-white/10 rounded px-2 py-2">
                                             <div className="min-w-0">
-                                                <div className="text-sm text-white truncate" style={{ fontFamily: f.fontFamily }}>
+                                                <div className="text-sm text-white truncate" style={{ fontFamily: cssFontFamily(f.fontFamily) }}>
                                                     {f.name}
                                                 </div>
                                                 <div className="text-[11px] text-[var(--text-secondary)] truncate">{f.fontFamily}</div>

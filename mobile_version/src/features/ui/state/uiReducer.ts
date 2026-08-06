@@ -141,7 +141,7 @@ export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
         const { name, id } = action.payload;
         const newId = id || `screen-${generateId()}`;
         // Unified schema: every screen uses the same editor and keeps all its widgets
-        // (including hot spots, image maps, and draggable elements) in `elements`. The
+        // (including hot spots, Interactive Images, and draggable elements) in `elements`. The
         // legacy `screenType: 'hotzone'` split was retired; old projects are migrated on load.
         const newScreen: VNUIScreen = {
             id: newId,

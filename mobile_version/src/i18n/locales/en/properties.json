@@ -205,6 +205,8 @@
     "add": "Add (+)",
     "subtract": "Subtract (-)",
     "random": "Random (Range)",
+    "addRandom": "Add Random (+ range)",
+    "subtractRandom": "Subtract Random (− range)",
     "true": "Yes",
     "false": "No",
     "minValue": "Min Value",
@@ -214,6 +216,8 @@
       "add": "Increase {{name}} by {{value}}",
       "subtract": "Decrease {{name}} by {{value}}",
       "random": "Set {{name}} to a random number from {{min}} to {{max}}",
+      "addRandom": "Increase {{name}} by a random amount from {{min}} to {{max}}",
+      "subtractRandom": "Decrease {{name}} by a random amount from {{min}} to {{max}}",
       "setStr": "Set {{name}} to “{{value}}”",
       "boolOn": "Set {{name}} to {{value}}",
       "boolOff": "Set {{name}} to {{value}}",
@@ -490,7 +494,7 @@
     "pickUpOnceHint": "Once collected, it won't reappear when the player revisits this scene, and the pickup is saved. Turn off for respawning pickups."
   },
   "draggableImageElement": {
-    "background": "Image Map Background",
+    "background": "Interactive Image Background",
     "hoverStateImage": "Hover State Image",
     "hoverStateHint": "When a region is hovered, this image is shown clipped to that region (Ren'Py-style hover effect).",
     "waitForClick": "Wait for Click",
@@ -525,9 +529,9 @@
     "addAction": "+ Add Action",
     "regionConditions": "Region Conditions",
     "regionConditionsHint": "Region only active when conditions are met.",
-    "targetdraggableImageElement": "Target Image Map to Hide",
-    "selectdraggableImageElement": "Select Image Map...",
-    "draggableImageElementOption": "Image Map ({{count}} regions) (ID: {{id}})"
+    "targetdraggableImageElement": "Target Interactive Image to Hide",
+    "selectdraggableImageElement": "Select Interactive Image...",
+    "draggableImageElementOption": "Interactive Image ({{count}} regions) (ID: {{id}})"
   },
   "credit": {
     "entries": "Credit Entries",
@@ -674,7 +678,7 @@
     "typeImage": "Image Overlay",
     "typeText": "Text Overlay",
     "typeButton": "Button Overlay",
-    "typedraggableImageElement": "Image Map",
+    "typedraggableImageElement": "Interactive Image",
     "typeMovie": "Video (Play Video)",
     "typeScreen": "Screen",
     "targetId": "Target ID",
@@ -704,7 +708,7 @@
     "panY": "Pan Y (%)",
     "screen": "Screen",
     "imageLabel": "Image ({{id}}…)",
-    "draggableImageElementLabel": "Image Map ({{id}}…)"
+    "draggableImageElementLabel": "Interactive Image ({{id}}…)"
   },
   "hotspot": {
     "name": "Name",

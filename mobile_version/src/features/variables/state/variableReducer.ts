@@ -69,6 +69,39 @@ export const variableReducer = (state: VNProject, action: VariableAction): VNPro
       console.log('[variableReducer] Deleted variable:', deletedVar?.name || 'NOT FOUND');
       console.log('[variableReducer] Remaining variables:', Object.keys(remainingVars));
 
+      // FREEZE rule for references to the deleted variable inside OTHER Set Variables' math and
+      // compare-to-variable conditions: bake its default value in as a plain number, so the
+      // author's calculation keeps working instead of silently losing a step. (The VariableManager
+      // delete dialog lists these usages BEFORE the dispatch, so this is confirmed, not silent.)
+      const frozen = Number(deletedVar?.defaultValue) || 0;
+      const freezeOperand = (o: any) =>
+          o && o.source === 'variable' && o.variableId === variableId ? { source: 'number', value: frozen } : o;
+      const freezeSetVarSpec = <T extends Record<string, any>>(spec: T): T => {
+          let next: any = spec;
+          if (next.valueSource === 'variable' && next.valueVariableId === variableId) {
+              next = { ...next, value: frozen };
+              delete next.valueSource;
+              delete next.valueVariableId;
+          }
+          if (next.valueSource === 'calc' && next.calc) {
+              next = {
+                  ...next,
+                  calc: {
+                      ...next.calc,
+                      first: freezeOperand(next.calc.first),
+                      steps: (next.calc.steps ?? []).map(freezeOperand),
+                  },
+              };
+          }
+          return next;
+      };
+      const freezeCondition = (c: any) => {
+          if (c?.compareVariableId !== variableId) return c;
+          const next = { ...c, value: frozen };
+          delete next.compareVariableId;
+          return next;
+      };
+
       // Clean up commands that use the deleted variable
       const newScenes = { ...state.scenes };
       for (const sceneId in newScenes) {
@@ -77,18 +110,21 @@ export const variableReducer = (state: VNProject, action: VariableAction): VNPro
               .map(cmd => {
                   let newCmd = { ...cmd };
                   if (newCmd.conditions) {
-                      const filteredConditions = newCmd.conditions.filter(c => c.variableId !== variableId);
+                      const filteredConditions = newCmd.conditions.filter(c => c.variableId !== variableId).map(freezeCondition);
                       if (filteredConditions.length === 0) {
                           delete newCmd.conditions;
                       } else {
                           newCmd.conditions = filteredConditions;
                       }
                   }
+                  if (newCmd.type === CommandType.SetVariable) {
+                      newCmd = freezeSetVarSpec(newCmd);
+                  }
                   if (newCmd.type === CommandType.Choice) {
                       const newOptions = (newCmd as ChoiceCommand).options.map(opt => {
                           const newOpt = { ...opt };
                            if (newOpt.conditions) {
-                                newOpt.conditions = newOpt.conditions.filter(c => c.variableId !== variableId);
+                                newOpt.conditions = newOpt.conditions.filter(c => c.variableId !== variableId).map(freezeCondition);
                                 if (newOpt.conditions.length === 0) {
                                     delete newOpt.conditions;
                                 }
@@ -101,7 +137,9 @@ export const variableReducer = (state: VNProject, action: VariableAction): VNPro
                                     return (action as any).variableId !== variableId;
                                 }
                                 return true;
-                            });
+                            }).map(action =>
+                                action.type === UIActionType.SetVariable ? freezeSetVarSpec(action as any) : action
+                            );
                             newOpt.actions = filteredActions;
                           }
                           return newOpt;

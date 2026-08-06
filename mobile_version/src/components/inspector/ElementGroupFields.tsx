@@ -17,7 +17,7 @@ import { VNTextAlign } from '../../types/shared';
 import {
     VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
     UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement,
-    UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, DropdownOption,
+    UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIMusicGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, DropdownOption,
     GameSetting, GameToggleSetting, UISlotRect, UIAppearanceState,
 } from '../../features/ui/types';
 import { VNVariable } from '../../features/variables/types';
@@ -33,6 +33,7 @@ import ActionEditor from '../menu-editor/ActionEditor';
 import ActionCard from '../menu-editor/ActionCard';
 import UIActionsListEditor from '../ui/UIActionsListEditor';
 import AssetSelector from '../ui/AssetSelector';
+import { MusicPlayerDesignField } from './MusicPlayerDesigner';
 import VideoTrimFields from '../ui/VideoTrimFields';
 import ConditionsEditor from '../ui/ConditionsEditor';
 import CollapsibleSection from '../ui/CollapsibleSection';
@@ -182,6 +183,29 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
             <div className="grid grid-cols-2 gap-2">
                 <FormField label={t('elementInspector.anchorX')}><TextInput type="number" step="0.1" value={element.anchorX} onChange={e => updateElement({ anchorX: parseFloat(e.target.value) || 0 })} /></FormField>
                 <FormField label={t('elementInspector.anchorY')}><TextInput type="number" step="0.1" value={element.anchorY} onChange={e => updateElement({ anchorY: parseFloat(e.target.value) || 0 })} /></FormField>
+            </div>
+            <FormField label={t('elementInspector.rotationDeg', 'Rotation (degrees)')}>
+                {/* Slider centered on 0 so authors can tilt either way; double-click recenters. */}
+                <RangeInput min={-180} max={180} step={1} value={element.rotation ?? 0}
+                    onChange={e => { const v = parseFloat(e.target.value) || 0; updateElement({ rotation: v === 0 ? undefined : v }); }}
+                    onDoubleClick={() => updateElement({ rotation: undefined })}
+                    className="w-full accent-purple-500" />
+            </FormField>
+            <div className="grid grid-cols-2 gap-2 items-end -mt-1">
+                <FormField label={t('elementInspector.rotationExact', 'Exact angle')}>
+                    <TextInput type="number" step="1" value={String(element.rotation ?? 0)}
+                        onChange={e => { const v = parseFloat(e.target.value) || 0; updateElement({ rotation: v === 0 ? undefined : v }); }} />
+                </FormField>
+                <div className="flex flex-col gap-1 pb-1">
+                    <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                        <input type="checkbox" checked={!!element.flipX} onChange={e => updateElement({ flipX: e.target.checked || undefined })} className="accent-purple-500" />
+                        {t('elementInspector.flipX', 'Flip left↔right')}
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                        <input type="checkbox" checked={!!element.flipY} onChange={e => updateElement({ flipY: e.target.checked || undefined })} className="accent-purple-500" />
+                        {t('elementInspector.flipY', 'Flip top↕bottom')}
+                    </label>
+                </div>
             </div>
             <LayerControl
                 value={element.layer}
@@ -891,6 +915,60 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                 <FontEditor font={el.nameFont} onFontChange={(prop, value) => updateElement({ nameFont: { ...el.nameFont!, [prop]: value } })} />
                             </>
                         )}
+                    </>,
+                };
+            }
+            case UIElementType.MusicGallery: {
+                const el = element as UIMusicGalleryElement;
+                const songEntries = Object.values(project.musicGallery?.entries || {});
+                const categories = [...new Set(songEntries.map((e: any) => e.category).filter(Boolean))] as string[];
+                return {
+                    content: <>
+                        <MusicPlayerDesignField element={el} project={project} updateElement={updateElement as any} />
+                        <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.musicBehavior', 'Behavior')}</h4>
+                        <FormField label={t('elementInspector.musicOnLeave', 'When the player leaves this screen')}>
+                            <Select value={el.onLeave || 'stop'} onChange={e => updateElement({ onLeave: e.target.value as 'stop' | 'keepPlaying' })}>
+                                <option value="stop">{t('elementInspector.musicOnLeaveStop', "Stop the song — the screen's own music comes back")}</option>
+                                <option value="keepPlaying">{t('elementInspector.musicOnLeaveKeep', 'Keep the song playing (on screens you allow)')}</option>
+                            </Select>
+                            {el.onLeave === 'keepPlaying' && (
+                                <p className="text-[9px] text-slate-500 mt-0.5">{t('elementInspector.musicOnLeaveKeepHint', 'Tick "Let gallery music keep playing here" on each screen where the song may continue.')}</p>
+                            )}
+                        </FormField>
+                        <FormField label={t('elementInspector.categoryFilter')}>
+                            <Select value={el.categoryFilter || ''} onChange={e => updateElement({ categoryFilter: e.target.value || undefined })}>
+                                <option value="">{t('elementInspector.allCategories')}</option>
+                                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                            </Select>
+                        </FormField>
+                        <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer my-1">
+                            <input type="checkbox" checked={el.hideLockedSongs === true} onChange={e => updateElement({ hideLockedSongs: e.target.checked })} className="accent-purple-500" />
+                            {t('elementInspector.hideLockedSongs', "Hide songs the player hasn't unlocked yet")}
+                        </label>
+                        <div className="mt-4 p-2 rounded bg-slate-700/30 text-xs text-slate-400">
+                            <p>{t('elementInspector.musicEntriesNote', 'Songs are managed in Settings → Music Gallery. This element plays them.')}</p>
+                            <p className="mt-1">{t('elementInspector.musicEntriesCount', { count: songEntries.length, defaultValue: '{{count}} songs configured.' })}</p>
+                        </div>
+                    </>,
+                    appearance: <>
+                        <h4 className="font-bold my-1 text-slate-400 text-xs">{t('elementInspector.musicPanel', 'Player panel')}</h4>
+                        <FormField label={t('elementInspector.backgroundColor')}><ColorInput value={el.backgroundColor || 'rgba(15, 23, 42, 0.92)'} onChange={v => updateElement({ backgroundColor: v })} allowAlpha disabled={el.hideBackgroundPanel === true} /></FormField>
+                        <FormField label={t('elementInspector.borderRadiusPx')}><TextInput type="number" min="0" max="64" value={String(el.borderRadius ?? 12)} onChange={e => updateElement({ borderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                        <AssetSelector
+                            label={t('elementInspector.musicPanelArt', 'My own art behind the player')}
+                            assetType="images"
+                            value={el.backgroundImage?.id || null}
+                            onChange={id => updateElement({ backgroundImage: id ? { type: 'image', id } : null })}
+                        />
+                        <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer my-1">
+                            <input type="checkbox" checked={el.hideBackgroundPanel === true} onChange={e => updateElement({ hideBackgroundPanel: e.target.checked })} className="accent-purple-500" />
+                            {t('elementInspector.musicHidePanel', 'Hide the panel (pieces float over the screen)')}
+                        </label>
+                        <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.lockedEntries')}</h4>
+                        <FormField label={t('elementInspector.lockedText')}><TextInput value={el.lockedText || '???'} onChange={e => updateElement({ lockedText: e.target.value })} placeholder="???" /></FormField>
+                        <FormField label={t('elementInspector.musicLockedColor', 'Locked song color')}><ColorInput value={el.lockedColor || 'rgba(148, 163, 184, 0.35)'} onChange={v => updateElement({ lockedColor: v })} allowAlpha /></FormField>
+                        <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.musicEmptyState', 'Before a song is picked')}</h4>
+                        <FormField label={t('elementInspector.musicNoSongText', 'Message shown')}><TextInput value={el.noSongText || 'Pick a song'} onChange={e => updateElement({ noSongText: e.target.value })} placeholder="Pick a song" /></FormField>
                     </>,
                 };
             }

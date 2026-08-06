@@ -1,6 +1,7 @@
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNVariable } from '../features/variables/types';
+import type { VNCharacter } from '../features/character/types';
 import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { formatBandedValue } from '../features/variables/bands';
 
@@ -123,4 +124,59 @@ export const interpolateVariables = (
     });
 
     return result;
+};
+
+/**
+ * A character's name as the PLAYER should see it right now. Names can contain {Variable}
+ * tokens ("{Nickname}", "Sir {Title}") — the name box shows whatever the variable currently
+ * says, so a "???" stranger can become "Yuki" with a plain Set Variable.
+ *
+ * Names WITHOUT braces return the exact same string as before this feature existed — the
+ * fast path below is the byte-identity guarantee for every existing project.
+ */
+export const resolveCharacterDisplayName = (
+    rawName: string | null | undefined,
+    variables: Record<VNID, string | number | boolean>,
+    project: VNProject
+): string => {
+    if (!rawName) return '';
+    if (!rawName.includes('{')) return rawName;
+    return interpolateVariables(rawName, variables, project).trim();
+};
+
+/**
+ * Build a `(raw, fallback)` resolver bound to one variables view — for surfaces (the phone)
+ * with many name sites, so the precedence chains like `displayName || character.name` stay
+ * exactly as written and only the resolution lives in one place.
+ */
+export const makeDisplayNameResolver = (
+    variables: Record<VNID, string | number | boolean>,
+    project: VNProject
+) => (raw: string | null | undefined, fallback: string): string =>
+    resolveCharacterDisplayName(raw, variables, project) || fallback;
+
+/**
+ * Find a character by the name a SCRIPT calls them — forgiving on purpose: matches the raw
+ * stored name first ("{YukiName}" addressed literally), then the currently-RESOLVED name
+ * ("Yuki" finds the character whose {YukiName} resolves to Yuki right now). Case-insensitive,
+ * raw match wins on collision (a script that worked yesterday keeps working today).
+ */
+export const findCharacterBySpokenName = (
+    spokenName: string,
+    project: VNProject,
+    variables: Record<VNID, string | number | boolean>
+): VNCharacter | undefined => {
+    const lower = String(spokenName ?? '').toLowerCase();
+    const all = Object.values(project.characters ?? {}) as VNCharacter[];
+    return all.find(c => c?.name?.toLowerCase() === lower)
+        ?? all.find(c => resolveCharacterDisplayName(c?.name, variables, project).toLowerCase() === lower);
+};
+
+/**
+ * The single letter shown on editor avatars. A tokened name like "{Nickname}" would show "{"
+ * — strip the tokens and use the first real character instead; 👤 when nothing is left.
+ */
+export const characterNameInitial = (rawName: string | null | undefined): string => {
+    const stripped = String(rawName ?? '').replace(/\{[^}]*\}/g, '').trim();
+    return stripped.charAt(0) || '👤';
 };

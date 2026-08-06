@@ -136,6 +136,10 @@ export interface VNScreenOverlayEffect {
   color?: string;
   /** Optional per-effect fine-tuning parameters */
   params?: VNEffectParams;
+  /** Effect style: only 'enhanced' (WebGL rendering) is ever stored; ABSENT = Classic =
+   *  exactly today's rendering. Honored in round 1 by fog/haze/smoke/lights/spotlight/
+   *  flashlight; other types ignore it. Additive-optional. */
+  effectStyle?: 'enhanced';
 }
 
 export function clamp01(value: number): number {

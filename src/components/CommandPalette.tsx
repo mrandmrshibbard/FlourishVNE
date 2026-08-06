@@ -14,7 +14,7 @@ export const COMMAND_CATEGORIES = {
     'Characters': {
         color: 'bg-blue-500/20 border-blue-500 text-blue-300',
         headerColor: 'bg-blue-600/30 text-blue-200',
-        commands: [CommandType.ShowCharacter, CommandType.HideCharacter, CommandType.SetCharacterLayer, CommandType.SetCharacterPose, CommandType.MoveCharacter]
+        commands: [CommandType.ShowCharacter, CommandType.HideCharacter, CommandType.SetCharacterLayer, CommandType.SetCharacterPose, CommandType.PlayCharacterAnimation, CommandType.MoveCharacter]
     },
     'Scenes': {
         color: 'bg-green-500/20 border-green-500 text-green-300',
@@ -79,6 +79,13 @@ export const getCommandColor = (commandType: CommandType): string => {
 interface CommandPaletteProps {
     onDragStart: (commandType: CommandType) => void;
 }
+
+/** Click-to-add bridge: the palette lives in the scenes sidebar, the command list lives in the
+ *  scene editor — siblings. The + buttons raise this DOM event and SceneEditor inserts (after
+ *  the selected command, else at the end). Same pattern as the save-slot pager events. */
+export const PALETTE_ADD_COMMAND_EVENT = 'vn-palette-add-command';
+const raiseAddCommand = (commandType: string) =>
+    window.dispatchEvent(new CustomEvent(PALETTE_ADD_COMMAND_EVENT, { detail: { commandType } }));
 
 const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
     const { t } = useTranslation('commands');
@@ -158,10 +165,17 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
                                                 key={commandType}
                                                 draggable
                                                 onDragStart={(e) => handleDragStart(e, commandType)}
-                                                className={`px-1.5 py-0.5 rounded text-xs border cursor-move ${category.color} hover:opacity-80 transition-opacity`}
+                                                className={`flex items-center px-1.5 py-0.5 rounded text-xs border cursor-move ${category.color} hover:opacity-80 transition-opacity`}
                                                 title={t('dragToAdd', { name: formatCommandName(commandType) })}
                                             >
-                                                {formatCommandName(commandType)}
+                                                <span className="flex-1 min-w-0 truncate">{formatCommandName(commandType)}</span>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); raiseAddCommand(commandType); }}
+                                                    className="ml-1 px-1 rounded font-bold leading-none text-current opacity-60 hover:opacity-100 hover:bg-white/10 flex-shrink-0"
+                                                    title={t('clickToAdd', { defaultValue: 'Add to the scene — after the selected command, or at the end', name: formatCommandName(commandType) })}
+                                                >
+                                                    +
+                                                </button>
                                             </div>
                                         ))}
                                 </div>
@@ -192,10 +206,17 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
                                             key={cmd.type}
                                             draggable
                                             onDragStart={(e) => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('application/vn-command-type', cmd.type); onDragStart(cmd.type as unknown as CommandType); }}
-                                            className="px-1.5 py-0.5 rounded text-xs border cursor-move bg-violet-500/20 border-violet-500 text-violet-300 hover:opacity-80 transition-opacity"
+                                            className="flex items-center px-1.5 py-0.5 rounded text-xs border cursor-move bg-violet-500/20 border-violet-500 text-violet-300 hover:opacity-80 transition-opacity"
                                             title={cmd.description || cmd.displayName}
                                         >
-                                            {cmd.displayName}
+                                            <span className="flex-1 min-w-0 truncate">{cmd.displayName}</span>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); raiseAddCommand(cmd.type); }}
+                                                className="ml-1 px-1 rounded font-bold leading-none text-current opacity-60 hover:opacity-100 hover:bg-white/10 flex-shrink-0"
+                                                title={t('clickToAdd', { defaultValue: 'Add to the scene — after the selected command, or at the end', name: cmd.displayName })}
+                                            >
+                                                +
+                                            </button>
                                         </div>
                                     ))}
                                 </div>

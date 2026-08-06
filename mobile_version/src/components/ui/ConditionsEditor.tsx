@@ -88,6 +88,8 @@ const ConditionsEditor: React.FC<{
             const nowBand = isBandOp(newConditions[index].operator);
             if (isBandOp(prevOperator) !== nowBand) {
                 newConditions[index].value = nowBand ? (sortedBands(variable)[0]?.id ?? '') : '';
+                // Band values are ids, never comparisons — a compare-to-variable can't cross over.
+                delete (newConditions[index] as any).compareVariableId;
             }
         }
         if (updates.variableId) {
@@ -96,6 +98,7 @@ const ConditionsEditor: React.FC<{
             newConditions[index].operator = ops[0];
             // Same reasoning: the old value belonged to the OLD variable's world.
             newConditions[index].value = isBandOp(ops[0]) ? (sortedBands(variable)[0]?.id ?? '') : '';
+            delete (newConditions[index] as any).compareVariableId;
         }
 
         onChange(newConditions);
@@ -214,7 +217,29 @@ const ConditionsEditor: React.FC<{
                                                     <option value="false">{no}</option>
                                                 </Select>
                                             ) : (
-                                                <TextInput value={String(condition.value || '')} onChange={e => handleUpdateCondition(index, { value: e.target.value })} />
+                                                // Compare against a typed value (default) or ANOTHER
+                                                // variable of the same type ("Strength is more than
+                                                // Enemy Strength"). Booleans are excluded — is Yes /
+                                                // is No already covers them.
+                                                <div className="space-y-1">
+                                                    <Select
+                                                        value={condition.compareVariableId !== undefined ? 'variable' : 'typed'}
+                                                        onChange={e => handleUpdateCondition(index, { compareVariableId: e.target.value === 'variable' ? ('' as any) : undefined })}
+                                                    >
+                                                        <option value="typed">{t('conditions.compareTyped', 'a value I type')}</option>
+                                                        <option value="variable">{t('conditions.compareVariable', 'another variable')}</option>
+                                                    </Select>
+                                                    {condition.compareVariableId !== undefined ? (
+                                                        <VariablePicker
+                                                            value={condition.compareVariableId}
+                                                            onChange={id => handleUpdateCondition(index, { compareVariableId: id })}
+                                                            allowedTypes={[variable?.type === 'number' ? 'number' : 'string']}
+                                                            allowCreate={false}
+                                                        />
+                                                    ) : (
+                                                        <TextInput value={String(condition.value || '')} onChange={e => handleUpdateCondition(index, { value: e.target.value })} />
+                                                    )}
+                                                </div>
                                             )}
                                         </FormField>
                                     )}

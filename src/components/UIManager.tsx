@@ -305,7 +305,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                         </div>
 
                         {/* UI Editor — MenuEditor handles every screen. Hot spots, draggable
-                            elements, and image maps render as overlays on the canvas; the inspector
+                            elements, and Interactive Images render as overlays on the canvas; the inspector
                             dispatcher routes selection to the right panel via the hot zone shim.
                             Hidden while the canvas is popped out into its own window. */}
                         {!canvasPoppedOut && (
@@ -423,7 +423,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
         setDropElId(null);
     };
 
-    // Unified schema: every screen keeps all its widgets (incl. hot spots, image maps,
+    // Unified schema: every screen keeps all its widgets (incl. hot spots, Interactive Images,
     // draggable elements) in `screen.elements`. The legacy `screenType: 'hotzone'` split
     // was retired and migrated away, so there's a single element list here.
     const elements = Object.values(screen.elements || {}) as VNUIElement[];

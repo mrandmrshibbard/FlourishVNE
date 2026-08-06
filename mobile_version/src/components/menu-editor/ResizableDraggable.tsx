@@ -41,12 +41,15 @@ export interface ResizableDraggableProps {
     /** Extra overlay rendered inside the element box, OUTSIDE the pointer-events-gated children
      *  wrapper (so its own handles can receive events) — used for the on-canvas content-box editor. */
     overlay?: React.ReactNode;
+    /** CSS transform applied to the CONTENT only (element rotation/flip preview). The drag box,
+     *  outline, and resize handles stay axis-aligned so the element remains easy to grab. */
+    contentTransform?: string;
 }
 
 const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
     x, y, width, height, anchorX, anchorY, parentSize, isSelected, onSelect, onUpdate, children,
     snapGrid = 1, showSnapGuides, label, locked, allowChildInteraction, onContextMenu, zIndex,
-    siblings, snapEnabled = true, onGuides, contentBox, overlay,
+    siblings, snapEnabled = true, onGuides, contentBox, overlay, contentTransform,
 }) => {
 
     const ref = useRef<HTMLDivElement>(null);
@@ -224,7 +227,7 @@ const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
     return (
         <div ref={ref} style={style} onMouseDown={(e) => handleMouseDown(e, 'drag')} onContextMenu={onContextMenu}>
             <div className={`relative w-full h-full ${isSelected ? 'outline outline-2 outline-sky-400 outline-offset-2' : ''}`}>
-                <div style={{ pointerEvents: allowChildInteraction ? 'auto' : 'none', width: '100%', height: '100%' }}>
+                <div style={{ pointerEvents: allowChildInteraction ? 'auto' : 'none', width: '100%', height: '100%', ...(contentTransform ? { transform: contentTransform } : {}) }}>
                     {children}
                 </div>
                 {/* Position / size label */}

@@ -10,11 +10,14 @@ import { getScreenCategory, getScreenCategoryColor, SCREEN_CATEGORY_ORDER, SCREE
 import { FormField, TextInput, Select, ColorInput, RangeInput } from '../ui/Form';
 import AssetSelector from '../ui/AssetSelector';
 import VideoTrimFields from '../ui/VideoTrimFields';
+import AudioAdjustFields from '../ui/AudioAdjustFields';
 import WinConditionEditor from '../ui/WinConditionEditor';
 import UIActionsListEditor from '../ui/UIActionsListEditor';
 import { isInteractiveElement } from '../../utils/interactiveElements';
 import { upsertOverlayEffect, type VNScreenOverlayEffectType, type VNEffectParams } from '../../types';
 import CollapsibleSection from '../ui/CollapsibleSection';
+import EffectStyleSwitch from '../inspector/EffectStyleSwitch';
+import { ENHANCED_OVERLAY_TYPES } from '../live-preview/fx/glFx';
 
 const newInteractiveId = (prefix: string): VNID =>
     `${prefix}-${Math.random().toString(36).substring(2, 9)}` as VNID;
@@ -99,7 +102,14 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
         return e?.params ?? {};
     };
     const getVarId = (type: VNScreenOverlayEffectType) => currentEffects.find(x => x.type === type)?.intensityVariableId ?? null;
-    const setEffect = (type: VNScreenOverlayEffectType, intensity: number, variant?: 'snow' | 'ash', color?: string, params?: VNEffectParams, intensityVariableId?: VNID | null) => {
+    const getStyle = (type: VNScreenOverlayEffectType): 'enhanced' | undefined =>
+        currentEffects.find(x => x.type === type)?.effectStyle === 'enhanced' ? 'enhanced' : undefined;
+    const setEffect = (type: VNScreenOverlayEffectType, intensity: number, variant?: 'snow' | 'ash', color?: string, params?: VNEffectParams, intensityVariableId?: VNID | null, effectStyle?: 'enhanced' | 'classic') => {
+        // Effect style follows the ⚡-binding pattern: preserved across ordinary edits unless
+        // explicitly changed; 'classic' (or disabling) REMOVES the field — absence is data.
+        const resolvedStyle = effectStyle !== undefined
+            ? (effectStyle === 'enhanced' ? 'enhanced' as const : undefined)
+            : getStyle(type);
         updateScreen({
             effects: upsertOverlayEffect(currentEffects, {
                 type,
@@ -107,6 +117,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                 variant,
                 color,
                 params,
+                ...(intensity > 0 && resolvedStyle ? { effectStyle: resolvedStyle } : {}),
                 // Preserve an existing ⚡ live binding across ordinary slider/param edits;
                 // pass null explicitly to clear it. Unchecking an effect clears it too (an
                 // intensity-0 effect WITH a binding would silently stay alive at runtime).
@@ -130,7 +141,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
         updateScreen({ additionalBackgrounds: addlBgs.filter(b => b.id !== id) });
 
     return (
-        <Panel title={t('screenInspector.title')} className="w-96 flex-shrink-0">
+        <Panel title={t('screenInspector.title')} className="w-[26rem] flex-shrink-0">
             <div className="flex-grow overflow-y-auto pr-1 space-y-2">
                 <FormField label={t('screenInspector.screenName')}>
                     <TextInput value={screen.name} onChange={e => updateScreen({ name: e.target.value })} disabled={isSpecialScreen} />
@@ -330,6 +341,27 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                             onChange={e => updateScreen({ music: { ...screen.music, volume: parseInt(e.target.value) / 100 } })}
                             className="w-full accent-purple-500" />
                     </FormField>
+                    {screen.music.audioId && (
+                        <div className="mt-2">
+                            <AudioAdjustFields
+                                value={screen.music.audioAdjust}
+                                onChange={next => updateScreen({ music: { ...screen.music, audioAdjust: next } })}
+                                allowReverse={false}
+                                project={project}
+                                audioId={screen.music.audioId}
+                            />
+                        </div>
+                    )}
+                    <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer mt-2">
+                        <input
+                            type="checkbox"
+                            checked={screen.allowGalleryMusic === true}
+                            onChange={e => updateScreen({ allowGalleryMusic: e.target.checked || undefined })}
+                            className="accent-purple-500"
+                        />
+                        {t('screenInspector.allowGalleryMusic', 'Let gallery music keep playing here')}
+                    </label>
+                    <p className="text-[10px] text-slate-500 mt-0.5 ml-5">{t('screenInspector.allowGalleryMusicHint', 'If a Music Gallery song set to "keep playing" is on, it continues over this screen instead of this screen\'s own music.')}</p>
                 </CollapsibleSection>
 
                 <CollapsibleSection title={t('screenInspector.ambientNoise')}>
@@ -347,6 +379,17 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                             onChange={e => updateScreen({ ambientNoise: { ...screen.ambientNoise, volume: parseInt(e.target.value) / 100 } })}
                             className="w-full accent-purple-500" />
                     </FormField>
+                    {screen.ambientNoise.audioId && (
+                        <div className="mt-2">
+                            <AudioAdjustFields
+                                value={screen.ambientNoise.audioAdjust}
+                                onChange={next => updateScreen({ ambientNoise: { ...screen.ambientNoise, audioAdjust: next } })}
+                                allowReverse={false}
+                                project={project}
+                                audioId={screen.ambientNoise.audioId}
+                            />
+                        </div>
+                    )}
                 </CollapsibleSection>
 
                 <CollapsibleSection title={t('screenInspector.transitions')}>
@@ -571,6 +614,16 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
 
                             {enabled && (
                                 <>
+                                    {/* Effect style — only for effects that HAVE an Enhanced (WebGL) look. */}
+                                    {ENHANCED_OVERLAY_TYPES.has(type) && (
+                                        <div className="mt-2">
+                                            <EffectStyleSwitch
+                                                compact
+                                                value={getStyle(type) === 'enhanced' ? 'enhanced' : 'classic'}
+                                                onChange={style => setEffect(type, intensity, variant, effectColor || undefined, params, undefined, style)}
+                                            />
+                                        </div>
+                                    )}
                                     <div className="mt-2">
                                         <div className="text-xs text-slate-300 mb-1 flex justify-between">
                                             <span>{t('screenInspector.intensity')}</span>
@@ -741,7 +794,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                 </CollapsibleSection>
 
                 {/* Interactivity — quick-add buttons that drop a default hot spot / draggable
-                    element / image map onto the screen. */}
+                    element / Interactive Image onto the screen. */}
                 <CollapsibleSection title={t('screenInspector.interactivity')}>
                 <p className="text-[10px] text-[var(--text-muted)] mb-2">
                     {t('screenInspector.interactivityHint')}
@@ -774,10 +827,10 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         onClick={() => {
                             const id = newInteractiveId('hze');
                             // Unified "interactive element": one draggable/clickable element that
-                            // can be an image, image map, button, text, etc. Created as an
+                            // can be an image, Interactive Image, button, text, etc. Created as an
                             // interactive Image; the inspector's Element Type dropdown switches it
-                            // (e.g. to an Image Map with clickable regions) and the Draggable toggle
-                            // turns on dragging — replacing the old separate Draggable / Image Map adds.
+                            // (e.g. to an Interactive Image with clickable regions) and the Draggable toggle
+                            // turns on dragging — replacing the old separate Draggable / Interactive Image adds.
                             const count = Object.values(screen.elements).filter(
                                 (e: any) => e.interactive === true && e.type !== UIElementType.HotSpot
                             ).length;
@@ -802,7 +855,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                 </CollapsibleSection>
 
                 {/* Win Condition — available on any screen. The targetable list is the screen's
-                    interactive elements (draggables / image maps), read from `screen.elements`. */}
+                    interactive elements (draggables / Interactive Images), read from `screen.elements`. */}
                 <CollapsibleSection title={t('screenInspector.winCondition')}>
                     <WinConditionEditor
                         winCondition={screen.winCondition}

@@ -49,6 +49,10 @@ async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
         await writer.write(data as unknown as Uint8Array<ArrayBuffer>);
         await writer.close();
     })();
+    // On corrupt data the reader throws FIRST and `await pump` below is never reached — mark the
+    // write-side rejection observed so it can't surface as an unhandled rejection. The error itself
+    // still propagates (via the reader throw, or `await pump` on the success path).
+    pump.catch(() => {});
 
     const reader = ds.readable.getReader();
     const chunks: Uint8Array[] = [];

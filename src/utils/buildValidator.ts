@@ -100,6 +100,49 @@ export function validateProjectForBuild(project: VNProject): ValidationResult {
         }
     }
 
+    // Validate Music Gallery
+    if (project.musicGallery) {
+        const songs = Object.values(project.musicGallery.entries || {});
+        for (const song of songs) {
+            const s = song as any;
+            if (!s.audioId) {
+                warnings.push({
+                    severity: 'warning',
+                    message: `Music Gallery song "${s.name || s.id}" has no music file chosen.`,
+                    location: 'Music Gallery'
+                });
+            } else if (!project.audio?.[s.audioId]) {
+                errors.push({
+                    severity: 'error',
+                    message: `Music Gallery song "${s.name || s.id}" references a missing audio file (ID: ${s.audioId}).`,
+                    location: 'Music Gallery'
+                });
+            }
+            if (s.artworkAssetId && !project.images?.[s.artworkAssetId] && !project.backgrounds?.[s.artworkAssetId]) {
+                warnings.push({
+                    severity: 'warning',
+                    message: `Music Gallery song "${s.name || s.id}" references a missing cover picture (ID: ${s.artworkAssetId}).`,
+                    location: 'Music Gallery'
+                });
+            }
+            if (s.unlockable && s.unlockVariableId && !project.variables[s.unlockVariableId]) {
+                errors.push({
+                    severity: 'error',
+                    message: `Music Gallery song "${s.name || s.id}" references a missing unlock variable (ID: ${s.unlockVariableId}).`,
+                    location: 'Music Gallery'
+                });
+            }
+        }
+        const defArt = project.musicGallery.defaultArtworkAssetId;
+        if (defArt && !project.images?.[defArt] && !project.backgrounds?.[defArt]) {
+            warnings.push({
+                severity: 'warning',
+                message: 'Music Gallery default cover picture references a missing image asset.',
+                location: 'Music Gallery'
+            });
+        }
+    }
+
     // Validate travel maps (locations jump to scenes) + the phone's Map app pointer.
     for (const map of Object.values(project.maps || {})) {
         for (const locEntry of map.locations || []) {
@@ -136,6 +179,49 @@ function validateCommand(
     warnings: ValidationIssue[]
 ) {
     const loc = `Scene: ${sceneName}`;
+
+    // A condition comparing against another variable must point at one that still exists —
+    // a dangling reference silently falls back to the typed value at runtime, so say so here.
+    for (const c of (Array.isArray((cmd as any).conditions) ? (cmd as any).conditions : [])) {
+        if (c?.compareVariableId && !project.variables[c.compareVariableId]) {
+            warnings.push({
+                severity: 'warning',
+                message: `A condition compares against a missing variable (ID: ${c.compareVariableId}).`,
+                location: loc
+            });
+        }
+    }
+
+    // "Play backwards" only works on files the engine can afford to decode (≤ ~4 MB of audio).
+    // Oversized files silently play FORWARD at runtime — warn at build time instead.
+    if (cmd.type === CommandType.PlaySoundEffect) {
+        const c = cmd as any;
+        const asset: any = c.audioId ? project.audio[c.audioId] : null;
+        const reverse = c.audioAdjust?.reverse ?? asset?.audioAdjust?.reverse;
+        if (reverse && typeof asset?.audioUrl === 'string' && asset.audioUrl.startsWith('data:')) {
+            const approxBytes = Math.floor((asset.audioUrl.length - (asset.audioUrl.indexOf(',') + 1)) * 3 / 4);
+            if (approxBytes > 4 * 1024 * 1024) {
+                warnings.push({
+                    severity: 'warning',
+                    message: `"${asset.name}" is set to play backwards but is larger than 4 MB — it will play forward instead. Use a shorter clip to reverse it.`,
+                    location: loc
+                });
+            }
+        }
+        // On DESKTOP only WAV files can reverse (compressed decode crashes Electron's renderer,
+        // so the engine refuses it and plays forward). Web games reverse mp3/ogg fine.
+        if (reverse && typeof asset?.audioUrl === 'string') {
+            const url = asset.audioUrl;
+            const looksWav = url.startsWith('data:audio/wav') || url.startsWith('data:audio/x-wav') || /\.wav($|[?#])/i.test(url);
+            if (!looksWav) {
+                warnings.push({
+                    severity: 'warning',
+                    message: `"${asset.name}" is set to play backwards, but on desktop only WAV files can reverse — it will play forward there. Convert it to a WAV to reverse it everywhere.`,
+                    location: loc
+                });
+            }
+        }
+    }
 
     switch (cmd.type) {
         case CommandType.ShowCharacter: {
@@ -214,6 +300,31 @@ function validateCommand(
                     message: `Command references missing variable (ID: ${cmd.variableId}).`,
                     location: loc
                 });
+            }
+            // From-a-variable / calculation value sources: every referenced variable must exist
+            // and be a number (the math is number-only).
+            const sv = cmd as any;
+            const checkMathRef = (id: unknown, what: string) => {
+                if (typeof id !== 'string' || !id) {
+                    warnings.push({ severity: 'warning', message: `Set Variable ${what} has no variable picked.`, location: loc });
+                    return;
+                }
+                const v = project.variables[id];
+                if (!v) {
+                    warnings.push({ severity: 'warning', message: `Set Variable ${what} references a missing variable (ID: ${id}).`, location: loc });
+                } else if (v.type !== 'number') {
+                    warnings.push({ severity: 'warning', message: `Set Variable ${what} uses "${v.name}" in math, but it isn't a number.`, location: loc });
+                }
+            };
+            if (sv.valueSource === 'variable') checkMathRef(sv.valueVariableId, 'value');
+            if (sv.valueSource === 'calc' && sv.calc) {
+                if (sv.calc.first?.source === 'variable') checkMathRef(sv.calc.first.variableId, 'calculation start');
+                for (const step of (sv.calc.steps ?? [])) {
+                    if (step?.source === 'variable') checkMathRef(step.variableId, 'calculation step');
+                    if (step?.op === 'divide' && step?.source === 'number' && (step?.value ?? 0) === 0) {
+                        warnings.push({ severity: 'warning', message: `Set Variable calculation divides by zero — that step will be skipped.`, location: loc });
+                    }
+                }
             }
             break;
         }
