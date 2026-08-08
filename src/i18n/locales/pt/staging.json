@@ -2,6 +2,7 @@
   "panelTitle": "Área de Palco",
   "dragToResize": "Arraste para redimensionar",
   "dragToResizeScale": "Arraste para redimensionar (escala)",
+  "fromCommonEvent": "Do evento: {{name}} — alterações aqui afetam todas as cenas que o chamam. Clique duas vezes para abrir.",
   "showEventIndicators": "Mostrar Indicadores de Evento",
   "hideEventIndicators": "Ocultar Indicadores de Evento",
   "showVariableState": "Mostrar Estado de Variáveis",

@@ -6,7 +6,7 @@
 
 import { VNProject } from '../../../types/project';
 import { VNCommonEvent, CommonEventParameter } from '../../../types/commonEvents';
-import { VNCommand } from '../../scene/types';
+import { VNCommand, CommandType } from '../../scene/types';
 import { VNID } from '../../../types';
 
 export type CommonEventAction =
@@ -163,6 +163,36 @@ export const commonEventReducer = (state: VNProject, action: CommonEventAction):
             const commonEvents = state.commonEvents || {};
             const existing = commonEvents[commonEventId];
             if (!existing || commandIndex < 0 || commandIndex >= existing.commands.length) return state;
+
+            const commandToDelete = existing.commands[commandIndex];
+
+            // Mirror the scene reducer's branch integrity rules: deleting a Branch removes ALL
+            // of its markers (start, otherwise-if / otherwise, end) while keeping the command
+            // bodies in place; a BranchEnd can never be deleted on its own — an orphaned branch
+            // makes the runtime fall through segment bodies.
+            if (commandToDelete?.type === CommandType.BranchStart) {
+                const branchId = (commandToDelete as { branchId?: VNID }).branchId;
+                const isBranchMarker = (cmd: VNCommand) =>
+                    (cmd.type === CommandType.BranchStart ||
+                     cmd.type === CommandType.BranchElseIf ||
+                     cmd.type === CommandType.BranchElse ||
+                     cmd.type === CommandType.BranchEnd) &&
+                    (cmd as { branchId?: VNID }).branchId === branchId;
+                return {
+                    ...state,
+                    commonEvents: {
+                        ...commonEvents,
+                        [commonEventId]: {
+                            ...existing,
+                            commands: existing.commands.filter(cmd => !isBranchMarker(cmd)),
+                            updatedAt: new Date().toISOString(),
+                        },
+                    },
+                };
+            }
+            if (commandToDelete?.type === CommandType.BranchEnd) {
+                return state;
+            }
 
             const commands = [...existing.commands];
             commands.splice(commandIndex, 1);

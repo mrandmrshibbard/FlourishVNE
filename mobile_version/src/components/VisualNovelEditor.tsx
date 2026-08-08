@@ -90,8 +90,9 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const [uiEditorMode, setUiEditorMode] = useState<'screens' | 'ingame'>('screens');
     // One-shot deep link into the Systems tab (set by "Manage in Systems" links in the UI editor).
     const [systemsSelection, setSystemsSelection] = useState<{ system: 'items' | 'inventory' | 'stats'; id?: VNID } | null>(null);
-    /** One-shot deep link into the Common Events tab (from the variable X-ray). Consumed on arrival. */
-    const [commonEventSelection, setCommonEventSelection] = useState<VNID | null>(null);
+    /** One-shot deep link into the Common Events tab (variable X-ray, or double-clicking an
+     *  event-owned element on the scene canvas). Consumed on arrival. */
+    const [commonEventSelection, setCommonEventSelection] = useState<{ eventId: VNID; commandIndex?: number } | null>(null);
 
     // Broadcast the editor "context" (active scene/tab + current selection) so popped-out PANEL
     // windows — currently the Properties Inspector — follow whatever editor the user is ACTIVELY
@@ -232,14 +233,19 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
     
+    // Keep a VALID expression selected — but never stomp an existing valid selection:
+    // this effect re-runs on every character edit (project.characters changes identity),
+    // and unconditionally picking the first expression bounced the author back to Default
+    // after every single layer-image change (Brad's report). Reset only when switching
+    // characters or when the selected expression no longer exists (deleted).
     useEffect(() => {
-        if (activeCharacterId) {
-            const character = project.characters[activeCharacterId];
-            const firstExprId = character && Object.keys(character.expressions)[0];
-            setSelectedExpressionId(firstExprId || null);
-        } else {
-            setSelectedExpressionId(null);
-        }
+        if (!activeCharacterId) { setSelectedExpressionId(null); return; }
+        const character = project.characters[activeCharacterId];
+        setSelectedExpressionId(prev =>
+            prev && character?.expressions?.[prev]
+                ? prev
+                : (character ? (Object.keys(character.expressions)[0] as VNID) ?? null : null)
+        );
     }, [activeCharacterId, project.characters]);
 
     const handleTitleChange = (newTitle: string) => {
@@ -308,7 +314,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             case 'commonEvent':
                 // The Common Events manager owns its own selection, so this is a one-shot deep link
                 // consumed on the other side — the same pattern as systemsSelection.
-                setCommonEventSelection(loc.commonEventId ?? null);
+                setCommonEventSelection(loc.commonEventId ? { eventId: loc.commonEventId } : null);
                 setActiveTab('commonEvents');
                 break;
             case 'systems':
@@ -654,6 +660,10 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                     if (isBgmPlaying()) toggleBackgroundMusic(false);
                                     setPlayStartAt({ sceneId: activeSceneId, index });
                                     setIsPlaying(true);
+                                }}
+                                onOpenCommonEvent={(eventId: VNID, commandIndex: number) => {
+                                    setCommonEventSelection({ eventId, commandIndex });
+                                    setActiveTab('commonEvents');
                                 }}
                             />
                         </ErrorBoundary>

@@ -3782,6 +3782,39 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return { valid: errors.length === 0, errors };
   }
   const pluginManager = PluginManagerService.getInstance();
+  function decodeDataUrl(dataUrl) {
+    var _a;
+    const comma = dataUrl.indexOf(",");
+    if (!dataUrl.startsWith("data:") || comma < 0) {
+      throw new Error("Not a data: URL");
+    }
+    const meta = dataUrl.slice(0, comma);
+    const data = dataUrl.slice(comma + 1);
+    const mime = ((_a = meta.match(/^data:([^;,]+)/)) == null ? void 0 : _a[1]) || "application/octet-stream";
+    if (/;base64/i.test(meta)) {
+      let b64 = data.replace(/\s/g, "");
+      if (b64.includes("%")) {
+        try {
+          b64 = decodeURIComponent(b64);
+        } catch {
+        }
+      }
+      b64 = b64.replace(/-/g, "+").replace(/_/g, "/");
+      const rem = b64.length % 4;
+      if (rem === 2) b64 += "==";
+      else if (rem === 3) b64 += "=";
+      const bin = atob(b64);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return { bytes: out, mime };
+    }
+    let text = data;
+    try {
+      text = decodeURIComponent(data);
+    } catch {
+    }
+    return { bytes: new TextEncoder().encode(text), mime };
+  }
   const ASSET_SCHEME = "flourish-asset";
   const api = () => typeof window !== "undefined" ? window.electronAPI : void 0;
   const isElectronAssetStore = () => {
@@ -3802,14 +3835,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const map = { jpeg: "jpg", "svg+xml": "svg", mpeg: "mp3", quicktime: "mov", "x-wav": "wav" };
     return (map[sub] || sub).toLowerCase().replace(/[^a-z0-9]/g, "");
   };
-  const dataUrlToBytes = (dataUrl) => {
-    const comma = dataUrl.indexOf(",");
-    const b64 = dataUrl.slice(comma + 1);
-    const bin = atob(b64);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-  };
+  const dataUrlToBytes = (dataUrl) => decodeDataUrl(dataUrl).bytes;
   async function writeAssetBytes(projectId, type, id, ext, bytes) {
     const a = api();
     if (!(a == null ? void 0 : a.writeProjectAsset)) return null;
@@ -13873,12 +13899,12 @@ void main() {
     }
     if (playerState.commandStack.length >= MAX_CALL_DEPTH) {
       console.error(`[CallCommonEvent] Max call depth (${MAX_CALL_DEPTH}) reached calling "${commonEvent.name}"`);
-      (_a = context.notify) == null ? void 0 : _a.call(context, `Common Event call depth limit reached ("${commonEvent.name}")`, "error");
+      if (!context.isStandalone) (_a = context.notify) == null ? void 0 : _a.call(context, `Common Event call depth limit reached ("${commonEvent.name}")`, "error");
       return { advance: true };
     }
     if (playerState.commandStack.some((frame) => frame.commonEventId === commonEvent.id)) {
       console.error(`[CallCommonEvent] Cycle detected — "${commonEvent.name}" is already on the call stack`);
-      (_b = context.notify) == null ? void 0 : _b.call(context, `Common Event cycle blocked ("${commonEvent.name}")`, "error");
+      if (!context.isStandalone) (_b = context.notify) == null ? void 0 : _b.call(context, `Common Event cycle blocked ("${commonEvent.name}")`, "error");
       return { advance: true };
     }
     const variableOverrides = {};
@@ -20711,6 +20737,13 @@ void main() {
         console.log(`[notify] [${type}] ${message}`);
       }
     }, [toast]);
+    const devNotify = React2.useCallback((message, type = "info") => {
+      if (isStandalone) {
+        console.warn(`[Flourish] ${message}`);
+        return;
+      }
+      notify(message, type);
+    }, [isStandalone, notify]);
     const getValidTitleScreenId = React2.useCallback(() => {
       if (project.ui.titleScreenId && project.uiScreens[project.ui.titleScreenId]) {
         return project.ui.titleScreenId;
@@ -23167,7 +23200,7 @@ void main() {
         const result = await executeScript(scr, ctx);
         if (!result.success) {
           console.error(`[Lifecycle:${trigger}] Script "${scr.name}" failed:`, result.error);
-          notify(`Script "${scr.name}" error: ${result.error}`, "error");
+          devNotify(`Script "${scr.name}" error: ${result.error}`, "error");
         }
       };
       for (const scr of scripts) await execLifecycle(scr, 0);
@@ -23175,7 +23208,7 @@ void main() {
         store.applyWrites(Object.entries(variableUpdates).map(([variableId, value]) => ({ variableId, value, scope: "global", sourceCommandId: `lifecycle-${trigger}` })));
       }
       updatePlayerState((p) => p ? { ...p, variables: { ...p.variables, ...variableUpdates } } : null);
-    }, [project, playerState == null ? void 0 : playerState.variables, updatePlayerState, assetResolver, playSound, fadeAudio, settings.musicVolume, notify]);
+    }, [project, playerState == null ? void 0 : playerState.variables, updatePlayerState, assetResolver, playSound, fadeAudio, settings.musicVolume, notify, devNotify]);
     React2.useEffect(() => {
       if (!playerState || playerState.mode !== "playing") {
         prevLifecycleSceneRef.current = null;
@@ -23331,7 +23364,7 @@ void main() {
             if (!parallelWarnedRef.current.has(key)) {
               parallelWarnedRef.current.add(key);
               console.warn(`[Parallel CE "${ce.name}"] command "${cmd.type}" skipped (not background-safe).`);
-              notify(`"${cmd.type}" won't run in the Parallel event "${ce.name}". Parallel events only run background commands (variables, audio, scripts). Use a "Called" or "Auto" event for on-screen commands.`, "warning");
+              devNotify(`"${cmd.type}" won't run in the Parallel event "${ce.name}". Parallel events only run background commands (variables, audio, scripts). Use a "Called" or "Auto" event for on-screen commands.`, "warning");
             }
             continue;
           }
@@ -23380,7 +23413,7 @@ void main() {
       };
       const interval = window.setInterval(tick, 120);
       return () => window.clearInterval(interval);
-    }, [project, assetResolver, getAssetMetadata, fadeAudio, playSound, playVoice, stopAllSfx, stopSfx, settings, updatePlayerState, evaluateConditions2, notify]);
+    }, [project, assetResolver, getAssetMetadata, fadeAudio, playSound, playVoice, stopAllSfx, stopSfx, settings, updatePlayerState, evaluateConditions2, notify, devNotify]);
     React2.useEffect(() => {
       const resolveVarId = (nameOrId) => {
         const p = projectRef.current;
@@ -23470,7 +23503,8 @@ void main() {
               if (frame.savedVariables) Object.assign(variables, frame.savedVariables);
               if (frame.clearedVariables) for (const k of frame.clearedVariables) delete variables[k];
             }
-            return { ...p, currentSceneId: frame.sceneId, currentCommands: frame.commands, currentIndex: frame.index, commandStack: newStack, variables };
+            const uiState = frame.resumeWaitingForInput ? { ...p.uiState, isWaitingForInput: true } : p.uiState;
+            return { ...p, currentSceneId: frame.sceneId, currentCommands: frame.commands, currentIndex: frame.index, commandStack: newStack, variables, uiState };
           });
         } else {
           runtimeDebugLog("End of scene - trying to advance to next scene");
@@ -23612,7 +23646,8 @@ void main() {
           diagnostics.emit("command-start", { sceneId: chainSig.sceneId, commandId: chainSig.commandId, index: chainSig.index });
           executeAtIndex(nextCmd, cmdIndex + 1);
         };
-        const conditionsMet = evaluateConditions2(command2.conditions, getRuntimeVariables());
+        const isBranchFlowMarker = command2.type === CommandType.BranchElseIf || command2.type === CommandType.BranchElse || command2.type === CommandType.BranchEnd;
+        const conditionsMet = isBranchFlowMarker || evaluateConditions2(command2.conditions, getRuntimeVariables());
         const isLiveReactive = !!command2.liveConditions && (REACTIVE_VISUAL_TYPES.has(command2.type) || REACTIVE_FX_TYPES.has(command2.type) || command2.type === CommandType.PlaySoundEffect);
         runtimeDebugLog("[DEBUG] Command:", command2.type, "Index:", cmdIndex, "Conditions met:", conditionsMet, "live:", isLiveReactive, "Variables:", getRuntimeVariables());
         if (!conditionsMet && !isLiveReactive) {
@@ -25133,6 +25168,7 @@ void main() {
       }
       updatePlayerState((p) => {
         if (!p || !p.uiState.dialogue) return p;
+        if (p.commandStack.some((f) => f.resumeWaitingForInput)) return p;
         const scene = project.scenes[p.currentSceneId];
         const currentCmd = scene == null ? void 0 : scene.commands[p.currentIndex];
         const nextCmd = scene == null ? void 0 : scene.commands[p.currentIndex + 1];
@@ -26477,15 +26513,15 @@ void main() {
         const ce = (project.commonEvents || {})[ccAction.commonEventId];
         if (!ce || !ce.enabled || !ce.commands || ce.commands.length === 0) {
           runtimeDebugWarn("[CallCommonEvent action] event not found / disabled / empty");
-          notify('A "Call Common Event" action points to a missing, disabled, or empty event.', "warning");
+          devNotify('A "Call Common Event" action points to a missing, disabled, or empty event.', "warning");
           return;
         }
         if (!playerState || playerState.mode !== "playing") {
-          notify("Call Common Event only works during gameplay", "warning");
+          devNotify("Call Common Event only works during gameplay", "warning");
           return;
         }
         if (playerState.commandStack.length >= MAX_CALL_DEPTH || playerState.commandStack.some((f) => f.commonEventId === ce.id)) {
-          notify(`Common Event call blocked (depth/cycle): "${ce.name}"`, "error");
+          devNotify(`Common Event call blocked (depth/cycle): "${ce.name}"`, "error");
           return;
         }
         const overrides = {};
@@ -26499,18 +26535,27 @@ void main() {
         }
         updatePlayerState((p) => {
           if (!p) return null;
+          const parkedForInput = !(opts == null ? void 0 : opts.resumeAtCurrent) && p.uiState.isWaitingForInput;
           const newStack = [...p.commandStack, {
             sceneId: p.currentSceneId,
             commands: p.currentCommands,
             // Return point: normally the command AFTER the current (waiting) one. When the
             // caller already advanced the index to the next un-run command (choice flow),
             // resume AT it — +1 here would skip the command right after the choice.
-            index: (opts == null ? void 0 : opts.resumeAtCurrent) ? p.currentIndex : p.currentIndex + 1,
+            index: (opts == null ? void 0 : opts.resumeAtCurrent) || parkedForInput ? p.currentIndex : p.currentIndex + 1,
             commonEventId: ce.id,
             ...Object.keys(savedVariables).length > 0 ? { savedVariables } : {},
-            ...clearedVariables.length > 0 ? { clearedVariables } : {}
+            ...clearedVariables.length > 0 ? { clearedVariables } : {},
+            ...parkedForInput ? { resumeWaitingForInput: true } : {}
           }];
-          return { ...p, currentCommands: ce.commands, currentIndex: 0, commandStack: newStack, variables: { ...p.variables, ...overrides } };
+          return {
+            ...p,
+            currentCommands: ce.commands,
+            currentIndex: 0,
+            commandStack: newStack,
+            variables: { ...p.variables, ...overrides },
+            ...parkedForInput ? { uiState: { ...p.uiState, isWaitingForInput: false } } : {}
+          };
         });
       } else if (action.type === UIActionType.GiveItem) {
         const a = action;

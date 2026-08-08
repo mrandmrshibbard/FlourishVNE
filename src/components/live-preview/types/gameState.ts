@@ -402,6 +402,11 @@ export interface PlayerState {
         savedVariables?: Record<VNID, string | number | boolean>;
         /** Keys that did NOT exist before the call (param ids) — delete on return. */
         clearedVariables?: VNID[];
+        /** This CE was called (hotspot/button) while the scene was PARKED on click-to-advance
+         *  (a dialogue / wait-for-input). The input-wait was cleared so the CE could run; restore
+         *  it on return so the parked command stays parked instead of being skipped.
+         *  Additive-optional — absent in older saves (old behavior). */
+        resumeWaitingForInput?: boolean;
     }>;
     variables: Record<VNID, string | number | boolean>;
     stageState: StageState;

@@ -47,13 +47,15 @@ export function handleCallCommonEvent(
   // Depth limit: runaway nesting would otherwise grow the stack until the tab dies.
   if (playerState.commandStack.length >= MAX_CALL_DEPTH) {
     console.error(`[CallCommonEvent] Max call depth (${MAX_CALL_DEPTH}) reached calling "${commonEvent.name}"`);
-    context.notify?.(`Common Event call depth limit reached ("${commonEvent.name}")`, 'error');
+    // Dev diagnostic — editor test play only. Players in a built game never see engine toasts
+    // (the console.error above still records it for troubleshooting).
+    if (!context.isStandalone) context.notify?.(`Common Event call depth limit reached ("${commonEvent.name}")`, 'error');
     return { advance: true };
   }
   // Cycle detection: the target is already an ancestor on the stack (A → B → A).
   if (playerState.commandStack.some(frame => frame.commonEventId === commonEvent.id)) {
     console.error(`[CallCommonEvent] Cycle detected — "${commonEvent.name}" is already on the call stack`);
-    context.notify?.(`Common Event cycle blocked ("${commonEvent.name}")`, 'error');
+    if (!context.isStandalone) context.notify?.(`Common Event cycle blocked ("${commonEvent.name}")`, 'error');
     return { advance: true };
   }
 

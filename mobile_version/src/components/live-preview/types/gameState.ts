@@ -381,6 +381,10 @@ export interface MusicState {
      *  player's music setting applies alone. Persisted so screen open/close, save/load, and
      *  rewind resume the track at the authored volume instead of resetting to full. */
     volume?: number;
+    /** The Play Music command's speed/keep-pitch shaping. Undefined = play as-is. Persisted
+     *  for the same reason as `volume` — every resume path must re-apply it (or reset to 1×
+     *  when absent), never inherit the element's previous rate. */
+    adjust?: import('../../../features/scene/types').VNAudioAdjust;
 }
 
 export interface PlayerState {
@@ -398,6 +402,11 @@ export interface PlayerState {
         savedVariables?: Record<VNID, string | number | boolean>;
         /** Keys that did NOT exist before the call (param ids) — delete on return. */
         clearedVariables?: VNID[];
+        /** This CE was called (hotspot/button) while the scene was PARKED on click-to-advance
+         *  (a dialogue / wait-for-input). The input-wait was cleared so the CE could run; restore
+         *  it on return so the parked command stays parked instead of being skipped.
+         *  Additive-optional — absent in older saves (old behavior). */
+        resumeWaitingForInput?: boolean;
     }>;
     variables: Record<VNID, string | number | boolean>;
     stageState: StageState;

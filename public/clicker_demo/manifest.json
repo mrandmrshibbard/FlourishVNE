@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "exportedAt": "2026-08-07T21:14:20.345Z",
+  "project": {
+    "id": "proj-clicker-demo",
+    "title": "Clicker Demo — Pet the Grump"
+  },
+  "embedded": {
+    "backgrounds": [
+      "assets/backgrounds/bg-room_dusk_lounge.bin"
+    ],
+    "images": [],
+    "audio": [
+      "assets/audio/sfx-pop_pat_pop.wav",
+      "assets/audio/sfx-chime_stage_chime.wav"
+    ],
+    "videos": [],
+    "characters": [
+      "assets/characters/char-que/l-body/b-pose1_standing.png",
+      "assets/characters/char-que/l-body/b-pose2_hand_out.png",
+      "assets/characters/char-que/l-face/f-pout_pout.png",
+      "assets/characters/char-que/l-face/f-pout-blink_pout_blink.png",
+      "assets/characters/char-que/l-face/f-normal_normal.png",
+      "assets/characters/char-que/l-face/f-normal-blink_normal_blink.png",
+      "assets/characters/char-que/l-face/f-normal2_normal_talk.png",
+      "assets/characters/char-que/l-face/f-normal2-blink_normal_talk_blink.png",
+      "assets/characters/char-que/l-face/f-smile_smile.png",
+      "assets/characters/char-que/l-face/f-surprised_surprised.png",
+      "assets/characters/char-que/l-face/f-surprised-blink_surprised_blink.png",
+      "assets/characters/char-que/l-face/f-lookaway_look_away.png",
+      "assets/characters/char-que/l-face/f-lookaway-blink_look_away_blink.png",
+      "assets/characters/char-alana/l-abody/a-idle_idle.png",
+      "assets/characters/char-alana/l-abody/a-blush_blushing.png"
+    ],
+    "ui": [],
+    "fonts": []
+  },
+  "fetchFailures": [],
+  "danglingRefs": []
+}

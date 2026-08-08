@@ -1,0 +1,1532 @@
+{
+  "id": "proj-clicker-demo",
+  "title": "Clicker Demo — Pet the Grump",
+  "startSceneId": "scene-start",
+  "scenes": {
+    "scene-start": {
+      "id": "scene-start",
+      "name": "Pet the Grump",
+      "commands": [
+        {
+          "id": "c-00n",
+          "type": "SetBackground",
+          "backgroundId": "bg-room",
+          "transition": "fade",
+          "duration": 1,
+          "modifiers": {}
+        },
+        {
+          "id": "c-00o",
+          "type": "ShowCharacter",
+          "characterId": "char-alana",
+          "expressionId": "e-a-idle",
+          "position": "right",
+          "transition": "fade",
+          "duration": 0.5,
+          "modifiers": {}
+        },
+        {
+          "id": "c-00p",
+          "type": "Dialogue",
+          "characterId": "char-alana",
+          "text": "See him? That’s Que. Resident grump. Hasn’t smiled since… hm. Ever?",
+          "modifiers": {}
+        },
+        {
+          "id": "c-00q",
+          "type": "ShowCharacter",
+          "characterId": "char-que",
+          "expressionId": "e-pouty",
+          "position": "center",
+          "transition": "fade",
+          "duration": 0.5,
+          "modifiers": {}
+        },
+        {
+          "id": "c-00r",
+          "type": "Dialogue",
+          "characterId": "char-que",
+          "text": "What do YOU want?",
+          "modifiers": {}
+        },
+        {
+          "id": "c-00s",
+          "type": "Dialogue",
+          "characterId": "char-alana",
+          "text": "I bet he's really a big softy... maybe if you pat him, he'll open up! Click him and try it!",
+          "modifiers": {}
+        },
+        {
+          "id": "c-00m",
+          "type": "ShowHotSpot",
+          "name": "Pet Que",
+          "shape": "rect",
+          "trigger": "click",
+          "x": 38,
+          "y": 6,
+          "width": 24,
+          "height": 86,
+          "hoverCursor": "hand",
+          "visible": false,
+          "advanceOnTrigger": false,
+          "actions": [
+            {
+              "type": "CallCommonEvent",
+              "commonEventId": "ce-pet"
+            }
+          ],
+          "modifiers": {}
+        },
+        {
+          "id": "c-00t",
+          "type": "Label",
+          "labelId": "petting1",
+          "modifiers": {}
+        },
+        {
+          "id": "c-00u",
+          "type": "Wait",
+          "duration": 0,
+          "waitForCondition": true,
+          "waitConditions": [
+            {
+              "variableId": "v-stage",
+              "operator": ">=",
+              "value": 2
+            }
+          ],
+          "modifiers": {}
+        },
+        {
+          "id": "c-00v",
+          "type": "BranchStart",
+          "name": "Still stage 1?",
+          "color": "#79b8e8",
+          "branchId": "branch-hold1",
+          "conditions": [
+            {
+              "variableId": "v-stage",
+              "operator": "<",
+              "value": 2
+            }
+          ],
+          "modifiers": {}
+        },
+        {
+          "id": "c-00w",
+          "type": "JumpToLabel",
+          "labelId": "petting1",
+          "modifiers": {}
+        },
+        {
+          "id": "c-00x",
+          "type": "BranchEnd",
+          "branchId": "branch-hold1",
+          "modifiers": {}
+        },
+        {
+          "id": "c-00y",
+          "type": "Dialogue",
+          "characterId": "char-que",
+          "text": "Hm. That’s… not TOO bad...",
+          "modifiers": {}
+        },
+        {
+          "id": "c-00z",
+          "type": "Label",
+          "labelId": "petting2",
+          "modifiers": {}
+        },
+        {
+          "id": "c-010",
+          "type": "Wait",
+          "duration": 0,
+          "waitForCondition": true,
+          "waitConditions": [
+            {
+              "variableId": "v-stage",
+              "operator": ">=",
+              "value": 3
+            }
+          ],
+          "modifiers": {}
+        },
+        {
+          "id": "c-011",
+          "type": "BranchStart",
+          "name": "Still stage 2?",
+          "color": "#79b8e8",
+          "branchId": "branch-hold2",
+          "conditions": [
+            {
+              "variableId": "v-stage",
+              "operator": "<",
+              "value": 3
+            }
+          ],
+          "modifiers": {}
+        },
+        {
+          "id": "c-012",
+          "type": "JumpToLabel",
+          "labelId": "petting2",
+          "modifiers": {}
+        },
+        {
+          "id": "c-013",
+          "type": "BranchEnd",
+          "branchId": "branch-hold2",
+          "modifiers": {}
+        },
+        {
+          "id": "c-014",
+          "type": "HideHotSpot",
+          "targetCommandId": "c-00m",
+          "modifiers": {}
+        },
+        {
+          "id": "c-015",
+          "type": "PlayCharacterAnimation",
+          "characterId": "char-que",
+          "animationId": null,
+          "modifiers": {}
+        },
+        {
+          "id": "c-016",
+          "type": "Dialogue",
+          "characterId": "char-que",
+          "text": "...Wait! Don't stop...",
+          "modifiers": {}
+        },
+        {
+          "id": "c-017",
+          "type": "SetCharacterLayer",
+          "characterId": "char-alana",
+          "layers": [
+            {
+              "layerId": "l-abody",
+              "assetId": "a-blush"
+            }
+          ],
+          "duration": 0.3,
+          "modifiers": {}
+        },
+        {
+          "id": "c-018",
+          "type": "Dialogue",
+          "characterId": "char-alana",
+          "text": "I have NEVER seen that face on him before!",
+          "modifiers": {}
+        },
+        {
+          "id": "c-019",
+          "type": "Dialogue",
+          "characterId": null,
+          "text": "Que isn't grumpy anymore! It took {Clicks} pats and gave {Affection} affection (later stages reward more per pat).",
+          "modifiers": {}
+        },
+        {
+          "id": "c-01a",
+          "type": "Dialogue",
+          "characterId": "char-alana",
+          "text": "Check the editor and see how it's done!",
+          "modifiers": {}
+        }
+      ]
+    }
+  },
+  "characters": {
+    "char-que": {
+      "id": "char-que",
+      "name": "Que",
+      "color": "#b48be0",
+      "baseImageUrl": "",
+      "layers": {
+        "l-body": {
+          "id": "l-body",
+          "name": "Body",
+          "assets": {
+            "b-pose1": {
+              "id": "b-pose1",
+              "name": "Standing",
+              "imageUrl": "assets/characters/char-que/l-body/b-pose1_standing.png",
+              "videoUrl": ""
+            },
+            "b-pose2": {
+              "id": "b-pose2",
+              "name": "Hand out",
+              "imageUrl": "assets/characters/char-que/l-body/b-pose2_hand_out.png",
+              "videoUrl": ""
+            }
+          }
+        },
+        "l-face": {
+          "id": "l-face",
+          "name": "Face",
+          "assets": {
+            "f-pout": {
+              "id": "f-pout",
+              "name": "Pout",
+              "imageUrl": "assets/characters/char-que/l-face/f-pout_pout.png",
+              "videoUrl": ""
+            },
+            "f-pout-blink": {
+              "id": "f-pout-blink",
+              "name": "Pout blink",
+              "imageUrl": "assets/characters/char-que/l-face/f-pout-blink_pout_blink.png",
+              "videoUrl": ""
+            },
+            "f-normal": {
+              "id": "f-normal",
+              "name": "Normal",
+              "imageUrl": "assets/characters/char-que/l-face/f-normal_normal.png",
+              "videoUrl": ""
+            },
+            "f-normal-blink": {
+              "id": "f-normal-blink",
+              "name": "Normal blink",
+              "imageUrl": "assets/characters/char-que/l-face/f-normal-blink_normal_blink.png",
+              "videoUrl": ""
+            },
+            "f-normal2": {
+              "id": "f-normal2",
+              "name": "Normal talk",
+              "imageUrl": "assets/characters/char-que/l-face/f-normal2_normal_talk.png",
+              "videoUrl": ""
+            },
+            "f-normal2-blink": {
+              "id": "f-normal2-blink",
+              "name": "Normal talk blink",
+              "imageUrl": "assets/characters/char-que/l-face/f-normal2-blink_normal_talk_blink.png",
+              "videoUrl": ""
+            },
+            "f-smile": {
+              "id": "f-smile",
+              "name": "Smile",
+              "imageUrl": "assets/characters/char-que/l-face/f-smile_smile.png",
+              "videoUrl": ""
+            },
+            "f-surprised": {
+              "id": "f-surprised",
+              "name": "Surprised",
+              "imageUrl": "assets/characters/char-que/l-face/f-surprised_surprised.png",
+              "videoUrl": ""
+            },
+            "f-surprised-blink": {
+              "id": "f-surprised-blink",
+              "name": "Surprised blink",
+              "imageUrl": "assets/characters/char-que/l-face/f-surprised-blink_surprised_blink.png",
+              "videoUrl": ""
+            },
+            "f-lookaway": {
+              "id": "f-lookaway",
+              "name": "Look away",
+              "imageUrl": "assets/characters/char-que/l-face/f-lookaway_look_away.png",
+              "videoUrl": ""
+            },
+            "f-lookaway-blink": {
+              "id": "f-lookaway-blink",
+              "name": "Look away blink",
+              "imageUrl": "assets/characters/char-que/l-face/f-lookaway-blink_look_away_blink.png",
+              "videoUrl": ""
+            }
+          }
+        }
+      },
+      "expressions": {
+        "e-pouty": {
+          "id": "e-pouty",
+          "name": "Pouty",
+          "layerConfiguration": {
+            "l-body": "b-pose1",
+            "l-face": "f-pout"
+          }
+        },
+        "e-neutral": {
+          "id": "e-neutral",
+          "name": "Neutral",
+          "layerConfiguration": {
+            "l-body": "b-pose1",
+            "l-face": "f-normal"
+          }
+        },
+        "e-smiling": {
+          "id": "e-smiling",
+          "name": "Smiling",
+          "layerConfiguration": {
+            "l-body": "b-pose2",
+            "l-face": "f-smile"
+          }
+        }
+      },
+      "animations": {
+        "a-sway": {
+          "id": "a-sway",
+          "name": "Idle sway",
+          "durationMs": 900,
+          "loop": false,
+          "trigger": "idle",
+          "idleMinMs": 2600,
+          "idleMaxMs": 5200,
+          "tracks": [
+            {
+              "layerId": "l-body",
+              "keys": [
+                {
+                  "atMs": 0,
+                  "assetId": "b-pose2"
+                },
+                {
+                  "atMs": 500,
+                  "assetId": "b-pose1"
+                }
+              ]
+            }
+          ]
+        },
+        "a-grumpy": {
+          "id": "a-grumpy",
+          "name": "Grumpy flutter",
+          "durationMs": 560,
+          "loop": false,
+          "trigger": "manual",
+          "tracks": [
+            {
+              "layerId": "l-face",
+              "keys": [
+                {
+                  "atMs": 0,
+                  "assetId": "f-pout-blink"
+                },
+                {
+                  "atMs": 140,
+                  "assetId": "f-pout"
+                },
+                {
+                  "atMs": 280,
+                  "assetId": "f-pout-blink"
+                },
+                {
+                  "atMs": 420,
+                  "assetId": "f-pout"
+                }
+              ]
+            }
+          ]
+        },
+        "a-chatter": {
+          "id": "a-chatter",
+          "name": "Chatter",
+          "durationMs": 640,
+          "loop": false,
+          "trigger": "manual",
+          "tracks": [
+            {
+              "layerId": "l-face",
+              "keys": [
+                {
+                  "atMs": 0,
+                  "assetId": "f-normal2"
+                },
+                {
+                  "atMs": 160,
+                  "assetId": "f-normal-blink"
+                },
+                {
+                  "atMs": 320,
+                  "assetId": "f-normal2"
+                },
+                {
+                  "atMs": 480,
+                  "assetId": "f-normal"
+                }
+              ]
+            }
+          ]
+        },
+        "a-delight": {
+          "id": "a-delight",
+          "name": "Delight",
+          "durationMs": 760,
+          "loop": false,
+          "trigger": "manual",
+          "tracks": [
+            {
+              "layerId": "l-face",
+              "keys": [
+                {
+                  "atMs": 0,
+                  "assetId": "f-surprised"
+                },
+                {
+                  "atMs": 190,
+                  "assetId": "f-surprised-blink"
+                },
+                {
+                  "atMs": 380,
+                  "assetId": "f-lookaway"
+                },
+                {
+                  "atMs": 570,
+                  "assetId": "f-smile"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "baseVideoUrl": "",
+      "fontUrl": ""
+    },
+    "char-alana": {
+      "id": "char-alana",
+      "name": "Alana",
+      "color": "#7fc4e8",
+      "baseImageUrl": "",
+      "layers": {
+        "l-abody": {
+          "id": "l-abody",
+          "name": "Body",
+          "assets": {
+            "a-idle": {
+              "id": "a-idle",
+              "name": "Idle",
+              "imageUrl": "assets/characters/char-alana/l-abody/a-idle_idle.png",
+              "videoUrl": ""
+            },
+            "a-blush": {
+              "id": "a-blush",
+              "name": "Blushing",
+              "imageUrl": "assets/characters/char-alana/l-abody/a-blush_blushing.png",
+              "videoUrl": ""
+            }
+          }
+        }
+      },
+      "expressions": {
+        "e-a-idle": {
+          "id": "e-a-idle",
+          "name": "Idle",
+          "layerConfiguration": {
+            "l-abody": "a-idle"
+          }
+        },
+        "e-a-blush": {
+          "id": "e-a-blush",
+          "name": "Blushing",
+          "layerConfiguration": {
+            "l-abody": "a-blush"
+          }
+        }
+      },
+      "baseVideoUrl": "",
+      "fontUrl": ""
+    }
+  },
+  "backgrounds": {
+    "bg-room": {
+      "id": "bg-room",
+      "name": "Dusk Lounge",
+      "imageUrl": "assets/backgrounds/bg-room_dusk_lounge.svg"
+    }
+  },
+  "images": {},
+  "audio": {
+    "sfx-pop": {
+      "id": "sfx-pop",
+      "name": "Pat Pop",
+      "audioUrl": "assets/audio/sfx-pop_pat_pop.wav"
+    },
+    "sfx-chime": {
+      "id": "sfx-chime",
+      "name": "Stage Chime",
+      "audioUrl": "assets/audio/sfx-chime_stage_chime.wav"
+    }
+  },
+  "videos": {},
+  "variables": {
+    "v-clicks": {
+      "id": "v-clicks",
+      "name": "Clicks",
+      "type": "number",
+      "defaultValue": 0
+    },
+    "v-affection": {
+      "id": "v-affection",
+      "name": "Affection",
+      "type": "number",
+      "defaultValue": 0,
+      "min": 0
+    },
+    "v-stage": {
+      "id": "v-stage",
+      "name": "Stage",
+      "type": "number",
+      "defaultValue": 1
+    }
+  },
+  "items": {},
+  "itemCollections": {},
+  "fonts": {},
+  "ui": {
+    "titleScreenId": "screen-jpoxiyk",
+    "saveScreenId": "screen-j3mfzp3",
+    "loadScreenId": "screen-ip0xw5l",
+    "settingsScreenId": "screen-na0focg",
+    "pauseScreenId": "screen-jyt2u42",
+    "gameHudScreenId": null,
+    "dialogueBoxImage": null,
+    "dialogueBoxBorderImage": null,
+    "choiceButtonImage": null,
+    "choiceButtonBorderImage": null,
+    "dialogueNameFont": {
+      "family": "Poppins, sans-serif",
+      "size": 22,
+      "color": "#FFFFFF",
+      "weight": "bold",
+      "italic": false
+    },
+    "dialogueTextFont": {
+      "family": "Poppins, sans-serif",
+      "size": 20,
+      "color": "#FFFFFF",
+      "weight": "normal",
+      "italic": false
+    },
+    "choiceTextFont": {
+      "family": "Poppins, sans-serif",
+      "size": 18,
+      "color": "#FFFFFF",
+      "weight": "normal",
+      "italic": false
+    },
+    "inputBoxImage": null,
+    "inputBoxBorderImage": null,
+    "inputPromptFont": {
+      "family": "Poppins, sans-serif",
+      "size": 18,
+      "color": "#FFFFFF",
+      "weight": "normal",
+      "italic": false
+    },
+    "inputFieldFont": {
+      "family": "Poppins, sans-serif",
+      "size": 16,
+      "color": "#FFFFFF",
+      "weight": "normal",
+      "italic": false
+    },
+    "inputSubmitFont": {
+      "family": "Poppins, sans-serif",
+      "size": 16,
+      "color": "#FFFFFF",
+      "weight": "normal",
+      "italic": false
+    },
+    "defaultGameSettings": {
+      "textSpeed": 50,
+      "musicVolume": 0.8,
+      "sfxVolume": 0.8,
+      "voiceVolume": 0.8,
+      "ambientVolume": 0.8,
+      "enableSkip": true,
+      "autoAdvance": false,
+      "autoAdvanceDelay": 3
+    }
+  },
+  "uiScreens": {
+    "screen-jpoxiyk": {
+      "id": "screen-jpoxiyk",
+      "name": "Title Screen",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-hissq30": {
+          "id": "el-hissq30",
+          "name": "Title Text",
+          "type": "Text",
+          "text": "My Visual Novel",
+          "x": 50,
+          "y": 30,
+          "width": 60,
+          "height": 15,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 64,
+            "color": "#f0e6ff",
+            "weight": "bold",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "el-zdms43g": {
+          "id": "el-zdms43g",
+          "name": "New Game Button",
+          "type": "Button",
+          "text": "New Game",
+          "x": 50,
+          "y": 55,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "StartNewGame"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-977vi8v": {
+          "id": "el-977vi8v",
+          "name": "Load Game Button",
+          "type": "Button",
+          "text": "Load Game",
+          "x": 50,
+          "y": 65,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-ip0xw5l"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-1xkqueu": {
+          "id": "el-1xkqueu",
+          "name": "Settings Button",
+          "type": "Button",
+          "text": "Settings",
+          "x": 50,
+          "y": 75,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-na0focg"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      }
+    },
+    "screen-j3mfzp3": {
+      "id": "screen-j3mfzp3",
+      "name": "Save Screen",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-n4evjkv": {
+          "id": "el-n4evjkv",
+          "name": "Header",
+          "type": "Text",
+          "text": "Save Game",
+          "x": 50,
+          "y": 10,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#f0e6ff",
+            "weight": "bold",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "el-4oy8gtd": {
+          "id": "el-4oy8gtd",
+          "name": "Save Slots",
+          "type": "SaveSlotGrid",
+          "slotCount": 8,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "emptySlotText": "[ Empty Slot ]",
+          "x": 50,
+          "y": 50,
+          "width": 80,
+          "height": 65,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-e6pmp5d": {
+          "id": "el-e6pmp5d",
+          "name": "Back Button",
+          "type": "Button",
+          "text": "Back",
+          "x": 50,
+          "y": 90,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToPreviousScreen"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      }
+    },
+    "screen-ip0xw5l": {
+      "id": "screen-ip0xw5l",
+      "name": "Load Screen",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-p4n5qhn": {
+          "id": "el-p4n5qhn",
+          "name": "Header",
+          "type": "Text",
+          "text": "Load Game",
+          "x": 50,
+          "y": 10,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#f0e6ff",
+            "weight": "bold",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "el-s7kcaye": {
+          "id": "el-s7kcaye",
+          "name": "Load Slots",
+          "type": "SaveSlotGrid",
+          "slotCount": 8,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "emptySlotText": "[ Empty Slot ]",
+          "x": 50,
+          "y": 50,
+          "width": 80,
+          "height": 65,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-2sm1jtm": {
+          "id": "el-2sm1jtm",
+          "name": "Back Button",
+          "type": "Button",
+          "text": "Back",
+          "x": 50,
+          "y": 90,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToPreviousScreen"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      }
+    },
+    "screen-na0focg": {
+      "id": "screen-na0focg",
+      "name": "Settings Screen",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-xoqixla": {
+          "id": "el-xoqixla",
+          "name": "Header",
+          "type": "Text",
+          "text": "Settings",
+          "x": 50,
+          "y": 10,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#f0e6ff",
+            "weight": "bold",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "el-v6xrgfe": {
+          "id": "el-v6xrgfe",
+          "name": "Music Volume Label",
+          "type": "Text",
+          "text": "Music Volume",
+          "x": 35,
+          "y": 30,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "el-wek9rid": {
+          "id": "el-wek9rid",
+          "name": "Music Volume Slider",
+          "type": "SettingsSlider",
+          "setting": "musicVolume",
+          "x": 65,
+          "y": 30,
+          "width": 40,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-vx35f8z": {
+          "id": "el-vx35f8z",
+          "name": "SFX Volume Label",
+          "type": "Text",
+          "text": "Sound FX Volume",
+          "x": 35,
+          "y": 40,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "el-pps0kpz": {
+          "id": "el-pps0kpz",
+          "name": "SFX Volume Slider",
+          "type": "SettingsSlider",
+          "setting": "sfxVolume",
+          "x": 65,
+          "y": 40,
+          "width": 40,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-v3tvzt7": {
+          "id": "el-v3tvzt7",
+          "name": "Ambient Volume Label",
+          "type": "Text",
+          "text": "Ambient Volume",
+          "x": 35,
+          "y": 50,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "el-cra96s0": {
+          "id": "el-cra96s0",
+          "name": "Ambient Volume Slider",
+          "type": "SettingsSlider",
+          "setting": "ambientVolume",
+          "x": 65,
+          "y": 50,
+          "width": 40,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-i24kpr5": {
+          "id": "el-i24kpr5",
+          "name": "Text Speed Label",
+          "type": "Text",
+          "text": "Text Speed",
+          "x": 35,
+          "y": 60,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "el-gdne8ss": {
+          "id": "el-gdne8ss",
+          "name": "Text Speed Slider",
+          "type": "SettingsSlider",
+          "setting": "textSpeed",
+          "x": 65,
+          "y": 60,
+          "width": 40,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-bju5kkp": {
+          "id": "el-bju5kkp",
+          "name": "Enable Skip Toggle",
+          "type": "SettingsToggle",
+          "setting": "enableSkip",
+          "text": "Enable Skip",
+          "x": 50,
+          "y": 70,
+          "width": 30,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          }
+        },
+        "el-hiodqzr": {
+          "id": "el-hiodqzr",
+          "name": "Back Button",
+          "type": "Button",
+          "text": "Back",
+          "x": 50,
+          "y": 85,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToPreviousScreen"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      }
+    },
+    "screen-jyt2u42": {
+      "id": "screen-jyt2u42",
+      "name": "Pause Menu",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-1g2hqn0": {
+          "id": "el-1g2hqn0",
+          "name": "Return Button",
+          "type": "Button",
+          "text": "Return to Game",
+          "x": 50,
+          "y": 30,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToGame"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-iicy10y": {
+          "id": "el-iicy10y",
+          "name": "Save Game Button",
+          "type": "Button",
+          "text": "Save Game",
+          "x": 50,
+          "y": 40,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-j3mfzp3"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-w4uyat6": {
+          "id": "el-w4uyat6",
+          "name": "Load Game Button",
+          "type": "Button",
+          "text": "Load Game",
+          "x": 50,
+          "y": 50,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-ip0xw5l"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-c4wgo4q": {
+          "id": "el-c4wgo4q",
+          "name": "Settings Button",
+          "type": "Button",
+          "text": "Settings",
+          "x": 50,
+          "y": 60,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-na0focg"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-vkhqb35": {
+          "id": "el-vkhqb35",
+          "name": "Quit Button",
+          "type": "Button",
+          "text": "Quit to Title",
+          "x": 50,
+          "y": 70,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "QuitToTitle"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      }
+    }
+  },
+  "commonEvents": {
+    "ce-pet": {
+      "id": "ce-pet",
+      "name": "Pet Que",
+      "description": "One click on the Hot Spot: count it, reward it, react to it.",
+      "trigger": "called",
+      "enabled": true,
+      "parameters": [],
+      "createdAt": "2026-08-07T00:00:00.000Z",
+      "updatedAt": "2026-08-07T00:00:00.000Z",
+      "commands": [
+        {
+          "id": "c-001",
+          "type": "SetVariable",
+          "variableId": "v-clicks",
+          "operator": "add",
+          "value": 1
+        },
+        {
+          "id": "c-002",
+          "type": "SetVariable",
+          "variableId": "v-affection",
+          "operator": "add",
+          "value": 1,
+          "valueSource": "variable",
+          "valueVariableId": "v-stage"
+        },
+        {
+          "id": "c-003",
+          "type": "PlaySoundEffect",
+          "audioId": "sfx-pop"
+        },
+        {
+          "id": "c-004",
+          "type": "BranchStart",
+          "name": "Stage logic",
+          "color": "#e879a9",
+          "branchId": "branch-pet",
+          "conditions": [
+            {
+              "variableId": "v-clicks",
+              "operator": ">=",
+              "value": 30
+            },
+            {
+              "variableId": "v-stage",
+              "operator": "==",
+              "value": 2,
+              "connector": "and"
+            }
+          ]
+        },
+        {
+          "id": "c-005",
+          "type": "SetVariable",
+          "variableId": "v-stage",
+          "operator": "set",
+          "value": 3
+        },
+        {
+          "id": "c-006",
+          "type": "SetCharacterLayer",
+          "characterId": "char-que",
+          "layers": [
+            {
+              "layerId": "l-face",
+              "assetId": "f-smile"
+            },
+            {
+              "layerId": "l-body",
+              "assetId": "b-pose2"
+            }
+          ],
+          "duration": 0.3
+        },
+        {
+          "id": "c-007",
+          "type": "PlayCharacterAnimation",
+          "characterId": "char-que",
+          "animationId": "a-delight"
+        },
+        {
+          "id": "c-008",
+          "type": "PlaySoundEffect",
+          "audioId": "sfx-chime"
+        },
+        {
+          "id": "c-009",
+          "type": "SpawnParticles",
+          "particleTag": "hearts",
+          "duration": 2.5,
+          "config": {
+            "name": "Hearts",
+            "shape": "heart",
+            "colors": [
+              "#ff7eb6",
+              "#ff4d94",
+              "#ffd1e5"
+            ],
+            "emitRate": 22,
+            "lifetime": 1.6,
+            "speedMin": 60,
+            "speedMax": 150,
+            "sizeMin": 10,
+            "sizeMax": 22,
+            "gravity": -60,
+            "wind": 0,
+            "directionMin": 60,
+            "directionMax": 120,
+            "emitterX": 50,
+            "emitterY": 55,
+            "emitterWidth": 22,
+            "emitterHeight": 10,
+            "fadeOut": true,
+            "shrink": false,
+            "rotationSpeed": 40,
+            "opacity": 0.9
+          }
+        },
+        {
+          "id": "c-00a",
+          "type": "BranchElseIf",
+          "branchId": "branch-pet",
+          "conditions": [
+            {
+              "variableId": "v-clicks",
+              "operator": ">=",
+              "value": 12
+            },
+            {
+              "variableId": "v-stage",
+              "operator": "==",
+              "value": 1,
+              "connector": "and"
+            }
+          ]
+        },
+        {
+          "id": "c-00b",
+          "type": "SetVariable",
+          "variableId": "v-stage",
+          "operator": "set",
+          "value": 2
+        },
+        {
+          "id": "c-00c",
+          "type": "SetCharacterLayer",
+          "characterId": "char-que",
+          "layers": [
+            {
+              "layerId": "l-face",
+              "assetId": "f-normal"
+            }
+          ],
+          "duration": 0.3
+        },
+        {
+          "id": "c-00d",
+          "type": "PlayCharacterAnimation",
+          "characterId": "char-que",
+          "animationId": "a-chatter"
+        },
+        {
+          "id": "c-00e",
+          "type": "PlaySoundEffect",
+          "audioId": "sfx-chime"
+        },
+        {
+          "id": "c-00f",
+          "type": "BranchElseIf",
+          "branchId": "branch-pet",
+          "conditions": [
+            {
+              "variableId": "v-stage",
+              "operator": "==",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "id": "c-00g",
+          "type": "PlayCharacterAnimation",
+          "characterId": "char-que",
+          "animationId": "a-grumpy"
+        },
+        {
+          "id": "c-00h",
+          "type": "BranchElseIf",
+          "branchId": "branch-pet",
+          "conditions": [
+            {
+              "variableId": "v-stage",
+              "operator": "==",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "id": "c-00i",
+          "type": "PlayCharacterAnimation",
+          "characterId": "char-que",
+          "animationId": "a-chatter"
+        },
+        {
+          "id": "c-00j",
+          "type": "BranchElse",
+          "branchId": "branch-pet"
+        },
+        {
+          "id": "c-00k",
+          "type": "PlayCharacterAnimation",
+          "characterId": "char-que",
+          "animationId": "a-delight"
+        },
+        {
+          "id": "c-00l",
+          "type": "BranchEnd",
+          "branchId": "branch-pet"
+        }
+      ]
+    }
+  },
+  "version": "2.0.0",
+  "metadata": {
+    "migratedAt": "2026-08-07T21:11:06.236Z",
+    "previousVersion": "1.0.0",
+    "lastMigration": {
+      "date": "2026-08-07T21:11:06.237Z",
+      "from": "1.0.0",
+      "to": "2.0.0"
+    }
+  },
+  "scripts": {},
+  "plugins": {},
+  "pluginRegistry": {},
+  "assetStorage": "external"
+}

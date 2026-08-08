@@ -124,6 +124,8 @@ export interface SceneManagerProps {
     onPlayFromHere?: (index: number) => void;
     /** The List ⇄ Map view toggle, rendered by the SceneManager router. */
     headerSlot?: React.ReactNode;
+    /** Deep link into the Common Events tab (double-click on an event-owned canvas element). */
+    onOpenCommonEvent?: (eventId: VNID, commandIndex: number) => void;
 }
 
 const SceneManagerList: React.FC<SceneManagerProps> = ({
@@ -137,7 +139,8 @@ const SceneManagerList: React.FC<SceneManagerProps> = ({
     isCollapsed,
     onToggleCollapse,
     onPlayFromHere,
-    headerSlot
+    headerSlot,
+    onOpenCommonEvent
 }) => {
     const { dispatch } = useProject();
     const toast = useToast();
@@ -364,6 +367,7 @@ const SceneManagerList: React.FC<SceneManagerProps> = ({
                                 activeSceneId={activeSceneId}
                                 selectedCommandIndex={selectedCommandIndex}
                                 onSelectCommand={setSelectedCommandIndex}
+                                onOpenCommonEvent={onOpenCommonEvent}
                                 className="h-full w-full border-2 border-[var(--border-subtle)] rounded-lg"
                                 style={{ height: '100%' }}
                             />

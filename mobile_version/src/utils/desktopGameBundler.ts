@@ -78,9 +78,13 @@ export async function buildDesktopGame(
     });
 
     if (dataUrl.startsWith('data:')) {
-      const blob = dataURLToBlob(dataUrl);
-      const arrayBuffer = await blob.arrayBuffer();
-      gameFiles[`assets/${name}`] = arrayBuffer;
+      try {
+        const blob = dataURLToBlob(dataUrl);
+        const arrayBuffer = await blob.arrayBuffer();
+        gameFiles[`assets/${name}`] = arrayBuffer;
+      } catch {
+        throw new Error(`Couldn't package the asset "${name}" — its stored data appears damaged. Try re-importing that file in the editor, then build again.`);
+      }
     }
   }
   

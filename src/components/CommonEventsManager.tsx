@@ -58,8 +58,9 @@ const formatCommandName = (type: string): string =>
 
 interface CommonEventsManagerProps {
     project: any;
-    /** One-shot deep link (from the variable X-ray's "take me there"). Consumed on arrival. */
-    initialSelection?: VNID | null;
+    /** One-shot deep link (variable X-ray "take me there", or double-clicking an event-owned
+     *  element on the scene canvas — the latter also targets a specific command). Consumed on arrival. */
+    initialSelection?: { eventId: VNID; commandIndex?: number } | null;
     onSelectionConsumed?: () => void;
 }
 
@@ -88,6 +89,9 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
         /** Row midpoints snapshotted at drag START (stable against our own drop-line shifting
          *  layout — the scene editor's hard-won lesson). */
         mids: number[];
+        /** The command index of each visible row, aligned with `mids` — collapsed-branch rows
+         *  are missing from the DOM, so a mids position must be mapped back through this. */
+        rowIdx: number[];
     } | null>(null);
     const justDraggedRef = useRef(false);
     const commandListRef = useRef<HTMLDivElement | null>(null);
@@ -97,11 +101,65 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
 
     const selectedEvent = selectedEventId ? (project.commonEvents || {})[selectedEventId] as VNCommonEvent | undefined : undefined;
 
-    // Adopt a deep link from elsewhere in the editor (the variable X-ray's "take me there"), then tell
-    // the owner it's been used — otherwise it would re-select on every later visit to this tab.
+    // Branch nesting depth per row, for the visual block indent (mirrors the scene editor's
+    // "a branch is ONE block" reading): contents sit one level deeper than their Branch row;
+    // Otherwise-if / Otherwise / End markers sit at the Branch's own level.
+    const rowDepths = useMemo(() => {
+        const depths: number[] = [];
+        let d = 0;
+        for (const c of (selectedEvent?.commands || []) as VNCommand[]) {
+            if (c.type === CommandType.BranchEnd) d = Math.max(0, d - 1);
+            const isMidMarker = c.type === CommandType.BranchElseIf || c.type === CommandType.BranchElse;
+            depths.push(isMidMarker ? Math.max(0, d - 1) : d);
+            if (c.type === CommandType.BranchStart) d += 1;
+        }
+        return depths;
+    }, [selectedEvent?.commands]);
+
+    // Rows hidden by a collapsed Branch (everything between its Start and matching End,
+    // markers and End included) — persisted on the BranchStart's `isCollapsed` field, exactly
+    // like the scene editor. Nested branches inside a collapsed one stay hidden regardless of
+    // their own collapse state (the walk stays balanced either way).
+    const hiddenRows = useMemo(() => {
+        const hidden = new Set<number>();
+        let hideDepth = 0;
+        ((selectedEvent?.commands || []) as VNCommand[]).forEach((c, i) => {
+            if (c.type === CommandType.BranchEnd) {
+                if (hideDepth > 0) { hidden.add(i); hideDepth -= 1; }
+                return;
+            }
+            if (hideDepth > 0) hidden.add(i);
+            if (c.type === CommandType.BranchStart && (hideDepth > 0 || (c as { isCollapsed?: boolean }).isCollapsed)) {
+                hideDepth += 1;
+            }
+        });
+        return hidden;
+    }, [selectedEvent?.commands]);
+
+    const toggleBranchCollapse = useCallback((index: number, collapsed: boolean) => {
+        if (!selectedEventId) return;
+        dispatch({ type: 'UPDATE_COMMON_EVENT_COMMAND', payload: { commonEventId: selectedEventId, commandIndex: index, updates: { isCollapsed: collapsed } as Partial<VNCommand> } });
+    }, [dispatch, selectedEventId]);
+
+    // A deep link's target command index, stashed (tagged with its event) so the "clear the command
+    // editor when the event changes" effect below consumes it instead of wiping it.
+    const pendingCommandIndexRef = useRef<{ eventId: VNID; index: number } | null>(null);
+
+    // Adopt a deep link from elsewhere in the editor (the variable X-ray's "take me there", or a
+    // double-clicked event element on the scene canvas), then tell the owner it's been used —
+    // otherwise it would re-select on every later visit to this tab.
     useEffect(() => {
         if (!initialSelection) return;
-        if ((project.commonEvents || {})[initialSelection]) setSelectedEventId(initialSelection);
+        if ((project.commonEvents || {})[initialSelection.eventId]) {
+            const idx = typeof initialSelection.commandIndex === 'number' ? initialSelection.commandIndex : null;
+            if (initialSelection.eventId === selectedEventId) {
+                // Same event — no event switch coming, apply the index directly.
+                if (idx !== null) setSelectedCommandIndex(idx);
+            } else {
+                if (idx !== null) pendingCommandIndexRef.current = { eventId: initialSelection.eventId, index: idx };
+                setSelectedEventId(initialSelection.eventId);
+            }
+        }
         onSelectionConsumed?.();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialSelection]);
@@ -114,8 +172,22 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
         dispatch({ type: 'UPDATE_COMMON_EVENT_COMMAND', payload: { commonEventId: selectedEventId, commandIndex: selectedCommandIndex, updates } });
     }, [dispatch, selectedEventId, selectedCommandIndex]);
 
-    // Clear the open command editor whenever the selected event changes.
-    React.useEffect(() => { setSelectedCommandIndex(null); }, [selectedEventId]);
+    // Clear the open command editor when the selected event GENUINELY changes — unless a deep link
+    // targeting a command in the new event is pending (it survives the switch). prevEventIdRef makes
+    // this a no-op on mount and on StrictMode's double-run of mount effects, where a deep-link-set
+    // index would otherwise be wiped right after being applied.
+    const prevEventIdRef = useRef<VNID | null | undefined>(undefined);
+    React.useEffect(() => {
+        const prev = prevEventIdRef.current;
+        prevEventIdRef.current = selectedEventId;
+        const pending = pendingCommandIndexRef.current;
+        if (pending && pending.eventId === selectedEventId) {
+            setSelectedCommandIndex(pending.index);
+            pendingCommandIndexRef.current = null;
+        } else if (!pending && prev !== undefined && prev !== selectedEventId) {
+            setSelectedCommandIndex(null);
+        }
+    }, [selectedEventId]);
 
     // ── Command reorder: pointer drag + ▲▼ (parity with the scene editor's list). ──
     // One UPDATE_COMMON_EVENT dispatch with the rebuilt array = one clean undo step.
@@ -130,12 +202,24 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
         if (!isReorderableCommand(selectedEvent.commands[index])) return;
         // Snapshot row midpoints NOW (in viewport space) — detection must not read the
         // drop-line-shifted layout mid-drag or the target flickers (scene-editor lesson).
-        const rows = Array.from(commandListRef.current?.querySelectorAll('[data-ce-row]') || []) as HTMLElement[];
-        const mids = rows
-            .sort((a, b) => Number(a.dataset.ceRow) - Number(b.dataset.ceRow))
-            .map(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2; });
-        reorderRef.current = { fromIndex: index, startX: e.clientX, startY: e.clientY, started: false, mids };
+        // Rows inside a collapsed branch aren't in the DOM, so keep the VISIBLE rows' command
+        // indices alongside their midpoints — a mids position is NOT a command index.
+        const rows = (Array.from(commandListRef.current?.querySelectorAll('[data-ce-row]') || []) as HTMLElement[])
+            .sort((a, b) => Number(a.dataset.ceRow) - Number(b.dataset.ceRow));
+        const rowIdx = rows.map(r => Number(r.dataset.ceRow));
+        const mids = rows.map(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2; });
+        reorderRef.current = { fromIndex: index, startX: e.clientX, startY: e.clientY, started: false, mids, rowIdx };
 
+        // Insertion COMMAND index = the index of the first visible row whose midpoint is below
+        // the cursor (end of list → past the last command).
+        const insertIndexAt = (clientY: number): number => {
+            const st = reorderRef.current;
+            if (!st || !selectedEvent) return 0;
+            for (let i = 0; i < st.mids.length; i++) {
+                if (clientY < st.mids[i]) return st.rowIdx[i];
+            }
+            return selectedEvent.commands.length;
+        };
         const onMove = (ev: PointerEvent) => {
             const st = reorderRef.current;
             if (!st) return;
@@ -144,27 +228,19 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
                 st.started = true;
                 setDraggingIndex(st.fromIndex);
             }
-            // Insertion index = first row whose midpoint is below the cursor.
-            let insert = st.mids.length;
-            for (let i = 0; i < st.mids.length; i++) {
-                if (ev.clientY < st.mids[i]) { insert = i; break; }
-            }
-            setDropLine(insert);
+            setDropLine(insertIndexAt(ev.clientY));
         };
         const onUp = (ev: PointerEvent) => {
             window.removeEventListener('pointermove', onMove);
             window.removeEventListener('pointerup', onUp);
             const st = reorderRef.current;
+            const insert = st ? insertIndexAt(ev.clientY) : 0;
             reorderRef.current = null;
             setDraggingIndex(null);
             setDropLine(null);
             if (!st || !st.started || !selectedEvent) return;
             justDraggedRef.current = true;
             setTimeout(() => { justDraggedRef.current = false; }, 0);
-            let insert = st.mids.length;
-            for (let i = 0; i < st.mids.length; i++) {
-                if (ev.clientY < st.mids[i]) { insert = i; break; }
-            }
             commitCommandsReorder(moveCommonEventCommand(selectedEvent.commands, st.fromIndex, insert));
         };
         window.addEventListener('pointermove', onMove);
@@ -669,9 +745,32 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
                                             </div>
                                         ) : (
                                             selectedEvent.commands.map((cmd: VNCommand, index: number) => {
+                                                if (hiddenRows.has(index)) return null;
                                                 const colorClass = getCommandColor(cmd.type);
                                                 const isSelected = selectedCommandIndex === index;
                                                 const reorderable = isReorderableCommand(cmd);
+                                                const depth = rowDepths[index] || 0;
+                                                const branchCmd = cmd.type === CommandType.BranchStart ? (cmd as { branchId?: string; name?: string; color?: string; isCollapsed?: boolean }) : null;
+                                                // The branch's closing marker renders as a slim block edge — not a command
+                                                // row. It has no editor and can't be deleted alone (the reducer enforces
+                                                // it); dragging it still moves the whole paired block.
+                                                if (cmd.type === CommandType.BranchEnd) {
+                                                    return (
+                                                        <React.Fragment key={cmd.id}>
+                                                            {dropLine === index && <div className="h-0.5 rounded" style={{ background: 'var(--accent-amber, #f59e0b)' }} />}
+                                                            <div
+                                                                data-ce-row={index}
+                                                                onPointerDown={e => beginCommandReorder(e, index)}
+                                                                className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] select-none cursor-grab"
+                                                                style={{ marginLeft: depth * 14, color: 'var(--text-muted)', ...(draggingIndex === index ? { opacity: 0.45 } : {}) }}
+                                                                title={t('branchEndTip', 'Closes the Branch above — it moves and is removed together with it.')}
+                                                            >
+                                                                <span className="inline-block w-3 h-2 border-l-2 border-b-2 rounded-bl" style={{ borderColor: 'var(--border-subtle)' }} aria-hidden />
+                                                                {t('branchEndLabel', 'end of branch')}
+                                                            </div>
+                                                        </React.Fragment>
+                                                    );
+                                                }
                                                 return (
                                                     <React.Fragment key={cmd.id}>
                                                         {dropLine === index && <div className="h-0.5 rounded" style={{ background: 'var(--accent-amber, #f59e0b)' }} />}
@@ -680,12 +779,28 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
                                                             onClick={() => { if (justDraggedRef.current) return; setSelectedCommandIndex(isSelected ? null : index); }}
                                                             onPointerDown={e => beginCommandReorder(e, index)}
                                                             className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-xs border ${colorClass} group cursor-pointer ${isSelected ? 'ring-2 ring-amber-400' : ''}`}
-                                                            style={draggingIndex === index ? { opacity: 0.45 } : undefined}
+                                                            style={{ marginLeft: depth * 14, ...(branchCmd?.color ? { borderColor: branchCmd.color } : {}), ...(draggingIndex === index ? { opacity: 0.45 } : {}) }}
                                                             title={reorderable ? t('dragToReorder', 'Click to edit · drag to reorder') : t('editCommand')}
                                                         >
                                                             <GripVerticalIcon className={`w-3 h-3 flex-shrink-0 ${reorderable ? 'opacity-40 cursor-grab' : 'opacity-10'}`} />
+                                                            {branchCmd && (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); toggleBranchCollapse(index, !branchCmd.isCollapsed); }}
+                                                                    onPointerDown={e => e.stopPropagation()}
+                                                                    className="p-0.5 rounded hover:bg-white/10 flex-shrink-0"
+                                                                    title={branchCmd.isCollapsed ? t('expandBranch', 'Expand branch') : t('collapseBranch', 'Collapse branch')}
+                                                                >
+                                                                    <span className="inline-block text-[9px] transition-transform" style={{ transform: branchCmd.isCollapsed ? '' : 'rotate(90deg)' }}>▶</span>
+                                                                </button>
+                                                            )}
                                                             <span className="flex-1 truncate font-medium">
                                                                 {formatCommandName(cmd.type)}
+                                                                {branchCmd?.name && (
+                                                                    <span className="ml-1 opacity-70 font-normal">({branchCmd.name})</span>
+                                                                )}
+                                                                {branchCmd?.isCollapsed && (
+                                                                    <span className="ml-1 opacity-50 font-normal">⋯</span>
+                                                                )}
                                                                 {cmd.type === CommandType.Dialogue && (cmd as any).text && (
                                                                     <span className="ml-1 opacity-50 font-normal">"{(cmd as any).text.slice(0, 30)}{(cmd as any).text.length > 30 ? '…' : ''}"</span>
                                                                 )}
@@ -716,7 +831,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
                                                                 onClick={(e) => { e.stopPropagation(); handleDeleteCommand(index); }}
                                                                 onPointerDown={e => e.stopPropagation()}
                                                                 className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-red-400 transition-opacity"
-                                                                title={t('removeCommand')}
+                                                                title={branchCmd ? t('removeBranchTip', 'Remove the branch (the commands inside it stay)') : t('removeCommand')}
                                                             >
                                                                 <TrashIcon className="w-3 h-3" />
                                                             </button>

@@ -447,7 +447,11 @@ export async function buildAndroidGame(
     i++;
     onProgress({ step: 'assets', progress: 22 + (i / Math.max(1, assetEntries.length)) * 16, message: `Processing asset ${i}/${assetEntries.length}...` });
     if (dataUrl.startsWith('data:')) {
-      androidFiles[`${wwwRoot}/assets/${name}`] = await dataURLToBlob(dataUrl).arrayBuffer();
+      try {
+        androidFiles[`${wwwRoot}/assets/${name}`] = await dataURLToBlob(dataUrl).arrayBuffer();
+      } catch {
+        throw new Error(`Couldn't package the asset "${name}" — its stored data appears damaged. Try re-importing that file in the editor, then build again.`);
+      }
     }
   }
 

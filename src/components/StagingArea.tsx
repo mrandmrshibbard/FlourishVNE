@@ -16,6 +16,7 @@ import { computeCharacterFitPlacement } from '../utils/characterFit';
 import { computeGrade, gradeToBackgroundStyle, gradeToCharacterFilter, gradeToSpriteTint } from './live-preview/systems/dayNightGrade';
 import ContentBoxEditor from './menu-editor/ContentBoxEditor';
 import { computeAlphaBounds } from '../utils/alphaBounds';
+import { resolveCommandCharacterId } from '../utils/playerCharacter';
 
 /** Drag-only marker for positioning a placed light on the scene preview (editor only). */
 const LightMarker: React.FC<{ light: VNLight; index: number; onMove: (x: number, y: number) => void }> = ({ light, index, onMove }) => {
@@ -66,6 +67,7 @@ const ResizeHandle: React.FC<{ onMouseDown: (e: React.MouseEvent) => void; title
 import { VNCondition } from '../types/shared';
 import { combineConditions, resolveConditionValue } from '../utils/conditionLogic';
 import { stripDialogueTextCodes } from './live-preview/dialogueTextCodes';
+import { flattenStagingCommands, CeMeta } from './staging/flattenStagingCommands';
 import { normalizeSetVariableOperatorByType, calculateVariableValue, resolveSetVariableValue } from '../utils/variableUtils';
 import { VNFontSettings } from '../features/ui/types';
 import { VNCharacterLayer } from '../features/character/types';
@@ -283,6 +285,20 @@ interface StageState {
     variables: Record<string, string | number | boolean>;
 }
 
+/** Editor-only chip on elements a Call Common Event puts on stage — tells the author this
+ *  element lives in a SHARED event (edits here change every scene that calls it). */
+const CeBadge: React.FC<{ name: string }> = ({ name }) => (
+    <span
+        className="absolute -top-2.5 -left-2.5 z-[70] pointer-events-none px-1 py-[1px] rounded bg-violet-600/90 text-white text-[9px] leading-tight shadow whitespace-nowrap max-w-[160px] truncate"
+        aria-hidden
+    >
+        🧩 {name}
+    </span>
+);
+
+/** Dashed violet outline marking an event-owned element (pairs with CeBadge). */
+const CE_OUTLINE_STYLE: React.CSSProperties = { outline: '1px dashed rgba(167,139,250,0.85)', outlineOffset: 2 };
+
 const StagingArea: React.FC<{
     project: VNProject;
     activeSceneId: VNID;
@@ -293,7 +309,10 @@ const StagingArea: React.FC<{
     bare?: boolean;
     /** Optional: select a command by index when its overlay is grabbed on the canvas (click-to-select). */
     onSelectCommand?: (index: number | null) => void;
-}> = ({ project, activeSceneId, selectedCommandIndex, className, style, bare, onSelectCommand }) => {
+    /** Optional: deep link into the Common Events tab (double-click on an event-owned element).
+     *  Omitted by the popped-out canvas window, where tab switching isn't possible. */
+    onOpenCommonEvent?: (eventId: VNID, commandIndex: number) => void;
+}> = ({ project, activeSceneId, selectedCommandIndex, className, style, bare, onSelectCommand, onOpenCommonEvent }) => {
     const { dispatch } = useProject();
     const { t } = useTranslation('staging');
     const commandRadial = useCommandRadial();
@@ -348,6 +367,10 @@ const StagingArea: React.FC<{
         variables: {},
     });
 
+    // Provenance of elements spliced in from Common Events (keyed by producing command id).
+    // Drives the badge, parent-call selection, and write-back into the shared event.
+    const [ceMeta, setCeMeta] = React.useState<Record<string, CeMeta>>({});
+
     // Track stage size for proper scaling — measure the parent container and compute
     // the largest stage that fits while preserving the game's aspect ratio.
     React.useEffect(() => {
@@ -385,6 +408,7 @@ const StagingArea: React.FC<{
                 screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, overlayEffects: [] },
                 dialogue: null, movie: null, flash: null, choices: null, textInput: null, commandIndicator: null, variables: {},
             });
+            setCeMeta({});
             return;
         }
 
@@ -451,10 +475,21 @@ const StagingArea: React.FC<{
         });
 
         const endIndex = selectedCommandIndex === null ? scene.commands.length : selectedCommandIndex + 1;
-        const activeCommands = scene.commands.slice(0, endIndex);
+        // Call Common Event commands expand INLINE (the runtime behavior), so an event's visual
+        // elements show up on the canvas and can be arranged here instead of edited blind in the
+        // Common Events tab. Each expanded command carries provenance (which event, which scene
+        // call) — collected into ceMeta for selection, write-back and the badge.
+        const flatEntries = flattenStagingCommands(scene.commands.slice(0, endIndex), project.commonEvents as any);
+        const nextCeMeta: Record<string, CeMeta> = {};
+        for (const entry of flatEntries) {
+            if (entry.ce) nextCeMeta[entry.cmd.id] = entry.ce;
+        }
 
         // Process commands up to the selected one to build the stage's state
-        activeCommands.forEach((command) => {
+        flatEntries.forEach((entry) => {
+            // Loosely typed on purpose — the switch below predates strict narrowing and reads
+            // per-type fields directly (exactly as the previous `activeCommands` walk did).
+            const command = entry.cmd as any;
             if (!command || !evaluateConditions(command.conditions, currentVariables)) {
                 return; // Skip this command if conditions are not met
             }
@@ -492,13 +527,21 @@ const StagingArea: React.FC<{
                     }
                     break;
                 }
-                case CommandType.ShowCharacter:
-                    const charData = project.characters[command.characterId];
-                    const exprData = charData?.expressions[command.expressionId];
+                case CommandType.ShowCharacter: {
+                    // Mirror the runtime handler's resilience (characterHandler.ts): resolve
+                    // ⟨Player's Character⟩ to whoever the player variable points at (else the
+                    // command's own character), and fall back to the character's FIRST expression
+                    // when the stored expressionId doesn't belong to this character. Without these,
+                    // a Show Character that renders fine in-game silently vanished from the canvas.
+                    const showCharId = resolveCommandCharacterId(command as any, project, currentVariables) || command.characterId;
+                    const charData = project.characters[showCharId];
+                    const exprData = charData
+                        ? (charData.expressions[command.expressionId] || Object.values(charData.expressions)[0])
+                        : undefined;
                     if (charData && exprData) {
                         // Resolve each layer: per-layer override wins, else the expression (preset) config.
                         const sel: Record<string, string | null> = {};
-                        const prevChar = characters[command.characterId];
+                        const prevChar = characters[showCharId];
                         Object.values(charData.layers).forEach((layer: VNCharacterLayer) => {
                             if (command.layerOverrides && Object.prototype.hasOwnProperty.call(command.layerOverrides, layer.id)) sel[layer.id] = command.layerOverrides[layer.id] || null;
                             else if (Object.prototype.hasOwnProperty.call(exprData.layerConfiguration, layer.id)) sel[layer.id] = exprData.layerConfiguration[layer.id] ?? null;
@@ -513,26 +556,31 @@ const StagingArea: React.FC<{
                         // "Keep current position": if the character is already on stage and the command
                         // opts in, preview it at its existing position (mirrors the runtime handler) so the
                         // author sees an expression change stay put instead of snapping to center.
-                        const keptPosition = command.keepPosition && characters[command.characterId]
-                            ? characters[command.characterId].position
+                        const keptPosition = command.keepPosition && characters[showCharId]
+                            ? characters[showCharId].position
                             : command.position;
-                        characters[command.characterId] = { charId: command.characterId, layer: command.layer, position: keptPosition, imageUrls, ...(imageBoxes ? { imageBoxes } : {}), transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY, contentBox: command.contentBox, layerSelections: sel, ...(showPoseId ? { poseId: showPoseId } : {}) } as any;
+                        characters[showCharId] = { charId: showCharId, layer: command.layer, position: keptPosition, imageUrls, ...(imageBoxes ? { imageBoxes } : {}), transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY, contentBox: command.contentBox, layerSelections: sel, ...(showPoseId ? { poseId: showPoseId } : {}) } as any;
                     }
                     break;
-                case CommandType.HideCharacter:
-                    delete characters[command.characterId];
+                }
+                case CommandType.HideCharacter: {
+                    // Same ⟨Player's Character⟩ resolution as Show — hide must find the same slot.
+                    const hideCharId = resolveCommandCharacterId(command as any, project, currentVariables) || command.characterId;
+                    delete characters[hideCharId];
                     break;
+                }
                 case CommandType.MoveCharacter: {
                     // Mirror the runtime: a Move Character updates where the character RESTS, so a later
                     // "Show Character" with "Keep current position" inherits the moved-to spot instead of
                     // snapping back to the pre-move position.
-                    const mc = characters[command.characterId];
+                    const moveCharId = resolveCommandCharacterId(command as any, project, currentVariables) || command.characterId;
+                    const mc = characters[moveCharId];
                     if (mc) {
                         // When the author is editing THIS move, the on-canvas character must belong to the
                         // move command so dragging it sets the move's DESTINATION (point B) — not the
                         // original Show Character's position (which would "reset" where the char starts).
                         const isSelectedMove = selectedCommandIndex !== null && scene.commands[selectedCommandIndex]?.id === command.id;
-                        characters[command.characterId] = {
+                        characters[moveCharId] = {
                             ...mc,
                             position: command.toPosition,
                             ...(command.scale !== undefined ? { scale: command.scale } : {}),
@@ -543,27 +591,29 @@ const StagingArea: React.FC<{
                     break;
                 }
                 case CommandType.SetCharacterLayer: {
-                    const cur = characters[command.characterId];
-                    const cData = project.characters[command.characterId];
+                    const layerCharId = resolveCommandCharacterId(command as any, project, currentVariables) || command.characterId;
+                    const cur = characters[layerCharId];
+                    const cData = project.characters[layerCharId];
                     if (cur && cData) {
                         const sel: Record<string, string | null> = { ...((cur as any).layerSelections || {}) };
                         (command.layers || []).forEach(({ layerId, assetId }) => { sel[layerId] = assetId || null; });
                         // Rebuild in the character's CURRENT pose (mirrors the runtime handler).
                         const curPoseId = resolvePoseId(cData, (cur as any).poseId);
                         const { imageUrls, imageBoxes } = buildStagingComposite(cData, sel, curPoseId);
-                        characters[command.characterId] = { ...cur, imageUrls, imageBoxes, layerSelections: sel } as any;
+                        characters[layerCharId] = { ...cur, imageUrls, imageBoxes, layerSelections: sel } as any;
                     }
                     break;
                 }
                 case CommandType.SetCharacterPose: {
                     // Change Pose: same outfit/expression/position, new art (mirrors the runtime handler).
-                    const cur = characters[command.characterId];
-                    const cData = project.characters[command.characterId];
+                    const poseCharId = resolveCommandCharacterId(command as any, project, currentVariables) || command.characterId;
+                    const cur = characters[poseCharId];
+                    const cData = project.characters[poseCharId];
                     if (cur && cData) {
                         const newPoseId = resolvePoseId(cData, (command as any).poseId);
                         const sel: Record<string, string | null> = { ...((cur as any).layerSelections || {}) };
                         const { imageUrls, imageBoxes } = buildStagingComposite(cData, sel, newPoseId);
-                        characters[command.characterId] = { ...cur, imageUrls, imageBoxes, ...(newPoseId ? { poseId: newPoseId } : { poseId: undefined }) } as any;
+                        characters[poseCharId] = { ...cur, imageUrls, imageBoxes, ...(newPoseId ? { poseId: newPoseId } : { poseId: undefined }) } as any;
                     }
                     break;
                 }
@@ -786,6 +836,7 @@ const StagingArea: React.FC<{
         }
 
         setStageState({ backgroundUrl, backgroundIsVideo, backgroundTrimStart, backgroundTrimEnd, backgroundStack, characters, textOverlays, imageOverlays, buttonOverlays, hotSpotOverlays, screen, dialogue, movie, flash, choices, choiceLayout, choiceCommandId, textInput, commandIndicator, variables: currentVariables });
+        setCeMeta(nextCeMeta);
 
     }, [activeSceneId, selectedCommandIndex, project]);
 
@@ -835,8 +886,13 @@ const StagingArea: React.FC<{
         if (!onSelectCommand) return;
         const cmds = project.scenes[activeSceneId]?.commands || [];
         const idx = cmds.findIndex((c: VNCommand) => c.id === sourceCommandId);
-        if (idx >= 0) onSelectCommand(idx);
-    }, [onSelectCommand, project.scenes, activeSceneId]);
+        if (idx >= 0) { onSelectCommand(idx); return; }
+        // Common-event elements aren't in the scene list — select their parent Call command instead.
+        const callId = ceMeta[sourceCommandId]?.callCommandId;
+        if (!callId) return;
+        const callIdx = cmds.findIndex((c: VNCommand) => c.id === callId);
+        if (callIdx >= 0) onSelectCommand(callIdx);
+    }, [onSelectCommand, project.scenes, activeSceneId, ceMeta]);
 
     // Measure a DOM element's true on-screen rect in stage-% (top-left). Ground truth for snapping —
     // immune to the character scale/transform-origin math that made the analytical centre drift.
@@ -949,38 +1005,53 @@ const StagingArea: React.FC<{
         handleOverlayResizeMouseDown(e, kind, id, wPct, hPct, id, corner);
     }, [stageSize, handleOverlayResizeMouseDown]);
 
-    // Commit a character's scale (used by the Fit-to-screen toolbar). Finds the ShowCharacter
-    // command by id across scenes and patches `scale` — one dispatch = one undo step.
-    const commitCharScale = useCallback((sourceCommandId: string, scale: number) => {
+    // ── The ONE command-by-id write path ─────────────────────────────────────────────────
+    // Canvas elements can come from the scene OR be spliced in from a Common Event (the
+    // Call Common Event expansion). Every canvas edit resolves the producing command by id —
+    // scenes first, then common events — and dispatches through the matching reducer action.
+    // Editing an event-owned element edits the SHARED event (owner decision): the change
+    // shows everywhere the event is used.
+    const resolveCommandById = useCallback((commandId: string):
+        | { kind: 'scene'; sceneId: VNID; index: number; command: VNCommand }
+        | { kind: 'ce'; commonEventId: VNID; index: number; command: VNCommand }
+        | null => {
         for (const scene of Object.values(project.scenes) as VNScene[]) {
-            const idx = scene.commands.findIndex((c: VNCommand) => c.id === sourceCommandId);
-            if (idx < 0) continue;
-            dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: scene.id, commandIndex: idx, command: { ...scene.commands[idx], scale } } });
-            break;
+            const idx = scene.commands.findIndex((c: VNCommand) => c.id === commandId);
+            if (idx >= 0) return { kind: 'scene', sceneId: scene.id, index: idx, command: scene.commands[idx] };
         }
-    }, [project.scenes, dispatch]);
+        for (const ce of Object.values((project.commonEvents || {}) as Record<string, { id: VNID; commands: VNCommand[] }>)) {
+            const idx = (ce.commands || []).findIndex((c: VNCommand) => c.id === commandId);
+            if (idx >= 0) return { kind: 'ce', commonEventId: ce.id, index: idx, command: ce.commands[idx] };
+        }
+        return null;
+    }, [project.scenes, project.commonEvents]);
+
+    const applyCommandUpdate = useCallback((commandId: string, updates: Record<string, unknown>) => {
+        const found = resolveCommandById(commandId);
+        if (!found) return;
+        if (found.kind === 'scene') {
+            dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: found.sceneId, commandIndex: found.index, command: { ...found.command, ...updates } } });
+        } else {
+            dispatch({ type: 'UPDATE_COMMON_EVENT_COMMAND', payload: { commonEventId: found.commonEventId, commandIndex: found.index, updates } });
+        }
+    }, [resolveCommandById, dispatch]);
+
+    // Commit a character's scale (used by the Fit-to-screen toolbar) — one dispatch = one undo step.
+    const commitCharScale = useCallback((sourceCommandId: string, scale: number) => {
+        applyCommandUpdate(sourceCommandId, { scale });
+    }, [applyCommandUpdate]);
 
     // Fit-to-screen: set scale AND a custom position so the visible content fills the screen and stays
     // on it (planted at the floor, centred). Converts a preset character to a custom {x,y} position.
     const commitCharFit = useCallback((sourceCommandId: string, mode: 'height' | 'width', box?: VNContentBox) => {
         const placement = computeCharacterFitPlacement(mode, stageSize, box);
-        for (const scene of Object.values(project.scenes) as VNScene[]) {
-            const idx = scene.commands.findIndex((c: VNCommand) => c.id === sourceCommandId);
-            if (idx < 0) continue;
-            dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: scene.id, commandIndex: idx, command: { ...scene.commands[idx], scale: placement.scale, position: { x: placement.x, y: placement.y } } } });
-            break;
-        }
-    }, [project.scenes, dispatch, stageSize]);
+        applyCommandUpdate(sourceCommandId, { scale: placement.scale, position: { x: placement.x, y: placement.y } });
+    }, [applyCommandUpdate, stageSize]);
 
-    // Content box (visible/interactive sub-region) commit + auto-trim, by command id across scenes.
+    // Content box (visible/interactive sub-region) commit + auto-trim, by command id.
     const commitContentBox = useCallback((sourceCommandId: string, box: VNContentBox | undefined) => {
-        for (const scene of Object.values(project.scenes) as VNScene[]) {
-            const idx = scene.commands.findIndex((c: VNCommand) => c.id === sourceCommandId);
-            if (idx < 0) continue;
-            dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: scene.id, commandIndex: idx, command: { ...scene.commands[idx], contentBox: box } } });
-            break;
-        }
-    }, [project.scenes, dispatch]);
+        applyCommandUpdate(sourceCommandId, { contentBox: box });
+    }, [applyCommandUpdate]);
     const trimContentBox = useCallback(async (sourceCommandId: string, imageUrl: string | undefined, boxAspect: number) => {
         if (!imageUrl) return;
         const box = await computeAlphaBounds(imageUrl, { boxAspect });
@@ -1190,35 +1261,25 @@ const StagingArea: React.FC<{
             if (offset) {
                 const newX = offset.x;
                 const newY = offset.y;
-                for (const scene of Object.values(project.scenes) as VNScene[]) {
-                    const idx = scene.commands.findIndex((c: VNCommand) => c.id === drag.sourceCommandId);
-                    if (idx < 0) continue;
-                    const cmd = scene.commands[idx];
+                const found = resolveCommandById(drag.sourceCommandId);
+                if (found) {
+                    const cmd = found.command;
                     if (drag.kind === 'character' && cmd.type === CommandType.MoveCharacter) {
                         // Dragging the character while editing a Move command sets its DESTINATION
                         // (point B) — it must NOT touch the original Show Character's position.
-                        dispatch({
-                            type: 'UPDATE_COMMAND',
-                            payload: { sceneId: scene.id, commandIndex: idx, command: { ...cmd, toPosition: { x: newX, y: newY } } },
-                        });
+                        applyCommandUpdate(drag.sourceCommandId, { toPosition: { x: newX, y: newY } });
                     } else if (drag.kind === 'character') {
                         // Dragging to reposition is an explicit position intent. If this command has
                         // "Keep current position (expression change only)" on, that flag would discard
                         // the new position on the next render (snapping the sprite back to where it was).
                         // So turn it off when the author actually moves the character.
-                        const charCmd: any = { ...cmd, position: { x: newX, y: newY } };
-                        if (charCmd.keepPosition) charCmd.keepPosition = undefined;
-                        dispatch({
-                            type: 'UPDATE_COMMAND',
-                            payload: { sceneId: scene.id, commandIndex: idx, command: charCmd },
+                        applyCommandUpdate(drag.sourceCommandId, {
+                            position: { x: newX, y: newY },
+                            ...((cmd as any).keepPosition ? { keepPosition: undefined } : {}),
                         });
                     } else {
-                        dispatch({
-                            type: 'UPDATE_COMMAND',
-                            payload: { sceneId: scene.id, commandIndex: idx, command: { ...cmd, x: newX, y: newY } },
-                        });
+                        applyCommandUpdate(drag.sourceCommandId, { x: newX, y: newY });
                     }
-                    break;
                 }
             }
             setOverlayDrag(null);
@@ -1230,7 +1291,7 @@ const StagingArea: React.FC<{
         window.addEventListener('mouseup', onUp);
         return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
         // overlayDragOffset intentionally not a dep — latest read via ref (listeners attach once per drag).
-    }, [overlayDrag, project.scenes, dispatch, stageSize, overlayMeta, characterRects, snapEnabled]);
+    }, [overlayDrag, resolveCommandById, applyCommandUpdate, stageSize, overlayMeta, characterRects, snapEnabled]);
 
     // Resize drag: the overlay is center-anchored, so growing width/height by 2× the
     // mouse delta keeps the dragged corner under the cursor.
@@ -1278,30 +1339,21 @@ const StagingArea: React.FC<{
             setOverlayResizeSize(null);
             overlayResizeSizeRef.current = null;
             if (!size) return;
-            for (const scene of Object.values(project.scenes) as VNScene[]) {
-                const idx = scene.commands.findIndex((c: VNCommand) => c.id === resize.sourceCommandId);
-                if (idx < 0) continue;
-                const cmd = scene.commands[idx];
-                // Per-kind units: characters store a uniform `scale`; image/text store px (relative to
-                // the 1280×720 reference); button/item/hotspot/movie store % directly.
-                const patch = resize.kind === 'character'
-                    ? { scale: size.width }
-                    : (resize.kind === 'image' || resize.kind === 'text')
-                        ? { width: Math.round((size.width * 1280) / 100), height: Math.round((size.height * 720) / 100) }
-                        : { width: size.width, height: size.height };
-                dispatch({
-                    type: 'UPDATE_COMMAND',
-                    payload: { sceneId: scene.id, commandIndex: idx, command: { ...cmd, ...patch } },
-                });
-                break;
-            }
+            // Per-kind units: characters store a uniform `scale`; image/text store px (relative to
+            // the 1280×720 reference); button/item/hotspot/movie store % directly.
+            const patch = resize.kind === 'character'
+                ? { scale: size.width }
+                : (resize.kind === 'image' || resize.kind === 'text')
+                    ? { width: Math.round((size.width * 1280) / 100), height: Math.round((size.height * 720) / 100) }
+                    : { width: size.width, height: size.height };
+            applyCommandUpdate(resize.sourceCommandId, patch);
         };
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
         return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
         // NOTE: `overlayResizeSize` is intentionally NOT a dep — the latest size is read via
         // overlayResizeSizeRef in onUp, so the listeners attach once per drag (not per mousemove).
-    }, [overlayResize, project.scenes, dispatch, stageSize]);
+    }, [overlayResize, applyCommandUpdate, stageSize]);
 
     // Arrow-key nudge: fine-tune the SELECTED command's position pixel-by-pixel (% steps; Shift = coarser).
     // Covers x/y commands (image/text/button/item/hot spot) and ShowCharacter once it has a custom {x,y}
@@ -1832,6 +1884,10 @@ const StagingArea: React.FC<{
     // The currently-selected command (drives selection-gated resize handles + the character Fit toolbar).
     const selectedCmd = selectedCommandIndex != null ? (project.scenes[activeSceneId]?.commands[selectedCommandIndex] as VNCommand | undefined) : undefined;
     const selectedCmdId = selectedCmd?.id ?? null;
+    // A common-event element counts as selected when its parent Call Common Event command is the
+    // selection — selecting the Call lights up handles on everything the event puts on stage.
+    const isSelectedEl = (id: string | undefined | null): boolean =>
+        !!id && !!selectedCmdId && (id === selectedCmdId || ceMeta[id]?.callCommandId === selectedCmdId);
 
     // Day/night grade preview (WYSIWYG): use the scene's fixed hour, else the time variable's default.
     const dnc = project.dayNightCycle;
@@ -2034,6 +2090,7 @@ const StagingArea: React.FC<{
                     const finalStyle = isCustomPosition
                         ? { ...posStyle, height: '90%', transform: transformStr, transformOrigin: 'center bottom' }
                         : { ...posStyle, height: '90%', bottom: '0', top: 'auto', transform: transformStr, transformOrigin: 'center bottom' };
+                    const ce = char.sourceCommandId ? ceMeta[char.sourceCommandId] : undefined;
                     return (
                         <div
                             key={char.charId}
@@ -2044,8 +2101,11 @@ const StagingArea: React.FC<{
                                 zIndex: isDragging ? 100000 : 5 + (char.layer ?? 0) * 100,
                                 cursor: char.sourceCommandId ? (isDragging ? 'grabbing' : 'grab') : undefined,
                                 ...(dnSpriteTint ? { isolation: 'isolate' as const } : {}),
+                                ...(ce ? CE_OUTLINE_STYLE : {}),
                             }}
+                            title={ce ? t('fromCommonEvent', 'From event: {{name}} — edits change every scene that calls it. Double-click to open.', { name: ce.eventName }) : undefined}
                             onMouseDown={char.sourceCommandId ? (e) => handleCharMouseDown(e, char) : undefined}
+                            onDoubleClick={(ce && onOpenCommonEvent) ? (e) => { e.stopPropagation(); onOpenCommonEvent(ce.eventId, ce.ceIndex); } : undefined}
                             onContextMenu={(commandRadial && char.sourceCommandId) ? (e) => { e.preventDefault(); commandRadial.openById(char.sourceCommandId!, e.clientX, e.clientY); } : undefined}
                         >
                             {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: index, filter: dnCharFilter || undefined, ...layerBoxStyle((char as any).imageBoxes?.[index]) }} />)}
@@ -2094,7 +2154,8 @@ const StagingArea: React.FC<{
                                     {overlayResizeSize.width.toFixed(2)}×
                                 </div>
                             )}
-                            {char.sourceCommandId && char.sourceCommandId === selectedCmdId && (
+                            {ce && <CeBadge name={ce.eventName} />}
+                            {char.sourceCommandId && isSelectedEl(char.sourceCommandId) && (
                                 <ContentBoxEditor
                                     box={char.contentBox}
                                     onChange={b => commitContentBox(char.sourceCommandId!, b)}
@@ -2138,13 +2199,18 @@ const StagingArea: React.FC<{
                          textBorder: o.textBorder,
                      });
                      Object.assign(textStyle, effectsContainerStyle);
+                     const ce = ceMeta[o.id];
+                     if (ce) Object.assign(textStyle, CE_OUTLINE_STYLE);
                      return (
                          <React.Fragment key={o.id}>
                              <div data-vn-id={o.id} style={textStyle} onMouseDown={e => handleOverlayMouseDown(e, 'text', o.id, o.x, o.y)}
+                                 title={ce ? t('fromCommonEvent', 'From event: {{name}} — edits change every scene that calls it. Double-click to open.', { name: ce.eventName }) : undefined}
+                                 onDoubleClick={(ce && onOpenCommonEvent) ? (e) => { e.stopPropagation(); onOpenCommonEvent(ce.eventId, ce.ceIndex); } : undefined}
                                  onContextMenu={commandRadial ? (e) => { e.preventDefault(); commandRadial.openById(o.id, e.clientX, e.clientY); } : undefined}>
                                  {/* GradientText forces Chromium to re-clip the gradient when colors change live. */}
                                  {gradientSpanStyle ? <GradientText style={gradientSpanStyle}>{overlayText}</GradientText> : <span>{overlayText}</span>}
-                                 {o.id === selectedCmdId && <ResizeHandle onMouseDown={e => startMeasuredResize(e, 'text', o.id)} title={t('dragToResize')} />}
+                                 {ce && <CeBadge name={ce.eventName} />}
+                                 {isSelectedEl(o.id) && <ResizeHandle onMouseDown={e => startMeasuredResize(e, 'text', o.id)} title={t('dragToResize')} />}
                              </div>
                              {isDragging && overlayDragOffset && (
                                  <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
@@ -2160,6 +2226,7 @@ const StagingArea: React.FC<{
                      const isResizing = overlayResize?.kind === 'image' && overlayResize.overlayId === o.id;
                      const displayX = isDragging && overlayDragOffset ? overlayDragOffset.x : o.x;
                      const displayY = isDragging && overlayDragOffset ? overlayDragOffset.y : o.y;
+                     const ce = ceMeta[o.id];
                      return (
                          <React.Fragment key={o.id}>
                              <div
@@ -2167,6 +2234,7 @@ const StagingArea: React.FC<{
                                      position: 'absolute',
                                      left: `${displayX}%`,
                                      top: `${displayY}%`,
+                                     ...(ce ? CE_OUTLINE_STYLE : {}),
                                      // While resizing, show explicit live size (in %); otherwise honor the stored px
                                      // size, and "Fit to content" treats width/height as a max bound around the art.
                                      ...(isResizing && overlayResizeSize
@@ -2180,14 +2248,17 @@ const StagingArea: React.FC<{
                                      zIndex: isDragging ? 100000 : 1 + (o.layer ?? 0) * 100,
                                  }}
                                  data-vn-id={o.id}
+                                 title={ce ? t('fromCommonEvent', 'From event: {{name}} — edits change every scene that calls it. Double-click to open.', { name: ce.eventName }) : undefined}
                                  onMouseDown={e => handleOverlayMouseDown(e, 'image', o.id, o.x, o.y, o.contentBox)}
+                                 onDoubleClick={(ce && onOpenCommonEvent) ? (e) => { e.stopPropagation(); onOpenCommonEvent(ce.eventId, ce.ceIndex); } : undefined}
                                  onContextMenu={commandRadial ? (e) => { e.preventDefault(); commandRadial.openById(o.id, e.clientX, e.clientY); } : undefined}
                              >
                                  {o.fitToContent
                                      ? <img src={o.imageUrl} alt="" style={{ display: 'block', maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain' }} />
                                      : <img src={o.imageUrl} alt="" className="w-full h-full object-contain" />}
-                                 {o.id === selectedCmdId && <ResizeHandle onMouseDown={e => startMeasuredResize(e, 'image', o.id)} title={t('dragToResize')} box={o.contentBox} />}
-                                 {o.id === selectedCmdId && (
+                                 {ce && <CeBadge name={ce.eventName} />}
+                                 {isSelectedEl(o.id) && <ResizeHandle onMouseDown={e => startMeasuredResize(e, 'image', o.id)} title={t('dragToResize')} box={o.contentBox} />}
+                                 {isSelectedEl(o.id) && (
                                      <ContentBoxEditor
                                          box={o.contentBox}
                                          onChange={b => commitContentBox(o.id, b)}
@@ -2214,6 +2285,7 @@ const StagingArea: React.FC<{
                     const displayY = isDragging && overlayDragOffset ? overlayDragOffset.y : btn.y;
                     const displayW = isResizing && overlayResizeSize ? overlayResizeSize.width : btn.width;
                     const displayH = isResizing && overlayResizeSize ? overlayResizeSize.height : btn.height;
+                    const ce = ceMeta[btn.id];
 
                     return (
                         <React.Fragment key={btn.id}>
@@ -2231,9 +2303,12 @@ const StagingArea: React.FC<{
                                     opacity: btn.opacity ?? 1,
                                     cursor: isResizing ? 'nwse-resize' : (isDragging ? 'grabbing' : 'grab'),
                                     zIndex: (isDragging || isResizing) ? 100000 : 1 + (btn.layer ?? 0) * 100,
+                                    ...(ce ? CE_OUTLINE_STYLE : {}),
                                 }}
                                 data-vn-id={btn.id}
+                                title={ce ? t('fromCommonEvent', 'From event: {{name}} — edits change every scene that calls it. Double-click to open.', { name: ce.eventName }) : undefined}
                                 onMouseDown={e => handleOverlayMouseDown(e, 'button', btn.id, btn.x, btn.y, btn.contentBox)}
+                                onDoubleClick={(ce && onOpenCommonEvent) ? (e) => { e.stopPropagation(); onOpenCommonEvent(ce.eventId, ce.ceIndex); } : undefined}
                                 onContextMenu={commandRadial ? (e) => { e.preventDefault(); commandRadial.openById(btn.id, e.clientX, e.clientY); } : undefined}
                             >
                                 {/* Resize handle — drag to scale the button. Sits at the content box
@@ -2273,7 +2348,8 @@ const StagingArea: React.FC<{
                                         {btn.text}
                                     </div>
                                 )}
-                                {btn.id === selectedCmdId && (
+                                {ce && <CeBadge name={ce.eventName} />}
+                                {isSelectedEl(btn.id) && (
                                     <ContentBoxEditor
                                         box={btn.contentBox}
                                         onChange={b => commitContentBox(btn.id, b)}
@@ -2309,6 +2385,7 @@ const StagingArea: React.FC<{
                     const displayW = isResizing && overlayResizeSize ? overlayResizeSize.width : hs.width;
                     const displayH = isResizing && overlayResizeSize ? overlayResizeSize.height : hs.height;
                     const outline = hs.highlightColor || 'rgba(99,102,241,0.9)';
+                    const ce = ceMeta[hs.id];
                     return (
                         <React.Fragment key={hs.id}>
                             <div
@@ -2322,15 +2399,18 @@ const StagingArea: React.FC<{
                                     cursor: isDragging ? 'grabbing' : 'grab',
                                     zIndex: isDragging ? 50 : 9,
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    ...(ce ? CE_OUTLINE_STYLE : {}),
                                 }}
                                 data-vn-id={hs.id}
                                 onMouseDown={e => handleOverlayMouseDown(e, 'hotspot', hs.id, hs.x, hs.y)}
-                                title={`${hs.name} (${hs.trigger})`}
+                                onDoubleClick={(ce && onOpenCommonEvent) ? (e) => { e.stopPropagation(); onOpenCommonEvent(ce.eventId, ce.ceIndex); } : undefined}
+                                title={ce ? t('fromCommonEvent', 'From event: {{name}} — edits change every scene that calls it. Double-click to open.', { name: ce.eventName }) : `${hs.name} (${hs.trigger})`}
                             >
                                 <span className="text-[10px] text-white/90 px-1 py-0.5 rounded bg-black/50 pointer-events-none truncate max-w-full">
                                     🎯 {hs.name}
                                 </span>
-                                {hs.id === selectedCmdId && <ResizeHandle onMouseDown={e => handleOverlayResizeMouseDown(e, 'hotspot', hs.id, hs.width, hs.height)} title={t('dragToResize')} />}
+                                {ce && <CeBadge name={ce.eventName} />}
+                                {isSelectedEl(hs.id) && <ResizeHandle onMouseDown={e => handleOverlayResizeMouseDown(e, 'hotspot', hs.id, hs.width, hs.height)} title={t('dragToResize')} />}
                             </div>
                             {isDragging && overlayDragOffset && (
                                 <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"

@@ -7,6 +7,7 @@
 // back to base64 (data: URLs), exactly as before.
 import { VNID } from '../types';
 import { fileToBase64 } from './file';
+import { decodeDataUrl } from './dataUrlBytes';
 
 export const ASSET_SCHEME = 'flourish-asset';
 
@@ -74,15 +75,9 @@ const fileToArrayBuffer = (file: File): Promise<ArrayBuffer> =>
         r.readAsArrayBuffer(file);
     });
 
-/** Decode a base64/`data:` URL to raw bytes (for migrating embedded media to files). */
-export const dataUrlToBytes = (dataUrl: string): Uint8Array => {
-    const comma = dataUrl.indexOf(',');
-    const b64 = dataUrl.slice(comma + 1);
-    const bin = atob(b64);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-};
+/** Decode a base64/`data:` URL to raw bytes (for migrating embedded media to files).
+ *  Shared robust decoder — tolerates line-wrapped/URL-safe base64 and text payloads. */
+export const dataUrlToBytes = (dataUrl: string): Uint8Array => decodeDataUrl(dataUrl).bytes;
 
 /** Write an uploaded File to the store; returns the project-relative ref (or null on failure). */
 export async function writeAsset(projectId: VNID, type: StoreType, id: VNID, file: File): Promise<string | null> {

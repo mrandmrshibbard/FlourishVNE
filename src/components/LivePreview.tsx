@@ -6659,6 +6659,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const notify = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
         try { toast.addToast(message, type); } catch { console.log(`[notify] [${type}] ${message}`); }
     }, [toast]);
+    // Dev-facing diagnostics (bad command targets, cycle guards, script errors): toast in editor
+    // test play, console-only in a BUILT game — players should never see engine-internals toasts.
+    // Author-driven notifications (game.notify from scripts, plugin api.notify) stay on `notify`.
+    const devNotify = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+        if (isStandalone) { console.warn(`[Flourish] ${message}`); return; }
+        notify(message, type);
+    }, [isStandalone, notify]);
 
     const getValidTitleScreenId = useCallback(() => {
         // 1. Check if the assigned title screen ID is valid
@@ -9515,7 +9522,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const result = await executeScript(scr, ctx);
             if (!result.success) {
                 console.error(`[Lifecycle:${trigger}] Script "${scr.name}" failed:`, result.error);
-                notify(`Script "${scr.name}" error: ${result.error}`, 'error');
+                devNotify(`Script "${scr.name}" error: ${result.error}`, 'error');
             }
         };
         for (const scr of scripts) await execLifecycle(scr, 0);
@@ -9525,7 +9532,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             store.applyWrites(Object.entries(variableUpdates).map(([variableId, value]) => ({ variableId, value, scope: 'global' as const, sourceCommandId: `lifecycle-${trigger}` })));
         }
         updatePlayerState(p => p ? { ...p, variables: { ...p.variables, ...variableUpdates } } : null);
-    }, [project, playerState?.variables, updatePlayerState, assetResolver, playSound, fadeAudio, settings.musicVolume, notify]);
+    }, [project, playerState?.variables, updatePlayerState, assetResolver, playSound, fadeAudio, settings.musicVolume, notify, devNotify]);
 
     useEffect(() => {
         if (!playerState || playerState.mode !== 'playing') { prevLifecycleSceneRef.current = null; return; }
@@ -9663,7 +9670,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         console.warn(`[Parallel CE "${ce.name}"] command "${cmd.type}" skipped (not background-safe).`);
                         // Surface it (test-play) so a "Show Character / Dialogue / etc. in a Parallel event
                         // does nothing" is never a SILENT failure — point the author at the fix.
-                        notify(`"${cmd.type}" won't run in the Parallel event "${ce.name}". Parallel events only run background commands (variables, audio, scripts). Use a "Called" or "Auto" event for on-screen commands.`, 'warning');
+                        devNotify(`"${cmd.type}" won't run in the Parallel event "${ce.name}". Parallel events only run background commands (variables, audio, scripts). Use a "Called" or "Auto" event for on-screen commands.`, 'warning');
                     }
                     continue;
                 }
@@ -9703,7 +9710,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
         const interval = window.setInterval(tick, 120);
         return () => window.clearInterval(interval);
-    }, [project, assetResolver, getAssetMetadata, fadeAudio, playSound, playVoice, stopAllSfx, stopSfx, settings, updatePlayerState, evaluateConditions, notify]);
+    }, [project, assetResolver, getAssetMetadata, fadeAudio, playSound, playVoice, stopAllSfx, stopSfx, settings, updatePlayerState, evaluateConditions, notify, devNotify]);
 
     // ── Plugin runtime bridge ─────────────────────────────────────────────────
     // While LivePreview is mounted, plugins' api.getVariable/setVariable read & write the
@@ -9809,7 +9816,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         if (frame.savedVariables) Object.assign(variables, frame.savedVariables);
                         if (frame.clearedVariables) for (const k of frame.clearedVariables) delete variables[k];
                     }
-                    return { ...p, currentSceneId: frame.sceneId, currentCommands: frame.commands, currentIndex: frame.index, commandStack: newStack, variables };
+                    // This CE was called while the scene was PARKED on click-to-advance (its input-wait
+                    // was cleared so the CE could run). Restore the park: frame.index points AT the
+                    // still-displayed dialogue/wait, and re-raising isWaitingForInput stops the loop
+                    // from re-executing it — the player's next click advances it normally.
+                    const uiState = frame.resumeWaitingForInput
+                        ? { ...p.uiState, isWaitingForInput: true }
+                        : p.uiState;
+                    return { ...p, currentSceneId: frame.sceneId, currentCommands: frame.commands, currentIndex: frame.index, commandStack: newStack, variables, uiState };
                 });
             } else {
                 runtimeDebugLog('End of scene - trying to advance to next scene');
@@ -9980,8 +9994,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             diagnostics.emit('command-start', { sceneId: chainSig.sceneId, commandId: chainSig.commandId, index: chainSig.index });
             executeAtIndex(nextCmd, cmdIndex + 1);
         };
-        // Check conditions for all other commands
-    const conditionsMet = evaluateConditions(command.conditions, getRuntimeVariables());
+        // Check conditions for all other commands.
+    // Branch FLOW MARKERS are exempt: an Otherwise-if / Otherwise reached by normal flow means a
+    // previous segment's body just ran, so the marker must ALWAYS jump past the branch end. Its
+    // `conditions` field belongs to the BranchStart decision walk, not the marker itself — letting
+    // this gate "skip" it on false conditions walked execution INTO the next segment's body (a
+    // branch re-ran lower segments right after the winning one, e.g. un-doing its variable writes).
+    const isBranchFlowMarker = command.type === CommandType.BranchElseIf || command.type === CommandType.BranchElse || command.type === CommandType.BranchEnd;
+    const conditionsMet = isBranchFlowMarker || evaluateConditions(command.conditions, getRuntimeVariables());
     // Live commands are NEVER skipped on a false condition — they register/create their
     // reactive state and let the renderer (visuals) or the live-SFX manager re-check the
     // condition as variables change (show/hide or play/stop live). Without this, a live
@@ -11523,6 +11543,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         }
         updatePlayerState(p => {
             if (!p || !p.uiState.dialogue) return p;
+            // A hotspot/button Common Event is running WHILE this dialogue is parked (its
+            // input-wait was temporarily cleared so the CE could execute — see the
+            // CallCommonEvent action's parkedForInput push). currentIndex points into the CE's
+            // command list right now, so a +1 advance here would skip one of the CE's commands.
+            // Drop the click: the park is restored when the CE returns; the next click advances.
+            if (p.commandStack.some(f => f.resumeWaitingForInput)) return p;
 
             // Check if the current dialogue has keepOpenDuringChoices flag
             // and the next command is a Choice command
@@ -13182,15 +13208,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 runtimeDebugWarn('[CallCommonEvent action] event not found / disabled / empty');
                 // Visible warning: a waiting button suppresses its own advance when it calls a
                 // common event, so a broken/disabled reference would otherwise stall silently.
-                notify('A "Call Common Event" action points to a missing, disabled, or empty event.', 'warning');
+                devNotify('A "Call Common Event" action points to a missing, disabled, or empty event.', 'warning');
                 return;
             }
             if (!playerState || playerState.mode !== 'playing') {
-                notify('Call Common Event only works during gameplay', 'warning');
+                devNotify('Call Common Event only works during gameplay', 'warning');
                 return;
             }
             if (playerState.commandStack.length >= MAX_CALL_DEPTH || playerState.commandStack.some(f => f.commonEventId === ce.id)) {
-                notify(`Common Event call blocked (depth/cycle): "${ce.name}"`, 'error');
+                devNotify(`Common Event call blocked (depth/cycle): "${ce.name}"`, 'error');
                 return;
             }
             const overrides: Record<VNID, string | number | boolean> = {};
@@ -13204,18 +13230,34 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
             updatePlayerState(p => {
                 if (!p) return null;
+                // Called while the scene is PARKED on click-to-advance (a dialogue on screen, or a
+                // Wait-for-input)? The command loop is gated on isWaitingForInput, so pushing the CE
+                // alone would leave it frozen at its first command until the next dialogue click —
+                // which would then "resume" it at index 1, silently SKIPPING the CE's first command
+                // (a spam-clicked hotspot during a dialogue lost every click this way). Instead:
+                // clear the input-wait so the CE runs NOW, return AT the parked command (not +1),
+                // and let the pop restore the park — the dialogue stays up, the next click advances.
+                const parkedForInput = !opts?.resumeAtCurrent && p.uiState.isWaitingForInput;
                 const newStack = [...p.commandStack, {
                     sceneId: p.currentSceneId,
                     commands: p.currentCommands,
                     // Return point: normally the command AFTER the current (waiting) one. When the
                     // caller already advanced the index to the next un-run command (choice flow),
                     // resume AT it — +1 here would skip the command right after the choice.
-                    index: opts?.resumeAtCurrent ? p.currentIndex : p.currentIndex + 1,
+                    index: (opts?.resumeAtCurrent || parkedForInput) ? p.currentIndex : p.currentIndex + 1,
                     commonEventId: ce.id,
                     ...(Object.keys(savedVariables).length > 0 ? { savedVariables } : {}),
                     ...(clearedVariables.length > 0 ? { clearedVariables } : {}),
+                    ...(parkedForInput ? { resumeWaitingForInput: true } : {}),
                 }];
-                return { ...p, currentCommands: ce.commands, currentIndex: 0, commandStack: newStack, variables: { ...p.variables, ...overrides } };
+                return {
+                    ...p,
+                    currentCommands: ce.commands,
+                    currentIndex: 0,
+                    commandStack: newStack,
+                    variables: { ...p.variables, ...overrides },
+                    ...(parkedForInput ? { uiState: { ...p.uiState, isWaitingForInput: false } } : {}),
+                };
             });
         } else if (action.type === UIActionType.GiveItem) {
             // Items are sugar over their count variable — translate to SetVariable (clamped via min:0).

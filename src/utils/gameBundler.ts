@@ -9,6 +9,7 @@ import { VNProject } from '../types/project';
 import { VNPlugin } from '../types/plugins';
 import { UIActionType } from '../types/shared';
 import { getGameEngineCode } from './gameEngineBundle';
+import { decodeDataUrl } from './dataUrlBytes';
 
 export interface BuildProgress {
   step: string;
@@ -298,8 +299,13 @@ export async function buildStandaloneGame(
 
     // Convert data URL to blob
     if (dataUrl.startsWith('data:')) {
-      const blob = dataURLToBlob(dataUrl);
-      assetsFolder.file(name, blob);
+      try {
+        const blob = dataURLToBlob(dataUrl);
+        assetsFolder.file(name, blob);
+      } catch {
+        // Name the culprit — a raw decode error gives the author nothing to act on.
+        throw new Error(`Couldn't package the asset "${name}" — its stored data appears damaged. Try re-importing that file in the editor, then build again.`);
+      }
     }
   }
 
@@ -1463,20 +1469,13 @@ export function buildLeanProject(project: VNProject, assetMap: Record<string, st
 }
 
 /**
- * Converts a data URL to a Blob
+ * Converts a data URL to a Blob. Tolerates everything the browser itself accepts —
+ * whitespace-wrapped or URL-safe base64 and non-base64 text payloads (URL-encoded SVG) —
+ * so one odd asset can't kill a build with a raw atob error.
  */
 export function dataURLToBlob(dataUrl: string): Blob {
-  const parts = dataUrl.split(',');
-  const mime = parts[0].match(/:(.*?);/)?.[1] || 'application/octet-stream';
-  const bstr = atob(parts[1]);
-  const n = bstr.length;
-  const u8arr = new Uint8Array(n);
-  
-  for (let i = 0; i < n; i++) {
-    u8arr[i] = bstr.charCodeAt(i);
-  }
-  
-  return new Blob([u8arr], { type: mime });
+  const { bytes, mime } = decodeDataUrl(dataUrl);
+  return new Blob([bytes], { type: mime });
 }
 
 /**
