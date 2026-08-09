@@ -1236,7 +1236,25 @@ export interface UIInventoryGridElement extends BaseUIElement {
     collectionId?: VNID;
     /** What the per-slot button does. Unset = derived from `showUseButton` (true→'use', else 'none')
      *  for backward compatibility. 'buy'/'sell' turn this grid into a shop control. */
-    slotButton?: 'use' | 'buy' | 'sell' | 'none';
+    /** 'discard' gives every slot a button that gets rid of the item — destroying it or moving
+     *  it to another list, per `discardMode`. */
+    slotButton?: 'use' | 'buy' | 'sell' | 'discard' | 'none';
+    /** What the discard button does. 'destroy' (default) removes the item for good; 'move' sends
+     *  it to `discardToCollectionId` so the story can hand it back later (a dropped-items box,
+     *  a stash, the ground). Only read when slotButton is 'discard'. */
+    discardMode?: 'destroy' | 'move';
+    /** Where a discarded item goes when `discardMode` is 'move'. */
+    discardToCollectionId?: VNID;
+    /** How many items each page shows. Unset = no pages: the grid grows with the items, exactly
+     *  as it always has. Mirrors the save-slot grid's model. Additive-optional. */
+    itemsPerPage?: number;
+    /** Text on the page-turn buttons. Unset = "‹" / "›". */
+    prevPageText?: string;
+    nextPageText?: string;
+    /** Hide the page-turn buttons (e.g. when the author wires their own). */
+    hidePageButtons?: boolean;
+    /** Hide the "1 / 3" indicator between the page buttons. */
+    hidePageIndicator?: boolean;
     /** For a 'sell' grid (the player's inventory shown on a shop screen): which shop list receives the
      *  sale — provides the currency, sell rate, and optional restock target. */
     sellToCollectionId?: VNID;

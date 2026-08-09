@@ -483,22 +483,8 @@ export function handlePlayCharacterAnimation(
     // Character not on stage — nothing to animate.
     return { advance: true };
   }
-  // Unknown/deleted animation behaves like stop — degrade, never break.
-  const animationId = command.animationId && charData.animations?.[command.animationId] ? command.animationId : null;
-  return {
-    advance: true,
-    stagePatch: (prev) => {
-      const cur = prev.characters[characterId];
-      if (!cur) return {};
-      return {
-        characters: {
-          ...prev.characters,
-          // Explicit set-or-clear: absence (stopped) must serialize to a MISSING field.
-          [characterId]: { ...cur, activeManualAnimationId: animationId ?? undefined },
-        },
-      };
-    },
-  };
+  // Shared with the "Play Character Animation" button action — see buildAnimationStagePatch.
+  return { advance: true, stagePatch: buildAnimationStagePatch(project, characterId, command.animationId) };
 }
 
 export function handleSetCharacterPose(
@@ -513,34 +499,132 @@ export function handleSetCharacterPose(
     // Character not on stage — nothing to change.
     return { advance: true };
   }
-  const wrap = (u: string): string => resolveFieldUrl(project.id, u) || u;
-  const useTransition = !!command.transition && command.transition !== 'instant';
-  const poseId = resolvePoseId(charData, command.poseId); // unknown/empty = back to Default
-
+  // Shared with the "Change Pose" button action — see buildPoseStagePatch.
   return {
     advance: true,
-    stagePatch: (prev) => {
-      const cur = prev.characters[characterId];
-      if (!cur) return {};
-      const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes } = buildCharacterMedia(charData, cur.layerSelections || {}, wrap, poseId);
-      return {
-        characters: {
-          ...prev.characters,
-          [characterId]: {
-            ...cur,
-            imageUrls,
-            videoUrls,
-            videoTrims,
-            // Explicit set-or-clear (see SetCharacterLayer note).
-            imageBoxes: imageBoxes.some(Boolean) ? imageBoxes : undefined,
-            videoBoxes: videoBoxes.some(Boolean) ? videoBoxes : undefined,
-            isVideo: hasVideo,
-            videoLoop,
-            ...(poseId ? { poseId } : { poseId: undefined }),
-            transition: useTransition ? { type: command.transition!, duration: command.duration ?? 0.3, action: 'show' as const } : null,
-          },
+    stagePatch: buildPoseStagePatch(project, characterId, command.poseId, command.transition, command.duration),
+  };
+}
+
+/* ── Shared stage patches ──────────────────────────────────────────────────────────────────
+ *
+ * The scene commands (above) and the equivalent BUTTON actions in LivePreview's executeUIAction
+ * are two separate code paths — one returns a CommandResult, the other edits playerState
+ * directly. Without a shared core they drift, and "Change Pose" ends up meaning subtly different
+ * things depending on whether a command or a button did it. These builders are that core: both
+ * paths call them and neither owns the logic.
+ *
+ * Each returns a stage patch function, so callers can drop it into a CommandResult.stagePatch
+ * or apply it to a StageState themselves.
+ */
+
+/** Repaint an on-stage character for a different pose. Unknown/empty pose = back to Default. */
+export function buildPoseStagePatch(
+  project: any,
+  characterId: VNID,
+  rawPoseId: VNID | null | undefined,
+  transition?: string | null,
+  duration?: number,
+) {
+  const charData = project.characters?.[characterId];
+  const wrap = (u: string): string => resolveFieldUrl(project.id, u) || u;
+  const poseId = charData ? resolvePoseId(charData, rawPoseId as any) : undefined;
+  const useTransition = !!transition && transition !== 'instant';
+  return (prev: any) => {
+    const cur = prev.characters?.[characterId];
+    if (!cur || !charData) return {};
+    const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes } =
+      buildCharacterMedia(charData, cur.layerSelections || {}, wrap, poseId);
+    return {
+      characters: {
+        ...prev.characters,
+        [characterId]: {
+          ...cur,
+          imageUrls,
+          videoUrls,
+          videoTrims,
+          // Explicit set-or-clear (see SetCharacterLayer note).
+          imageBoxes: imageBoxes.some(Boolean) ? imageBoxes : undefined,
+          videoBoxes: videoBoxes.some(Boolean) ? videoBoxes : undefined,
+          isVideo: hasVideo,
+          videoLoop,
+          ...(poseId ? { poseId } : { poseId: undefined }),
+          transition: useTransition ? { type: transition as any, duration: duration ?? 0.3, action: 'show' as const } : null,
         },
-      };
-    },
+      },
+    };
+  };
+}
+
+/** Start or stop a character's manual animation. A deleted/unknown animation behaves as stop. */
+export function buildAnimationStagePatch(
+  project: any,
+  characterId: VNID,
+  rawAnimationId: VNID | null | undefined,
+) {
+  const charData = project.characters?.[characterId];
+  const animationId = rawAnimationId && charData?.animations?.[rawAnimationId] ? rawAnimationId : null;
+  return (prev: any) => {
+    const cur = prev.characters?.[characterId];
+    if (!cur) return {};
+    return {
+      characters: {
+        ...prev.characters,
+        // Explicit set-or-clear: absence (stopped) must serialize to a MISSING field.
+        [characterId]: { ...cur, activeManualAnimationId: animationId ?? undefined },
+      },
+    };
+  };
+}
+
+/**
+ * Swap the character standing in a spot for a different one, keeping the spot: position, scale,
+ * flip and anchor all carry over, so a button can change who is on stage without the author
+ * re-describing where they stand. The incoming character uses the given expression (or their
+ * first) and pose (or Default).
+ */
+export function buildCharacterSwapStagePatch(
+  project: any,
+  fromCharacterId: VNID,
+  toCharacterId: VNID,
+  expressionId?: VNID | null,
+  rawPoseId?: VNID | null,
+) {
+  const toChar = project.characters?.[toCharacterId];
+  const wrap = (u: string): string => resolveFieldUrl(project.id, u) || u;
+  const poseId = toChar ? resolvePoseId(toChar, rawPoseId as any) : undefined;
+  return (prev: any) => {
+    const cur = prev.characters?.[fromCharacterId];
+    if (!cur || !toChar) return {};
+    const expr = (expressionId && toChar.expressions?.[expressionId])
+      || Object.values(toChar.expressions || {})[0] as any;
+    // Build this character's own layer picks from the chosen expression.
+    const layerSelections: Record<VNID, VNID | null> = {};
+    Object.values(toChar.layers || {}).forEach((layer: any) => {
+      layerSelections[layer.id] = expr?.layerConfiguration?.[layer.id] ?? null;
+    });
+    const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes } =
+      buildCharacterMedia(toChar, layerSelections, wrap, poseId);
+    const { [fromCharacterId]: _gone, ...others } = prev.characters;
+    return {
+      characters: {
+        ...others,
+        [toCharacterId]: {
+          ...cur,                       // keeps position/scale/flip/anchor — the whole point
+          characterId: toCharacterId,
+          layerSelections,
+          imageUrls,
+          videoUrls,
+          videoTrims,
+          imageBoxes: imageBoxes.some(Boolean) ? imageBoxes : undefined,
+          videoBoxes: videoBoxes.some(Boolean) ? videoBoxes : undefined,
+          isVideo: hasVideo,
+          videoLoop,
+          ...(poseId ? { poseId } : { poseId: undefined }),
+          expressionId: expr?.id,
+          activeManualAnimationId: undefined,   // the outgoing character's animation must not linger
+        },
+      },
+    };
   };
 }

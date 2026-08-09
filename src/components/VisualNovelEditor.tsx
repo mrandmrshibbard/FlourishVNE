@@ -721,19 +721,19 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                         </ErrorBoundary>
                     ) : activeTab === 'systems' ? (
                         <ErrorBoundary panelName="Systems">
-                            <Suspense fallback={<div className="text-slate-300 p-4">Loading systems…</div>}>
+                            <Suspense fallback={<div className="text-slate-300 p-4">{t('hc.loadingSystems', 'Loading systems…')}</div>}>
                                 <SystemsManager project={project} onOpenScreenInEditor={handleOpenScreenInUIEditor} onOpenInGameUI={() => { setActiveTab('ui'); setUiEditorMode('ingame'); }} initialSelection={systemsSelection} onSelectionConsumed={() => setSystemsSelection(null)} />
                             </Suspense>
                         </ErrorBoundary>
                     ) : activeTab === 'miniGames' ? (
                         <ErrorBoundary panelName="Mini Games">
-                            <Suspense fallback={<div className="text-slate-300 p-4">Loading mini games…</div>}>
+                            <Suspense fallback={<div className="text-slate-300 p-4">{t('hc.loadingMiniGames', 'Loading mini games…')}</div>}>
                                 <MiniGamesManager project={project} />
                             </Suspense>
                         </ErrorBoundary>
                     ) : activeTab === 'storyBible' ? (
                         <ErrorBoundary panelName="Story Bible">
-                            <Suspense fallback={<div className="text-slate-300 p-4">Loading story bible…</div>}>
+                            <Suspense fallback={<div className="text-slate-300 p-4">{t('hc.loadingStoryBible', 'Loading story bible…')}</div>}>
                                 <StoryBibleManager project={project} />
                             </Suspense>
                         </ErrorBoundary>

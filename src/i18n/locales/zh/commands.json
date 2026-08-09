@@ -13,7 +13,8 @@
     "Screen FX": "屏幕特效",
     "UI Elements": "UI 元素",
     "Media": "媒体",
-    "Flow Control": "流程控制"
+    "Flow Control": "流程控制",
+    "Phone": "手机"
   },
   "names": {
     "Dialogue": "对话",
@@ -59,6 +60,27 @@
     "Wait": "等待",
     "RunScript": "运行脚本",
     "CallCommonEvent": "调用公共事件",
-    "Group": "分组"
+    "Group": "分组",
+    "SetCharacterLayer": "设置角色图层",
+    "ShowPhone": "显示手机",
+    "HidePhone": "隐藏手机",
+    "ShowPhoneText": "显示短信",
+    "HidePhoneText": "隐藏短信",
+    "PhoneIncomingText": "收到短信",
+    "PhoneIncomingCall": "来电",
+    "StartPhoneCall": "拨打电话",
+    "ShowMap": "显示地图",
+    "ShowMiniGame": "显示小游戏",
+    "PhoneNotify": "手机通知",
+    "MoveCharacter": "移动角色",
+    "StartTimer": "启动计时器",
+    "StopTimer": "停止计时器",
+    "SetCharacterPose": "更换姿势",
+    "PlayCharacterAnimation": "播放动画",
+    "BranchElseIf": "否则如果",
+    "BranchElse": "否则"
+  },
+  "hc": {
+    "playFromHereTestThe": "从这里开始试玩——从这一行开始测试游戏（全新一局；会套用本场景的画面布置）"
   }
 }

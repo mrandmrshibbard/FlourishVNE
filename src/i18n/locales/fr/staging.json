@@ -24,5 +24,26 @@
   "lightMarkerTitle": "{{type}} n°{{n}} — glisser pour positionner",
   "lightCandle": "bougie",
   "lightStar": "étoile",
-  "lightChristmas": "Noël"
+  "lightChristmas": "Noël",
+  "characterSize": "Taille :",
+  "fitHeight": "Ajuster à la hauteur",
+  "fitHeightTip": "Met le personnage à l'échelle pour remplir la hauteur de l'écran",
+  "fitWidth": "Ajuster à la largeur",
+  "fitWidthTip": "Met le personnage à l'échelle pour couvrir la largeur de l'écran",
+  "resetSize": "100 %",
+  "resetSizeTip": "Rétablit la taille d'origine du personnage",
+  "snapToggle": "Aimantation",
+  "snapTip": "Aimantation intelligente aux bords, aux centres et aux autres éléments. Maintenez Alt en glissant pour placer librement.",
+  "chromeShow": "Afficher les boutons du canevas",
+  "chromeHide": "Masquer les boutons du canevas (ils peuvent cacher l'image que vous alignez)",
+  "zoomIn": "Zoom avant (Ctrl+molette)",
+  "zoomOut": "Zoom arrière (Ctrl+molette)",
+  "zoomReset": "Revenir à l'ajustement",
+  "fromCommonEvent": "De l'événement : {{name}} — les modifications touchent toutes les scènes qui l'appellent. Double-cliquez pour l'ouvrir.",
+  "hudOverlayLabel": "ATH",
+  "hudOverlayTip": "Affiche sur ce canevas les zones cliquables de l'ATH du jeu. En jeu, l'ATH est au-dessus de la scène : un point interactif situé dessous ne recevra pas les clics.",
+  "hudOverlayToggle": "Zones de l'ATH",
+  "hc": {
+    "backgroundLayer": "calque d'arrière-plan"
+  }
 }

@@ -65,5 +65,88 @@
     "elSetsVariable": "Elemento \"{{name}}\": Establece la variable",
     "elCyclesLayer": "Elemento \"{{name}}\": Alterna el recurso de capa",
     "elTextRef": "Elemento \"{{name}}\": Referenciada en el texto"
-  }
+  },
+  "list": {
+    "searchPlaceholder": "Buscar variables…",
+    "sortTitle": "Cómo se ordena la lista",
+    "sortProject": "Orden de creación",
+    "sortAz": "A → Z",
+    "sortType": "Por tipo",
+    "group": "Agrupar",
+    "groupHint": "Las variables llamadas \"heroe_oro\" y \"heroe_confianza\" se agrupan bajo un encabezado \"heroe\"",
+    "noResults": "Ninguna variable coincide con tu búsqueda.",
+    "newFolder": "Nueva carpeta: arrastra variables dentro para organizarlas",
+    "newFolderName": "Nueva carpeta",
+    "dragHere": "Arrastra variables aquí",
+    "noFolder": "Sin carpeta",
+    "deleteFolderConfirm": "¿Eliminar la carpeta \"{{name}}\"? Las variables que contiene se conservan: solo salen de la carpeta."
+  },
+  "xray": {
+    "title": "Dónde se usa esto",
+    "count": "{{count}} lugares",
+    "nowhere": "en ningún sitio todavía",
+    "rowCount": "Se usa en {{count}} lugares",
+    "rowNone": "Todavía nada usa esto",
+    "jump": "Llévame allí",
+    "noJump": "Este no se puede abrir directamente",
+    "up": "sube en {{n}}",
+    "down": "baja en {{n}}",
+    "changed": "cambia en {{n}}",
+    "checked": "se comprueba en {{n}}",
+    "shown": "se muestra en {{n}}",
+    "orphan": "Todavía nada en tu historia usa esto. Se quedará en su valor inicial.",
+    "neverChanged": "Nada cambia esto nunca, así que se queda en su valor inicial durante todo el juego. ¿Querías cambiarla en algún sitio?",
+    "neverUsed": "Nada comprueba ni muestra esto nunca, así que cambiarla no afecta a nada que el jugador vea."
+  },
+  "picker": {
+    "placeholder": "Elige una variable…",
+    "search": "Busca o escribe un nombre nuevo…",
+    "none": "Aún no hay variables.",
+    "nameTaken": "Ya existe una variable con ese nombre.",
+    "createAs": "Crear “{{name}}” como…",
+    "type": {
+      "boolean": "Sí / No",
+      "number": "Número",
+      "string": "Texto"
+    },
+    "typeHint": {
+      "boolean": "Algo que ocurrió o no ocurrió",
+      "number": "Algo que cuentas o mides",
+      "string": "Palabras: un nombre, una ruta, un color"
+    }
+  },
+  "token": {
+    "insert": "Inserta una variable en este texto: mostrará su valor mientras se juega",
+    "pick": "¿Qué variable?"
+  },
+  "meaning": {
+    "iconTitle": "Un emoji, para reconocer esta variable de un vistazo",
+    "colorTitle": "Un color, que se usa allí donde aparezca esta variable",
+    "descPlaceholder": "Qué significa esto en tu historia — p. ej. “Cuánto le gustas a Yuki”"
+  },
+  "bands": {
+    "label": "Ponles nombre a los números",
+    "hint": "Nombra los tramos una vez y luego podrás escribir “cuando Yuki sea Amiga” en lugar de “cuando Afecto sea 41 o más”.",
+    "startBlank": "Empezar en blanco",
+    "presetHint": "Elige uno para empezar: después puedes renombrar, recolorear y renumerar cada tramo.",
+    "namePlaceholder": "Amigo",
+    "iconTitle": "Un emoji para este tramo (opcional)",
+    "colorTitle": "Color de este tramo",
+    "from": "desde",
+    "andUp": "{{from}} o más",
+    "andUpShort": "o más",
+    "add": "Añadir otro tramo",
+    "remove": "Quitar este tramo",
+    "rowSummary_one": "{{count}} tramo con nombre",
+    "rowSummary_other": "{{count}} tramos con nombre",
+    "showAsLabel": "Cuando esto aparece en el texto de tu historia",
+    "showAsNumber": "Mostrar el número — “34”",
+    "showAsBand": "Mostrar el nombre — “Amigo”",
+    "showAsBoth": "Mostrar ambos — “Amigo (34)”",
+    "showAsHint": "Esto es lo que {{token}} imprime en diálogos y opciones."
+  },
+  "valueBounds": "Rango de valores (opcional)",
+  "noMin": "Sin mínimo",
+  "noMax": "Sin máximo",
+  "valueBoundsHint": "Cada cambio (Definir variable desde comandos, botones o elecciones) se limita a este rango, así que el valor nunca se pasa de lo que pretendes (por ejemplo, mantener el afecto entre 0 y 100)."
 }

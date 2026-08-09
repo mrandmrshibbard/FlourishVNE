@@ -191,7 +191,7 @@ const MapEditor: React.FC<{ isOpen: boolean; onClose: () => void; initialMapId?:
                                 <input type="checkbox" checked={!!map.confirmTravel} onChange={e => patchMap({ confirmTravel: e.target.checked || undefined })} className="w-4 h-4" />
                                 {t('mapEditor.confirmTravel', 'Ask before traveling')}
                             </label>
-                            {map.confirmTravel && <FormField label={t('mapEditor.confirmText', 'Confirm text')}><TextInput value={map.confirmText || ''} placeholder="Travel to {name}?" onChange={e => patchMap({ confirmText: e.target.value || undefined })} /></FormField>}
+                            {map.confirmTravel && <FormField label={t('mapEditor.confirmText', 'Confirm text')}><TextInput value={map.confirmText || ''} placeholder={t('hc.travelToName', 'Travel to {name}?')} onChange={e => patchMap({ confirmText: e.target.value || undefined })} /></FormField>}
 
                             <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
                                 <input type="checkbox" checked={map.allowZoom !== false} onChange={e => patchMap({ allowZoom: e.target.checked ? undefined : false })} className="w-4 h-4" />

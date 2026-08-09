@@ -1,3 +1,5 @@
+import { useCanvasZoom } from '../hooks/useCanvasZoom';
+import CanvasZoomControls from './ui/CanvasZoomControls';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VNID, VNPosition, VNTransition, VNPositionPreset, VNContentBox } from '../types';
@@ -338,11 +340,10 @@ const StagingArea: React.FC<{
     const stageRef = React.useRef<HTMLDivElement>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const [stageSize, setStageSize] = React.useState({ width: 1280, height: 720 }); // Default 16:9 at 720p
-    // Canvas zoom (1 = fit the panel). Lets authors fine-tune tiny images/hot spots: the stage
-    // renders larger and the panel scrolls. Multiplied INTO stageSize so every consumer
-    // (drag math, font scale, slide previews) scales consistently. Declared BEFORE the
-    // measurement effect that reads it.
-    const [stageZoom, setStageZoom] = React.useState(1);
+    // Canvas zoom (1 = fit the panel) — shared with the screens canvas via useCanvasZoom.
+    // Multiplied INTO stageSize so every consumer (drag math, font scale, previews) scales together.
+    const zoomCtl = useCanvasZoom(containerRef);
+    const stageZoom = zoomCtl.zoom;
     const [stageState, setStageState] = React.useState<StageState>({
         backgroundUrl: null,
         characters: {},
@@ -1070,19 +1071,6 @@ const StagingArea: React.FC<{
     useEffect(() => {
         try { localStorage.setItem('flourish:stagingChromeCollapsed', chromeCollapsed ? '1' : '0'); } catch { /* ignore */ }
     }, [chromeCollapsed]);
-    // Ctrl+scroll zooms the canvas. Native listener (passive: false) — React's synthetic wheel
-    // handler is passive, so preventDefault (needed to stop the browser's page zoom) is ignored there.
-    useEffect(() => {
-        const el = containerRef.current;
-        if (!el) return;
-        const onWheel = (e: WheelEvent) => {
-            if (!e.ctrlKey) return;
-            e.preventDefault();
-            setStageZoom(z => Math.max(0.5, Math.min(4, Math.round(z * (e.deltaY < 0 ? 1.15 : 1 / 1.15) * 100) / 100)));
-        };
-        el.addEventListener('wheel', onWheel, { passive: false });
-        return () => el.removeEventListener('wheel', onWheel);
-    }, []);
     // Show the game HUD's click-capturing areas on the scene canvas (default ON) — an always-on
     // HUD renders over every scene in-game, so an author's scene hotspot placed underneath one
     // silently loses the click. Persisted per user.
@@ -1950,7 +1938,7 @@ const StagingArea: React.FC<{
                             <div key={plane.commandId} className="absolute inset-0 overflow-hidden" style={{ zIndex: plane.layer ?? 0, backgroundColor: plane.color }}>
                                 {plane.url && (plane.isVideo
                                     ? <TrimmedVideo key={`stage-bgplane-${plane.commandId}-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={plane.url} autoPlay loop muted trimStart={plane.trimStart} trimEnd={plane.trimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" style={plane.parallaxDepth ? { transform: 'scale(1.15)', transformOrigin: 'center' } : undefined} />
-                                    : <img src={plane.url} alt="background layer" className="absolute inset-0 w-full h-full object-cover" style={plane.parallaxDepth ? { transform: 'scale(1.15)', transformOrigin: 'center' } : undefined} />
+                                    : <img src={plane.url} alt={t('hc.backgroundLayer', 'background layer')} className="absolute inset-0 w-full h-full object-cover" style={plane.parallaxDepth ? { transform: 'scale(1.15)', transformOrigin: 'center' } : undefined} />
                                 )}
                             </div>
                         );
@@ -2583,23 +2571,7 @@ const StagingArea: React.FC<{
                  </div>
 
                  {/* Canvas zoom — fine-tune tiny images/hot spots (also Ctrl+scroll on the canvas). */}
-                 <div className="absolute bottom-2 right-2 flex items-center gap-1 z-[10000] bg-[var(--bg-primary)]/70 border border-[var(--border-default)]/40 rounded-lg px-1 py-0.5">
-                    <button
-                        onClick={() => setStageZoom(z => Math.max(0.5, Math.round(z / 1.25 * 100) / 100))}
-                        className="w-5 h-5 flex items-center justify-center rounded text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
-                        title={t('zoomOut', 'Zoom out (Ctrl+scroll)')}
-                    >−</button>
-                    <button
-                        onClick={() => setStageZoom(1)}
-                        className="px-1 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] tabular-nums"
-                        title={t('zoomReset', 'Back to fit')}
-                    >{Math.round(stageZoom * 100)}%</button>
-                    <button
-                        onClick={() => setStageZoom(z => Math.min(4, Math.round(z * 1.25 * 100) / 100))}
-                        className="w-5 h-5 flex items-center justify-center rounded text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
-                        title={t('zoomIn', 'Zoom in (Ctrl+scroll)')}
-                    >+</button>
-                 </div>
+                 <CanvasZoomControls zoom={zoomCtl} />
                 </div>
             </div>
     );

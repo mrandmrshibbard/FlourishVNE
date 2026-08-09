@@ -25,8 +25,21 @@
   "exportingProject": "Exportando Projeto...",
   "packagingFiles": "Empacotando os arquivos do projeto",
   "toast": {
-    "savedMissingAssets": "Guardado — mas {{count}} ficheiro(s) de media não foram encontrados no disco e NÃO estão dentro do ficheiro guardado. O projeto continua a abrir, mas essa arte/áudio está em falta. Verifique as suas imagens e sons."
+    "savedMissingAssets": "Guardado — mas {{count}} ficheiro(s) de media não foram encontrados no disco e NÃO estão dentro do ficheiro guardado. O projeto continua a abrir, mas essa arte/áudio está em falta. Verifique as suas imagens e sons.",
+    "saved": "Projeto salvo"
   },
   "saveAs": "Guardar como…",
-  "saveAsTip": "Escolha onde guardar este projeto (e continuar a guardar aí)"
+  "saveAsTip": "Escolha onde guardar este projeto (e continuar a guardar aí)",
+  "compareMerge": "Comparar e Mesclar",
+  "extensionPanels": "Painéis de Extensão",
+  "extensionTools": "Ferramentas de Extensão",
+  "extensionData": "Dados de Extensão",
+  "savingInProgress": "Salvando…",
+  "playInWindow": "Jogar em uma janela separada (com Recarregar)",
+  "largeExport": {
+    "title": "Este projeto é grande",
+    "body": "Sua mídia soma cerca de {{size}}. A exportação vai funcionar, mas pode ficar lenta e gerar um arquivo grande. Comprimir seus maiores arquivos mantém tudo rápido e leve.",
+    "biggest": "Maiores arquivos",
+    "proceed": "Exportar mesmo assim"
+  }
 }

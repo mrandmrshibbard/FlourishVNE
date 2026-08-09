@@ -188,47 +188,170 @@
       "effectsTip": "Combina gli effetti ScuotiSchermo, LampeggiaSchermo e TingiSchermo con effetti sonori per momenti drammatici d'impatto, come esplosioni o rivelazioni."
     },
     "commands": {
-      "GiveItem": { "desc": "Dà al giocatore una quantità di un oggetto dell'inventario (imposta la quantità a 1 per gli oggetti Unici).", "example": "Dopo una scena con un baule, Dai oggetto Chiave d'oro (quantità 1) così il giocatore può aprire la porta chiusa." },
-      "UseItem": { "desc": "Usa un oggetto: esegue il suo effetto Usa e, se l'oggetto è consumabile, ne diminuisce la quantità di uno.", "example": "Usa oggetto su una Pozione di salute esegue il suo effetto (aumenta salute di 50) e rimuove una pozione dalla borsa." },
-      "DestroyItem": { "desc": "Rimuove dal giocatore una parte o tutto di un oggetto senza usarlo; la quantità non scende mai sotto zero.", "example": "Quando il ponte brucia, Distruggi oggetto su Corda con 'tutto' attivo per togliere ogni corda al giocatore." },
-      "RestockCollection": { "desc": "Riempie di nuovo una lista di oggetti di un negozio o di un deposito riportandola ai livelli di stock, seguendo la regola di rifornimento di quella lista.", "example": "Dopo 'Riposi per la notte', Rifornisci lista oggetti sull'Emporio così la merce torna entro mattina." },
-      "BuyItem": { "desc": "Acquista un oggetto da una lista di un negozio, spendendo la valuta di quella lista (non fa nulla se non te lo puoi permettere o è esaurito).", "example": "In una scena d'intermezzo, Compra oggetto Spada dalla lista del Fabbro; l'Oro viene detratto automaticamente." },
-      "SellItem": { "desc": "Vende un oggetto posseduto dal giocatore a una lista di un negozio, pagando il suo prezzo moltiplicato per il tasso di vendita del negozio.", "example": "Dopo una missione, Vendi oggetto Vecchio anello alla lista del Mercante per rimuoverlo e incassare monete." },
-      "Dialogue": { "desc": "Mostra il dialogo di un personaggio con nome del parlante e ritratto opzionali.", "example": "Mostra Sakura che dice \"Ciao!\" sul lato sinistro dello schermo." },
-      "Choice": { "desc": "Presenta al giocatore più opzioni che influenzano il percorso della storia.", "example": "Chiedi al giocatore \"Dove vai?\" con le opzioni \"Parco\", \"Biblioteca\", \"Casa\"." },
-      "BranchStart": { "desc": "Inizia una sezione di ramo con un nome per organizzare visivamente i percorsi della storia.", "example": "Inizia un ramo chiamato \"Percorso Sakura\" colorato di rosa per raggruppare i comandi correlati." },
-      "BranchEnd": { "desc": "Termina una sezione di ramo aperta in precedenza.", "example": "Chiudi il blocco del ramo \"Percorso Sakura\"." },
-      "ShowCharacter": { "desc": "Mostra lo sprite di un personaggio sullo schermo con posizione ed espressione.", "example": "Mostra Kai al centro con espressione felice, in dissolvenza in entrata in 0,5 secondi." },
-      "HideCharacter": { "desc": "Rimuove un personaggio dallo schermo con una transizione.", "example": "Nascondi Sakura con una dissolvenza in uscita in 1 secondo." },
-      "SetBackground": { "desc": "Cambia l'immagine di sfondo della scena.", "example": "Imposta lo sfondo su \"corridoio_scuola\" con dissolvenza incrociata in 1 secondo." },
-      "ShowText": { "desc": "Mostra un overlay di testo sullo schermo in una posizione specifica con uno stile.", "example": "Mostra \"Capitolo 1\" centrato sullo schermo in grande testo bianco, in dissolvenza in entrata." },
-      "HideText": { "desc": "Rimuove dallo schermo un overlay di testo mostrato in precedenza.", "example": "Nascondi il testo del titolo del capitolo con una dissolvenza in uscita." },
-      "ShowImage": { "desc": "Mostra un overlay di immagine sullo schermo con posizione, dimensione e rotazione.", "example": "Mostra l'immagine di una lettera centrata sullo schermo al 50% delle dimensioni, in dissolvenza in entrata." },
-      "HideImage": { "desc": "Rimuove dallo schermo un overlay di immagine mostrato in precedenza.", "example": "Nascondi l'immagine della lettera con una transizione in dissolvenza in uscita." },
-      "ShowButton": { "desc": "Mostra un pulsante interattivo sullo schermo con uno stile e azioni al clic.", "example": "Mostra un pulsante \"Continua\" in basso al centro che salta alla scena successiva quando viene cliccato." },
-      "HideButton": { "desc": "Rimuove dallo schermo un pulsante mostrato in precedenza.", "example": "Nascondi il pulsante \"Continua\" con una dissolvenza in uscita." },
-      "ShowdraggableImageElement": { "desc": "Mostra un'immagine con regioni hot-spot cliccabili che attivano azioni (salto, imposta variabile).", "example": "Mostra l'immagine di una mappa del mondo con regioni cliccabili delle città che saltano a scene diverse quando vengono cliccate." },
-      "HidedraggableImageElement": { "desc": "Rimuove dallo schermo una mappa immagine mostrata in precedenza.", "example": "Nascondi la mappa del mondo con una transizione in dissolvenza in uscita." },
-      "PlayMusic": { "desc": "Avvia la riproduzione della musica di sottofondo. In loop per impostazione predefinita.", "example": "Riproduci \"tema_romantico.mp3\" all'80% di volume con dissolvenza in entrata di 2s." },
-      "StopMusic": { "desc": "Ferma la musica di sottofondo attualmente in riproduzione.", "example": "Ferma la musica con una dissolvenza in uscita di 1 secondo." },
-      "PlaySoundEffect": { "desc": "Riproduce un effetto sonoro una tantum.", "example": "Riproduci il suono bussa_alla_porta a volume pieno." },
-      "StopSoundEffect": { "desc": "Ferma tutti gli effetti sonori attualmente in riproduzione.", "example": "Ferma immediatamente tutti gli effetti sonori." },
-      "PlayMovie": { "desc": "Riproduce un file video. In modalità a schermo intero, viene mostrato su uno sfondo nero (scene d'intermezzo). In modalità overlay, viene riprodotto in trasparenza sopra la scena (effetti come petali che cadono, pioggia).", "example": "Riproduci petali che cadono come overlay trasparente in loop mentre il dialogo continua sotto." },
-      "StopMovie": { "desc": "Ferma tutti gli overlay video attualmente in riproduzione.", "example": "Ferma l'overlay dei petali che cadono quando la scena cambia." },
-      "SetVariable": { "desc": "Imposta una variabile di gioco a un valore. Usata per tenere traccia di scelte e statistiche.", "example": "Imposta \"punteggioGiocatore\" a 10, oppure aggiungi 5 a \"livelloAmicizia\"." },
-      "TextInput": { "desc": "Chiede al giocatore di digitare del testo e lo memorizza in una variabile.", "example": "Chiedi \"Come ti chiami?\" e memorizza la risposta in \"nomeGiocatore\"." },
-      "Jump": { "desc": "Salta immediatamente a un'altra scena.", "example": "Salta alla scena \"inizio_capitolo2\"." },
-      "Label": { "desc": "Definisce un punto etichetta con un nome all'interno di una scena, a cui è possibile saltare.", "example": "Crea un'etichetta chiamata \"inizio_ciclo\" per segnare un punto di ritorno." },
-      "JumpToLabel": { "desc": "Salta a un'etichetta con un nome all'interno della scena corrente.", "example": "Salta indietro all'etichetta \"inizio_ciclo\" per ripetere una sezione." },
-      "Wait": { "desc": "Mette in pausa per una durata specificata prima di continuare.", "example": "Attendi 2 secondi prima di mostrare il dialogo successivo, oppure attendi il clic del giocatore." },
-      "ShowScreen": { "desc": "Mostra una schermata UI personalizzata (menu, inventari, ecc.).", "example": "Mostra l'overlay UI \"schermata_inventario\"." },
-      "ShakeScreen": { "desc": "Applica un effetto di scuotimento dello schermo per un impatto drammatico.", "example": "Scuoti lo schermo per 0,5 secondi a intensità media durante un'esplosione." },
-      "TintScreen": { "desc": "Applica un overlay di tinta colorata all'intero schermo.", "example": "Tingi lo schermo di rosso in 1 secondo per indicare pericolo." },
-      "FlashScreen": { "desc": "Fa lampeggiare lo schermo con un colore brillante per un breve istante.", "example": "Fai lampeggiare lo schermo di bianco per 0,3 secondi per un effetto fulmine." },
-      "PanZoomScreen": { "desc": "Sposta e ingrandisce la camera per mettere a fuoco un'area specifica.", "example": "Ingrandisci 2x sul lato sinistro dello schermo in 1 secondo." },
-      "ResetScreenEffects": { "desc": "Reimposta tutti gli effetti schermo attivi (tinta, zoom, ecc.) riportandoli alla normalità.", "example": "Reimposta tutti gli effetti schermo in modo fluido in 0,5 secondi." },
-      "SetScreenOverlayEffect": { "desc": "Applica un effetto overlay persistente come pioggia, neve o particelle.", "example": "Aggiungi un delicato effetto di nevicata al 50% di intensità." },
-      "Group": { "desc": "Raggruppa più eventi per l'organizzazione visiva nell'editor.", "example": "Raggruppa insieme gli eventi \"entra in classe\" (sfondo, personaggi, musica)." }
+      "GiveItem": {
+        "desc": "Dà al giocatore una quantità di un oggetto dell'inventario (imposta la quantità a 1 per gli oggetti Unici).",
+        "example": "Dopo una scena con un baule, Dai oggetto Chiave d'oro (quantità 1) così il giocatore può aprire la porta chiusa."
+      },
+      "UseItem": {
+        "desc": "Usa un oggetto: esegue il suo effetto Usa e, se l'oggetto è consumabile, ne diminuisce la quantità di uno.",
+        "example": "Usa oggetto su una Pozione di salute esegue il suo effetto (aumenta salute di 50) e rimuove una pozione dalla borsa."
+      },
+      "DestroyItem": {
+        "desc": "Rimuove dal giocatore una parte o tutto di un oggetto senza usarlo; la quantità non scende mai sotto zero.",
+        "example": "Quando il ponte brucia, Distruggi oggetto su Corda con 'tutto' attivo per togliere ogni corda al giocatore."
+      },
+      "RestockCollection": {
+        "desc": "Riempie di nuovo una lista di oggetti di un negozio o di un deposito riportandola ai livelli di stock, seguendo la regola di rifornimento di quella lista.",
+        "example": "Dopo 'Riposi per la notte', Rifornisci lista oggetti sull'Emporio così la merce torna entro mattina."
+      },
+      "BuyItem": {
+        "desc": "Acquista un oggetto da una lista di un negozio, spendendo la valuta di quella lista (non fa nulla se non te lo puoi permettere o è esaurito).",
+        "example": "In una scena d'intermezzo, Compra oggetto Spada dalla lista del Fabbro; l'Oro viene detratto automaticamente."
+      },
+      "SellItem": {
+        "desc": "Vende un oggetto posseduto dal giocatore a una lista di un negozio, pagando il suo prezzo moltiplicato per il tasso di vendita del negozio.",
+        "example": "Dopo una missione, Vendi oggetto Vecchio anello alla lista del Mercante per rimuoverlo e incassare monete."
+      },
+      "Dialogue": {
+        "desc": "Mostra il dialogo di un personaggio con nome del parlante e ritratto opzionali.",
+        "example": "Mostra Sakura che dice \"Ciao!\" sul lato sinistro dello schermo."
+      },
+      "Choice": {
+        "desc": "Presenta al giocatore più opzioni che influenzano il percorso della storia.",
+        "example": "Chiedi al giocatore \"Dove vai?\" con le opzioni \"Parco\", \"Biblioteca\", \"Casa\"."
+      },
+      "BranchStart": {
+        "desc": "Inizia una sezione di ramo con un nome per organizzare visivamente i percorsi della storia.",
+        "example": "Inizia un ramo chiamato \"Percorso Sakura\" colorato di rosa per raggruppare i comandi correlati."
+      },
+      "BranchEnd": {
+        "desc": "Termina una sezione di ramo aperta in precedenza.",
+        "example": "Chiudi il blocco del ramo \"Percorso Sakura\"."
+      },
+      "ShowCharacter": {
+        "desc": "Mostra lo sprite di un personaggio sullo schermo con posizione ed espressione.",
+        "example": "Mostra Kai al centro con espressione felice, in dissolvenza in entrata in 0,5 secondi."
+      },
+      "HideCharacter": {
+        "desc": "Rimuove un personaggio dallo schermo con una transizione.",
+        "example": "Nascondi Sakura con una dissolvenza in uscita in 1 secondo."
+      },
+      "SetBackground": {
+        "desc": "Cambia l'immagine di sfondo della scena.",
+        "example": "Imposta lo sfondo su \"corridoio_scuola\" con dissolvenza incrociata in 1 secondo."
+      },
+      "ShowText": {
+        "desc": "Mostra un overlay di testo sullo schermo in una posizione specifica con uno stile.",
+        "example": "Mostra \"Capitolo 1\" centrato sullo schermo in grande testo bianco, in dissolvenza in entrata."
+      },
+      "HideText": {
+        "desc": "Rimuove dallo schermo un overlay di testo mostrato in precedenza.",
+        "example": "Nascondi il testo del titolo del capitolo con una dissolvenza in uscita."
+      },
+      "ShowImage": {
+        "desc": "Mostra un overlay di immagine sullo schermo con posizione, dimensione e rotazione.",
+        "example": "Mostra l'immagine di una lettera centrata sullo schermo al 50% delle dimensioni, in dissolvenza in entrata."
+      },
+      "HideImage": {
+        "desc": "Rimuove dallo schermo un overlay di immagine mostrato in precedenza.",
+        "example": "Nascondi l'immagine della lettera con una transizione in dissolvenza in uscita."
+      },
+      "ShowButton": {
+        "desc": "Mostra un pulsante interattivo sullo schermo con uno stile e azioni al clic.",
+        "example": "Mostra un pulsante \"Continua\" in basso al centro che salta alla scena successiva quando viene cliccato."
+      },
+      "HideButton": {
+        "desc": "Rimuove dallo schermo un pulsante mostrato in precedenza.",
+        "example": "Nascondi il pulsante \"Continua\" con una dissolvenza in uscita."
+      },
+      "ShowdraggableImageElement": {
+        "desc": "Mostra un'immagine con regioni hot-spot cliccabili che attivano azioni (salto, imposta variabile).",
+        "example": "Mostra l'immagine di una mappa del mondo con regioni cliccabili delle città che saltano a scene diverse quando vengono cliccate."
+      },
+      "HidedraggableImageElement": {
+        "desc": "Rimuove dallo schermo una mappa immagine mostrata in precedenza.",
+        "example": "Nascondi la mappa del mondo con una transizione in dissolvenza in uscita."
+      },
+      "PlayMusic": {
+        "desc": "Avvia la riproduzione della musica di sottofondo. In loop per impostazione predefinita.",
+        "example": "Riproduci \"tema_romantico.mp3\" all'80% di volume con dissolvenza in entrata di 2s."
+      },
+      "StopMusic": {
+        "desc": "Ferma la musica di sottofondo attualmente in riproduzione.",
+        "example": "Ferma la musica con una dissolvenza in uscita di 1 secondo."
+      },
+      "PlaySoundEffect": {
+        "desc": "Riproduce un effetto sonoro una tantum.",
+        "example": "Riproduci il suono bussa_alla_porta a volume pieno."
+      },
+      "StopSoundEffect": {
+        "desc": "Ferma tutti gli effetti sonori attualmente in riproduzione.",
+        "example": "Ferma immediatamente tutti gli effetti sonori."
+      },
+      "PlayMovie": {
+        "desc": "Riproduce un file video. In modalità a schermo intero, viene mostrato su uno sfondo nero (scene d'intermezzo). In modalità overlay, viene riprodotto in trasparenza sopra la scena (effetti come petali che cadono, pioggia).",
+        "example": "Riproduci petali che cadono come overlay trasparente in loop mentre il dialogo continua sotto."
+      },
+      "StopMovie": {
+        "desc": "Ferma tutti gli overlay video attualmente in riproduzione.",
+        "example": "Ferma l'overlay dei petali che cadono quando la scena cambia."
+      },
+      "SetVariable": {
+        "desc": "Imposta una variabile di gioco a un valore. Usata per tenere traccia di scelte e statistiche.",
+        "example": "Imposta \"punteggioGiocatore\" a 10, oppure aggiungi 5 a \"livelloAmicizia\"."
+      },
+      "TextInput": {
+        "desc": "Chiede al giocatore di digitare del testo e lo memorizza in una variabile.",
+        "example": "Chiedi \"Come ti chiami?\" e memorizza la risposta in \"nomeGiocatore\"."
+      },
+      "Jump": {
+        "desc": "Salta immediatamente a un'altra scena.",
+        "example": "Salta alla scena \"inizio_capitolo2\"."
+      },
+      "Label": {
+        "desc": "Definisce un punto etichetta con un nome all'interno di una scena, a cui è possibile saltare.",
+        "example": "Crea un'etichetta chiamata \"inizio_ciclo\" per segnare un punto di ritorno."
+      },
+      "JumpToLabel": {
+        "desc": "Salta a un'etichetta con un nome all'interno della scena corrente.",
+        "example": "Salta indietro all'etichetta \"inizio_ciclo\" per ripetere una sezione."
+      },
+      "Wait": {
+        "desc": "Mette in pausa per una durata specificata prima di continuare.",
+        "example": "Attendi 2 secondi prima di mostrare il dialogo successivo, oppure attendi il clic del giocatore."
+      },
+      "ShowScreen": {
+        "desc": "Mostra una schermata UI personalizzata (menu, inventari, ecc.).",
+        "example": "Mostra l'overlay UI \"schermata_inventario\"."
+      },
+      "ShakeScreen": {
+        "desc": "Applica un effetto di scuotimento dello schermo per un impatto drammatico.",
+        "example": "Scuoti lo schermo per 0,5 secondi a intensità media durante un'esplosione."
+      },
+      "TintScreen": {
+        "desc": "Applica un overlay di tinta colorata all'intero schermo.",
+        "example": "Tingi lo schermo di rosso in 1 secondo per indicare pericolo."
+      },
+      "FlashScreen": {
+        "desc": "Fa lampeggiare lo schermo con un colore brillante per un breve istante.",
+        "example": "Fai lampeggiare lo schermo di bianco per 0,3 secondi per un effetto fulmine."
+      },
+      "PanZoomScreen": {
+        "desc": "Sposta e ingrandisce la camera per mettere a fuoco un'area specifica.",
+        "example": "Ingrandisci 2x sul lato sinistro dello schermo in 1 secondo."
+      },
+      "ResetScreenEffects": {
+        "desc": "Reimposta tutti gli effetti schermo attivi (tinta, zoom, ecc.) riportandoli alla normalità.",
+        "example": "Reimposta tutti gli effetti schermo in modo fluido in 0,5 secondi."
+      },
+      "SetScreenOverlayEffect": {
+        "desc": "Applica un effetto overlay persistente come pioggia, neve o particelle.",
+        "example": "Aggiungi un delicato effetto di nevicata al 50% di intensità."
+      },
+      "Group": {
+        "desc": "Raggruppa più eventi per l'organizzazione visiva nell'editor.",
+        "example": "Raggruppa insieme gli eventi \"entra in classe\" (sfondo, personaggi, musica)."
+      }
     }
   },
   "assetSelector": {
@@ -330,5 +453,20 @@
     "enableBorder": "Abilita bordo",
     "width": "Larghezza (px)",
     "borderColor": "Colore del bordo"
+  },
+  "emoji": {
+    "pick": "Scegli un'emoji",
+    "search": "Cerca — “arrabbiato”, “chiave”, “soldi”…",
+    "none": "Nessuna",
+    "noMatch": "Nessun risultato. Puoi incollare la tua qui sotto.",
+    "custom": "…oppure digita / incolla una qualsiasi emoji",
+    "group": {
+      "feelings": "Emozioni",
+      "love": "Amore e legami",
+      "status": "Stato e statistiche",
+      "things": "Oggetti",
+      "world": "Mondo",
+      "marks": "Simboli"
+    }
   }
 }

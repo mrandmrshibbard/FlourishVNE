@@ -23,5 +23,23 @@
   "exitWithoutSaving": "Esci senza salvare",
   "exportError": "Errore di esportazione",
   "exportingProject": "Esportazione del progetto...",
-  "packagingFiles": "Creazione del pacchetto con i file del progetto"
+  "packagingFiles": "Creazione del pacchetto con i file del progetto",
+  "toast": {
+    "savedMissingAssets": "Salvato — ma {{count}} file multimediali non sono stati trovati su disco e NON sono dentro il file salvato. Il progetto si aprirà comunque, ma quelle immagini/suoni mancano. Controlla immagini e suoni.",
+    "saved": "Progetto salvato"
+  },
+  "saveAs": "Salva con nome…",
+  "saveAsTip": "Scegli dove salvare questo progetto (e continua a salvarlo lì)",
+  "compareMerge": "Confronta e unisci",
+  "extensionPanels": "Pannelli delle estensioni",
+  "extensionTools": "Strumenti delle estensioni",
+  "extensionData": "Dati delle estensioni",
+  "savingInProgress": "Salvataggio…",
+  "playInWindow": "Prova in una finestra separata (con Ricarica)",
+  "largeExport": {
+    "title": "Questo progetto è grande",
+    "body": "I suoi media pesano circa {{size}}. L'esportazione funzionerà comunque, ma potrebbe essere lenta e produrre un file grande. Comprimere le risorse più pesanti mantiene tutto rapido e leggero.",
+    "biggest": "Risorse più pesanti",
+    "proceed": "Esporta comunque"
+  }
 }

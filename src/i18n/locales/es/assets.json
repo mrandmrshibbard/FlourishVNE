@@ -84,5 +84,10 @@
   "toastAcross": " en {{cats}}",
   "toastReplaced": "Recurso reemplazado: todas las referencias conservadas",
   "toastReplaceFailed": "No se pudo reemplazar el recurso",
-  "toastFolderExists": "Ya existe una carpeta llamada \"{{name}}\" aquí"
+  "toastFolderExists": "Ya existe una carpeta llamada \"{{name}}\" aquí",
+  "toastLargeAsset": "Archivo grande añadido: {{files}}. Los medios grandes ralentizan el editor y agrandan las exportaciones — considera comprimirlo.",
+  "defaultTrim": "Recorte predeterminado (segundos)",
+  "defaultTrimHint": "Se aplica a todos los usos de este vídeo, salvo que un comando o elemento indique otra cosa.",
+  "defaultShaping": "Ajuste de sonido predeterminado",
+  "defaultShapingHint": "Se aplica dondequiera que se use este sonido, salvo que un comando o botón indique otra cosa. \"Reproducir al revés\" solo afecta a efectos de sonido y voces — la música siempre suena hacia delante."
 }

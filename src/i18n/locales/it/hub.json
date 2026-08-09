@@ -33,7 +33,9 @@
     "prompt": "Sono stati trovati progetti salvati automaticamente da una sessione precedente. Vuoi ripristinarne uno?",
     "savedAt": "Salvato {{time}}",
     "startFresh": "Inizia da Zero",
-    "discardAll": "Scarta Tutto"
+    "discardAll": "Scarta Tutto",
+    "checkpoint": "copia precedente",
+    "discardConfirm": "Eliminare TUTTE le copie di backup, di ogni progetto? Se il file di un progetto sparisce o si danneggia, queste copie sono l'unico modo per recuperarlo. L'operazione non è reversibile."
   },
   "time": {
     "justNow": "Adesso",
@@ -61,6 +63,16 @@
     "projectRecovered": "Progetto recuperato!",
     "couldNotLoadSaved": "Impossibile caricare il progetto salvato.",
     "recoverFailed": "Impossibile recuperare il progetto.",
-    "autoSavesCleared": "Salvataggi automatici cancellati."
+    "autoSavesCleared": "Salvataggi automatici cancellati.",
+    "repaired": "Questo file di progetto era danneggiato (un salvataggio è stato interrotto), ma è stato recuperato tutto. Salvalo di nuovo ora per renderlo integro.",
+    "repairedPartial": "Questo file di progetto era danneggiato (un salvataggio è stato interrotto). La storia è stata recuperata, ma {{count}} file multimediali sono andati persi e andranno reimportati. Salvalo ora per renderlo integro."
+  },
+  "holiday": {
+    "activeLabel": "tema {{theme}}",
+    "turnOff": "Disattiva",
+    "turnOffTip": "Torna al tuo tema abituale (puoi riattivarlo quando vuoi dal menu Tema)"
+  },
+  "hc": {
+    "loading": "Caricamento…"
   }
 }

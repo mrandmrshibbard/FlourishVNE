@@ -55,5 +55,24 @@
   "emptyTitle": "Eventos Comunes",
   "emptyDescNew": "Crea secuencias de comandos reutilizables que pueden llamarse desde cualquier escena. Los Eventos Comunes funcionan como funciones: créalos una vez y reutilízalos en todas partes.",
   "emptyDescSelect": "Selecciona un Evento Común de la barra lateral para editarlo.",
-  "createFirst": "Crear Primer Evento Común"
+  "createFirst": "Crear Primer Evento Común",
+  "branchEndTip": "Cierra la Ramificación de arriba: se mueve y se elimina junto con ella.",
+  "branchEndLabel": "fin de la ramificación",
+  "dragToReorder": "Haz clic para editar · arrastra para reordenar",
+  "expandBranch": "Expandir ramificación",
+  "collapseBranch": "Contraer ramificación",
+  "moveUp": "Mover arriba",
+  "moveDown": "Mover abajo",
+  "removeBranchTip": "Quitar la ramificación (los comandos que contiene se conservan)",
+  "addOtherwiseIf": "+ Si no, si",
+  "addOtherwiseIfTip": "Añadir un “Si no, si”: otra comprobación que se prueba cuando las anteriores no se cumplen",
+  "addOtherwise": "+ Si no",
+  "addOtherwiseTip": "Añadir un “Si no”: se ejecuta cuando nada de lo anterior se cumple",
+  "addOtherwiseAlready": "Esta ramificación ya tiene un “Si no”: solo puede haber uno.",
+  "hc": {
+    "exportAllCommonEventsTo": "Exportar todos los eventos comunes a un archivo JSON",
+    "importCommonEventsFromA": "Importar eventos comunes desde un archivo JSON",
+    "export": "Exportar",
+    "import": "Importar"
+  }
 }

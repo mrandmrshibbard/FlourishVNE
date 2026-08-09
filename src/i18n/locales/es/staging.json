@@ -24,5 +24,26 @@
   "lightMarkerTitle": "{{type}} #{{n}} — arrastra para posicionar",
   "lightCandle": "vela",
   "lightStar": "estrella",
-  "lightChristmas": "navidad"
+  "lightChristmas": "navidad",
+  "characterSize": "Tamaño:",
+  "fitHeight": "Ajustar a la altura",
+  "fitHeightTip": "Escala el personaje para llenar el alto de la pantalla",
+  "fitWidth": "Ajustar al ancho",
+  "fitWidthTip": "Escala el personaje para abarcar el ancho de la pantalla",
+  "resetSize": "100%",
+  "resetSizeTip": "Devuelve el personaje a su tamaño original",
+  "snapToggle": "Ajuste",
+  "snapTip": "Ajuste inteligente a bordes, centros y otros elementos. Mantén Alt al arrastrar para colocar libremente.",
+  "chromeShow": "Mostrar los botones del lienzo",
+  "chromeHide": "Ocultar los botones del lienzo (pueden tapar el arte que estás alineando)",
+  "zoomIn": "Acercar (Ctrl+rueda)",
+  "zoomOut": "Alejar (Ctrl+rueda)",
+  "zoomReset": "Volver al ajuste",
+  "fromCommonEvent": "Del evento: {{name}} — los cambios afectan a todas las escenas que lo llaman. Haz doble clic para abrirlo.",
+  "hudOverlayLabel": "HUD",
+  "hudOverlayTip": "Muestra en este lienzo las zonas en las que se puede hacer clic del HUD del juego. En el juego el HUD queda por encima de la escena: un punto interactivo de la escena situado debajo no recibirá clics.",
+  "hudOverlayToggle": "Zonas del HUD",
+  "hc": {
+    "backgroundLayer": "capa de fondo"
+  }
 }

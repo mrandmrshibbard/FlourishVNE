@@ -13,7 +13,8 @@
     "Screen FX": "Екранні ефекти",
     "UI Elements": "Елементи інтерфейсу",
     "Media": "Медіа",
-    "Flow Control": "Керування потоком"
+    "Flow Control": "Керування потоком",
+    "Phone": "Телефон"
   },
   "names": {
     "Dialogue": "Діалог",
@@ -59,6 +60,27 @@
     "Wait": "Чекати",
     "RunScript": "Виконати скрипт",
     "CallCommonEvent": "Викликати спільну подію",
-    "Group": "Група"
+    "Group": "Група",
+    "SetCharacterLayer": "Задати шар персонажа",
+    "ShowPhone": "Показати телефон",
+    "HidePhone": "Сховати телефон",
+    "ShowPhoneText": "Показати повідомлення",
+    "HidePhoneText": "Сховати повідомлення",
+    "PhoneIncomingText": "Вхідне повідомлення",
+    "PhoneIncomingCall": "Вхідний дзвінок",
+    "StartPhoneCall": "Зателефонувати",
+    "ShowMap": "Показати карту",
+    "ShowMiniGame": "Показати міні-гру",
+    "PhoneNotify": "Сповіщення на телефон",
+    "MoveCharacter": "Перемістити персонажа",
+    "StartTimer": "Запустити таймер",
+    "StopTimer": "Зупинити таймер",
+    "SetCharacterPose": "Змінити позу",
+    "PlayCharacterAnimation": "Відтворити анімацію",
+    "BranchElseIf": "Інакше якщо",
+    "BranchElse": "Інакше"
+  },
+  "hc": {
+    "playFromHereTestThe": "Грати звідси — перевірити гру з цього рядка (нова партія; візуальна підготовка сцени застосовується)"
   }
 }

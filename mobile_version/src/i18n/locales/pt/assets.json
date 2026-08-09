@@ -86,5 +86,8 @@
   "toastReplaceFailed": "Falha ao substituir o recurso",
   "toastFolderExists": "Já existe uma pasta chamada \"{{name}}\" aqui",
   "defaultShaping": "Ajuste padrão do som",
-  "defaultShapingHint": "Vale para todos os usos deste som, a menos que um comando ou botão defina o seu próprio. \"Tocar ao contrário\" só afeta efeitos sonoros e vozes — a música sempre toca normalmente."
+  "defaultShapingHint": "Vale para todos os usos deste som, a menos que um comando ou botão defina o seu próprio. \"Tocar ao contrário\" só afeta efeitos sonoros e vozes — a música sempre toca normalmente.",
+  "toastLargeAsset": "Arquivo grande adicionado: {{files}}. Mídia grande deixa o editor lento e aumenta o tamanho do jogo exportado — considere comprimir.",
+  "defaultTrim": "Corte padrão (segundos)",
+  "defaultTrimHint": "Vale para todos os usos deste vídeo, a menos que um comando/elemento defina o seu próprio."
 }

@@ -85,9 +85,9 @@ const SceneConfigEditor: React.FC<{
 
                     {/* Parallax */}
                     <div className="mb-4">
-                        <h3 className="font-bold mb-2 text-[var(--accent-cyan)]">Parallax</h3>
+                        <h3 className="font-bold mb-2 text-[var(--accent-cyan)]">{t('hc.parallax', 'Parallax')}</h3>
                         <p className="text-xs text-[var(--text-secondary)] mb-3">
-                            Shifts stage visuals by their per-command <em>Parallax depth</em> (set in a visual's Transform group) for a sense of depth. <em>Follow mouse</em> tracks the pointer; <em>Camera</em> reacts to Pan/Zoom Screen moves (nearer/higher-depth layers sweep past farther ones); <em>Both</em> combines them.
+                            Shifts stage visuals by their per-command <em>{t('hc.parallaxDepth', 'Parallax depth')}</em> {t('hc.setInAVisualS', '(set in a visual\'s Transform group) for a sense of depth.')} <em>{t('hc.followMouse', 'Follow mouse')}</em> {t('hc.tracksThePointer', "tracks the pointer;")} <em>{t('hc.camera', "Camera")}</em> {t('hc.reactsToPanZoomScreen', "reacts to Pan/Zoom Screen moves (nearer/higher-depth layers sweep past farther ones);")} <em>{t('hc.both', "Both")}</em> {t('hc.combinesThem', "combines them.")}
                         </p>
                         <FormField label="Mode">
                             <Select
@@ -98,8 +98,8 @@ const SceneConfigEditor: React.FC<{
                                 }}
                             >
                                 <option value="off">Off</option>
-                                <option value="mouse">Follow mouse</option>
-                                <option value="camera">Camera (pan/zoom)</option>
+                                <option value="mouse">{t('hc.followMouse', 'Follow mouse')}</option>
+                                <option value="camera">{t('hc.cameraPanZoom', 'Camera (pan/zoom)')}</option>
                                 <option value="both">Both</option>
                             </Select>
                         </FormField>
@@ -113,7 +113,7 @@ const SceneConfigEditor: React.FC<{
                             </FormField>
                         )}
                         {(px?.mode === 'camera' || px?.mode === 'both') && (
-                            <p className="text-[10px] text-[var(--text-secondary)] mt-1">Camera parallax is driven by <em>Pan/Zoom Screen</em> commands — depth-0 layers move with the camera, higher-depth layers move more. Add some pan to see it.</p>
+                            <p className="text-[10px] text-[var(--text-secondary)] mt-1">{t('hc.cameraParallaxIsDrivenBy', 'Camera parallax is driven by')} <em>{t('hc.panZoomScreen', 'Pan/Zoom Screen')}</em> {t('hc.commandsDepth0LayersMove', 'commands — depth-0 layers move with the camera, higher-depth layers move more. Add some pan to see it.')}</p>
                         )}
                     </div>
 

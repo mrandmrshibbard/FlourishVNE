@@ -240,7 +240,7 @@ export const HotSpotProperties: React.FC<{
         <Panel title={t('hotZone.propsHotSpot')} className="w-[26rem] flex-shrink-0">
             <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3 text-sm">
             <h4 className="font-bold text-sky-300 flex items-center gap-2">
-                Hot Spot Properties
+                {t('hc.hotSpotProperties', 'Hot Spot Properties')}
                 <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400">
                     {spot.trigger}
                 </span>
@@ -505,7 +505,7 @@ export const InteractiveElementProperties: React.FC<{
                 Element Properties
                 {element.draggable && (
                     <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
-                        draggable
+                        {t('hc.draggable', 'draggable')}
                     </span>
                 )}
             </h4>
@@ -588,12 +588,12 @@ export const InteractiveElementProperties: React.FC<{
                         <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
                             <input type="checkbox" checked={element.videoLoop ?? true}
                                 onChange={e => onUpdate({ videoLoop: e.target.checked })} />
-                            Loop
+                            {t('hc.loop', 'Loop')}
                         </label>
                         <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
                             <input type="checkbox" checked={element.videoMuted ?? true}
                                 onChange={e => onUpdate({ videoMuted: e.target.checked })} />
-                            Muted
+                            {t('hc.muted', 'Muted')}
                         </label>
                     </div>
                     <VideoTrimFields className="mt-2" start={(element as any).videoTrimStart} end={(element as any).videoTrimEnd}
@@ -822,11 +822,11 @@ export const InteractiveElementProperties: React.FC<{
                         <div className="flex gap-2">
                             <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
                                 <input type="checkbox" checked={font.weight === 'bold'} onChange={e => updateFont({ weight: e.target.checked ? 'bold' : 'normal' })} />
-                                Bold
+                                {t('hc.bold', 'Bold')}
                             </label>
                             <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
                                 <input type="checkbox" checked={font.italic} onChange={e => updateFont({ italic: e.target.checked })} />
-                                Italic
+                                {t('hc.italic', 'Italic')}
                             </label>
                         </div>
                     </div>

@@ -23,5 +23,23 @@
   "exitWithoutSaving": "不保存直接退出",
   "exportError": "导出错误",
   "exportingProject": "正在导出项目…",
-  "packagingFiles": "正在打包您的项目文件"
+  "packagingFiles": "正在打包您的项目文件",
+  "toast": {
+    "savedMissingAssets": "已保存——但有 {{count}} 个媒体文件在磁盘上找不到，并未包含在保存的文件中。项目仍可打开，但这些美术/音频缺失。请检查你的图片和声音。",
+    "saved": "项目已保存"
+  },
+  "saveAs": "另存为…",
+  "saveAsTip": "选择该项目的保存位置（之后会继续保存到那里）",
+  "compareMerge": "比较与合并",
+  "extensionPanels": "扩展面板",
+  "extensionTools": "扩展工具",
+  "extensionData": "扩展数据",
+  "savingInProgress": "正在保存…",
+  "playInWindow": "在单独窗口中试玩（带重新加载）",
+  "largeExport": {
+    "title": "该项目体积较大",
+    "body": "其中的媒体文件约有 {{size}}。导出仍然可以完成，但可能较慢并生成很大的文件。压缩体积最大的素材能让一切保持轻快。",
+    "biggest": "最大的素材",
+    "proceed": "仍然导出"
+  }
 }

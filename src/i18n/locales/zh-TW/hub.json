@@ -33,7 +33,9 @@
     "prompt": "偵測到上次工作階段自動儲存的專案。要復原其中一個嗎？",
     "savedAt": "儲存於 {{time}}",
     "startFresh": "重新開始",
-    "discardAll": "全部捨棄"
+    "discardAll": "全部捨棄",
+    "checkpoint": "較早的副本",
+    "discardConfirm": "刪除所有專案的全部備份副本？如果某個專案檔案遺失或損毀，這些備份是唯一的找回途徑。此操作無法復原。"
   },
   "time": {
     "justNow": "剛剛",
@@ -61,6 +63,16 @@
     "projectRecovered": "專案已復原！",
     "couldNotLoadSaved": "無法載入已儲存的專案。",
     "recoverFailed": "復原專案失敗。",
-    "autoSavesCleared": "自動儲存已清除。"
+    "autoSavesCleared": "自動儲存已清除。",
+    "repaired": "該專案檔案曾損毀（儲存過程被中斷），但內容已全部復原。請立即重新儲存，使檔案恢復完整。",
+    "repairedPartial": "該專案檔案曾損毀（儲存過程被中斷）。故事內容已復原，但有 {{count}} 個媒體檔案遺失，需要重新匯入。請立即儲存，使檔案恢復完整。"
+  },
+  "holiday": {
+    "activeLabel": "{{theme}} 主題",
+    "turnOff": "關閉",
+    "turnOffTip": "切換回你的常用主題（隨時可在主題選單中重新選擇）"
+  },
+  "hc": {
+    "loading": "載入中…"
   }
 }

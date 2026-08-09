@@ -84,5 +84,10 @@
   "toastAcross": " réparti(s) sur {{cats}}",
   "toastReplaced": "Ressource remplacée — toutes les références conservées",
   "toastReplaceFailed": "Échec du remplacement de la ressource",
-  "toastFolderExists": "Un dossier nommé « {{name}} » existe déjà ici"
+  "toastFolderExists": "Un dossier nommé « {{name}} » existe déjà ici",
+  "toastLargeAsset": "Fichier volumineux ajouté : {{files}}. Les médias lourds ralentissent l'éditeur et alourdissent les exports — pensez à le compresser.",
+  "defaultTrim": "Découpe par défaut (secondes)",
+  "defaultTrimHint": "S'applique à chaque utilisation de cette vidéo, sauf si une commande ou un élément en décide autrement.",
+  "defaultShaping": "Réglage sonore par défaut",
+  "defaultShapingHint": "S'applique partout où ce son est utilisé, sauf si une commande ou un bouton en décide autrement. « Lire à l'envers » ne concerne que les effets sonores et les voix — la musique est toujours lue à l'endroit."
 }

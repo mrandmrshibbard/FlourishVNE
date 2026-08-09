@@ -228,5 +228,16 @@
     "downloading": "Androidツールをセットアップ中（一度きり）…",
     "continue": "ダウンロードして続行",
     "cancel": "キャンセル"
-  }
+  },
+  "webOptions": {
+    "title": "Web 版のオプション",
+    "fullscreenLabel": "全画面ボタンを追加",
+    "fullscreenHint": "ゲームの上に小さなボタンを表示し、プレイヤーが画面いっぱいに広げられるようにします。ブラウザゲームが小さく表示されがちな itch.io に最適です。",
+    "fullscreenCorner": "ボタンの位置",
+    "cornerTopRight": "右上",
+    "cornerTopLeft": "左上",
+    "cornerBottomRight": "右下",
+    "cornerBottomLeft": "左下"
+  },
+  "cancelBuild": "この書き出しを中止して後片付けする"
 }

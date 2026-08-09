@@ -23,5 +23,23 @@
   "exitWithoutSaving": "Salir sin guardar",
   "exportError": "Error de exportación",
   "exportingProject": "Exportando proyecto...",
-  "packagingFiles": "Empaquetando los archivos de tu proyecto"
+  "packagingFiles": "Empaquetando los archivos de tu proyecto",
+  "toast": {
+    "savedMissingAssets": "Guardado — pero no se encontraron {{count}} archivo(s) multimedia en el disco y NO están dentro del archivo guardado. El proyecto seguirá abriéndose, pero falta ese arte o audio. Revisa tus imágenes y sonidos.",
+    "saved": "Proyecto guardado"
+  },
+  "saveAs": "Guardar como…",
+  "saveAsTip": "Elige dónde guardar este proyecto (y sigue guardando ahí)",
+  "compareMerge": "Comparar y combinar",
+  "extensionPanels": "Paneles de extensión",
+  "extensionTools": "Herramientas de extensión",
+  "extensionData": "Datos de extensión",
+  "savingInProgress": "Guardando…",
+  "playInWindow": "Jugar en una ventana aparte (con Recargar)",
+  "largeExport": {
+    "title": "Este proyecto es grande",
+    "body": "Sus medios suman unos {{size}}. La exportación funcionará igual, pero puede ser lenta y generar un archivo grande. Comprimir tus recursos más pesados lo mantiene rápido y ligero.",
+    "biggest": "Archivos más grandes",
+    "proceed": "Exportar de todos modos"
+  }
 }

@@ -175,6 +175,12 @@ export function getCommandGroups(command: VNCommand | null | undefined): Inspect
         case CommandType.CallCommonEvent:
         case CommandType.BranchStart:
             return order(['content', 'conditions']);
+        // "Otherwise if" carries the conditions that decide ITS segment, so it needs the
+        // universal Conditions group. (The scene editor edits these inline inside the branch
+        // block; the Common Events list selects the marker itself and uses the inspector.)
+        case CommandType.BranchElseIf:
+            return order(['content', 'conditions']);
+        case CommandType.BranchElse:
         case CommandType.BranchEnd:
             return order(['content']);
         default:

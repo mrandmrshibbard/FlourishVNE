@@ -137,6 +137,12 @@ export enum UIActionType {
     ToggleScreen = 'ToggleScreen',
     OpenURL = 'OpenURL',
     PlayAnimation = 'PlayAnimation',
+    /** Character-stage actions — the button equivalents of the Change Pose / Show Character /
+     *  Play Animation scene commands. They share their stage logic with those commands (see
+     *  buildPoseStagePatch and friends) so a button and a command can't mean different things. */
+    ChangePose = 'ChangePose',
+    ChangeCharacter = 'ChangeCharacter',
+    PlayCharacterAnimation = 'PlayCharacterAnimation',
     ChangeImage = 'ChangeImage',
     /** Reveals a target element (overrides its current/`startHidden` state). Pairs with HideElement
      *  so one button can show the next "page" while hiding the previous — multi-page documents,
@@ -247,6 +253,12 @@ export interface ToggleScreenAction extends BaseUIAction { type: UIActionType.To
 export interface OpenURLAction extends BaseUIAction { type: UIActionType.OpenURL; url: string; newTab?: boolean; }
 export interface PlayAnimationAction extends BaseUIAction { type: UIActionType.PlayAnimation; targetElementId: VNID; animation: string; duration?: number; }
 export interface ChangeImageAction extends BaseUIAction { type: UIActionType.ChangeImage; targetElementId: VNID; newImageId: VNID; }
+/** Change an on-stage character's pose. Empty poseId = back to their Default pose. */
+export interface ChangePoseAction extends BaseUIAction { type: UIActionType.ChangePose; characterId: VNID; poseId?: VNID | null; transition?: string | null; duration?: number; }
+/** Swap who is standing in a spot, keeping the position/scale of the character being replaced. */
+export interface ChangeCharacterAction extends BaseUIAction { type: UIActionType.ChangeCharacter; fromCharacterId: VNID; toCharacterId: VNID; expressionId?: VNID | null; poseId?: VNID | null; }
+/** Start (or, with no animationId, stop) a character's frame animation. */
+export interface PlayCharacterAnimationAction extends BaseUIAction { type: UIActionType.PlayCharacterAnimation; characterId: VNID; animationId?: VNID | null; }
 export interface ShowElementAction extends BaseUIAction { type: UIActionType.ShowElement; targetElementId: VNID; }
 export interface HideElementAction extends BaseUIAction { type: UIActionType.HideElement; targetElementId: VNID; }
 export interface CallCommonEventAction extends BaseUIAction { type: UIActionType.CallCommonEvent; commonEventId: VNID; arguments?: Record<VNID, string | number | boolean>; }
@@ -269,4 +281,4 @@ export interface SetTimeOfDayAction extends BaseUIAction { type: UIActionType.Se
 /** Clear the palette→UI restyle applied by a coloring mini game. */
 export interface ClearUiPaletteAction extends BaseUIAction { type: UIActionType.ClearUiPalette; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | PlayMusicAction | StopMusicAction | SaveSlotsPageAction | ShowSpotlightAction | HideSpotlightAction | ShowFlashlightAction | HideFlashlightAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | OpenPhoneAppAction | ShowMapAction | ShowMiniGameAction | StartTimerAction | StopTimerAction | SetTimeOfDayAction | ClearUiPaletteAction | StopSoundAction | PlayVideoAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | PlayMusicAction | StopMusicAction | SaveSlotsPageAction | ShowSpotlightAction | HideSpotlightAction | ShowFlashlightAction | HideFlashlightAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ChangePoseAction | ChangeCharacterAction | PlayCharacterAnimationAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | OpenPhoneAppAction | ShowMapAction | ShowMiniGameAction | StartTimerAction | StopTimerAction | SetTimeOfDayAction | ClearUiPaletteAction | StopSoundAction | PlayVideoAction;

@@ -1,0 +1,88 @@
+{
+  "title": "Bibbia della Storia",
+  "empty": {
+    "title": "La tua Bibbia della Storia",
+    "body": "Tieni tutto ciò che riguarda la tua storia in un unico posto: sinossi, note sui personaggi, luoghi, archi narrativi. Lo vedi solo tu: non finisce mai nel gioco.",
+    "starterButton": "Crea le sezioni iniziali"
+  },
+  "starter": {
+    "synopsis": "Sinossi",
+    "chapters": "Capitoli",
+    "characters": "Personaggi",
+    "locations": "Luoghi",
+    "arcs": "Archi narrativi"
+  },
+  "sections": {
+    "add": "Aggiungi sezione",
+    "newName": "Nuova sezione",
+    "unnamed": "Senza titolo",
+    "none": "Ancora nessuna sezione.",
+    "namePlaceholder": "Nome della sezione",
+    "delete": "Elimina sezione",
+    "deleteConfirm": "Eliminare \"{{name}}\"?",
+    "deleteConfirmWithSubs": "Eliminare \"{{name}}\" e le sue {{count}} sottosezioni? L'operazione non è reversibile e le note al loro interno andranno perse.",
+    "moveUp": "Sposta su",
+    "moveDown": "Sposta giù"
+  },
+  "subsections": {
+    "add": "Aggiungi sottosezione",
+    "newName": "Nuova sottosezione",
+    "namePlaceholder": "Nome della sottosezione",
+    "delete": "Elimina sottosezione",
+    "deleteConfirm": "Eliminare \"{{name}}\"?"
+  },
+  "editor": {
+    "edit": "✏ Modifica",
+    "preview": "👁 Anteprima",
+    "heading": "Titolo (clicca di nuovo per uno più piccolo)",
+    "bold": "Grassetto",
+    "italic": "Corsivo",
+    "bulletList": "Elenco puntato",
+    "numberedList": "Elenco numerato",
+    "placeholder": "Scrivi qui le tue note… Usa i pulsanti qui sopra per titoli, grassetto ed elenchi.",
+    "placeholderWord": "testo"
+  },
+  "glossary": {
+    "title": "Glossario",
+    "navHint": "Parole su cui i giocatori possono passare il mouse nei dialoghi per vedere una spiegazione",
+    "back": "Bibbia della Storia",
+    "emptyTitle": "Glossario",
+    "emptyBody": "Aggiungi parole che i giocatori potrebbero non conoscere. Quando una compare in un dialogo viene evidenziata e, passandoci sopra il mouse, mostra la tua spiegazione.",
+    "addTerm": "Aggiungi termine",
+    "newTerm": "Nuovo termine",
+    "search": "Cerca termini…",
+    "none": "Ancora nessun termine.",
+    "noResults": "Nessun termine corrisponde.",
+    "term": "Parola o frase",
+    "alternatives": "Altre grafie o forme",
+    "alternativesHelp": "ad es. il plurale — premi Invio per aggiungere",
+    "caseSensitive": "Distingui maiuscole e minuscole",
+    "color": "Colore dell'evidenziazione",
+    "useDefaultColor": "Usa il colore predefinito",
+    "tooltipTitle": "Titolo del riquadro (vuoto = la parola stessa)",
+    "description": "Spiegazione",
+    "extra": "Piccola nota (facoltativa)",
+    "enabledEntry": "Mostra nel gioco",
+    "preview": "Come appare nel gioco (passa il mouse sulla parola):",
+    "previewLine": "Dicono che il {{term}} compaia solo di notte.",
+    "previewNoMatch": "Il termine non corrisponde all'esempio: controlla le maiuscole se è attivo «Distingui maiuscole e minuscole».",
+    "delete": "Elimina termine",
+    "deleteConfirm": "Eliminare \"{{term}}\" dal glossario?",
+    "import": "Importa…",
+    "export": "Esporta",
+    "importSuccess": "Importati {{count}} termini",
+    "importError": "Quel file non è un glossario di Flourish.",
+    "settings": {
+      "enabled": "Evidenzia i termini del glossario nel gioco",
+      "defaultColor": "Colore predefinito",
+      "style": "Come risaltano i termini",
+      "styleUnderline": "Sottolineato",
+      "styleColor": "Testo colorato",
+      "styleGlow": "Bagliore tenue"
+    }
+  },
+  "pluginBanner": {
+    "text": "La Bibbia della Storia è ora integrata nell'editor e le note del vecchio plugin sono state importate qui. Puoi disinstallare tranquillamente il plugin da Strumenti → Gestore plugin.",
+    "dismiss": "Ho capito"
+  }
+}

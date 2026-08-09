@@ -80,5 +80,73 @@
     "elSetsVariable": "Elemento \"{{name}}\": Define a variável",
     "elCyclesLayer": "Elemento \"{{name}}\": Alterna recurso de camada",
     "elTextRef": "Elemento \"{{name}}\": Referenciada no texto"
-  }
+  },
+  "xray": {
+    "title": "Onde isto é usado",
+    "count": "{{count}} lugares",
+    "nowhere": "em lugar nenhum ainda",
+    "rowCount": "Usada em {{count}} lugares",
+    "rowNone": "Nada usa isto ainda",
+    "jump": "Ir até lá",
+    "noJump": "Este não pode ser aberto diretamente",
+    "up": "sobe em {{n}}",
+    "down": "desce em {{n}}",
+    "changed": "muda em {{n}}",
+    "checked": "verificada em {{n}}",
+    "shown": "exibida em {{n}}",
+    "orphan": "Nada na sua história usa isto ainda. Ela vai apenas ficar no valor inicial.",
+    "neverChanged": "Nada nunca altera isto, então fica no valor inicial o jogo inteiro. Você queria mudá-la em algum lugar?",
+    "neverUsed": "Nada nunca verifica nem exibe isto, então mudá-la não afeta nada que o jogador veja."
+  },
+  "picker": {
+    "placeholder": "Escolha uma variável…",
+    "search": "Busque, ou digite um nome novo…",
+    "none": "Nenhuma variável ainda.",
+    "nameTaken": "Já existe uma variável com esse nome.",
+    "createAs": "Criar “{{name}}” como…",
+    "type": {
+      "boolean": "Sim / Não",
+      "number": "Número",
+      "string": "Texto"
+    },
+    "typeHint": {
+      "boolean": "Algo que aconteceu ou não",
+      "number": "Algo que você conta ou mede",
+      "string": "Palavras — um nome, uma rota, uma cor"
+    }
+  },
+  "token": {
+    "insert": "Coloque uma variável neste texto — o valor aparece enquanto o jogo roda",
+    "pick": "Qual variável?"
+  },
+  "meaning": {
+    "iconTitle": "Um emoji, para reconhecer esta variável de relance",
+    "colorTitle": "Uma cor, usada onde quer que esta variável apareça",
+    "descPlaceholder": "O que isto significa na sua história — ex.: “O quanto Yuki gosta de você”"
+  },
+  "bands": {
+    "label": "Dê nomes aos números",
+    "hint": "Nomeie as faixas uma vez — depois você pode escrever “quando Yuki for Amiga” em vez de “quando Afeto for 41 ou mais”.",
+    "startBlank": "Começar do zero",
+    "presetHint": "Escolha um para começar — depois você pode renomear, recolorir e renumerar cada etapa.",
+    "namePlaceholder": "Amigo",
+    "iconTitle": "Um emoji para esta etapa (opcional)",
+    "colorTitle": "Cor desta etapa",
+    "from": "a partir de",
+    "andUp": "{{from}} ou mais",
+    "andUpShort": "ou mais",
+    "add": "Adicionar outra etapa",
+    "remove": "Remover esta etapa",
+    "rowSummary_one": "{{count}} etapa nomeada",
+    "rowSummary_other": "{{count}} etapas nomeadas",
+    "showAsLabel": "Quando isto aparece no texto da sua história",
+    "showAsNumber": "Mostrar o número — “34”",
+    "showAsBand": "Mostrar o nome — “Amigo”",
+    "showAsBoth": "Mostrar os dois — “Amigo (34)”",
+    "showAsHint": "É isto que {{token}} imprime em diálogos e escolhas."
+  },
+  "valueBounds": "Faixa de valores (opcional)",
+  "noMin": "Sem mínimo",
+  "noMax": "Sem máximo",
+  "valueBoundsHint": "Toda mudança (Definir Variável em comandos, botões ou escolhas) é limitada a esta faixa, então o valor nunca ultrapassa o que você pretende (por exemplo, manter o afeto entre 0 e 100)."
 }

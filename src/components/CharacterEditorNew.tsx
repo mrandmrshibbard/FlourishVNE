@@ -39,6 +39,8 @@ import VariableTokenButton from './variables/VariableTokenButton';
 import { characterNameInitial } from '../utils/variableInterpolation';
 import { sanitizeFontFamily, analyzeFontComplexity, rendererFreezesOnComplexFonts } from '../utils/styleUtils';
 import TypingBlipFields from './ui/TypingBlipFields';
+import TextboxThemeSummary from './character/TextboxThemeSummary';
+import { stepLayer } from '../utils/layerReorder';
 
 type EditorArea = 'appearance' | 'voice';
 
@@ -53,7 +55,15 @@ const AppearanceLayerCard: React.FC<{
     onPick: (assetId: VNID | null) => void;
     /** When set, thumbnails show THIS pose's art and uploads target the pose (null = Default). */
     activePoseId?: VNID | null;
-}> = ({ characterId, layer, activeAssetId, onPick, activePoseId }) => {
+    /** Multi-select: ticked state, plus click handling that honours ctrl/shift. */
+    selected?: boolean;
+    onToggleSelect?: (e: React.MouseEvent) => void;
+    /** Stacking order controls. Disabled at the ends. */
+    onMoveUp?: () => void;
+    onMoveDown?: () => void;
+    canMoveUp?: boolean;
+    canMoveDown?: boolean;
+}> = ({ characterId, layer, activeAssetId, onPick, activePoseId, selected, onToggleSelect, onMoveUp, onMoveDown, canMoveUp, canMoveDown }) => {
     const { t } = useTranslation('characters');
     const { project, dispatch } = useProject();
     const toast = useToast();
@@ -158,8 +168,18 @@ const AppearanceLayerCard: React.FC<{
     const tile = (selected: boolean) => `relative rounded-md overflow-hidden aspect-square cursor-pointer transition-all ${selected ? 'ring-2 ring-[var(--accent-cyan)]' : 'ring-1 ring-[var(--border-subtle)] hover:ring-[var(--accent-cyan)]/50'}`;
 
     return (
-        <div className="rounded-lg border" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-primary)' }}>
+        <div className="rounded-lg border" style={{ borderColor: selected ? 'var(--accent-cyan)' : 'var(--border-subtle)', background: 'var(--bg-primary)' }}>
             <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+                {onToggleSelect && (
+                    <input
+                        type="checkbox"
+                        checked={!!selected}
+                        onChange={() => { /* click handler below carries the ctrl/shift state */ }}
+                        onClick={onToggleSelect}
+                        className="cursor-pointer flex-shrink-0"
+                        title={t('editor.selectLayer', 'Select this piece (Shift-click to select a run)')}
+                    />
+                )}
                 {isRenaming ? (
                     <input {...renameProps} className="bg-slate-900 text-white px-2 py-0.5 rounded text-sm outline-none ring-1 ring-sky-500 flex-1" />
                 ) : (
@@ -168,6 +188,12 @@ const AppearanceLayerCard: React.FC<{
                 <span className="text-[10px] px-1.5 py-0.5 rounded-full truncate max-w-[8rem]" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-muted)' }} title={activeName || t('editor.none')}>
                     {activeName || t('editor.none')}
                 </span>
+                {onMoveUp && (
+                    <button onClick={onMoveUp} disabled={!canMoveUp} className="p-1 text-slate-500 hover:text-sky-400 disabled:opacity-25" title={t('editor.layerUp', 'Move up — draws further BACK, behind the pieces below it')}>▲</button>
+                )}
+                {onMoveDown && (
+                    <button onClick={onMoveDown} disabled={!canMoveDown} className="p-1 text-slate-500 hover:text-sky-400 disabled:opacity-25" title={t('editor.layerDown', 'Move down — draws further FORWARD, over the pieces above it')}>▼</button>
+                )}
                 <button onClick={() => setIsRenaming(true)} className="p-1 text-slate-500 hover:text-sky-400" title={t('editor.renameLayer')}><PencilIcon className="w-3 h-3" /></button>
                 <button onClick={handleDeleteLayer} className="p-1 text-slate-500 hover:text-red-400" title={t('editor.deleteLayer')}><TrashIcon className="w-3 h-3" /></button>
             </div>
@@ -385,8 +411,60 @@ const CharacterEditorNew: React.FC<{
         const newConfig = { ...selectedExpression.layerConfiguration, [layerId]: assetId };
         dispatch({ type: 'UPDATE_EXPRESSION', payload: { characterId: activeCharacterId, expressionId: selectedExpression.id, updates: { layerConfiguration: newConfig } } });
     };
+    // Multi-select for bulk actions on the layer list; the ref anchors Shift-click runs.
+    const [selectedLayerIds, setSelectedLayerIds] = useState<Set<VNID>>(new Set());
+    const lastLayerClickRef = useRef<number | null>(null);
+    // Switching character must drop the selection — otherwise the batch bar would offer to delete
+    // ids belonging to somebody else (they'd be filtered out, so it would silently do nothing).
+    useEffect(() => {
+        setSelectedLayerIds(new Set());
+        lastLayerClickRef.current = null;
+    }, [activeCharacterId]);
+
     const handleAddLayer = () => {
         dispatch({ type: 'ADD_CHARACTER_LAYER', payload: { characterId: activeCharacterId, name: t('editor.newLayerName', { n: layersArray.length + 1 }) } });
+    };
+
+    /* ── Layer multi-select + stacking order ── */
+
+    /** Ctrl/⌘-click adds one; Shift-click takes the run since the last click; a plain click picks one. */
+    const handleToggleLayerSelect = (layerId: VNID, index: number, e: React.MouseEvent) => {
+        setSelectedLayerIds(prev => {
+            const next = new Set(prev);
+            if (e.shiftKey && lastLayerClickRef.current !== null) {
+                const [from, to] = [lastLayerClickRef.current, index].sort((a, b) => a - b);
+                for (let i = from; i <= to; i++) next.add(layersArray[i].id);
+            } else if (e.ctrlKey || e.metaKey) {
+                next.has(layerId) ? next.delete(layerId) : next.add(layerId);
+            } else {
+                next.has(layerId) ? next.delete(layerId) : next.add(layerId);
+            }
+            return next;
+        });
+        lastLayerClickRef.current = index;
+    };
+
+    const handleDeleteSelectedLayers = () => {
+        const ids = layersArray.filter(l => selectedLayerIds.has(l.id)).map(l => l.id);
+        if (ids.length === 0) return;
+        const names = ids.map(id => character.layers[id]?.name).filter(Boolean).join(', ');
+        if (!confirm(t('editor.deleteLayersConfirm', 'Delete these pieces and their art from every expression and pose?\n\n{{names}}').replace('{{names}}', names))) return;
+        // ONE dispatch — see DELETE_CHARACTER_LAYERS in the reducer.
+        dispatch({ type: 'DELETE_CHARACTER_LAYERS', payload: { characterId: activeCharacterId, layerIds: ids } });
+        setSelectedLayerIds(new Set());
+        lastLayerClickRef.current = null;
+    };
+
+    /**
+     * Reorder the BASE stacking order. Reuses APPLY_CHARACTER_LAYOUT's `baseLayerOrder`, which is
+     * the same path the Pose Studio uses — the order lives in the `layers` Record's key order and
+     * that action already knows how to rebuild it safely.
+     */
+    const handleMoveLayer = (index: number, dir: -1 | 1) => {
+        const order = layersArray.map(l => l.id);
+        const next = stepLayer(order, index, dir);
+        if (!next) return;
+        dispatch({ type: 'APPLY_CHARACTER_LAYOUT', payload: { characterId: activeCharacterId, baseLayerOrder: next } });
     };
 
     /* ── Pose handlers ── */
@@ -718,6 +796,12 @@ const CharacterEditorNew: React.FC<{
                                     onChange={patch => dispatch({ type: 'UPDATE_POSE', payload: { characterId: activeCharacterId, poseId: activePoseId, updates: { baseVideoTrimStart: patch.trimStart, baseVideoTrimEnd: patch.trimEnd } } })} />
                             )}
 
+                            {/* This character's dialogue box, mirrored here from "Dialogue & Voice".
+                                It already existed — but only on the other tab, so people building a
+                                character never found it and set the theme line-by-line instead.
+                                Read-only on purpose: one place still owns the editing. */}
+                            <TextboxThemeSummary character={character} project={project} onEdit={() => setArea('voice')} />
+
                             {/* Layers */}
                             <div className="flex items-center justify-between">
                                 <div>
@@ -728,6 +812,22 @@ const CharacterEditorNew: React.FC<{
                                 </div>
                                 <button onClick={handleAddLayer} className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 flex-shrink-0"><PlusIcon className="w-3 h-3" /> {t('editor.addLayer')}</button>
                             </div>
+
+                            {/* Batch bar — appears once more than one piece is ticked, mirroring
+                                the Asset Manager. One dispatch removes them all (see the reducer). */}
+                            {selectedLayerIds.size > 1 && (
+                                <div className="flex items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: 'var(--accent-cyan)', background: 'color-mix(in srgb, var(--accent-cyan) 8%, transparent)' }}>
+                                    <span className="text-xs flex-1" style={{ color: 'var(--text-secondary)' }}>
+                                        {t('editor.layersSelected', '{{count}} pieces selected').replace('{{count}}', String(selectedLayerIds.size))}
+                                    </span>
+                                    <button onClick={() => setSelectedLayerIds(new Set())} className="text-xs px-2 py-1 rounded-md" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
+                                        {t('editor.clearSelection', 'Clear')}
+                                    </button>
+                                    <button onClick={handleDeleteSelectedLayers} className="text-xs px-2 py-1 rounded-md text-red-400 hover:bg-red-500/10">
+                                        {t('editor.deleteSelected', 'Delete these')}
+                                    </button>
+                                </div>
+                            )}
 
                             {layersArray.length === 0 ? (
                                 <div className="text-center py-8 rounded-lg border" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-primary)' }}>
@@ -740,7 +840,7 @@ const CharacterEditorNew: React.FC<{
                                 </div>
                             ) : (
                                 <div className="space-y-2">
-                                    {layersArray.map(layer => (
+                                    {layersArray.map((layer, index) => (
                                         <AppearanceLayerCard
                                             key={layer.id}
                                             characterId={character.id}
@@ -748,6 +848,12 @@ const CharacterEditorNew: React.FC<{
                                             activeAssetId={selectedExpression.layerConfiguration[layer.id] || null}
                                             onPick={(assetId) => handleLayerAssetChange(layer.id, assetId)}
                                             activePoseId={activePoseId}
+                                            selected={selectedLayerIds.has(layer.id)}
+                                            onToggleSelect={(e) => handleToggleLayerSelect(layer.id, index, e)}
+                                            onMoveUp={() => handleMoveLayer(index, -1)}
+                                            onMoveDown={() => handleMoveLayer(index, 1)}
+                                            canMoveUp={index > 0}
+                                            canMoveDown={index < layersArray.length - 1}
                                         />
                                     ))}
                                 </div>
@@ -801,20 +907,20 @@ const CharacterEditorNew: React.FC<{
 
                         {/* Textbox */}
                         <div>
-                            <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>Dialogue Textbox</h3>
-                            <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>Pick a reusable theme and/or set a custom look. Anything left blank uses your project's default dialogue UI.</p>
+                            <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>{t('hc.dialogueTextbox', 'Dialogue Textbox')}</h3>
+                            <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>{t('hc.pickAReusableThemeAnd', 'Pick a reusable theme and/or set a custom look. Anything left blank uses your project\'s default dialogue UI.')}</p>
                             <FormField label="Textbox theme">
                                 <Select value={character.textboxThemeId || ''} onChange={e => updateCharacter({ textboxThemeId: e.target.value || undefined })}>
-                                    <option value="">None (use project default)</option>
+                                    <option value="">{t('hc.noneUseProjectDefault', 'None (use project default)')}</option>
                                     {Object.values(project.textboxThemes || {}).map((th: any) => (<option key={th.id} value={th.id}>{th.name}</option>))}
                                 </Select>
                             </FormField>
-                            <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>Create and edit themes in the In-Game UI Editor → Textbox Themes.</p>
+                            <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>{t('hc.createAndEditThemesIn', 'Create and edit themes in the In-Game UI Editor → Textbox Themes.')}</p>
                             <FormField label="Speak in color">
                                 <Select value={character.dialogueTextColorMode || 'off'} onChange={e => updateCharacter({ dialogueTextColorMode: (e.target.value === 'off' ? undefined : e.target.value) as any })}>
-                                    <option value="off">Off — use the textbox text color</option>
+                                    <option value="off">{t('hc.offUseTheTextboxText', 'Off — use the textbox text color')}</option>
                                     <option value="character">My name color ({character.color})</option>
-                                    <option value="custom">A custom color…</option>
+                                    <option value="custom">{t('hc.aCustomColor', 'A custom color…')}</option>
                                 </Select>
                             </FormField>
                             {character.dialogueTextColorMode === 'custom' && (
@@ -823,7 +929,7 @@ const CharacterEditorNew: React.FC<{
                                 </FormField>
                             )}
                             {(character.dialogueTextColorMode === 'character' || character.dialogueTextColorMode === 'custom') && (
-                                <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>Every line this character speaks renders in this color — an instant “who’s talking” cue.</p>
+                                <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>{t('hc.everyLineThisCharacterSpeaks', 'Every line this character speaks renders in this color — an instant “who’s talking” cue.')}</p>
                             )}
                             <label className="flex items-center gap-2 text-xs cursor-pointer mb-2" style={{ color: 'var(--text-secondary)' }}>
                                 <input type="checkbox" checked={!!character.textbox} onChange={e => updateCharacter({ textbox: e.target.checked ? (character.textbox ?? {}) : undefined })} className="accent-[var(--accent-cyan)]" />

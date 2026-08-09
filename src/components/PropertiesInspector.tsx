@@ -404,7 +404,7 @@ const PropertiesInspector: React.FC<{
                             placeholder={t('shared.selectCharacter')}
                         />
                     </FormField>
-                    {cmd.characterSource === 'player' && <p className="text-[11px] text-[var(--text-muted)] -mt-1">Speaks as the player-created character; the name box uses the player's chosen name.</p>}
+                    {cmd.characterSource === 'player' && <p className="text-[11px] text-[var(--text-muted)] -mt-1">{t('hc.speaksAsThePlayerCreated2', "Speaks as the player-created character; the name box uses the player's chosen name.")}</p>}
                     <FormField label={t('dialogue.text')}>
                         <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value })} />
                     </FormField>
@@ -537,7 +537,7 @@ const PropertiesInspector: React.FC<{
                             placeholder={Object.keys(project.characters).length === 0 ? t('shared.noCharacters') : t('shared.selectCharacter')}
                         />
                     </FormField>
-                    {isPlayerChar && <p className="text-[11px] text-[var(--text-muted)] -mt-1">Shows the character the player created (set one up in <strong>Systems → Character Creator</strong>). Until a player character exists, a default character is shown here so you can preview. Expression falls back automatically.</p>}
+                    {isPlayerChar && <p className="text-[11px] text-[var(--text-muted)] -mt-1">{t('hc.showsTheCharacterThePlayer', 'Shows the character the player created (set one up in')} <strong>{t('hc.systemsCharacterCreator', 'Systems → Character Creator')}</strong>). Until a player character exists, a default character is shown here so you can preview. Expression falls back automatically.</p>}
                     {!isPlayerChar && <FormField label={t('shared.expression')}>
                         <SearchableSelect
                             options={expressionOptions}
@@ -1001,7 +1001,7 @@ const PropertiesInspector: React.FC<{
                     <FormField label={t('jump.targetScene')}><Select value={cmd.targetSceneId} onChange={e => updateCommand({ targetSceneId: e.target.value })}>
                          {Object.values(project.scenes).map((s: VNScene) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </Select></FormField>
-                    {!project.scenes[cmd.targetSceneId] && <p className="text-red-500 text-xs">Warning: Target scene not found.</p>}
+                    {!project.scenes[cmd.targetSceneId] && <p className="text-red-500 text-xs">{t('hc.warningTargetSceneNotFound', 'Warning: Target scene not found.')}</p>}
                 </>;
             }
             case CommandType.Wait: {
@@ -1147,7 +1147,7 @@ const PropertiesInspector: React.FC<{
                             <option value="fog">Fog</option>
                             <option value="haze">Haze</option>
                             <option value="smoke">Smoke</option>
-                            <option value="fireworks">Fireworks (looping show)</option>
+                            <option value="fireworks">{t('hc.fireworksLoopingShow', 'Fireworks (looping show)')}</option>
                             {pluginManager.getRegisteredEffects().filter(e => typeof e.render === 'function').map(e => (
                                 <option key={e.type} value={e.type}>🧩 {e.displayName}</option>
                             ))}
@@ -2516,9 +2516,9 @@ const PropertiesInspector: React.FC<{
                             type="button"
                             onClick={() => updateCommand(patch)}
                             className="w-full mt-3 text-xs px-2 py-1.5 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"
-                            title="Snap this element back to its default position."
+                            title={t('hc.snapThisElementBackTo', 'Snap this element back to its default position.')}
                         >
-                            ⤢ Reset Position
+                            {t('hc.resetPosition', '⤢ Reset Position')}
                         </button>
                     );
                 })()}

@@ -66,5 +66,13 @@
     "autoSavesCleared": "Salvamentos automáticos apagados.",
     "repaired": "Este ficheiro de projeto estava danificado (um guardar foi interrompido), mas foi tudo recuperado. Guarde-o novamente agora para o deixar completo.",
     "repairedPartial": "Este ficheiro de projeto estava danificado (um guardar foi interrompido). A sua história foi recuperada, mas {{count}} ficheiro(s) de media perderam-se e terão de ser importados de novo. Guarde-o novamente agora para o deixar completo."
+  },
+  "holiday": {
+    "activeLabel": "tema {{theme}}",
+    "turnOff": "Desativar",
+    "turnOffTip": "Voltar ao seu tema normal (você pode escolhê-lo de novo a qualquer momento no menu Tema)"
+  },
+  "hc": {
+    "loading": "Carregando…"
   }
 }

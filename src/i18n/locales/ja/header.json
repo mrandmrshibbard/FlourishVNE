@@ -23,5 +23,23 @@
   "exitWithoutSaving": "保存せずに退出",
   "exportError": "エクスポートエラー",
   "exportingProject": "プロジェクトをエクスポート中…",
-  "packagingFiles": "プロジェクトファイルをパッケージ化しています"
+  "packagingFiles": "プロジェクトファイルをパッケージ化しています",
+  "toast": {
+    "savedMissingAssets": "保存しました。ただしメディアファイル {{count}} 件がディスク上に見つからず、保存ファイルに含まれていません。プロジェクトは開けますが、その画像や音声は失われています。画像とサウンドをご確認ください。",
+    "saved": "プロジェクトを保存しました"
+  },
+  "saveAs": "名前を付けて保存…",
+  "saveAsTip": "このプロジェクトの保存先を選びます（以降もそこに保存されます）",
+  "compareMerge": "比較して統合",
+  "extensionPanels": "拡張パネル",
+  "extensionTools": "拡張ツール",
+  "extensionData": "拡張データ",
+  "savingInProgress": "保存中…",
+  "playInWindow": "別ウィンドウでプレイ（再読み込み付き）",
+  "largeExport": {
+    "title": "このプロジェクトは大きめです",
+    "body": "メディアの合計は約 {{size}} です。書き出しは可能ですが、時間がかかりファイルも大きくなります。大きな素材を圧縮すると軽快に保てます。",
+    "biggest": "大きい素材",
+    "proceed": "このまま書き出す"
+  }
 }

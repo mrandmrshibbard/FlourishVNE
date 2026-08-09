@@ -33,7 +33,9 @@
     "prompt": "Se encontraron proyectos guardados automáticamente de una sesión anterior. ¿Quieres restaurar uno?",
     "savedAt": "Guardado {{time}}",
     "startFresh": "Empezar de Cero",
-    "discardAll": "Descartar Todo"
+    "discardAll": "Descartar Todo",
+    "checkpoint": "copia anterior",
+    "discardConfirm": "¿Eliminar TODAS las copias de seguridad, de todos los proyectos? Si el archivo de un proyecto se pierde o se daña, estas copias son la única forma de recuperarlo. Esto no se puede deshacer."
   },
   "time": {
     "justNow": "Ahora mismo",
@@ -61,6 +63,16 @@
     "projectRecovered": "¡Proyecto recuperado!",
     "couldNotLoadSaved": "No se pudo cargar el proyecto guardado.",
     "recoverFailed": "No se pudo recuperar el proyecto.",
-    "autoSavesCleared": "Guardados automáticos eliminados."
+    "autoSavesCleared": "Guardados automáticos eliminados.",
+    "repaired": "Este archivo de proyecto estaba dañado (se interrumpió un guardado), pero se recuperó todo. Guárdalo de nuevo ahora para dejarlo íntegro.",
+    "repairedPartial": "Este archivo de proyecto estaba dañado (se interrumpió un guardado). Tu historia se recuperó, pero se perdieron {{count}} archivo(s) multimedia que tendrás que volver a importar. Guárdalo ahora para dejarlo íntegro."
+  },
+  "holiday": {
+    "activeLabel": "tema {{theme}}",
+    "turnOff": "Desactivar",
+    "turnOffTip": "Vuelve a tu tema normal (puedes elegirlo de nuevo cuando quieras en el menú Tema)"
+  },
+  "hc": {
+    "loading": "Cargando…"
   }
 }

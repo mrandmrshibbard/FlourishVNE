@@ -33,6 +33,13 @@ export interface AnimatedDialogueTextProps {
     glossaryMatches?: GlossaryMatchSpan[] | null;
     /** Hover in/move/out over a term (entryId null = pointer left). Drives the tooltip. */
     onGlossaryHover?: (entryId: string | null, ev: React.MouseEvent) => void;
+    /**
+     * Per-word effects from inline tags (`[shake]NO[/shake]`), in the same clean-text
+     * coordinates as the glossary/karaoke ranges. A char inside a span uses that span's effect;
+     * everything else falls back to the line-level `textEffect`. Innermost span wins, so
+     * `[wave]soft [shake]LOUD[/shake] soft[/wave]` shakes only the middle.
+     */
+    effectSpans?: Array<{ start: number; end: number; effect: string; intensity?: number }> | null;
 }
 
 /** Style applied to the word being revealed. Kept subtle enough to read at typewriter speed.
@@ -142,10 +149,13 @@ function getRainbowColor(index: number, speed: number): string {
 
 /** Get animation CSS for a character at a given index */
 function getCharacterStyle(
-    effect: VNDialogueTextEffect,
+    // Optional since inline tags arrived: a line can reach the per-character path with NO
+    // line-level effect (only some words tagged), so the chars outside a tag have none at all.
+    effect: VNDialogueTextEffect | undefined,
     charIndex: number,
     totalChars: number
 ): React.CSSProperties {
+    if (!effect || effect.type === 'none') return {};
     const speed = effect.speed ?? 1;
     const intensity = effect.intensity ?? 1;
     const duration = 1 / speed;
@@ -228,6 +238,7 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
     revealHighlight,
     glossaryMatches,
     onGlossaryHover,
+    effectSpans,
 }) => {
     // Inject keyframe styles once
     useMemo(() => {
@@ -237,9 +248,25 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
     // Glossary terms only light up once the typewriter has revealed them completely.
     const visibleGlossary = (glossaryMatches ?? []).filter(m => m.start < m.end && m.end <= displayText.length);
 
+    // Inline tags put effects on PART of a line, so a line with no whole-line effect still needs
+    // the per-character path below. Resolve each char against the innermost covering span.
+    const spans = effectSpans && effectSpans.length ? effectSpans : null;
+    const effectForChar = (index: number): VNDialogueTextEffect | undefined => {
+        if (spans) {
+            let winner: { start: number; end: number; effect: string; intensity?: number } | null = null;
+            for (const s of spans) {
+                if (index < s.start || index >= s.end) continue;
+                // Innermost = the one that started latest (ties broken by the shorter span).
+                if (!winner || s.start > winner.start || (s.start === winner.start && s.end < winner.end)) winner = s;
+            }
+            if (winner) return { type: winner.effect as VNTextEffectType, ...(winner.intensity !== undefined ? { intensity: winner.intensity } : {}) };
+        }
+        return textEffect;
+    };
+
     // If no effect or 'none', render plain text, split into segments along the karaoke range
     // and glossary match boundaries (a generalization of the old before/word/after split).
-    if (!textEffect || textEffect.type === 'none') {
+    if ((!textEffect || textEffect.type === 'none') && !spans) {
         const hlActive = !!(revealHighlight && revealHighlight.start < displayText.length);
         if (!hlActive && visibleGlossary.length === 0) {
             return <span style={gradientStyle || undefined}>{displayText}</span>;
@@ -309,7 +336,7 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
                         {...(wordMatch ? glossarySpanProps(wordMatch.entryId, onGlossaryHover) : {})}
                     >
                         {token.split('').map((char, ci) => {
-                            const charStyle = getCharacterStyle(textEffect, wordStart + ci, totalChars);
+                            const charStyle = getCharacterStyle(effectForChar(wordStart + ci), wordStart + ci, totalChars);
                             // Karaoke: chars in the currently revealed/spoken word carry the highlight.
                             const gi = wordStart + ci;
                             const hlStyle = revealHighlight && gi >= revealHighlight.start && gi < (revealHighlight.end ?? displayText.length)

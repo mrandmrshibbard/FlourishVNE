@@ -228,5 +228,16 @@
     "downloading": "正在设置 Android 工具（一次性）……",
     "continue": "下载并继续",
     "cancel": "取消"
-  }
+  },
+  "webOptions": {
+    "title": "网页选项",
+    "fullscreenLabel": "添加全屏按钮",
+    "fullscreenHint": "在游戏上方显示一个小按钮，让玩家把画面放大到整个屏幕——非常适合 itch.io，那里的网页游戏窗口往往偏小。",
+    "fullscreenCorner": "按钮位置",
+    "cornerTopRight": "右上角",
+    "cornerTopLeft": "左上角",
+    "cornerBottomRight": "右下角",
+    "cornerBottomLeft": "左下角"
+  },
+  "cancelBuild": "停止本次导出并清理"
 }

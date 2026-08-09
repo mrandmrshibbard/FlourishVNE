@@ -1,0 +1,88 @@
+{
+  "title": "ストーリーバイブル",
+  "empty": {
+    "title": "あなたのストーリーバイブル",
+    "body": "あらすじ、キャラクターのメモ、場所、物語の流れなど、作品に関することを一か所にまとめられます。見えるのはあなただけで、ゲームには決して含まれません。",
+    "starterButton": "基本のセクションを作る"
+  },
+  "starter": {
+    "synopsis": "あらすじ",
+    "chapters": "章立て",
+    "characters": "キャラクター",
+    "locations": "場所",
+    "arcs": "物語の流れ"
+  },
+  "sections": {
+    "add": "セクションを追加",
+    "newName": "新しいセクション",
+    "unnamed": "名称未設定",
+    "none": "セクションはまだありません。",
+    "namePlaceholder": "セクション名",
+    "delete": "セクションを削除",
+    "deleteConfirm": "「{{name}}」を削除しますか？",
+    "deleteConfirmWithSubs": "「{{name}}」とその下位セクション {{count}} 件を削除しますか？中のメモも失われ、元に戻せません。",
+    "moveUp": "上へ移動",
+    "moveDown": "下へ移動"
+  },
+  "subsections": {
+    "add": "下位セクションを追加",
+    "newName": "新しい下位セクション",
+    "namePlaceholder": "下位セクション名",
+    "delete": "下位セクションを削除",
+    "deleteConfirm": "「{{name}}」を削除しますか？"
+  },
+  "editor": {
+    "edit": "✏ 編集",
+    "preview": "👁 プレビュー",
+    "heading": "見出し（もう一度押すと小さくなります）",
+    "bold": "太字",
+    "italic": "斜体",
+    "bulletList": "箇条書き",
+    "numberedList": "番号付きリスト",
+    "placeholder": "ここにメモを書きましょう。上のボタンで見出し・太字・リストを使えます。",
+    "placeholderWord": "テキスト"
+  },
+  "glossary": {
+    "title": "用語集",
+    "navHint": "会話文でカーソルを合わせると説明が出る言葉です",
+    "back": "ストーリーバイブル",
+    "emptyTitle": "用語集",
+    "emptyBody": "プレイヤーが知らないかもしれない言葉を登録します。会話文に出てくると強調表示され、カーソルを合わせると説明が表示されます。",
+    "addTerm": "用語を追加",
+    "newTerm": "新しい用語",
+    "search": "用語を検索…",
+    "none": "用語はまだありません。",
+    "noResults": "該当する用語がありません。",
+    "term": "単語またはフレーズ",
+    "alternatives": "別の表記や語形",
+    "alternativesHelp": "例：複数形など。Enter キーで追加します",
+    "caseSensitive": "大文字と小文字を区別する",
+    "color": "強調の色",
+    "useDefaultColor": "既定の色を使う",
+    "tooltipTitle": "ふきだしの見出し（空欄ならその言葉自体）",
+    "description": "説明",
+    "extra": "小さな補足（任意）",
+    "enabledEntry": "ゲーム中に表示する",
+    "preview": "ゲームでの見え方（言葉にカーソルを合わせてください）：",
+    "previewLine": "{{term}} は夜にしか現れないと言われている。",
+    "previewNoMatch": "この用語は例文と一致しませんでした。「大文字と小文字を区別する」が有効な場合は表記をご確認ください。",
+    "delete": "用語を削除",
+    "deleteConfirm": "用語集から「{{term}}」を削除しますか？",
+    "import": "読み込み…",
+    "export": "書き出し",
+    "importSuccess": "{{count}} 件の用語を読み込みました",
+    "importError": "そのファイルは Flourish の用語集ではありません。",
+    "settings": {
+      "enabled": "ゲーム中で用語集の言葉を強調する",
+      "defaultColor": "既定の色",
+      "style": "言葉の目立たせ方",
+      "styleUnderline": "下線",
+      "styleColor": "色付きの文字",
+      "styleGlow": "やわらかな光"
+    }
+  },
+  "pluginBanner": {
+    "text": "ストーリーバイブルはエディタに組み込まれ、旧プラグインのメモはこちらに取り込まれました。プラグインは ツール → プラグイン管理 から安心してアンインストールできます。",
+    "dismiss": "了解"
+  }
+}

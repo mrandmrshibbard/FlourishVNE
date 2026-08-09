@@ -33,7 +33,9 @@
     "prompt": "Des projets enregistrés automatiquement ont été trouvés d'une session précédente. Souhaitez-vous en restaurer un ?",
     "savedAt": "Enregistré {{time}}",
     "startFresh": "Recommencer à zéro",
-    "discardAll": "Tout supprimer"
+    "discardAll": "Tout supprimer",
+    "checkpoint": "copie antérieure",
+    "discardConfirm": "Supprimer TOUTES les copies de sauvegarde, pour tous les projets ? Si le fichier d'un projet disparaît ou est endommagé, ces copies sont le seul moyen de le récupérer. Action irréversible."
   },
   "time": {
     "justNow": "À l'instant",
@@ -61,6 +63,16 @@
     "projectRecovered": "Projet récupéré !",
     "couldNotLoadSaved": "Impossible de charger le projet enregistré.",
     "recoverFailed": "Échec de la récupération du projet.",
-    "autoSavesCleared": "Sauvegardes automatiques effacées."
+    "autoSavesCleared": "Sauvegardes automatiques effacées.",
+    "repaired": "Ce fichier de projet était endommagé (une sauvegarde a été interrompue), mais tout a été récupéré. Enregistrez-le à nouveau pour le rendre intact.",
+    "repairedPartial": "Ce fichier de projet était endommagé (une sauvegarde a été interrompue). Votre histoire a été récupérée, mais {{count}} fichier(s) multimédias ont été perdus et devront être réimportés. Enregistrez-le pour le rendre intact."
+  },
+  "holiday": {
+    "activeLabel": "thème {{theme}}",
+    "turnOff": "Désactiver",
+    "turnOffTip": "Revenir à votre thème habituel (vous pourrez le rechoisir à tout moment dans le menu Thème)"
+  },
+  "hc": {
+    "loading": "Chargement…"
   }
 }

@@ -70,6 +70,8 @@
     "StopMovie": "Stop Movie",
     "CreditRoll": "Credit Roll",
     "BranchStart": "Branch",
+    "BranchElseIf": "Otherwise if",
+    "BranchElse": "Otherwise",
     "BranchEnd": "Branch End",
     "Wait": "Wait",
     "RunScript": "Run Script",

@@ -75,6 +75,7 @@ import esEditorTools from './locales/es/editorTools.json';
 import esTemplates from './locales/es/templates.json';
 import esContentTools from './locales/es/contentTools.json';
 import esContextPanels from './locales/es/contextPanels.json';
+import esStoryBible from './locales/es/storyBible.json';
 import itCommon from './locales/it/common.json';
 import itHeader from './locales/it/header.json';
 import itSettings from './locales/it/settings.json';
@@ -95,6 +96,7 @@ import itEditorTools from './locales/it/editorTools.json';
 import itTemplates from './locales/it/templates.json';
 import itContentTools from './locales/it/contentTools.json';
 import itContextPanels from './locales/it/contextPanels.json';
+import itStoryBible from './locales/it/storyBible.json';
 import zhCommon from './locales/zh/common.json';
 import zhHeader from './locales/zh/header.json';
 import zhSettings from './locales/zh/settings.json';
@@ -115,6 +117,7 @@ import zhEditorTools from './locales/zh/editorTools.json';
 import zhTemplates from './locales/zh/templates.json';
 import zhContentTools from './locales/zh/contentTools.json';
 import zhContextPanels from './locales/zh/contextPanels.json';
+import zhStoryBible from './locales/zh/storyBible.json';
 import jaCommon from './locales/ja/common.json';
 import jaHeader from './locales/ja/header.json';
 import jaSettings from './locales/ja/settings.json';
@@ -135,6 +138,7 @@ import jaEditorTools from './locales/ja/editorTools.json';
 import jaTemplates from './locales/ja/templates.json';
 import jaContentTools from './locales/ja/contentTools.json';
 import jaContextPanels from './locales/ja/contextPanels.json';
+import jaStoryBible from './locales/ja/storyBible.json';
 import zhTwCommon from './locales/zh-TW/common.json';
 import zhTwHeader from './locales/zh-TW/header.json';
 import zhTwSettings from './locales/zh-TW/settings.json';
@@ -155,6 +159,7 @@ import zhTwEditorTools from './locales/zh-TW/editorTools.json';
 import zhTwTemplates from './locales/zh-TW/templates.json';
 import zhTwContentTools from './locales/zh-TW/contentTools.json';
 import zhTwContextPanels from './locales/zh-TW/contextPanels.json';
+import zhTwStoryBible from './locales/zh-TW/storyBible.json';
 import ruCommon from './locales/ru/common.json';
 import ruHeader from './locales/ru/header.json';
 import ruSettings from './locales/ru/settings.json';
@@ -175,6 +180,7 @@ import ruEditorTools from './locales/ru/editorTools.json';
 import ruTemplates from './locales/ru/templates.json';
 import ruContentTools from './locales/ru/contentTools.json';
 import ruContextPanels from './locales/ru/contextPanels.json';
+import ruStoryBible from './locales/ru/storyBible.json';
 import ukCommon from './locales/uk/common.json';
 import ukHeader from './locales/uk/header.json';
 import ukSettings from './locales/uk/settings.json';
@@ -195,6 +201,7 @@ import ukEditorTools from './locales/uk/editorTools.json';
 import ukTemplates from './locales/uk/templates.json';
 import ukContentTools from './locales/uk/contentTools.json';
 import ukContextPanels from './locales/uk/contextPanels.json';
+import ukStoryBible from './locales/uk/storyBible.json';
 import frCommon from './locales/fr/common.json';
 import frHeader from './locales/fr/header.json';
 import frSettings from './locales/fr/settings.json';
@@ -215,6 +222,7 @@ import frEditorTools from './locales/fr/editorTools.json';
 import frTemplates from './locales/fr/templates.json';
 import frContentTools from './locales/fr/contentTools.json';
 import frContextPanels from './locales/fr/contextPanels.json';
+import frStoryBible from './locales/fr/storyBible.json';
 
 /** Languages offered in the editor's Language selector. `en` is the source of truth. */
 export const SUPPORTED_LANGUAGES = [
@@ -237,14 +245,14 @@ const LANGUAGE_STORAGE_KEY = 'flourish-editor-language';
 const resources = {
     en: { common: enCommon, header: enHeader, settings: enSettings, hub: enHub, nav: enNav, scenes: enScenes, characters: enCharacters, variables: enVariables, commonEvents: enCommonEvents, commands: enCommands, properties: enProperties, assets: enAssets, ui: enUi, components: enComponents, staging: enStaging, gameBuilder: enGameBuilder, editorTools: enEditorTools, templates: enTemplates, contentTools: enContentTools, contextPanels: enContextPanels, storyBible: enStoryBible },
     pt: { common: ptCommon, header: ptHeader, settings: ptSettings, hub: ptHub, nav: ptNav, scenes: ptScenes, characters: ptCharacters, variables: ptVariables, commonEvents: ptCommonEvents, commands: ptCommands, properties: ptProperties, assets: ptAssets, ui: ptUi, components: ptComponents, staging: ptStaging, gameBuilder: ptGameBuilder, editorTools: ptEditorTools, templates: ptTemplates, contentTools: ptContentTools, contextPanels: ptContextPanels, storyBible: ptStoryBible },
-    es: { common: esCommon, header: esHeader, settings: esSettings, hub: esHub, nav: esNav, scenes: esScenes, characters: esCharacters, variables: esVariables, commonEvents: esCommonEvents, commands: esCommands, properties: esProperties, assets: esAssets, ui: esUi, components: esComponents, staging: esStaging, gameBuilder: esGameBuilder, editorTools: esEditorTools, templates: esTemplates, contentTools: esContentTools, contextPanels: esContextPanels },
-    it: { common: itCommon, header: itHeader, settings: itSettings, hub: itHub, nav: itNav, scenes: itScenes, characters: itCharacters, variables: itVariables, commonEvents: itCommonEvents, commands: itCommands, properties: itProperties, assets: itAssets, ui: itUi, components: itComponents, staging: itStaging, gameBuilder: itGameBuilder, editorTools: itEditorTools, templates: itTemplates, contentTools: itContentTools, contextPanels: itContextPanels },
-    zh: { common: zhCommon, header: zhHeader, settings: zhSettings, hub: zhHub, nav: zhNav, scenes: zhScenes, characters: zhCharacters, variables: zhVariables, commonEvents: zhCommonEvents, commands: zhCommands, properties: zhProperties, assets: zhAssets, ui: zhUi, components: zhComponents, staging: zhStaging, gameBuilder: zhGameBuilder, editorTools: zhEditorTools, templates: zhTemplates, contentTools: zhContentTools, contextPanels: zhContextPanels },
-    ja: { common: jaCommon, header: jaHeader, settings: jaSettings, hub: jaHub, nav: jaNav, scenes: jaScenes, characters: jaCharacters, variables: jaVariables, commonEvents: jaCommonEvents, commands: jaCommands, properties: jaProperties, assets: jaAssets, ui: jaUi, components: jaComponents, staging: jaStaging, gameBuilder: jaGameBuilder, editorTools: jaEditorTools, templates: jaTemplates, contentTools: jaContentTools, contextPanels: jaContextPanels },
-    'zh-TW': { common: zhTwCommon, header: zhTwHeader, settings: zhTwSettings, hub: zhTwHub, nav: zhTwNav, scenes: zhTwScenes, characters: zhTwCharacters, variables: zhTwVariables, commonEvents: zhTwCommonEvents, commands: zhTwCommands, properties: zhTwProperties, assets: zhTwAssets, ui: zhTwUi, components: zhTwComponents, staging: zhTwStaging, gameBuilder: zhTwGameBuilder, editorTools: zhTwEditorTools, templates: zhTwTemplates, contentTools: zhTwContentTools, contextPanels: zhTwContextPanels },
-    ru: { common: ruCommon, header: ruHeader, settings: ruSettings, hub: ruHub, nav: ruNav, scenes: ruScenes, characters: ruCharacters, variables: ruVariables, commonEvents: ruCommonEvents, commands: ruCommands, properties: ruProperties, assets: ruAssets, ui: ruUi, components: ruComponents, staging: ruStaging, gameBuilder: ruGameBuilder, editorTools: ruEditorTools, templates: ruTemplates, contentTools: ruContentTools, contextPanels: ruContextPanels },
-    uk: { common: ukCommon, header: ukHeader, settings: ukSettings, hub: ukHub, nav: ukNav, scenes: ukScenes, characters: ukCharacters, variables: ukVariables, commonEvents: ukCommonEvents, commands: ukCommands, properties: ukProperties, assets: ukAssets, ui: ukUi, components: ukComponents, staging: ukStaging, gameBuilder: ukGameBuilder, editorTools: ukEditorTools, templates: ukTemplates, contentTools: ukContentTools, contextPanels: ukContextPanels },
-    fr: { common: frCommon, header: frHeader, settings: frSettings, hub: frHub, nav: frNav, scenes: frScenes, characters: frCharacters, variables: frVariables, commonEvents: frCommonEvents, commands: frCommands, properties: frProperties, assets: frAssets, ui: frUi, components: frComponents, staging: frStaging, gameBuilder: frGameBuilder, editorTools: frEditorTools, templates: frTemplates, contentTools: frContentTools, contextPanels: frContextPanels },
+    es: { common: esCommon, header: esHeader, settings: esSettings, hub: esHub, nav: esNav, scenes: esScenes, characters: esCharacters, variables: esVariables, commonEvents: esCommonEvents, commands: esCommands, properties: esProperties, assets: esAssets, ui: esUi, components: esComponents, staging: esStaging, gameBuilder: esGameBuilder, editorTools: esEditorTools, templates: esTemplates, contentTools: esContentTools, contextPanels: esContextPanels, storyBible: esStoryBible },
+    it: { common: itCommon, header: itHeader, settings: itSettings, hub: itHub, nav: itNav, scenes: itScenes, characters: itCharacters, variables: itVariables, commonEvents: itCommonEvents, commands: itCommands, properties: itProperties, assets: itAssets, ui: itUi, components: itComponents, staging: itStaging, gameBuilder: itGameBuilder, editorTools: itEditorTools, templates: itTemplates, contentTools: itContentTools, contextPanels: itContextPanels, storyBible: itStoryBible },
+    zh: { common: zhCommon, header: zhHeader, settings: zhSettings, hub: zhHub, nav: zhNav, scenes: zhScenes, characters: zhCharacters, variables: zhVariables, commonEvents: zhCommonEvents, commands: zhCommands, properties: zhProperties, assets: zhAssets, ui: zhUi, components: zhComponents, staging: zhStaging, gameBuilder: zhGameBuilder, editorTools: zhEditorTools, templates: zhTemplates, contentTools: zhContentTools, contextPanels: zhContextPanels, storyBible: zhStoryBible },
+    ja: { common: jaCommon, header: jaHeader, settings: jaSettings, hub: jaHub, nav: jaNav, scenes: jaScenes, characters: jaCharacters, variables: jaVariables, commonEvents: jaCommonEvents, commands: jaCommands, properties: jaProperties, assets: jaAssets, ui: jaUi, components: jaComponents, staging: jaStaging, gameBuilder: jaGameBuilder, editorTools: jaEditorTools, templates: jaTemplates, contentTools: jaContentTools, contextPanels: jaContextPanels, storyBible: jaStoryBible },
+    'zh-TW': { common: zhTwCommon, header: zhTwHeader, settings: zhTwSettings, hub: zhTwHub, nav: zhTwNav, scenes: zhTwScenes, characters: zhTwCharacters, variables: zhTwVariables, commonEvents: zhTwCommonEvents, commands: zhTwCommands, properties: zhTwProperties, assets: zhTwAssets, ui: zhTwUi, components: zhTwComponents, staging: zhTwStaging, gameBuilder: zhTwGameBuilder, editorTools: zhTwEditorTools, templates: zhTwTemplates, contentTools: zhTwContentTools, contextPanels: zhTwContextPanels, storyBible: zhTwStoryBible },
+    ru: { common: ruCommon, header: ruHeader, settings: ruSettings, hub: ruHub, nav: ruNav, scenes: ruScenes, characters: ruCharacters, variables: ruVariables, commonEvents: ruCommonEvents, commands: ruCommands, properties: ruProperties, assets: ruAssets, ui: ruUi, components: ruComponents, staging: ruStaging, gameBuilder: ruGameBuilder, editorTools: ruEditorTools, templates: ruTemplates, contentTools: ruContentTools, contextPanels: ruContextPanels, storyBible: ruStoryBible },
+    uk: { common: ukCommon, header: ukHeader, settings: ukSettings, hub: ukHub, nav: ukNav, scenes: ukScenes, characters: ukCharacters, variables: ukVariables, commonEvents: ukCommonEvents, commands: ukCommands, properties: ukProperties, assets: ukAssets, ui: ukUi, components: ukComponents, staging: ukStaging, gameBuilder: ukGameBuilder, editorTools: ukEditorTools, templates: ukTemplates, contentTools: ukContentTools, contextPanels: ukContextPanels, storyBible: ukStoryBible },
+    fr: { common: frCommon, header: frHeader, settings: frSettings, hub: frHub, nav: frNav, scenes: frScenes, characters: frCharacters, variables: frVariables, commonEvents: frCommonEvents, commands: frCommands, properties: frProperties, assets: frAssets, ui: frUi, components: frComponents, staging: frStaging, gameBuilder: frGameBuilder, editorTools: frEditorTools, templates: frTemplates, contentTools: frContentTools, contextPanels: frContextPanels, storyBible: frStoryBible },
 } as const;
 
 function getInitialLanguage(): string {

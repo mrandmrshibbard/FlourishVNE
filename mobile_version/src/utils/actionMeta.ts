@@ -65,6 +65,15 @@ export function defaultActionForType(type: UIActionType, project: VNProject): VN
             const firstChar = (project.characters as any)[firstCharId];
             return { ...base, characterId: firstCharId, layerId: firstChar ? firstKey(firstChar.layers) : '', variableId: firstKey(project.variables), direction: 'next' };
         }
+        case UIActionType.ChangePose:
+            return { ...base, characterId: firstKey(project.characters), poseId: null, transition: 'instant', duration: 0.3 };
+        case UIActionType.ChangeCharacter: {
+            const ids = Object.keys(project.characters || {});
+            return { ...base, fromCharacterId: ids[0] || '', toCharacterId: ids[1] || ids[0] || '', expressionId: null, poseId: null };
+        }
+        case UIActionType.PlayCharacterAnimation:
+            // No animation chosen = "stop whatever is playing", which is a useful default on its own.
+            return { ...base, characterId: firstKey(project.characters), animationId: null };
         case UIActionType.OpenURL:
             return { ...base, url: 'https://', newTab: true };
         case UIActionType.CallCommonEvent:

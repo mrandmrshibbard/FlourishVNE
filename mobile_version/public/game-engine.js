@@ -63,6 +63,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["ToggleScreen"] = "ToggleScreen";
     UIActionType2["OpenURL"] = "OpenURL";
     UIActionType2["PlayAnimation"] = "PlayAnimation";
+    UIActionType2["ChangePose"] = "ChangePose";
+    UIActionType2["ChangeCharacter"] = "ChangeCharacter";
+    UIActionType2["PlayCharacterAnimation"] = "PlayCharacterAnimation";
     UIActionType2["ChangeImage"] = "ChangeImage";
     UIActionType2["ShowElement"] = "ShowElement";
     UIActionType2["HideElement"] = "HideElement";
@@ -911,8 +914,48 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return parts.join(" ");
   }
   const generateId$7 = () => Math.random().toString(36).substring(2, 9);
+  const removeLayersFromCharacter = (character, layerIds) => {
+    var _a, _b;
+    const remainingLayers = {};
+    for (const [id, layer] of Object.entries(character.layers)) {
+      if (!layerIds.has(id)) remainingLayers[id] = layer;
+    }
+    const newExpressions = {};
+    for (const [exprId, expr] of Object.entries(character.expressions)) {
+      const touched = Object.keys(expr.layerConfiguration).some((id) => layerIds.has(id));
+      if (!touched) {
+        newExpressions[exprId] = expr;
+        continue;
+      }
+      const restCfg = {};
+      for (const [id, assetId] of Object.entries(expr.layerConfiguration)) {
+        if (!layerIds.has(id)) restCfg[id] = assetId;
+      }
+      newExpressions[exprId] = { ...expr, layerConfiguration: restCfg };
+    }
+    let newPoses = character.poses;
+    if (character.poses) {
+      const posesNext = {};
+      for (const [poseId, pose] of Object.entries(character.poses)) {
+        let p = pose;
+        if ((_a = p.layerOrder) == null ? void 0 : _a.some((id) => layerIds.has(id))) {
+          const filtered = p.layerOrder.filter((id) => !layerIds.has(id));
+          const { layerOrder: _lo, ...rest } = p;
+          p = filtered.length ? { ...rest, layerOrder: filtered } : rest;
+        }
+        if ((_b = p.hiddenLayers) == null ? void 0 : _b.some((id) => layerIds.has(id))) {
+          const filtered = p.hiddenLayers.filter((id) => !layerIds.has(id));
+          const { hiddenLayers: _hl, ...rest } = p;
+          p = filtered.length ? { ...rest, hiddenLayers: filtered } : rest;
+        }
+        posesNext[poseId] = p;
+      }
+      newPoses = posesNext;
+    }
+    return newPoses !== character.poses ? { ...character, layers: remainingLayers, expressions: newExpressions, poses: newPoses } : { ...character, layers: remainingLayers, expressions: newExpressions };
+  };
   const characterReducer = (state2, action) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
     switch (action.type) {
       case "ADD_CHARACTER": {
         const { name, color } = action.payload;
@@ -992,37 +1035,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "DELETE_CHARACTER_LAYER": {
         const { characterId, layerId } = action.payload;
         const character = state2.characters[characterId];
-        if (!character) return state2;
-        const { [layerId]: _, ...remainingLayers } = character.layers;
-        const newExpressions = {};
-        for (const [exprId, expr] of Object.entries(character.expressions)) {
-          if (layerId in expr.layerConfiguration) {
-            const { [layerId]: _cfg, ...restCfg } = expr.layerConfiguration;
-            newExpressions[exprId] = { ...expr, layerConfiguration: restCfg };
-          } else {
-            newExpressions[exprId] = expr;
-          }
-        }
-        let newPoses = character.poses;
-        if (character.poses) {
-          const posesNext = {};
-          for (const [poseId, pose] of Object.entries(character.poses)) {
-            let p = pose;
-            if ((_a = p.layerOrder) == null ? void 0 : _a.includes(layerId)) {
-              const filtered = p.layerOrder.filter((id) => id !== layerId);
-              const { layerOrder: _lo, ...rest } = p;
-              p = filtered.length ? { ...rest, layerOrder: filtered } : rest;
-            }
-            if ((_b = p.hiddenLayers) == null ? void 0 : _b.includes(layerId)) {
-              const filtered = p.hiddenLayers.filter((id) => id !== layerId);
-              const { hiddenLayers: _hl, ...rest } = p;
-              p = filtered.length ? { ...rest, hiddenLayers: filtered } : rest;
-            }
-            posesNext[poseId] = p;
-          }
-          newPoses = posesNext;
-        }
-        const updatedChar = newPoses !== character.poses ? { ...character, layers: remainingLayers, expressions: newExpressions, poses: newPoses } : { ...character, layers: remainingLayers, expressions: newExpressions };
+        if (!(character == null ? void 0 : character.layers[layerId])) return state2;
+        const updatedChar = removeLayersFromCharacter(character, /* @__PURE__ */ new Set([layerId]));
+        return { ...state2, characters: { ...state2.characters, [characterId]: updatedChar } };
+      }
+      /**
+       * Bulk delete. ONE dispatch on purpose: deleting selected layers one at a time would make
+       * each removal re-render and re-resolve against a character that has already changed — the
+       * same class of bug the scene editor's multi-delete comment warns about with indices.
+       */
+      case "DELETE_CHARACTER_LAYERS": {
+        const { characterId, layerIds } = action.payload;
+        const character = state2.characters[characterId];
+        if (!character || !(layerIds == null ? void 0 : layerIds.length)) return state2;
+        const wanted = new Set(layerIds.filter((id) => character.layers[id]));
+        if (wanted.size === 0) return state2;
+        const updatedChar = removeLayersFromCharacter(character, wanted);
         return { ...state2, characters: { ...state2.characters, [characterId]: updatedChar } };
       }
       case "ADD_LAYER_ASSET": {
@@ -1048,7 +1076,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "DELETE_LAYER_ASSET": {
         const { characterId, layerId, assetId } = action.payload;
         const character = state2.characters[characterId];
-        if (!((_c = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _c.assets[assetId])) return state2;
+        if (!((_a = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _a.assets[assetId])) return state2;
         const { [assetId]: _, ...remainingAssets } = character.layers[layerId].assets;
         const newLayers = { ...character.layers, [layerId]: { ...character.layers[layerId], assets: remainingAssets } };
         const newExpressions = { ...character.expressions };
@@ -1062,7 +1090,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "UPDATE_LAYER_ASSET": {
         const { characterId, layerId, assetId, updates } = action.payload;
         const character = state2.characters[characterId];
-        const asset = (_d = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _d.assets[assetId];
+        const asset = (_b = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _b.assets[assetId];
         if (!asset) return state2;
         const newAssets = { ...character.layers[layerId].assets, [assetId]: { ...asset, ...updates } };
         const newLayers = { ...character.layers, [layerId]: { ...character.layers[layerId], assets: newAssets } };
@@ -1115,14 +1143,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "UPDATE_POSE": {
         const { characterId, poseId, updates } = action.payload;
         const character = state2.characters[characterId];
-        const pose = (_e = character == null ? void 0 : character.poses) == null ? void 0 : _e[poseId];
+        const pose = (_c = character == null ? void 0 : character.poses) == null ? void 0 : _c[poseId];
         if (!character || !pose) return state2;
         return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, poses: { ...character.poses, [poseId]: { ...pose, ...updates } } } } };
       }
       case "DELETE_POSE": {
         const { characterId, poseId } = action.payload;
         const character = state2.characters[characterId];
-        if (!((_f = character == null ? void 0 : character.poses) == null ? void 0 : _f[poseId])) return state2;
+        if (!((_d = character == null ? void 0 : character.poses) == null ? void 0 : _d[poseId])) return state2;
         const { [poseId]: _removed, ...remainingPoses } = character.poses;
         const stripPoseBoxes = (owner) => {
           if (!owner.poseBoxes || !(poseId in owner.poseBoxes)) return owner;
@@ -1174,7 +1202,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "UPDATE_CHARACTER_ANIMATION": {
         const { characterId, animationId, updates } = action.payload;
         const character = state2.characters[characterId];
-        const anim = (_g = character == null ? void 0 : character.animations) == null ? void 0 : _g[animationId];
+        const anim = (_e = character == null ? void 0 : character.animations) == null ? void 0 : _e[animationId];
         if (!character || !anim) return state2;
         const next = { ...anim, ...updates };
         next.tracks = (next.tracks || []).map((tr) => ({ ...tr, keys: [...tr.keys || []].sort((a, b) => a.atMs - b.atMs) }));
@@ -1183,7 +1211,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "DELETE_CHARACTER_ANIMATION": {
         const { characterId, animationId } = action.payload;
         const character = state2.characters[characterId];
-        if (!((_h = character == null ? void 0 : character.animations) == null ? void 0 : _h[animationId])) return state2;
+        if (!((_f = character == null ? void 0 : character.animations) == null ? void 0 : _f[animationId])) return state2;
         const { [animationId]: _gone, ...rest } = character.animations;
         const nextChar = { ...character };
         if (Object.keys(rest).length) nextChar.animations = rest;
@@ -1193,7 +1221,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "SET_ASSET_POSE_ART": {
         const { characterId, layerId, assetId, poseId, art } = action.payload;
         const character = state2.characters[characterId];
-        const asset = (_i = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _i.assets[assetId];
+        const asset = (_g = character == null ? void 0 : character.layers[layerId]) == null ? void 0 : _g.assets[assetId];
         if (!character || !asset) return state2;
         let newAsset;
         if (art === null) {
@@ -1291,7 +1319,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "DUPLICATE_POSE": {
         const { characterId, poseId, newPoseId, newName } = action.payload;
         const character = state2.characters[characterId];
-        const src = (_j = character == null ? void 0 : character.poses) == null ? void 0 : _j[poseId];
+        const src = (_h = character == null ? void 0 : character.poses) == null ? void 0 : _h[poseId];
         if (!character || !src) return state2;
         const newId2 = newPoseId || `pose-${generateId$7()}`;
         if (character.poses[newId2]) return state2;
@@ -1299,7 +1327,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const newLayers = {};
         for (const [layerId, layer] of Object.entries(character.layers)) {
           let l = layer;
-          if ((_k = layer.poseBoxes) == null ? void 0 : _k[poseId]) {
+          if ((_i = layer.poseBoxes) == null ? void 0 : _i[poseId]) {
             l = { ...l, poseBoxes: { ...l.poseBoxes, [newId2]: { ...layer.poseBoxes[poseId] } } };
           }
           if (Object.values(l.assets).some((a) => {
@@ -1309,10 +1337,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const newAssets = {};
             for (const [assetId, asset] of Object.entries(l.assets)) {
               let a = asset;
-              if ((_l = asset.poseArt) == null ? void 0 : _l[poseId]) {
+              if ((_j = asset.poseArt) == null ? void 0 : _j[poseId]) {
                 a = { ...a, poseArt: { ...a.poseArt, [newId2]: { ...asset.poseArt[poseId] } } };
               }
-              if ((_m = asset.poseBoxes) == null ? void 0 : _m[poseId]) {
+              if ((_k = asset.poseBoxes) == null ? void 0 : _k[poseId]) {
                 a = { ...a, poseBoxes: { ...a.poseBoxes, [newId2]: { ...asset.poseBoxes[poseId] } } };
               }
               newAssets[assetId] = a;
@@ -2281,6 +2309,25 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const commonEvents = state2.commonEvents || {};
         const existing = commonEvents[commonEventId];
         if (!existing || commandIndex < 0 || commandIndex >= existing.commands.length) return state2;
+        const commandToDelete = existing.commands[commandIndex];
+        if ((commandToDelete == null ? void 0 : commandToDelete.type) === CommandType.BranchStart) {
+          const branchId = commandToDelete.branchId;
+          const isBranchMarker = (cmd) => (cmd.type === CommandType.BranchStart || cmd.type === CommandType.BranchElseIf || cmd.type === CommandType.BranchElse || cmd.type === CommandType.BranchEnd) && cmd.branchId === branchId;
+          return {
+            ...state2,
+            commonEvents: {
+              ...commonEvents,
+              [commonEventId]: {
+                ...existing,
+                commands: existing.commands.filter((cmd) => !isBranchMarker(cmd)),
+                updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+              }
+            }
+          };
+        }
+        if ((commandToDelete == null ? void 0 : commandToDelete.type) === CommandType.BranchEnd) {
+          return state2;
+        }
         const commands = [...existing.commands];
         commands.splice(commandIndex, 1);
         return {
@@ -10816,6 +10863,7 @@ void main() {
     return `hsl(${hue}, 85%, 65%)`;
   }
   function getCharacterStyle(effect, charIndex, totalChars) {
+    if (!effect || effect.type === "none") return {};
     const speed = effect.speed ?? 1;
     const intensity = effect.intensity ?? 1;
     const delay = charIndex * 0.05 / speed;
@@ -10885,13 +10933,26 @@ void main() {
     gradientStyle,
     revealHighlight,
     glossaryMatches,
-    onGlossaryHover
+    onGlossaryHover,
+    effectSpans
   }) => {
     React2.useMemo(() => {
       injectTextEffectStyles();
     }, []);
     const visibleGlossary = (glossaryMatches ?? []).filter((m) => m.start < m.end && m.end <= displayText.length);
-    if (!textEffect || textEffect.type === "none") {
+    const spans = effectSpans && effectSpans.length ? effectSpans : null;
+    const effectForChar = (index) => {
+      if (spans) {
+        let winner = null;
+        for (const s of spans) {
+          if (index < s.start || index >= s.end) continue;
+          if (!winner || s.start > winner.start || s.start === winner.start && s.end < winner.end) winner = s;
+        }
+        if (winner) return { type: winner.effect, ...winner.intensity !== void 0 ? { intensity: winner.intensity } : {} };
+      }
+      return textEffect;
+    };
+    if ((!textEffect || textEffect.type === "none") && !spans) {
       const hlActive = !!(revealHighlight && revealHighlight.start < displayText.length);
       if (!hlActive && visibleGlossary.length === 0) {
         return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: gradientStyle || void 0, children: displayText });
@@ -10954,7 +11015,7 @@ void main() {
           style: { display: "inline-block", whiteSpace: "nowrap", ...wordMatch ? { cursor: "help" } : {} },
           ...wordMatch ? glossarySpanProps(wordMatch.entryId, onGlossaryHover) : {},
           children: token.split("").map((char, ci) => {
-            const charStyle = getCharacterStyle(textEffect, wordStart + ci);
+            const charStyle = getCharacterStyle(effectForChar(wordStart + ci), wordStart + ci);
             const gi = wordStart + ci;
             const hlStyle = revealHighlight && gi >= revealHighlight.start && gi < (revealHighlight.end ?? displayText.length) ? revealHighlightStyle(revealHighlight) : void 0;
             const glStyle = wordMatch && gi >= wordMatch.start && gi < wordMatch.end ? glossaryTermStyle(wordMatch) : void 0;
@@ -11409,31 +11470,90 @@ void main() {
     }
     return result;
   }
-  const PAUSE_RE = /\[pause(?:\s+(\d+(?:\.\d+)?))?\]/gi;
   const DEFAULT_PAUSE_MS = 400;
+  const EFFECT_TAGS = /* @__PURE__ */ new Set(["shake", "wave", "rainbow", "glitch", "pulse", "fade-in", "bounce", "typewriter-bounce"]);
+  const TAG_RE = /\[(\/?)([a-z][a-z-]*)(?:\s+(\d+(?:\.\d+)?))?\]/gi;
+  const tokenizeDialogueText = (raw) => {
+    const out = [];
+    let last = 0;
+    const openNames = [];
+    const pushText = (value) => {
+      if (!value) return;
+      const prev = out[out.length - 1];
+      if (prev && prev.kind === "text") prev.value += value;
+      else out.push({ kind: "text", value });
+    };
+    TAG_RE.lastIndex = 0;
+    for (let m = TAG_RE.exec(raw); m; m = TAG_RE.exec(raw)) {
+      const [whole, slash, rawName, num2] = m;
+      const name = rawName.toLowerCase();
+      const known = name === "pause" ? "pause" : EFFECT_TAGS.has(name) ? "effect" : null;
+      if (!known || slash && known === "pause") {
+        pushText(raw.slice(last, m.index) + whole);
+        last = m.index + whole.length;
+        continue;
+      }
+      if (known === "effect" && slash && !openNames.includes(name)) {
+        pushText(raw.slice(last, m.index) + whole);
+        last = m.index + whole.length;
+        continue;
+      }
+      pushText(raw.slice(last, m.index));
+      if (known === "pause") {
+        out.push({ kind: "pause", ms: num2 !== void 0 ? Math.max(0, parseFloat(num2) * 1e3) : DEFAULT_PAUSE_MS });
+      } else if (slash) {
+        openNames.splice(openNames.lastIndexOf(name), 1);
+        out.push({ kind: "close", effect: name });
+      } else {
+        openNames.push(name);
+        out.push({ kind: "open", effect: name, ...num2 !== void 0 ? { intensity: parseFloat(num2) } : {} });
+      }
+      last = m.index + whole.length;
+    }
+    pushText(raw.slice(last));
+    return out;
+  };
   const parseDialogueTextCodes = (raw) => {
     const segments = [];
     const pausesMs = [];
-    let last = 0;
-    PAUSE_RE.lastIndex = 0;
-    for (let m = PAUSE_RE.exec(raw); m; m = PAUSE_RE.exec(raw)) {
-      segments.push(raw.slice(last, m.index));
-      pausesMs.push(m[1] !== void 0 ? Math.max(0, parseFloat(m[1]) * 1e3) : DEFAULT_PAUSE_MS);
-      last = m.index + m[0].length;
+    let current = "";
+    for (const token of tokenizeDialogueText(raw)) {
+      if (token.kind === "text") current += token.value;
+      else if (token.kind === "pause") {
+        segments.push(current);
+        current = "";
+        pausesMs.push(token.ms);
+      }
     }
-    segments.push(raw.slice(last));
+    segments.push(current);
     return { segments, pausesMs };
   };
   const stripDialogueTextCodes = (raw) => parseDialogueTextCodes(raw).segments.join("");
   const processDialogueText = (raw, interpolate) => {
-    const { segments, pausesMs } = parseDialogueTextCodes(raw);
     let cleanText = "";
     const pauses = [];
-    segments.forEach((segment, i) => {
-      cleanText += interpolate(segment);
-      if (i < pausesMs.length) pauses.push({ index: cleanText.length, ms: pausesMs[i] });
-    });
-    return { cleanText, pauses };
+    const effectSpans = [];
+    const open = [];
+    for (const token of tokenizeDialogueText(raw)) {
+      if (token.kind === "text") {
+        cleanText += interpolate(token.value);
+      } else if (token.kind === "pause") {
+        pauses.push({ index: cleanText.length, ms: token.ms });
+      } else if (token.kind === "open") {
+        open.push({ effect: token.effect, intensity: token.intensity, start: cleanText.length });
+      } else {
+        const at = [...open].reverse().findIndex((o2) => o2.effect === token.effect);
+        if (at === -1) continue;
+        const idx = open.length - 1 - at;
+        const [o] = open.splice(idx, 1);
+        if (cleanText.length > o.start) effectSpans.push({ start: o.start, end: cleanText.length, effect: o.effect, intensity: o.intensity });
+      }
+    }
+    for (const o of open) {
+      if (cleanText.length > o.start) effectSpans.push({ start: o.start, end: cleanText.length, effect: o.effect, intensity: o.intensity });
+    }
+    effectSpans.sort((a, b) => a.start - b.start || a.end - b.end);
+    return { cleanText, pauses, effectSpans };
   };
   const smartJoin = (prev, next) => {
     if (!prev || !next) return prev + next;
@@ -12268,7 +12388,6 @@ void main() {
     };
   }
   function handlePlayCharacterAnimation(command, context) {
-    var _a;
     const { project, playerState } = context;
     const characterId = resolveCommandCharacterId(command, project, playerState.variables) || command.characterId;
     const charData = characterId ? project.characters[characterId] : void 0;
@@ -12276,21 +12395,7 @@ void main() {
     if (!charData || !onStage) {
       return { advance: true };
     }
-    const animationId = command.animationId && ((_a = charData.animations) == null ? void 0 : _a[command.animationId]) ? command.animationId : null;
-    return {
-      advance: true,
-      stagePatch: (prev) => {
-        const cur = prev.characters[characterId];
-        if (!cur) return {};
-        return {
-          characters: {
-            ...prev.characters,
-            // Explicit set-or-clear: absence (stopped) must serialize to a MISSING field.
-            [characterId]: { ...cur, activeManualAnimationId: animationId ?? void 0 }
-          }
-        };
-      }
-    };
+    return { advance: true, stagePatch: buildAnimationStagePatch(project, characterId, command.animationId) };
   }
   function handleSetCharacterPose(command, context) {
     const { project, playerState } = context;
@@ -12300,34 +12405,98 @@ void main() {
     if (!charData || !onStage) {
       return { advance: true };
     }
-    const wrap = (u) => resolveFieldUrl(project.id, u) || u;
-    const useTransition = !!command.transition && command.transition !== "instant";
-    const poseId = resolvePoseId(charData, command.poseId);
     return {
       advance: true,
-      stagePatch: (prev) => {
-        const cur = prev.characters[characterId];
-        if (!cur) return {};
-        const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes } = buildCharacterMedia(charData, cur.layerSelections || {}, wrap, poseId);
-        return {
-          characters: {
-            ...prev.characters,
-            [characterId]: {
-              ...cur,
-              imageUrls,
-              videoUrls,
-              videoTrims,
-              // Explicit set-or-clear (see SetCharacterLayer note).
-              imageBoxes: imageBoxes.some(Boolean) ? imageBoxes : void 0,
-              videoBoxes: videoBoxes.some(Boolean) ? videoBoxes : void 0,
-              isVideo: hasVideo,
-              videoLoop,
-              ...poseId ? { poseId } : { poseId: void 0 },
-              transition: useTransition ? { type: command.transition, duration: command.duration ?? 0.3, action: "show" } : null
-            }
+      stagePatch: buildPoseStagePatch(project, characterId, command.poseId, command.transition, command.duration)
+    };
+  }
+  function buildPoseStagePatch(project, characterId, rawPoseId, transition, duration) {
+    var _a;
+    const charData = (_a = project.characters) == null ? void 0 : _a[characterId];
+    const wrap = (u) => resolveFieldUrl(project.id, u) || u;
+    const poseId = charData ? resolvePoseId(charData, rawPoseId) : void 0;
+    const useTransition = !!transition && transition !== "instant";
+    return (prev) => {
+      var _a2;
+      const cur = (_a2 = prev.characters) == null ? void 0 : _a2[characterId];
+      if (!cur || !charData) return {};
+      const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes } = buildCharacterMedia(charData, cur.layerSelections || {}, wrap, poseId);
+      return {
+        characters: {
+          ...prev.characters,
+          [characterId]: {
+            ...cur,
+            imageUrls,
+            videoUrls,
+            videoTrims,
+            // Explicit set-or-clear (see SetCharacterLayer note).
+            imageBoxes: imageBoxes.some(Boolean) ? imageBoxes : void 0,
+            videoBoxes: videoBoxes.some(Boolean) ? videoBoxes : void 0,
+            isVideo: hasVideo,
+            videoLoop,
+            ...poseId ? { poseId } : { poseId: void 0 },
+            transition: useTransition ? { type: transition, duration: duration ?? 0.3, action: "show" } : null
           }
-        };
-      }
+        }
+      };
+    };
+  }
+  function buildAnimationStagePatch(project, characterId, rawAnimationId) {
+    var _a, _b;
+    const charData = (_a = project.characters) == null ? void 0 : _a[characterId];
+    const animationId = rawAnimationId && ((_b = charData == null ? void 0 : charData.animations) == null ? void 0 : _b[rawAnimationId]) ? rawAnimationId : null;
+    return (prev) => {
+      var _a2;
+      const cur = (_a2 = prev.characters) == null ? void 0 : _a2[characterId];
+      if (!cur) return {};
+      return {
+        characters: {
+          ...prev.characters,
+          // Explicit set-or-clear: absence (stopped) must serialize to a MISSING field.
+          [characterId]: { ...cur, activeManualAnimationId: animationId ?? void 0 }
+        }
+      };
+    };
+  }
+  function buildCharacterSwapStagePatch(project, fromCharacterId, toCharacterId, expressionId, rawPoseId) {
+    var _a;
+    const toChar = (_a = project.characters) == null ? void 0 : _a[toCharacterId];
+    const wrap = (u) => resolveFieldUrl(project.id, u) || u;
+    const poseId = toChar ? resolvePoseId(toChar, rawPoseId) : void 0;
+    return (prev) => {
+      var _a2, _b;
+      const cur = (_a2 = prev.characters) == null ? void 0 : _a2[fromCharacterId];
+      if (!cur || !toChar) return {};
+      const expr = expressionId && ((_b = toChar.expressions) == null ? void 0 : _b[expressionId]) || Object.values(toChar.expressions || {})[0];
+      const layerSelections = {};
+      Object.values(toChar.layers || {}).forEach((layer) => {
+        var _a3;
+        layerSelections[layer.id] = ((_a3 = expr == null ? void 0 : expr.layerConfiguration) == null ? void 0 : _a3[layer.id]) ?? null;
+      });
+      const { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes } = buildCharacterMedia(toChar, layerSelections, wrap, poseId);
+      const { [fromCharacterId]: _gone, ...others } = prev.characters;
+      return {
+        characters: {
+          ...others,
+          [toCharacterId]: {
+            ...cur,
+            // keeps position/scale/flip/anchor — the whole point
+            characterId: toCharacterId,
+            layerSelections,
+            imageUrls,
+            videoUrls,
+            videoTrims,
+            imageBoxes: imageBoxes.some(Boolean) ? imageBoxes : void 0,
+            videoBoxes: videoBoxes.some(Boolean) ? videoBoxes : void 0,
+            isVideo: hasVideo,
+            videoLoop,
+            ...poseId ? { poseId } : { poseId: void 0 },
+            expressionId: expr == null ? void 0 : expr.id,
+            activeManualAnimationId: void 0
+            // the outgoing character's animation must not linger
+          }
+        }
+      };
     };
   }
   async function handleSetBackground(command, context) {
@@ -15133,6 +15302,36 @@ void main() {
     const skip = () => skipRef.current();
     return { displayText, skip, hasFinished };
   };
+  function resolveRewind(p, scenes) {
+    if (!p.history || p.history.length === 0) return { target: null, reason: "no-previous-line" };
+    let historyIndex = p.history.length - 1;
+    while (historyIndex >= 0 && p.history[historyIndex].type !== "dialogue") historyIndex--;
+    if (historyIndex < 0) return { target: null, reason: "no-previous-line" };
+    const entry = p.history[historyIndex];
+    const sceneId = entry.sceneId || p.currentSceneId;
+    const commandIndex = entry.commandIndex ?? p.currentIndex;
+    let commands;
+    let commandStack;
+    if (entry.commandsSnapshot) {
+      commands = entry.commandsSnapshot;
+      commandStack = entry.commandStackSnapshot ?? [];
+    } else {
+      const scene = scenes[sceneId];
+      if (scene) {
+        commands = scene.commands;
+        commandStack = p.commandStack;
+      } else if (entry.sceneId && entry.sceneId !== p.currentSceneId) {
+        return { target: null, reason: "scene-missing" };
+      } else {
+        commands = p.currentCommands;
+        commandStack = p.commandStack;
+      }
+    }
+    if (commandIndex < 0 || commandIndex >= commands.length) {
+      return { target: null, reason: "out-of-bounds" };
+    }
+    return { target: { historyIndex, entry, sceneId, commands, commandIndex, commandStack } };
+  }
   const MAX_BLIP_BYTES = 1 * 1024 * 1024;
   const bufferCache = /* @__PURE__ */ new Map();
   const pending = /* @__PURE__ */ new Map();
@@ -16367,7 +16566,7 @@ void main() {
   const DialogueBox = ({ dialogue, settings, projectUI, onFinished, variables, project, reactiveState, timerPaused, uiPalette, voiceRef, autoContinue, isSkipping }) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
     if (!dialogue) return null;
-    const { cleanText: interpolatedText, pauses: inlinePauses } = React2.useMemo(
+    const { cleanText: interpolatedText, pauses: inlinePauses, effectSpans: inlineEffectSpans } = React2.useMemo(
       () => processDialogueText(dialogue.text, (s) => interpolateVariables(s, variables, project)),
       [dialogue.text, variables, project]
     );
@@ -16759,7 +16958,8 @@ void main() {
                           gradientStyle: extractTextGradientStyle(projectUI.dialogueTextFont) || void 0,
                           revealHighlight,
                           glossaryMatches,
-                          onGlossaryHover: handleGlossaryHover
+                          onGlossaryHover: handleGlossaryHover,
+                          effectSpans: inlineEffectSpans
                         }
                       ),
                       !hasFinished && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: {
@@ -18217,6 +18417,12 @@ void main() {
         u++;
       }
     }
+    const perPage = element.itemsPerPage && element.itemsPerPage > 0 ? element.itemsPerPage : 0;
+    const [invPage, setInvPage] = React2.useState(0);
+    const totalPages = perPage ? Math.max(1, Math.ceil(slots.length / perPage)) : 1;
+    const page = Math.min(invPage, totalPages - 1);
+    const pageOffset = perPage ? page * perPage : 0;
+    const visibleSlots = perPage ? slots.slice(pageOffset, pageOffset + perPage) : slots;
     const reorderEnabled = element.allowReorder !== false && !!onReorderSlots && !autoSort;
     const selectEnabled = !!onSelectItem;
     const [dragSlot, setDragSlot] = React2.useState(null);
@@ -18260,6 +18466,22 @@ void main() {
       ]);
     };
     const slotButtonMode = element.slotButton ?? "none";
+    const discardItem = (it) => {
+      var _a2, _b;
+      if (element.discardMode === "move") {
+        const dest = element.discardToCollectionId ? (_a2 = project.itemCollections) == null ? void 0 : _a2[element.discardToCollectionId] : void 0;
+        const entry = (_b = dest == null ? void 0 : dest.entries) == null ? void 0 : _b.find((e) => e.itemId === it.id);
+        if (!(entry == null ? void 0 : entry.countVariableId)) {
+          runtimeDebugWarn(`[Inventory] "${it.name}" not discarded: ${dest ? `the list "${dest.name}" does not stock it` : "no destination list is set"}.`);
+          return;
+        }
+        onAction({ type: UIActionType.SetVariable, variableId: entry.countVariableId, operator: "add", value: 1 });
+      }
+      onAction({ type: UIActionType.DestroyItem, itemId: it.id, quantity: 1 });
+      if (onCommitVariables) onCommitVariables();
+      const acts = slotButtonActionsFor(it);
+      if (acts.length) runActionList(acts);
+    };
     const tradeCollectionId = slotButtonMode === "buy" ? element.collectionId : slotButtonMode === "sell" ? element.sellToCollectionId : void 0;
     const tradeCollection = tradeCollectionId ? (_a = project.itemCollections) == null ? void 0 : _a[tradeCollectionId] : void 0;
     const tradeItem = (it) => {
@@ -18323,7 +18545,7 @@ void main() {
             element.showNames !== false && /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-[10px] text-white truncate w-full mt-0.5", style: { ...element.nameFont ? fontSettingsToStyle(element.nameFont) : {}, textAlign: "center" }, children: it.name }),
             (() => {
               var _a3, _b2;
-              const showBtn = slotButtonMode === "use" ? !!it.usable : slotButtonMode === "buy" || slotButtonMode === "sell" ? !!tradeCollection : false;
+              const showBtn = slotButtonMode === "use" ? !!it.usable : slotButtonMode === "buy" || slotButtonMode === "sell" ? !!tradeCollection : slotButtonMode === "discard" ? true : false;
               if (!showBtn) return null;
               const blocked = (slotButtonMode === "buy" || slotButtonMode === "sell") && tradeBlocked(it);
               const hovered = hoverUseId === it.id && !blocked;
@@ -18331,7 +18553,7 @@ void main() {
               const hoverArt = ((_b2 = element.useButtonHoverImage) == null ? void 0 : _b2.id) ? assetResolver(element.useButtonHoverImage.id, element.useButtonHoverImage.type === "video" ? "video" : "image") : null;
               const art = hovered && hoverArt ? hoverArt : baseArt;
               const bg = art ? void 0 : hovered ? element.useButtonHoverColor || element.useButtonColor || "#0ea5e9" : element.useButtonColor || "#0ea5e9";
-              const defaultLabel = slotButtonMode === "buy" ? "Buy" : slotButtonMode === "sell" ? "Sell" : "Use";
+              const defaultLabel = slotButtonMode === "buy" ? "Buy" : slotButtonMode === "sell" ? "Sell" : slotButtonMode === "discard" ? "Drop" : "Use";
               let label = element.useButtonText || defaultLabel;
               if (!element.useButtonText && (slotButtonMode === "buy" || slotButtonMode === "sell") && tradeCollection) {
                 const entry = tradeCollection.entries.find((e) => e.itemId === it.id);
@@ -18341,7 +18563,9 @@ void main() {
               const onClick = (e) => {
                 e.stopPropagation();
                 if (blocked) return;
-                slotButtonMode === "use" ? useItem(it) : tradeItem(it);
+                if (slotButtonMode === "use") useItem(it);
+                else if (slotButtonMode === "discard") discardItem(it);
+                else tradeItem(it);
               };
               return /* @__PURE__ */ jsxRuntime2.jsx(
                 "button",
@@ -18419,7 +18643,40 @@ void main() {
         onPointerUp: reorderEnabled ? (() => setDragSlot(null)) : void 0,
         children: [
           totalSlots === 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full flex items-center justify-center text-center text-xs text-white/50 px-2", children: element.emptyText || "" }),
-          groupByCategory ? groupedSections : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "grid", style: gridStyle, children: slots.map((slotId, i) => renderSlot(slotId, i)) })
+          groupByCategory ? groupedSections : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "grid", style: gridStyle, children: visibleSlots.map((slotId, i) => renderSlot(slotId, i + pageOffset)) }),
+          perPage > 0 && !groupByCategory && totalPages > 1 && /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "flex items-center justify-center gap-3 mt-2 select-none", children: [
+            !element.hidePageButtons && /* @__PURE__ */ jsxRuntime2.jsx(
+              "button",
+              {
+                onClick: (e) => {
+                  e.stopPropagation();
+                  setInvPage((p) => Math.max(0, Math.min(p, totalPages - 1) - 1));
+                },
+                disabled: page <= 0,
+                className: "px-2 py-0.5 rounded text-sm disabled:opacity-30",
+                style: { background: "rgba(255,255,255,0.1)", color: "#fff", cursor: page <= 0 ? "default" : "pointer" },
+                children: element.prevPageText || "‹"
+              }
+            ),
+            !element.hidePageIndicator && /* @__PURE__ */ jsxRuntime2.jsxs("span", { className: "text-xs tabular-nums", style: { color: "rgba(255,255,255,0.7)" }, children: [
+              page + 1,
+              " / ",
+              totalPages
+            ] }),
+            !element.hidePageButtons && /* @__PURE__ */ jsxRuntime2.jsx(
+              "button",
+              {
+                onClick: (e) => {
+                  e.stopPropagation();
+                  setInvPage((p) => Math.min(totalPages - 1, Math.min(p, totalPages - 1) + 1));
+                },
+                disabled: page >= totalPages - 1,
+                className: "px-2 py-0.5 rounded text-sm disabled:opacity-30",
+                style: { background: "rgba(255,255,255,0.1)", color: "#fff", cursor: page >= totalPages - 1 ? "default" : "pointer" },
+                children: element.nextPageText || "›"
+              }
+            )
+          ] })
         ]
       }
     );
@@ -20724,6 +20981,232 @@ void main() {
           onAction({ type: isHome ? UIActionType.HidePhone : UIActionType.ShowPhone });
         }, "aria-label": "Home", title: "Home", style: { width: "1.5em", height: "1.5em", borderRadius: "9999px", border: `2px solid ${ui.phoneHomeButtonColor || "rgba(255,255,255,0.28)"}`, background: "transparent", cursor: "var(--vn-cursor-hand, pointer)", flexShrink: 0 } }) })
       ] })
+    );
+  };
+  const CreditScrollContent = ({ command, hasBgs, hasMedia, onFinish }) => {
+    const contentRef = React2.useRef(null);
+    const containerRef = React2.useRef(null);
+    const [animStyle, setAnimStyle] = React2.useState({ visibility: "hidden" });
+    const finishedRef = React2.useRef(false);
+    React2.useEffect(() => {
+      finishedRef.current = false;
+      const raf = requestAnimationFrame(() => {
+        const content = contentRef.current;
+        const container = containerRef.current;
+        if (!content || !container) return;
+        const contentHeight = content.scrollHeight;
+        const containerHeight = container.clientHeight;
+        const totalDistance = containerHeight + contentHeight;
+        const speed = command.scrollSpeed || 60;
+        const calcDuration = totalDistance / speed;
+        const maxDuration = command.duration || 300;
+        const finalDuration = Math.min(calcDuration, maxDuration);
+        setAnimStyle({
+          animation: `credit-scroll-dynamic ${finalDuration}s linear forwards`,
+          // Use CSS custom properties for start and end translate values (in pixels)
+          ["--credit-scroll-start"]: `${containerHeight}px`,
+          ["--credit-scroll-end"]: `-${contentHeight}px`
+        });
+      });
+      return () => cancelAnimationFrame(raf);
+    }, [command]);
+    const handleAnimEnd = React2.useCallback((e) => {
+      if (e.target === e.currentTarget && !finishedRef.current) {
+        finishedRef.current = true;
+        onFinish();
+      }
+    }, [onFinish]);
+    React2.useEffect(() => {
+      command.scrollSpeed || 60;
+      const maxDuration = command.duration || 300;
+      const timeout = window.setTimeout(() => {
+        if (!finishedRef.current) {
+          finishedRef.current = true;
+          onFinish();
+        }
+      }, (maxDuration + 5) * 1e3);
+      return () => clearTimeout(timeout);
+    }, [command, onFinish]);
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: containerRef, className: "absolute inset-0 overflow-hidden z-[2]", children: [
+      /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `
+                @keyframes credit-scroll-dynamic {
+                    from { transform: translateY(var(--credit-scroll-start, 100%)); }
+                    to { transform: translateY(var(--credit-scroll-end, -100%)); }
+                }
+            ` }),
+      /* @__PURE__ */ jsxRuntime2.jsx(
+        "div",
+        {
+          ref: contentRef,
+          className: "text-center px-8 w-full",
+          style: {
+            color: command.textColor || "#FFFFFF",
+            textShadow: hasBgs || hasMedia ? "0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)" : "none",
+            willChange: "transform",
+            ...animStyle
+          },
+          onAnimationEnd: handleAnimEnd,
+          children: command.entries.map(
+            (entry, i) => entry.kind === "heading" ? /* @__PURE__ */ jsxRuntime2.jsx("h2", { className: "text-2xl font-bold mt-8 mb-4", style: { color: "#FFD700" }, children: entry.label }, i) : /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "mb-2", children: [
+              /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-sm opacity-70", children: entry.label }),
+              entry.value && /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntime2.jsx("br", {}),
+                /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-lg", children: entry.value })
+              ] })
+            ] }, i)
+          )
+        }
+      )
+    ] });
+  };
+  const CreditRollOverlay = ({ command, project, assetResolver, getAssetMetadata, onFinish }) => {
+    const bgs = command.backgrounds || [];
+    const mediaItems = command.media || [];
+    const hasBgs = bgs.length > 0;
+    const hasMedia = mediaItems.length > 0;
+    const [bgIndex, setBgIndex] = React2.useState(0);
+    const [prevBgIndex, setPrevBgIndex] = React2.useState(null);
+    const [transitioning, setTransitioning] = React2.useState(false);
+    const bgTimerRef = React2.useRef(null);
+    const bgTransTimerRef = React2.useRef(null);
+    const [elapsed, setElapsed] = React2.useState(0);
+    const startTimeRef = React2.useRef(Date.now());
+    React2.useEffect(() => {
+      if (!hasMedia) return;
+      startTimeRef.current = Date.now();
+      const interval = window.setInterval(() => {
+        setElapsed((Date.now() - startTimeRef.current) / 1e3);
+      }, 200);
+      return () => clearInterval(interval);
+    }, [hasMedia]);
+    React2.useEffect(() => {
+      if (!hasBgs || bgs.length <= 1) return;
+      const scheduleNext = (idx) => {
+        const slide = bgs[idx];
+        const displayMs = ((slide == null ? void 0 : slide.displayDuration) || 5) * 1e3;
+        bgTimerRef.current = window.setTimeout(() => {
+          const nextIdx = (idx + 1) % bgs.length;
+          const nextSlide = bgs[nextIdx];
+          const transDur2 = ((nextSlide == null ? void 0 : nextSlide.transitionDuration) || 0.5) * 1e3;
+          const transType = (nextSlide == null ? void 0 : nextSlide.transition) || "fade";
+          if (transType === "instant" || transDur2 === 0) {
+            setBgIndex(nextIdx);
+            scheduleNext(nextIdx);
+          } else {
+            setPrevBgIndex(idx);
+            setBgIndex(nextIdx);
+            setTransitioning(true);
+            bgTransTimerRef.current = window.setTimeout(() => {
+              setTransitioning(false);
+              setPrevBgIndex(null);
+              scheduleNext(nextIdx);
+            }, transDur2);
+          }
+        }, displayMs);
+      };
+      scheduleNext(bgIndex);
+      return () => {
+        if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
+        if (bgTransTimerRef.current) clearTimeout(bgTransTimerRef.current);
+      };
+    }, [hasBgs, bgs.length]);
+    const renderBgSlide = (slide, opacity, transitionDuration) => {
+      const url = assetResolver(slide.assetId, "image");
+      if (!url) return null;
+      const meta = getAssetMetadata(slide.assetId, "image");
+      const isCustom = slide.objectFit === "custom";
+      const style = isCustom ? {
+        position: "absolute",
+        left: `${slide.x ?? 0}%`,
+        top: `${slide.y ?? 0}%`,
+        width: `${slide.width ?? 100}%`,
+        height: `${slide.height ?? 100}%`,
+        objectFit: "fill",
+        opacity: (slide.opacity ?? 1) * opacity,
+        transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : "none"
+      } : {
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        objectFit: slide.objectFit || "cover",
+        opacity: (slide.opacity ?? 1) * opacity,
+        transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : "none"
+      };
+      if (meta.isVideo) {
+        return /* @__PURE__ */ jsxRuntime2.jsx(TrimmedVideo, { src: url, autoPlay: true, muted: true, loop: meta.loop, trimStart: slide.trimStart, trimEnd: slide.trimEnd, playsInline: true, style });
+      }
+      return /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", style });
+    };
+    const currentSlide = hasBgs ? bgs[bgIndex] : null;
+    const prevSlide = prevBgIndex !== null && hasBgs ? bgs[prevBgIndex] : null;
+    const transDur = (currentSlide == null ? void 0 : currentSlide.transitionDuration) || 0.5;
+    return /* @__PURE__ */ jsxRuntime2.jsxs(
+      "div",
+      {
+        className: "absolute inset-0 z-40 flex items-end justify-center overflow-hidden",
+        style: { backgroundColor: command.backgroundColor || "#000000FF", cursor: command.allowSkip ? "var(--vn-cursor-hand, pointer)" : "var(--vn-cursor-normal, default)" },
+        onClick: () => {
+          if (!command.allowSkip) return;
+          onFinish();
+        },
+        children: [
+          hasBgs && /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 z-0", children: [
+            prevSlide && transitioning && renderBgSlide(prevSlide, 1, 0),
+            currentSlide && renderBgSlide(currentSlide, transitioning ? currentSlide.transition === "instant" ? 1 : 1 : 1, transitioning ? transDur : 0),
+            transitioning && currentSlide && currentSlide.transition !== "instant" && /* @__PURE__ */ jsxRuntime2.jsx(
+              "div",
+              {
+                className: "absolute inset-0",
+                style: {
+                  backgroundColor: currentSlide.transition === "dissolve" ? "transparent" : command.backgroundColor || "#000000FF",
+                  animation: `credit-bg-fade-in ${transDur}s ease-in-out both`
+                }
+              }
+            )
+          ] }),
+          hasBgs && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 z-[1]", style: { backgroundColor: "rgba(0,0,0,0.4)" } }),
+          hasMedia && mediaItems.map((item, idx) => {
+            const url = assetResolver(item.assetId, "image");
+            if (!url) return null;
+            const meta = getAssetMetadata(item.assetId, "image");
+            const showAt = item.showAt || 0;
+            const hideAt = item.hideAt || 0;
+            const isVisible = elapsed >= showAt && (hideAt <= 0 || elapsed < hideAt);
+            const isFading = item.transition === "fade";
+            const itemOpacity = isVisible ? item.opacity ?? 1 : 0;
+            const isCustomItem = item.objectFit === "custom";
+            const mediaStyle = isCustomItem ? {
+              position: "absolute",
+              left: `${item.x}%`,
+              top: `${item.y}%`,
+              width: `${item.width}%`,
+              height: `${item.height}%`,
+              objectFit: "fill",
+              opacity: itemOpacity,
+              transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : "none",
+              zIndex: 1,
+              pointerEvents: "none"
+            } : {
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: item.objectFit || "cover",
+              opacity: itemOpacity,
+              transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : "none",
+              zIndex: 1,
+              pointerEvents: "none"
+            };
+            if (meta.isVideo) {
+              return /* @__PURE__ */ jsxRuntime2.jsx(TrimmedVideo, { src: url, autoPlay: true, muted: true, loop: true, trimStart: item.trimStart, trimEnd: item.trimEnd, playsInline: true, style: mediaStyle }, `credit-media-${idx}`);
+            }
+            return /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", style: mediaStyle }, `credit-media-${idx}`);
+          }),
+          /* @__PURE__ */ jsxRuntime2.jsx(CreditScrollContent, { command, hasBgs, hasMedia, onFinish }),
+          command.allowSkip && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute bottom-4 right-4 text-xs opacity-50 z-[3]", style: { color: command.textColor || "#FFFFFF" }, children: "Click to skip" })
+        ]
+      }
     );
   };
   const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false, startAt = null, startScreenId = null }) => {
@@ -25207,7 +25690,12 @@ void main() {
           // Full state snapshots for backward navigation
           stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
           variablesSnapshot: { ...p.variables },
-          musicSnapshot: { ...p.musicState }
+          musicSnapshot: { ...p.musicState },
+          // Which list `commandIndex` indexes, and the call stack it belonged to. Inside a
+          // Common Event that list is the EVENT's commands, not the scene's — see the
+          // HistoryEntry doc comment. Plain references; the engine never mutates these.
+          commandsSnapshot: p.currentCommands,
+          commandStackSnapshot: p.commandStack
         };
         const newHistory = [...p.history, historyEntry];
         if (newHistory.length > 200) newHistory.splice(0, newHistory.length - 200);
@@ -25471,23 +25959,22 @@ void main() {
         }
       }
       (_a2 = coverageRef.current) == null ? void 0 : _a2.resetCursor();
+      let rewindRefused = false;
       updatePlayerState((p) => {
-        if (!p || p.history.length === 0) return p;
-        let targetIdx = p.history.length - 1;
-        while (targetIdx >= 0 && p.history[targetIdx].type !== "dialogue") {
-          targetIdx--;
-        }
-        if (targetIdx < 0) return p;
-        const target = p.history[targetIdx];
-        let newSceneId = target.sceneId || p.currentSceneId;
-        let newCommands = p.currentCommands;
-        let newCommandIndex = target.commandIndex ?? p.currentIndex;
-        const targetScene = project.scenes[newSceneId];
-        if (targetScene) {
-          newCommands = targetScene.commands;
-        } else if (target.sceneId && target.sceneId !== p.currentSceneId) {
+        if (!p) return p;
+        const resolved = resolveRewind(p, project.scenes);
+        if (!resolved.target) {
+          if (resolved.reason !== "no-previous-line") rewindRefused = true;
           return p;
         }
+        const {
+          historyIndex: targetIdx,
+          entry: target,
+          sceneId: newSceneId,
+          commands: newCommands,
+          commandIndex: newCommandIndex,
+          commandStack: newStack
+        } = resolved.target;
         const trimmedHistory = p.history.slice(0, targetIdx);
         const restoredStage = target.stageSnapshot ? JSON.parse(JSON.stringify(target.stageSnapshot)) : p.stageState;
         const restoredVariables = target.variablesSnapshot ? { ...target.variablesSnapshot } : p.variables;
@@ -25497,6 +25984,7 @@ void main() {
           currentSceneId: newSceneId,
           currentCommands: newCommands,
           currentIndex: newCommandIndex,
+          commandStack: newStack,
           history: trimmedHistory,
           // Restore full visual/audio state from snapshot
           stageState: restoredStage,
@@ -25520,9 +26008,13 @@ void main() {
           }
         };
       });
+      if (rewindRefused) {
+        devNotify("Could not step back any further from here.", "warning");
+        return;
+      }
       commandSchedulerRef.current.reset();
       variableStoreRef.current = null;
-    }, [project.scenes]);
+    }, [project.scenes, devNotify]);
     const handleUIAction = (action, opts) => {
       runtimeDebugLog("handleUIAction called with:", action.type, action);
       if (action.conditions && action.conditions.length > 0) {
@@ -25547,7 +26039,7 @@ void main() {
       executeUIAction(action, opts);
     };
     const executeUIAction = (action, opts) => {
-      var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r2, _s2, _t2, _u2, _v2, _w2, _x2;
+      var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r2, _s2, _t2, _u2, _v2, _w2, _x2, _y2;
       if (action.type === UIActionType.StartNewGame) {
         startNewGameWithFade();
       } else if (!playerState && action.type === UIActionType.ContinueGame) {
@@ -26331,6 +26823,25 @@ void main() {
         if (a.sfxId) playSound(a.sfxId);
       } else if (action.type === UIActionType.HideFlashlight) {
         setFlashlight((f) => f ? { ...f, on: false } : f);
+      } else if (action.type === UIActionType.ChangePose || action.type === UIActionType.ChangeCharacter || action.type === UIActionType.PlayCharacterAnimation) {
+        const a = action;
+        const targetId = action.type === UIActionType.ChangeCharacter ? a.fromCharacterId : a.characterId;
+        if (!playerState) {
+          devNotify("That button changes a character on stage, so it only works during the story.", "warning");
+          return;
+        }
+        if (!targetId || !playerState.stageState.characters[targetId]) {
+          const who = ((_m2 = project.characters[targetId]) == null ? void 0 : _m2.name) || targetId || "that character";
+          devNotify(`Nothing happened: ${who} is not on stage right now.`, "warning");
+          return;
+        }
+        const patch = action.type === UIActionType.ChangePose ? buildPoseStagePatch(project, targetId, a.poseId, a.transition, a.duration) : action.type === UIActionType.PlayCharacterAnimation ? buildAnimationStagePatch(project, targetId, a.animationId) : buildCharacterSwapStagePatch(project, a.fromCharacterId, a.toCharacterId, a.expressionId, a.poseId);
+        updatePlayerState((p) => {
+          if (!p) return p;
+          const delta = patch(p.stageState);
+          if (!delta || Object.keys(delta).length === 0) return p;
+          return { ...p, stageState: { ...p.stageState, ...delta } };
+        });
       } else if (action.type === UIActionType.CycleLayerAsset) {
         runtimeDebugLog("CycleLayerAsset handler triggered, playerState exists:", !!playerState);
         const cycleAction = action;
@@ -26395,10 +26906,10 @@ void main() {
         runtimeDebugLog("JumpToLabel handler triggered:", {
           targetLabel,
           currentSceneId: playerState.currentSceneId,
-          currentSceneName: (_m2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _m2.name,
+          currentSceneName: (_n2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _n2.name,
           screenSceneId: playerState.uiState.screenSceneId,
           targetSceneId,
-          targetSceneName: (_n2 = project.scenes[targetSceneId]) == null ? void 0 : _n2.name
+          targetSceneName: (_o2 = project.scenes[targetSceneId]) == null ? void 0 : _o2.name
         });
         const found = findLabelAcrossScenes(project, targetLabel, targetSceneId);
         if (!found) {
@@ -26528,7 +27039,7 @@ void main() {
         const savedVariables = {};
         const clearedVariables = [];
         for (const param of ce.parameters || []) {
-          const raw = (_o2 = ccAction.arguments) == null ? void 0 : _o2[param.id];
+          const raw = (_p2 = ccAction.arguments) == null ? void 0 : _p2[param.id];
           overrides[param.id] = raw !== void 0 ? coerceParam(raw, param.type) : param.defaultValue;
           if (Object.prototype.hasOwnProperty.call(playerState.variables, param.id)) savedVariables[param.id] = playerState.variables[param.id];
           else clearedVariables.push(param.id);
@@ -26559,22 +27070,22 @@ void main() {
         });
       } else if (action.type === UIActionType.GiveItem) {
         const a = action;
-        const item = (_p2 = project.items) == null ? void 0 : _p2[a.itemId];
+        const item = (_q2 = project.items) == null ? void 0 : _q2[a.itemId];
         if (item) executeUIAction(item.unique ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 1 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "add", value: a.quantity ?? 1 });
       } else if (action.type === UIActionType.UseItem) {
         const a = action;
-        const item = (_q2 = project.items) == null ? void 0 : _q2[a.itemId];
+        const item = (_r2 = project.items) == null ? void 0 : _r2[a.itemId];
         if (item) {
           if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
           (item.useEffect || []).forEach((eff) => executeUIAction(eff));
         }
       } else if (action.type === UIActionType.DestroyItem) {
         const a = action;
-        const item = (_r2 = project.items) == null ? void 0 : _r2[a.itemId];
+        const item = (_s2 = project.items) == null ? void 0 : _s2[a.itemId];
         if (item) executeUIAction(a.all ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 0 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: a.quantity ?? 1 });
       } else if (action.type === UIActionType.UseSelectedItem) {
-        const selId = (_s2 = playerStateRef.current) == null ? void 0 : _s2.selectedItemId;
-        const item = selId ? (_t2 = project.items) == null ? void 0 : _t2[selId] : void 0;
+        const selId = (_t2 = playerStateRef.current) == null ? void 0 : _t2.selectedItemId;
+        const item = selId ? (_u2 = project.items) == null ? void 0 : _u2[selId] : void 0;
         if (item && item.usable) {
           if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
           (item.useEffect || []).forEach((eff) => executeUIAction(eff));
@@ -26583,7 +27094,7 @@ void main() {
         startCarry(action.itemId);
       } else if (action.type === UIActionType.RestockCollection) {
         const a = action;
-        const collection = (_u2 = project.itemCollections) == null ? void 0 : _u2[a.collectionId];
+        const collection = (_v2 = project.itemCollections) == null ? void 0 : _v2[a.collectionId];
         if (collection) {
           const restocked = computeCollectionRestock(collection, project.variables);
           Object.entries(restocked).forEach(([varId, val]) => {
@@ -26592,12 +27103,12 @@ void main() {
         }
       } else if (action.type === UIActionType.BuyItem || action.type === UIActionType.SellItem || action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem) {
         const a = action;
-        const collection = (_v2 = project.itemCollections) == null ? void 0 : _v2[a.collectionId];
+        const collection = (_w2 = project.itemCollections) == null ? void 0 : _w2[a.collectionId];
         const isBuy = action.type === UIActionType.BuyItem || action.type === UIActionType.BuySelectedItem;
         const isSelected = action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem;
-        const itemId = isSelected ? (_w2 = playerStateRef.current) == null ? void 0 : _w2.selectedItemId : a.itemId;
+        const itemId = isSelected ? (_x2 = playerStateRef.current) == null ? void 0 : _x2.selectedItemId : a.itemId;
         if (collection && itemId) {
-          const curVars = ((_x2 = playerStateRef.current) == null ? void 0 : _x2.variables) || {};
+          const curVars = ((_y2 = playerStateRef.current) == null ? void 0 : _y2.variables) || {};
           const res = isBuy ? computeBuy(itemId, collection, project, curVars) : computeSell(itemId, collection, project, curVars);
           if (!("blocked" in res)) {
             Object.entries(res.updates).forEach(([varId, val]) => {
@@ -28285,232 +28796,6 @@ void main() {
               ))
             ] }) }),
             /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none", style: tintStyle })
-          ]
-        }
-      );
-    };
-    const CreditScrollContent = ({ command, hasBgs, hasMedia, onFinish }) => {
-      const contentRef = React2.useRef(null);
-      const containerRef = React2.useRef(null);
-      const [animStyle, setAnimStyle] = React2.useState({ visibility: "hidden" });
-      const finishedRef = React2.useRef(false);
-      React2.useEffect(() => {
-        finishedRef.current = false;
-        const raf = requestAnimationFrame(() => {
-          const content = contentRef.current;
-          const container = containerRef.current;
-          if (!content || !container) return;
-          const contentHeight = content.scrollHeight;
-          const containerHeight = container.clientHeight;
-          const totalDistance = containerHeight + contentHeight;
-          const speed = command.scrollSpeed || 60;
-          const calcDuration = totalDistance / speed;
-          const maxDuration = command.duration || 300;
-          const finalDuration = Math.min(calcDuration, maxDuration);
-          setAnimStyle({
-            animation: `credit-scroll-dynamic ${finalDuration}s linear forwards`,
-            // Use CSS custom properties for start and end translate values (in pixels)
-            ["--credit-scroll-start"]: `${containerHeight}px`,
-            ["--credit-scroll-end"]: `-${contentHeight}px`
-          });
-        });
-        return () => cancelAnimationFrame(raf);
-      }, [command]);
-      const handleAnimEnd = React2.useCallback((e) => {
-        if (e.target === e.currentTarget && !finishedRef.current) {
-          finishedRef.current = true;
-          onFinish();
-        }
-      }, [onFinish]);
-      React2.useEffect(() => {
-        command.scrollSpeed || 60;
-        const maxDuration = command.duration || 300;
-        const timeout = window.setTimeout(() => {
-          if (!finishedRef.current) {
-            finishedRef.current = true;
-            onFinish();
-          }
-        }, (maxDuration + 5) * 1e3);
-        return () => clearTimeout(timeout);
-      }, [command, onFinish]);
-      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: containerRef, className: "absolute inset-0 overflow-hidden z-[2]", children: [
-        /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `
-                    @keyframes credit-scroll-dynamic {
-                        from { transform: translateY(var(--credit-scroll-start, 100%)); }
-                        to { transform: translateY(var(--credit-scroll-end, -100%)); }
-                    }
-                ` }),
-        /* @__PURE__ */ jsxRuntime2.jsx(
-          "div",
-          {
-            ref: contentRef,
-            className: "text-center px-8 w-full",
-            style: {
-              color: command.textColor || "#FFFFFF",
-              textShadow: hasBgs || hasMedia ? "0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)" : "none",
-              willChange: "transform",
-              ...animStyle
-            },
-            onAnimationEnd: handleAnimEnd,
-            children: command.entries.map(
-              (entry, i) => entry.kind === "heading" ? /* @__PURE__ */ jsxRuntime2.jsx("h2", { className: "text-2xl font-bold mt-8 mb-4", style: { color: "#FFD700" }, children: entry.label }, i) : /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "mb-2", children: [
-                /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-sm opacity-70", children: entry.label }),
-                entry.value && /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
-                  /* @__PURE__ */ jsxRuntime2.jsx("br", {}),
-                  /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-lg", children: entry.value })
-                ] })
-              ] }, i)
-            )
-          }
-        )
-      ] });
-    };
-    const CreditRollOverlay = ({ command, project: project2, assetResolver: assetResolver2, getAssetMetadata: getAssetMetadata2, onFinish }) => {
-      const bgs = command.backgrounds || [];
-      const mediaItems = command.media || [];
-      const hasBgs = bgs.length > 0;
-      const hasMedia = mediaItems.length > 0;
-      const [bgIndex, setBgIndex] = React2.useState(0);
-      const [prevBgIndex, setPrevBgIndex] = React2.useState(null);
-      const [transitioning, setTransitioning] = React2.useState(false);
-      const bgTimerRef = React2.useRef(null);
-      const bgTransTimerRef = React2.useRef(null);
-      const [elapsed, setElapsed] = React2.useState(0);
-      const startTimeRef = React2.useRef(Date.now());
-      React2.useEffect(() => {
-        if (!hasMedia) return;
-        startTimeRef.current = Date.now();
-        const interval = window.setInterval(() => {
-          setElapsed((Date.now() - startTimeRef.current) / 1e3);
-        }, 200);
-        return () => clearInterval(interval);
-      }, [hasMedia]);
-      React2.useEffect(() => {
-        if (!hasBgs || bgs.length <= 1) return;
-        const scheduleNext = (idx) => {
-          const slide = bgs[idx];
-          const displayMs = ((slide == null ? void 0 : slide.displayDuration) || 5) * 1e3;
-          bgTimerRef.current = window.setTimeout(() => {
-            const nextIdx = (idx + 1) % bgs.length;
-            const nextSlide = bgs[nextIdx];
-            const transDur2 = ((nextSlide == null ? void 0 : nextSlide.transitionDuration) || 0.5) * 1e3;
-            const transType = (nextSlide == null ? void 0 : nextSlide.transition) || "fade";
-            if (transType === "instant" || transDur2 === 0) {
-              setBgIndex(nextIdx);
-              scheduleNext(nextIdx);
-            } else {
-              setPrevBgIndex(idx);
-              setBgIndex(nextIdx);
-              setTransitioning(true);
-              bgTransTimerRef.current = window.setTimeout(() => {
-                setTransitioning(false);
-                setPrevBgIndex(null);
-                scheduleNext(nextIdx);
-              }, transDur2);
-            }
-          }, displayMs);
-        };
-        scheduleNext(bgIndex);
-        return () => {
-          if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
-          if (bgTransTimerRef.current) clearTimeout(bgTransTimerRef.current);
-        };
-      }, [hasBgs, bgs.length]);
-      const renderBgSlide = (slide, opacity, transitionDuration) => {
-        const url = assetResolver2(slide.assetId, "image");
-        if (!url) return null;
-        const meta = getAssetMetadata2(slide.assetId, "image");
-        const isCustom = slide.objectFit === "custom";
-        const style = isCustom ? {
-          position: "absolute",
-          left: `${slide.x ?? 0}%`,
-          top: `${slide.y ?? 0}%`,
-          width: `${slide.width ?? 100}%`,
-          height: `${slide.height ?? 100}%`,
-          objectFit: "fill",
-          opacity: (slide.opacity ?? 1) * opacity,
-          transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : "none"
-        } : {
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: slide.objectFit || "cover",
-          opacity: (slide.opacity ?? 1) * opacity,
-          transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : "none"
-        };
-        if (meta.isVideo) {
-          return /* @__PURE__ */ jsxRuntime2.jsx(TrimmedVideo, { src: url, autoPlay: true, muted: true, loop: meta.loop, trimStart: slide.trimStart, trimEnd: slide.trimEnd, playsInline: true, style });
-        }
-        return /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", style });
-      };
-      const currentSlide = hasBgs ? bgs[bgIndex] : null;
-      const prevSlide = prevBgIndex !== null && hasBgs ? bgs[prevBgIndex] : null;
-      const transDur = (currentSlide == null ? void 0 : currentSlide.transitionDuration) || 0.5;
-      return /* @__PURE__ */ jsxRuntime2.jsxs(
-        "div",
-        {
-          className: "absolute inset-0 z-40 flex items-end justify-center overflow-hidden",
-          style: { backgroundColor: command.backgroundColor || "#000000FF", cursor: command.allowSkip ? "var(--vn-cursor-hand, pointer)" : "var(--vn-cursor-normal, default)" },
-          onClick: () => {
-            if (!command.allowSkip) return;
-            onFinish();
-          },
-          children: [
-            hasBgs && /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 z-0", children: [
-              prevSlide && transitioning && renderBgSlide(prevSlide, 1, 0),
-              currentSlide && renderBgSlide(currentSlide, transitioning ? currentSlide.transition === "instant" ? 1 : 1 : 1, transitioning ? transDur : 0),
-              transitioning && currentSlide && currentSlide.transition !== "instant" && /* @__PURE__ */ jsxRuntime2.jsx(
-                "div",
-                {
-                  className: "absolute inset-0",
-                  style: {
-                    backgroundColor: currentSlide.transition === "dissolve" ? "transparent" : command.backgroundColor || "#000000FF",
-                    animation: `credit-bg-fade-in ${transDur}s ease-in-out both`
-                  }
-                }
-              )
-            ] }),
-            hasBgs && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 z-[1]", style: { backgroundColor: "rgba(0,0,0,0.4)" } }),
-            hasMedia && mediaItems.map((item, idx) => {
-              const url = assetResolver2(item.assetId, "image");
-              if (!url) return null;
-              const meta = getAssetMetadata2(item.assetId, "image");
-              const showAt = item.showAt || 0;
-              const hideAt = item.hideAt || 0;
-              const isVisible = elapsed >= showAt && (hideAt <= 0 || elapsed < hideAt);
-              const isFading = item.transition === "fade";
-              const itemOpacity = isVisible ? item.opacity ?? 1 : 0;
-              const isCustomItem = item.objectFit === "custom";
-              const mediaStyle = isCustomItem ? {
-                position: "absolute",
-                left: `${item.x}%`,
-                top: `${item.y}%`,
-                width: `${item.width}%`,
-                height: `${item.height}%`,
-                objectFit: "fill",
-                opacity: itemOpacity,
-                transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : "none",
-                zIndex: 1,
-                pointerEvents: "none"
-              } : {
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                objectFit: item.objectFit || "cover",
-                opacity: itemOpacity,
-                transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : "none",
-                zIndex: 1,
-                pointerEvents: "none"
-              };
-              if (meta.isVideo) {
-                return /* @__PURE__ */ jsxRuntime2.jsx(TrimmedVideo, { src: url, autoPlay: true, muted: true, loop: true, trimStart: item.trimStart, trimEnd: item.trimEnd, playsInline: true, style: mediaStyle }, `credit-media-${idx}`);
-              }
-              return /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", style: mediaStyle }, `credit-media-${idx}`);
-            }),
-            /* @__PURE__ */ jsxRuntime2.jsx(CreditScrollContent, { command, hasBgs, hasMedia, onFinish }),
-            command.allowSkip && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute bottom-4 right-4 text-xs opacity-50 z-[3]", style: { color: command.textColor || "#FFFFFF" }, children: "Click to skip" })
           ]
         }
       );
@@ -30334,7 +30619,109 @@ void main() {
       ] })
     ] });
   };
+  class ErrorBoundary extends React2.Component {
+    constructor() {
+      super(...arguments);
+      this.state = {
+        hasError: false,
+        error: null,
+        errorInfo: null
+      };
+      this.handleCopyReport = () => {
+        const report = this.getErrorReport();
+        navigator.clipboard.writeText(report).catch(() => {
+        });
+      };
+    }
+    static getDerivedStateFromError(error) {
+      return { hasError: true, error, errorInfo: null };
+    }
+    componentDidCatch(error, errorInfo) {
+      this.setState({ errorInfo });
+    }
+    getErrorReport() {
+      const { error, errorInfo } = this.state;
+      const panelName = this.props.panelName || "Unknown Panel";
+      return [
+        `Flourish Visual Novel Engine Error Report`,
+        `Panel: ${panelName}`,
+        `Time: ${(/* @__PURE__ */ new Date()).toISOString()}`,
+        `Error: ${(error == null ? void 0 : error.message) || "Unknown error"}`,
+        `Stack: ${(error == null ? void 0 : error.stack) || "No stack trace"}`,
+        `Component Stack: ${(errorInfo == null ? void 0 : errorInfo.componentStack) || "No component stack"}`
+      ].join("\n");
+    }
+    render() {
+      var _a;
+      if (this.state.hasError) {
+        if (this.props.fallback) {
+          return this.props.fallback;
+        }
+        const panelName = this.props.panelName || "This panel";
+        return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "p-4 bg-red-900/50 border border-red-500 rounded-lg m-4", children: [
+          /* @__PURE__ */ jsxRuntime2.jsxs("h2", { className: "text-red-300 font-bold mb-2", children: [
+            panelName,
+            " encountered an error"
+          ] }),
+          /* @__PURE__ */ jsxRuntime2.jsx("pre", { className: "text-red-200 text-sm overflow-auto max-h-40 whitespace-pre-wrap mb-3", children: (_a = this.state.error) == null ? void 0 : _a.message }),
+          /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "flex gap-2", children: [
+            /* @__PURE__ */ jsxRuntime2.jsx(
+              "button",
+              {
+                onClick: () => this.setState({ hasError: false, error: null, errorInfo: null }),
+                className: "px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded text-sm",
+                children: "Try Again"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntime2.jsx(
+              "button",
+              {
+                onClick: this.handleCopyReport,
+                className: "px-3 py-1 bg-slate-600 hover:bg-slate-500 text-white rounded text-sm",
+                children: "Copy Error Report"
+              }
+            )
+          ] })
+        ] });
+      }
+      return this.props.children;
+    }
+  }
   const flourishLogo = "data:image/png;base64,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";
+  const PlayerCrashScreen = () => /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: {
+    width: "100%",
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 18,
+    background: "#000",
+    color: "#fff",
+    textAlign: "center",
+    padding: 24,
+    fontFamily: "system-ui, sans-serif"
+  }, children: [
+    /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: 40 }, children: "😵‍💫" }),
+    /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: 20, fontWeight: 600 }, children: "Something went wrong" }),
+    /* @__PURE__ */ jsxRuntime2.jsx("p", { style: { maxWidth: 460, opacity: 0.75, lineHeight: 1.5, margin: 0 }, children: "The game ran into a problem and had to stop. Your saved games are safe — reloading will take you back to the title screen, and you can carry on from your last save." }),
+    /* @__PURE__ */ jsxRuntime2.jsx(
+      "button",
+      {
+        onClick: () => window.location.reload(),
+        style: {
+          padding: "10px 22px",
+          borderRadius: 8,
+          border: "1px solid rgba(255,255,255,0.25)",
+          background: "rgba(255,255,255,0.1)",
+          color: "#fff",
+          fontSize: 15,
+          cursor: "pointer"
+        },
+        children: "Reload the game"
+      }
+    )
+  ] });
   const StandalonePlayer = ({ project }) => {
     const [isReady, setIsReady] = React2.useState(false);
     const [showSplash, setShowSplash] = React2.useState(true);
@@ -30447,8 +30834,8 @@ void main() {
                     -ms-user-select: text;
                 }
             ` }),
-      /* @__PURE__ */ jsxRuntime2.jsx(ToastProvider, { children: /* @__PURE__ */ jsxRuntime2.jsx(ProjectProvider, { initialProject: project, children: /* @__PURE__ */ jsxRuntime2.jsx(LivePreview, { onClose: () => {
-      }, hideCloseButton: true, autoStartMusic: true, isStandalone: true }) }) })
+      /* @__PURE__ */ jsxRuntime2.jsx(ToastProvider, { children: /* @__PURE__ */ jsxRuntime2.jsx(ProjectProvider, { initialProject: project, children: /* @__PURE__ */ jsxRuntime2.jsx(ErrorBoundary, { fallback: /* @__PURE__ */ jsxRuntime2.jsx(PlayerCrashScreen, {}), children: /* @__PURE__ */ jsxRuntime2.jsx(LivePreview, { onClose: () => {
+      }, hideCloseButton: true, autoStartMusic: true, isStandalone: true }) }) }) })
     ] });
   };
   const GameEngine2 = {

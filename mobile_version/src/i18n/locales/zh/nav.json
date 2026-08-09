@@ -7,7 +7,9 @@
     "variables": "变量",
     "commonEvents": "事件",
     "systems": "系统",
-    "settings": "设置"
+    "settings": "设置",
+    "storyBible": "故事设定集",
+    "miniGames": "小游戏"
   },
   "desc": {
     "scenes": "创建并编辑包含对话、选项和命令的故事场景",
@@ -17,8 +19,12 @@
     "variables": "创建并管理故事变量和游戏状态",
     "commonEvents": "可从场景触发的可复用命令序列",
     "systems": "可选启用的玩法系统，如背包和物品注册表",
-    "settings": "配置项目设置和偏好"
+    "settings": "配置项目设置和偏好",
+    "storyBible": "保存你的故事梗概、角色笔记和术语表",
+    "miniGames": "制作可游玩的小游戏，由“显示小游戏”指令展示"
   },
   "rightClickHint": " | 右键单击以聚焦管理器窗口",
-  "openInWindow": "在单独窗口中打开或聚焦 {{label}}"
+  "openInWindow": "在单独窗口中打开或聚焦 {{label}}",
+  "expandLabels": "显示所有标签名称",
+  "collapseLabels": "将标签折叠为图标"
 }

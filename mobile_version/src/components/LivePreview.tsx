@@ -476,10 +476,11 @@ import { computeGrade, gradeToBackgroundStyle, gradeToCharacterFilter, gradeToSp
 import { useTween } from './live-preview/hooks/useTween';
 import { useTypewriter } from './live-preview/hooks/useTypewriter';
 import { processDialogueText, stripDialogueTextCodes, walkToAppendGroupHead, smartJoin, punctuationPauses, DEFAULT_PUNCTUATION_PACING, DEFAULT_PAUSE_MS } from './live-preview/dialogueTextCodes';
+import { resolveRewind } from './live-preview/rewind';
 import { playBlip, prepareBlipBuffer, blipIndicesFor } from './live-preview/letterBlips';
 import { noteSpeechReveal, clearSpeech, isSpeakingNow } from './live-preview/speechState';
 import { frameAssetAt, applyAnimationFrame, animationFrameUrls, autoAnimationsOf } from '../features/character/spriteAnim';
-import { buildCharacterMedia, boxFieldsForStage } from './live-preview/command-handlers/characterHandler';
+import { buildCharacterMedia, boxFieldsForStage, buildPoseStagePatch, buildAnimationStagePatch, buildCharacterSwapStagePatch } from './live-preview/command-handlers/characterHandler';
 
 const defaultSettings: GameSettings = {
     textSpeed: 50,
@@ -1482,7 +1483,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     if (!dialogue) return null;
     // Inline [pause 0.5] codes are parsed from the RAW text (per segment, BEFORE interpolation —
     // a variable's value can never inject a pause), and everything below sees only cleanText.
-    const { cleanText: interpolatedText, pauses: inlinePauses } = useMemo(
+    const { cleanText: interpolatedText, pauses: inlinePauses, effectSpans: inlineEffectSpans } = useMemo(
         () => processDialogueText(dialogue.text, s => interpolateVariables(s, variables, project)),
         [dialogue.text, variables, project]
     );
@@ -1963,6 +1964,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                                 revealHighlight={revealHighlight}
                                 glossaryMatches={glossaryMatches}
                                 onGlossaryHover={handleGlossaryHover}
+                                effectSpans={inlineEffectSpans}
                             />
                             {!hasFinished && (
                                 <span style={{ 
@@ -3731,6 +3733,18 @@ const InventoryGridElement: React.FC<{
         while (u < unplaced.length) { slots.push(unplaced[u].id); placed.add(unplaced[u].id); u++; }
     }
 
+    /* Pages (opt-in). Unset itemsPerPage = the grid grows with the items, exactly as before —
+       so every existing inventory is untouched. When on, the computed slot list is sliced and
+       each page-local index is offset back to its absolute slot, which keeps drag-reorder and
+       selection pointing at the right item. */
+    const perPage = element.itemsPerPage && element.itemsPerPage > 0 ? element.itemsPerPage : 0;
+    const [invPage, setInvPage] = useState(0);
+    const totalPages = perPage ? Math.max(1, Math.ceil(slots.length / perPage)) : 1;
+    // Items leaving the bag can shrink the page count out from under the player.
+    const page = Math.min(invPage, totalPages - 1);
+    const pageOffset = perPage ? page * perPage : 0;
+    const visibleSlots = perPage ? slots.slice(pageOffset, pageOffset + perPage) : slots;
+
     // Manual rearrange is disabled while auto-sorted (a fixed order + freeform drag would fight).
     const reorderEnabled = element.allowReorder !== false && !!onReorderSlots && !autoSort;
     const selectEnabled = !!onSelectItem;
@@ -3780,7 +3794,32 @@ const InventoryGridElement: React.FC<{
     };
 
     // Per-slot button mode (legacy showUseButton is migrated to slotButton on load).
-    const slotButtonMode: 'use' | 'buy' | 'sell' | 'none' = element.slotButton ?? 'none';
+    const slotButtonMode: 'use' | 'buy' | 'sell' | 'discard' | 'none' = element.slotButton ?? 'none';
+    /* Discard: get rid of the item in this slot. Either destroyed outright, or moved to another
+       list so the story can give it back (a dropped-items box, a stash, the ground) — the author
+       picks per grid. Reuses the existing item actions rather than new inventory maths. */
+    const discardItem = (it: VNItem) => {
+        if (element.discardMode === 'move') {
+            // Each list tracks its own stock in a per-entry count variable, so "moving" is: add one
+            // to the destination's count, then take it off the player. If the destination doesn't
+            // stock this item there is nowhere for it to land — refuse rather than quietly destroy
+            // something the author meant to keep.
+            const dest = element.discardToCollectionId ? project.itemCollections?.[element.discardToCollectionId] : undefined;
+            const entry = dest?.entries?.find(e => e.itemId === it.id);
+            if (!entry?.countVariableId) {
+                // Refusing beats destroying something the author meant to keep. (This grid is a
+                // module-level component with no toast access; the editor-side hint on the setting
+                // is what steers authors, and the build validator is the place to catch it early.)
+                runtimeDebugWarn(`[Inventory] "${it.name}" not discarded: ${dest ? `the list "${dest.name}" does not stock it` : 'no destination list is set'}.`);
+                return;
+            }
+            onAction({ type: UIActionType.SetVariable, variableId: entry.countVariableId, operator: 'add', value: 1 } as VNUIAction);
+        }
+        onAction({ type: UIActionType.DestroyItem, itemId: it.id, quantity: 1 } as VNUIAction);
+        if (onCommitVariables) onCommitVariables();
+        const acts = slotButtonActionsFor(it);
+        if (acts.length) runActionList(acts);
+    };
     const tradeCollectionId = slotButtonMode === 'buy' ? element.collectionId : slotButtonMode === 'sell' ? element.sellToCollectionId : undefined;
     const tradeCollection = tradeCollectionId ? project.itemCollections?.[tradeCollectionId] : undefined;
     // Fire a Buy/Sell action then commit (mirrors the screen Button var-mutation→commit flow).
@@ -3842,6 +3881,7 @@ const InventoryGridElement: React.FC<{
                                 // buy/sell show on every slot and dim when the trade can't happen.
                                 const showBtn = slotButtonMode === 'use' ? !!it.usable
                                     : (slotButtonMode === 'buy' || slotButtonMode === 'sell') ? !!tradeCollection
+                                    : slotButtonMode === 'discard' ? true
                                     : false;
                                 if (!showBtn) return null;
                                 const blocked = (slotButtonMode === 'buy' || slotButtonMode === 'sell') && tradeBlocked(it);
@@ -3850,14 +3890,20 @@ const InventoryGridElement: React.FC<{
                                 const hoverArt = element.useButtonHoverImage?.id ? assetResolver(element.useButtonHoverImage.id, element.useButtonHoverImage.type === 'video' ? 'video' : 'image') : null;
                                 const art = hovered && hoverArt ? hoverArt : baseArt;
                                 const bg = art ? undefined : (hovered ? (element.useButtonHoverColor || element.useButtonColor || '#0ea5e9') : (element.useButtonColor || '#0ea5e9'));
-                                const defaultLabel = slotButtonMode === 'buy' ? 'Buy' : slotButtonMode === 'sell' ? 'Sell' : 'Use';
+                                const defaultLabel = slotButtonMode === 'buy' ? 'Buy' : slotButtonMode === 'sell' ? 'Sell' : slotButtonMode === 'discard' ? 'Drop' : 'Use';
                                 let label = element.useButtonText || defaultLabel;
                                 if (!element.useButtonText && (slotButtonMode === 'buy' || slotButtonMode === 'sell') && tradeCollection) {
                                     const entry = tradeCollection.entries.find(e => e.itemId === it.id);
                                     const price = tradePrice(it, entry);
                                     if (price > 0) label = `${defaultLabel} ${price}`;
                                 }
-                                const onClick = (e: React.MouseEvent) => { e.stopPropagation(); if (blocked) return; slotButtonMode === 'use' ? useItem(it) : tradeItem(it); };
+                                const onClick = (e: React.MouseEvent) => {
+                                    e.stopPropagation();
+                                    if (blocked) return;
+                                    if (slotButtonMode === 'use') useItem(it);
+                                    else if (slotButtonMode === 'discard') discardItem(it);
+                                    else tradeItem(it);
+                                };
                                 return (
                                     <button onClick={onClick} disabled={blocked} onMouseEnter={() => setHoverUseId(it.id)} onMouseLeave={() => setHoverUseId(null)}
                                         className="mt-0.5 px-1.5 py-0.5 relative overflow-hidden leading-tight"
@@ -3929,7 +3975,31 @@ const InventoryGridElement: React.FC<{
             )}
             {groupByCategory
                 ? groupedSections
-                : <div className="grid" style={gridStyle}>{slots.map((slotId, i) => renderSlot(slotId, i))}</div>}
+                : <div className="grid" style={gridStyle}>{visibleSlots.map((slotId, i) => renderSlot(slotId, i + pageOffset))}</div>}
+            {/* Page turners. Grouping renders every category at once, so pages don't apply there. */}
+            {perPage > 0 && !groupByCategory && totalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 mt-2 select-none">
+                    {!element.hidePageButtons && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setInvPage(p => Math.max(0, Math.min(p, totalPages - 1) - 1)); }}
+                            disabled={page <= 0}
+                            className="px-2 py-0.5 rounded text-sm disabled:opacity-30"
+                            style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', cursor: page <= 0 ? 'default' : 'pointer' }}
+                        >{element.prevPageText || '‹'}</button>
+                    )}
+                    {!element.hidePageIndicator && (
+                        <span className="text-xs tabular-nums" style={{ color: 'rgba(255,255,255,0.7)' }}>{page + 1} / {totalPages}</span>
+                    )}
+                    {!element.hidePageButtons && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setInvPage(p => Math.min(totalPages - 1, Math.min(p, totalPages - 1) + 1)); }}
+                            disabled={page >= totalPages - 1}
+                            className="px-2 py-0.5 rounded text-sm disabled:opacity-30"
+                            style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', cursor: page >= totalPages - 1 ? 'default' : 'pointer' }}
+                        >{element.nextPageText || '›'}</button>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
@@ -6637,6 +6707,288 @@ const PhonePanel: React.FC<{
             {showHome && !phone.activeCall && (
                 <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: bezel * 0.6 }}>
                     <button onClick={() => { playTap(); onAction({ type: isHome ? UIActionType.HidePhone : UIActionType.ShowPhone } as VNUIAction); }} aria-label="Home" title="Home" style={{ width: '1.5em', height: '1.5em', borderRadius: '9999px', border: `2px solid ${ui.phoneHomeButtonColor || 'rgba(255,255,255,0.28)'}`, background: 'transparent', cursor: 'var(--vn-cursor-hand, pointer)', flexShrink: 0 }} />
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ── Credit roll components (module scope ON PURPOSE) ─────────────────────────
+// These were defined inside LivePreview, which recreated their component TYPES on
+// every parent render — React then unmounted/remounted the overlay each time, so the
+// scroll animation (and background slideshow) restarted continuously during play.
+// Everything they need arrives via props; keep them out here.
+// Credit scroll content — measures its own height to compute proper scroll distance
+const CreditScrollContent: React.FC<{
+    command: CreditRollCommand;
+    hasBgs: boolean;
+    hasMedia: boolean;
+    onFinish: () => void;
+}> = ({ command, hasBgs, hasMedia, onFinish }) => {
+    const contentRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    // Start INVISIBLE: the scroll animation can only be applied after a layout pass measures
+    // the content, so for a frame or two the credits would otherwise sit unanimated at the
+    // top of the screen (the "credits flash at the top before the roll starts" bug).
+    // visibility (not display) keeps layout so the measurement still works.
+    const [animStyle, setAnimStyle] = useState<React.CSSProperties>({ visibility: 'hidden' });
+    const finishedRef = useRef(false);
+
+    useEffect(() => {
+        finishedRef.current = false;
+        // Wait a frame for layout so we can measure content height
+        const raf = requestAnimationFrame(() => {
+            const content = contentRef.current;
+            const container = containerRef.current;
+            if (!content || !container) return;
+
+            const contentHeight = content.scrollHeight;
+            const containerHeight = container.clientHeight;
+            // Total distance: start below viewport (containerHeight) + scroll through all content past top
+            const totalDistance = containerHeight + contentHeight;
+            const speed = (command as any).scrollSpeed || 60; // px/sec
+            // Calculate duration from speed, but cap at the max duration
+            const calcDuration = totalDistance / speed;
+            const maxDuration = command.duration || 300;
+            const finalDuration = Math.min(calcDuration, maxDuration);
+
+            setAnimStyle({
+                animation: `credit-scroll-dynamic ${finalDuration}s linear forwards`,
+                // Use CSS custom properties for start and end translate values (in pixels)
+                ['--credit-scroll-start' as any]: `${containerHeight}px`,
+                ['--credit-scroll-end' as any]: `-${contentHeight}px`,
+            });
+        });
+        return () => cancelAnimationFrame(raf);
+    }, [command]);
+
+    const handleAnimEnd = useCallback((e: React.AnimationEvent) => {
+        if (e.target === e.currentTarget && !finishedRef.current) {
+            finishedRef.current = true;
+            onFinish();
+        }
+    }, [onFinish]);
+
+    // Fallback timer in case animationend doesn't fire
+    useEffect(() => {
+        const speed = (command as any).scrollSpeed || 60;
+        const maxDuration = command.duration || 300;
+        // Give a generous timeout (maxDuration + 5s buffer)
+        const timeout = window.setTimeout(() => {
+            if (!finishedRef.current) {
+                finishedRef.current = true;
+                onFinish();
+            }
+        }, (maxDuration + 5) * 1000);
+        return () => clearTimeout(timeout);
+    }, [command, onFinish]);
+
+    return (
+        <div ref={containerRef} className="absolute inset-0 overflow-hidden z-[2]">
+            <style>{`
+                @keyframes credit-scroll-dynamic {
+                    from { transform: translateY(var(--credit-scroll-start, 100%)); }
+                    to { transform: translateY(var(--credit-scroll-end, -100%)); }
+                }
+            `}</style>
+            <div
+                ref={contentRef}
+                className="text-center px-8 w-full"
+                style={{
+                    color: command.textColor || '#FFFFFF',
+                    textShadow: (hasBgs || hasMedia) ? '0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)' : 'none',
+                    willChange: 'transform',
+                    ...animStyle,
+                }}
+                onAnimationEnd={handleAnimEnd}
+            >
+                {command.entries.map((entry, i) =>
+                    entry.kind === 'heading' ? (
+                        <h2 key={i} className="text-2xl font-bold mt-8 mb-4" style={{ color: '#FFD700' }}>{entry.label}</h2>
+                    ) : (
+                        <div key={i} className="mb-2">
+                            <span className="text-sm opacity-70">{entry.label}</span>
+                            {entry.value && <><br /><span className="text-lg">{entry.value}</span></>}
+                        </div>
+                    )
+                )}
+            </div>
+        </div>
+    );
+};
+
+// Credit Roll overlay component with optional CG background gallery
+const CreditRollOverlay: React.FC<{
+    command: CreditRollCommand;
+    project: VNProject;
+    assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+    getAssetMetadata: (assetId: VNID | null, type: 'image') => { isVideo: boolean; loop: boolean };
+    onFinish: () => void;
+}> = ({ command, project, assetResolver, getAssetMetadata, onFinish }) => {
+    const bgs = command.backgrounds || [];
+    const mediaItems = command.media || [];
+    const hasBgs = bgs.length > 0;
+    const hasMedia = mediaItems.length > 0;
+    const [bgIndex, setBgIndex] = useState(0);
+    const [prevBgIndex, setPrevBgIndex] = useState<number | null>(null);
+    const [transitioning, setTransitioning] = useState(false);
+    const bgTimerRef = useRef<number | null>(null);
+    const bgTransTimerRef = useRef<number | null>(null);
+    const [elapsed, setElapsed] = useState(0);
+    const startTimeRef = useRef(Date.now());
+
+    // Track elapsed time for timed media items
+    useEffect(() => {
+        if (!hasMedia) return;
+        startTimeRef.current = Date.now();
+        const interval = window.setInterval(() => {
+            setElapsed((Date.now() - startTimeRef.current) / 1000);
+        }, 200);
+        return () => clearInterval(interval);
+    }, [hasMedia]);
+
+    // Cycle backgrounds
+    useEffect(() => {
+        if (!hasBgs || bgs.length <= 1) return;
+        const scheduleNext = (idx: number) => {
+            const slide = bgs[idx];
+            const displayMs = (slide?.displayDuration || 5) * 1000;
+            bgTimerRef.current = window.setTimeout(() => {
+                const nextIdx = (idx + 1) % bgs.length;
+                const nextSlide = bgs[nextIdx];
+                const transDur = (nextSlide?.transitionDuration || 0.5) * 1000;
+                const transType = nextSlide?.transition || 'fade';
+
+                if (transType === 'instant' || transDur === 0) {
+                    setBgIndex(nextIdx);
+                    scheduleNext(nextIdx);
+                } else {
+                    setPrevBgIndex(idx);
+                    setBgIndex(nextIdx);
+                    setTransitioning(true);
+                    bgTransTimerRef.current = window.setTimeout(() => {
+                        setTransitioning(false);
+                        setPrevBgIndex(null);
+                        scheduleNext(nextIdx);
+                    }, transDur);
+                }
+            }, displayMs);
+        };
+        scheduleNext(bgIndex);
+        return () => {
+            if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
+            if (bgTransTimerRef.current) clearTimeout(bgTransTimerRef.current);
+        };
+    }, [hasBgs, bgs.length]); // Only re-run if backgrounds change
+
+    const renderBgSlide = (slide: CreditBackground, opacity: number, transitionDuration: number) => {
+        const url = assetResolver(slide.assetId, 'image');
+        if (!url) return null;
+        const meta = getAssetMetadata(slide.assetId, 'image');
+        const isCustom = slide.objectFit === 'custom';
+        const style: React.CSSProperties = isCustom ? {
+            position: 'absolute',
+            left: `${slide.x ?? 0}%`,
+            top: `${slide.y ?? 0}%`,
+            width: `${slide.width ?? 100}%`,
+            height: `${slide.height ?? 100}%`,
+            objectFit: 'fill' as const,
+            opacity: (slide.opacity ?? 1) * opacity,
+            transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : 'none',
+        } : {
+            position: 'absolute', inset: 0, width: '100%', height: '100%',
+            objectFit: (slide.objectFit || 'cover') as React.CSSProperties['objectFit'],
+            opacity: (slide.opacity ?? 1) * opacity,
+            transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : 'none',
+        };
+        if (meta.isVideo) {
+            return <TrimmedVideo src={url} autoPlay muted loop={meta.loop} trimStart={(slide as any).trimStart} trimEnd={(slide as any).trimEnd} playsInline style={style} />;
+        }
+        return <img src={url} alt="" style={style} />;
+    };
+
+    const currentSlide = hasBgs ? bgs[bgIndex] : null;
+    const prevSlide = prevBgIndex !== null && hasBgs ? bgs[prevBgIndex] : null;
+    const transDur = currentSlide?.transitionDuration || 0.5;
+
+    return (
+        <div
+            className="absolute inset-0 z-40 flex items-end justify-center overflow-hidden"
+            style={{ backgroundColor: command.backgroundColor || '#000000FF', cursor: command.allowSkip ? 'var(--vn-cursor-hand, pointer)' : 'var(--vn-cursor-normal, default)' }}
+            onClick={() => {
+                if (!command.allowSkip) return;
+                onFinish();
+            }}
+        >
+            {/* Background slides */}
+            {hasBgs && (
+                <div className="absolute inset-0 z-0">
+                    {prevSlide && transitioning && renderBgSlide(prevSlide, 1, 0)}
+                    {currentSlide && renderBgSlide(currentSlide, transitioning ? (currentSlide.transition === 'instant' ? 1 : 1) : 1, transitioning ? transDur : 0)}
+                    {/* Use a crossfade overlay approach: the new slide fades in on top */}
+                    {transitioning && currentSlide && currentSlide.transition !== 'instant' && (
+                        <div
+                            className="absolute inset-0"
+                            style={{
+                                backgroundColor: currentSlide.transition === 'dissolve' ? 'transparent' : command.backgroundColor || '#000000FF',
+                                animation: `credit-bg-fade-in ${transDur}s ease-in-out both`,
+                            }}
+                        />
+                    )}
+                </div>
+            )}
+
+            {/* Semi-transparent overlay for text readability when backgrounds are present */}
+            {hasBgs && (
+                <div className="absolute inset-0 z-[1]" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }} />
+            )}
+
+            {/* Foreground media items (images/videos with positioning and timed visibility) */}
+            {hasMedia && mediaItems.map((item, idx) => {
+                const url = assetResolver(item.assetId, 'image');
+                if (!url) return null;
+                const meta = getAssetMetadata(item.assetId, 'image');
+                const showAt = item.showAt || 0;
+                const hideAt = item.hideAt || 0;
+                const isVisible = elapsed >= showAt && (hideAt <= 0 || elapsed < hideAt);
+                const isFading = item.transition === 'fade';
+                const itemOpacity = isVisible ? (item.opacity ?? 1) : 0;
+                const isCustomItem = item.objectFit === 'custom';
+                const mediaStyle: React.CSSProperties = isCustomItem ? {
+                    position: 'absolute',
+                    left: `${item.x}%`,
+                    top: `${item.y}%`,
+                    width: `${item.width}%`,
+                    height: `${item.height}%`,
+                    objectFit: 'fill' as const,
+                    opacity: itemOpacity,
+                    transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : 'none',
+                    zIndex: 1,
+                    pointerEvents: 'none',
+                } : {
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: (item.objectFit || 'cover') as React.CSSProperties['objectFit'],
+                    opacity: itemOpacity,
+                    transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : 'none',
+                    zIndex: 1,
+                    pointerEvents: 'none',
+                };
+                if (meta.isVideo) {
+                    return <TrimmedVideo key={`credit-media-${idx}`} src={url} autoPlay muted loop trimStart={(item as any).trimStart} trimEnd={(item as any).trimEnd} playsInline style={mediaStyle} />;
+                }
+                return <img key={`credit-media-${idx}`} src={url} alt="" style={mediaStyle} />;
+            })}
+
+            {/* Credits scroll - uses dynamic measurement for proper full scroll */}
+            <CreditScrollContent command={command} hasBgs={hasBgs} hasMedia={hasMedia} onFinish={onFinish} />
+
+            {/* Skip hint */}
+            {command.allowSkip && (
+                <div className="absolute bottom-4 right-4 text-xs opacity-50 z-[3]" style={{ color: command.textColor || '#FFFFFF' }}>
+                    Click to skip
                 </div>
             )}
         </div>
@@ -11604,6 +11956,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
                 variablesSnapshot: { ...p.variables },
                 musicSnapshot: { ...p.musicState },
+                // Which list `commandIndex` indexes, and the call stack it belonged to. Inside a
+                // Common Event that list is the EVENT's commands, not the scene's — see the
+                // HistoryEntry doc comment. Plain references; the engine never mutates these.
+                commandsSnapshot: p.currentCommands,
+                commandStackSnapshot: p.commandStack,
             };
             
             // Cap history at 200 entries to prevent unbounded memory growth
@@ -11939,39 +12296,26 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // Route coverage: stepping BACKWARD is not a route. Without this, rewinding from B to A in a
         // story loop would record A←B and light up an edge the author never actually took forward.
         coverageRef.current?.resetCursor();
+        let rewindRefused = false;
         updatePlayerState(p => {
-            if (!p || p.history.length === 0) return p;
+            if (!p) return p;
 
-            // The CURRENT dialogue lives in `uiState.dialogue`, NOT in history — entries
-            // are pushed to history only when the user advances past them. So the most
-            // recent history entry is already the "previous" dialogue we want to step
-            // back to. Walk backward from the end looking for the most recent
-            // dialogue-type entry (we skip choice / textInput entries).
-            let targetIdx = p.history.length - 1;
-            while (targetIdx >= 0 && p.history[targetIdx].type !== 'dialogue') {
-                targetIdx--;
+            // Where the rewind lands (which command list, which index, which call stack) is
+            // resolved by a tested pure helper — see live-preview/rewind.ts for why.
+            const resolved = resolveRewind(p, project.scenes as any);
+            if (!resolved.target) {
+                // Assignment only — this updater can run twice under StrictMode, so the toast
+                // itself fires after updatePlayerState returns, not in here. "Nothing earlier to
+                // go back to" is normal (start of the game); the other reasons are worth saying.
+                if (resolved.reason !== 'no-previous-line') rewindRefused = true;
+                return p;
             }
+            const { historyIndex: targetIdx, entry: target, sceneId: newSceneId,
+                commands: newCommands, commandIndex: newCommandIndex, commandStack: newStack } = resolved.target;
 
-            if (targetIdx < 0) return p; // No previous dialogue to go back to
-            
-            const target = p.history[targetIdx];
-            
-            // Restore scene navigation
-            let newSceneId = target.sceneId || p.currentSceneId;
-            let newCommands = p.currentCommands;
-            let newCommandIndex = target.commandIndex ?? p.currentIndex;
-            
-            // Always load commands from the target scene (even same scene - ensures consistency)
-            const targetScene = project.scenes[newSceneId];
-            if (targetScene) {
-                newCommands = targetScene.commands;
-            } else if (target.sceneId && target.sceneId !== p.currentSceneId) {
-                return p; // Target scene not found, can't navigate
-            }
-            
             // Trim history to the target entry (remove everything after it)
             const trimmedHistory = p.history.slice(0, targetIdx);
-            
+
             // Restore full visual state from snapshot if available
             const restoredStage = target.stageSnapshot
                 ? JSON.parse(JSON.stringify(target.stageSnapshot))
@@ -11988,6 +12332,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 currentSceneId: newSceneId,
                 currentCommands: newCommands,
                 currentIndex: newCommandIndex,
+                commandStack: newStack,
                 history: trimmedHistory,
                 // Restore full visual/audio state from snapshot
                 stageState: restoredStage,
@@ -12011,13 +12356,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
             };
         });
+        if (rewindRefused) {
+            devNotify('Could not step back any further from here.', 'warning');
+            return;
+        }
         // Rewinding to an earlier command index leaves the scheduler's `lastProcessed`
         // ahead of where we are now — its `alreadyAdvancedPast` guard can then block
         // commands from running when the user advances forward again. Reset both the
         // scheduler and the variable cache, mirroring what JumpToScene does.
         commandSchedulerRef.current.reset();
         variableStoreRef.current = null;
-    }, [project.scenes]);
+    }, [project.scenes, devNotify]);
 
     // opts.resumeAtCurrent (CallCommonEvent only): the caller has ALREADY advanced currentIndex
     // to the next un-run command (choice selection does this before running its actions), so the
@@ -12988,6 +13337,36 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             if (a.sfxId) playSound(a.sfxId);
         } else if (action.type === UIActionType.HideFlashlight) {
             setFlashlight(f => f ? { ...f, on: false } : f);
+        } else if (action.type === UIActionType.ChangePose
+            || action.type === UIActionType.ChangeCharacter
+            || action.type === UIActionType.PlayCharacterAnimation) {
+            /* Character-stage buttons. The stage patch itself comes from characterHandler, the
+               same builders the equivalent scene commands use — so a button and a command can
+               never mean two different things. There is deliberately no scene-command fallback
+               here: these only touch what's already on stage. */
+            const a = action as any;
+            const targetId: VNID = action.type === UIActionType.ChangeCharacter ? a.fromCharacterId : a.characterId;
+            if (!playerState) {
+                // Pressed from a menu with no game running — nothing is on stage to change.
+                devNotify('That button changes a character on stage, so it only works during the story.', 'warning');
+                return;
+            }
+            if (!targetId || !playerState.stageState.characters[targetId]) {
+                const who = project.characters[targetId]?.name || targetId || 'that character';
+                devNotify(`Nothing happened: ${who} is not on stage right now.`, 'warning');
+                return;
+            }
+            const patch = action.type === UIActionType.ChangePose
+                ? buildPoseStagePatch(project, targetId, a.poseId, a.transition, a.duration)
+                : action.type === UIActionType.PlayCharacterAnimation
+                    ? buildAnimationStagePatch(project, targetId, a.animationId)
+                    : buildCharacterSwapStagePatch(project, a.fromCharacterId, a.toCharacterId, a.expressionId, a.poseId);
+            updatePlayerState(p => {
+                if (!p) return p;
+                const delta = patch(p.stageState);
+                if (!delta || Object.keys(delta).length === 0) return p;
+                return { ...p, stageState: { ...p.stageState, ...delta } };
+            });
         } else if (action.type === UIActionType.CycleLayerAsset) {
             runtimeDebugLog('CycleLayerAsset handler triggered, playerState exists:', !!playerState);
             
@@ -15315,283 +15694,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     </div>
                 </div>
                 <div className="absolute inset-0 pointer-events-none" style={tintStyle}></div>
-            </div>
-        );
-    };
-
-    // Credit scroll content — measures its own height to compute proper scroll distance
-    const CreditScrollContent: React.FC<{
-        command: CreditRollCommand;
-        hasBgs: boolean;
-        hasMedia: boolean;
-        onFinish: () => void;
-    }> = ({ command, hasBgs, hasMedia, onFinish }) => {
-        const contentRef = useRef<HTMLDivElement>(null);
-        const containerRef = useRef<HTMLDivElement>(null);
-        // Start INVISIBLE: the scroll animation can only be applied after a layout pass measures
-        // the content, so for a frame or two the credits would otherwise sit unanimated at the
-        // top of the screen (the "credits flash at the top before the roll starts" bug).
-        // visibility (not display) keeps layout so the measurement still works.
-        const [animStyle, setAnimStyle] = useState<React.CSSProperties>({ visibility: 'hidden' });
-        const finishedRef = useRef(false);
-
-        useEffect(() => {
-            finishedRef.current = false;
-            // Wait a frame for layout so we can measure content height
-            const raf = requestAnimationFrame(() => {
-                const content = contentRef.current;
-                const container = containerRef.current;
-                if (!content || !container) return;
-
-                const contentHeight = content.scrollHeight;
-                const containerHeight = container.clientHeight;
-                // Total distance: start below viewport (containerHeight) + scroll through all content past top
-                const totalDistance = containerHeight + contentHeight;
-                const speed = (command as any).scrollSpeed || 60; // px/sec
-                // Calculate duration from speed, but cap at the max duration
-                const calcDuration = totalDistance / speed;
-                const maxDuration = command.duration || 300;
-                const finalDuration = Math.min(calcDuration, maxDuration);
-
-                setAnimStyle({
-                    animation: `credit-scroll-dynamic ${finalDuration}s linear forwards`,
-                    // Use CSS custom properties for start and end translate values (in pixels)
-                    ['--credit-scroll-start' as any]: `${containerHeight}px`,
-                    ['--credit-scroll-end' as any]: `-${contentHeight}px`,
-                });
-            });
-            return () => cancelAnimationFrame(raf);
-        }, [command]);
-
-        const handleAnimEnd = useCallback((e: React.AnimationEvent) => {
-            if (e.target === e.currentTarget && !finishedRef.current) {
-                finishedRef.current = true;
-                onFinish();
-            }
-        }, [onFinish]);
-
-        // Fallback timer in case animationend doesn't fire
-        useEffect(() => {
-            const speed = (command as any).scrollSpeed || 60;
-            const maxDuration = command.duration || 300;
-            // Give a generous timeout (maxDuration + 5s buffer)
-            const timeout = window.setTimeout(() => {
-                if (!finishedRef.current) {
-                    finishedRef.current = true;
-                    onFinish();
-                }
-            }, (maxDuration + 5) * 1000);
-            return () => clearTimeout(timeout);
-        }, [command, onFinish]);
-
-        return (
-            <div ref={containerRef} className="absolute inset-0 overflow-hidden z-[2]">
-                <style>{`
-                    @keyframes credit-scroll-dynamic {
-                        from { transform: translateY(var(--credit-scroll-start, 100%)); }
-                        to { transform: translateY(var(--credit-scroll-end, -100%)); }
-                    }
-                `}</style>
-                <div
-                    ref={contentRef}
-                    className="text-center px-8 w-full"
-                    style={{
-                        color: command.textColor || '#FFFFFF',
-                        textShadow: (hasBgs || hasMedia) ? '0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)' : 'none',
-                        willChange: 'transform',
-                        ...animStyle,
-                    }}
-                    onAnimationEnd={handleAnimEnd}
-                >
-                    {command.entries.map((entry, i) =>
-                        entry.kind === 'heading' ? (
-                            <h2 key={i} className="text-2xl font-bold mt-8 mb-4" style={{ color: '#FFD700' }}>{entry.label}</h2>
-                        ) : (
-                            <div key={i} className="mb-2">
-                                <span className="text-sm opacity-70">{entry.label}</span>
-                                {entry.value && <><br /><span className="text-lg">{entry.value}</span></>}
-                            </div>
-                        )
-                    )}
-                </div>
-            </div>
-        );
-    };
-
-    // Credit Roll overlay component with optional CG background gallery
-    const CreditRollOverlay: React.FC<{
-        command: CreditRollCommand;
-        project: VNProject;
-        assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
-        getAssetMetadata: (assetId: VNID | null, type: 'image') => { isVideo: boolean; loop: boolean };
-        onFinish: () => void;
-    }> = ({ command, project, assetResolver, getAssetMetadata, onFinish }) => {
-        const bgs = command.backgrounds || [];
-        const mediaItems = command.media || [];
-        const hasBgs = bgs.length > 0;
-        const hasMedia = mediaItems.length > 0;
-        const [bgIndex, setBgIndex] = useState(0);
-        const [prevBgIndex, setPrevBgIndex] = useState<number | null>(null);
-        const [transitioning, setTransitioning] = useState(false);
-        const bgTimerRef = useRef<number | null>(null);
-        const bgTransTimerRef = useRef<number | null>(null);
-        const [elapsed, setElapsed] = useState(0);
-        const startTimeRef = useRef(Date.now());
-
-        // Track elapsed time for timed media items
-        useEffect(() => {
-            if (!hasMedia) return;
-            startTimeRef.current = Date.now();
-            const interval = window.setInterval(() => {
-                setElapsed((Date.now() - startTimeRef.current) / 1000);
-            }, 200);
-            return () => clearInterval(interval);
-        }, [hasMedia]);
-
-        // Cycle backgrounds
-        useEffect(() => {
-            if (!hasBgs || bgs.length <= 1) return;
-            const scheduleNext = (idx: number) => {
-                const slide = bgs[idx];
-                const displayMs = (slide?.displayDuration || 5) * 1000;
-                bgTimerRef.current = window.setTimeout(() => {
-                    const nextIdx = (idx + 1) % bgs.length;
-                    const nextSlide = bgs[nextIdx];
-                    const transDur = (nextSlide?.transitionDuration || 0.5) * 1000;
-                    const transType = nextSlide?.transition || 'fade';
-
-                    if (transType === 'instant' || transDur === 0) {
-                        setBgIndex(nextIdx);
-                        scheduleNext(nextIdx);
-                    } else {
-                        setPrevBgIndex(idx);
-                        setBgIndex(nextIdx);
-                        setTransitioning(true);
-                        bgTransTimerRef.current = window.setTimeout(() => {
-                            setTransitioning(false);
-                            setPrevBgIndex(null);
-                            scheduleNext(nextIdx);
-                        }, transDur);
-                    }
-                }, displayMs);
-            };
-            scheduleNext(bgIndex);
-            return () => {
-                if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
-                if (bgTransTimerRef.current) clearTimeout(bgTransTimerRef.current);
-            };
-        }, [hasBgs, bgs.length]); // Only re-run if backgrounds change
-
-        const renderBgSlide = (slide: CreditBackground, opacity: number, transitionDuration: number) => {
-            const url = assetResolver(slide.assetId, 'image');
-            if (!url) return null;
-            const meta = getAssetMetadata(slide.assetId, 'image');
-            const isCustom = slide.objectFit === 'custom';
-            const style: React.CSSProperties = isCustom ? {
-                position: 'absolute',
-                left: `${slide.x ?? 0}%`,
-                top: `${slide.y ?? 0}%`,
-                width: `${slide.width ?? 100}%`,
-                height: `${slide.height ?? 100}%`,
-                objectFit: 'fill' as const,
-                opacity: (slide.opacity ?? 1) * opacity,
-                transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : 'none',
-            } : {
-                position: 'absolute', inset: 0, width: '100%', height: '100%',
-                objectFit: (slide.objectFit || 'cover') as React.CSSProperties['objectFit'],
-                opacity: (slide.opacity ?? 1) * opacity,
-                transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : 'none',
-            };
-            if (meta.isVideo) {
-                return <TrimmedVideo src={url} autoPlay muted loop={meta.loop} trimStart={(slide as any).trimStart} trimEnd={(slide as any).trimEnd} playsInline style={style} />;
-            }
-            return <img src={url} alt="" style={style} />;
-        };
-
-        const currentSlide = hasBgs ? bgs[bgIndex] : null;
-        const prevSlide = prevBgIndex !== null && hasBgs ? bgs[prevBgIndex] : null;
-        const transDur = currentSlide?.transitionDuration || 0.5;
-
-        return (
-            <div
-                className="absolute inset-0 z-40 flex items-end justify-center overflow-hidden"
-                style={{ backgroundColor: command.backgroundColor || '#000000FF', cursor: command.allowSkip ? 'var(--vn-cursor-hand, pointer)' : 'var(--vn-cursor-normal, default)' }}
-                onClick={() => {
-                    if (!command.allowSkip) return;
-                    onFinish();
-                }}
-            >
-                {/* Background slides */}
-                {hasBgs && (
-                    <div className="absolute inset-0 z-0">
-                        {prevSlide && transitioning && renderBgSlide(prevSlide, 1, 0)}
-                        {currentSlide && renderBgSlide(currentSlide, transitioning ? (currentSlide.transition === 'instant' ? 1 : 1) : 1, transitioning ? transDur : 0)}
-                        {/* Use a crossfade overlay approach: the new slide fades in on top */}
-                        {transitioning && currentSlide && currentSlide.transition !== 'instant' && (
-                            <div
-                                className="absolute inset-0"
-                                style={{
-                                    backgroundColor: currentSlide.transition === 'dissolve' ? 'transparent' : command.backgroundColor || '#000000FF',
-                                    animation: `credit-bg-fade-in ${transDur}s ease-in-out both`,
-                                }}
-                            />
-                        )}
-                    </div>
-                )}
-
-                {/* Semi-transparent overlay for text readability when backgrounds are present */}
-                {hasBgs && (
-                    <div className="absolute inset-0 z-[1]" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }} />
-                )}
-
-                {/* Foreground media items (images/videos with positioning and timed visibility) */}
-                {hasMedia && mediaItems.map((item, idx) => {
-                    const url = assetResolver(item.assetId, 'image');
-                    if (!url) return null;
-                    const meta = getAssetMetadata(item.assetId, 'image');
-                    const showAt = item.showAt || 0;
-                    const hideAt = item.hideAt || 0;
-                    const isVisible = elapsed >= showAt && (hideAt <= 0 || elapsed < hideAt);
-                    const isFading = item.transition === 'fade';
-                    const itemOpacity = isVisible ? (item.opacity ?? 1) : 0;
-                    const isCustomItem = item.objectFit === 'custom';
-                    const mediaStyle: React.CSSProperties = isCustomItem ? {
-                        position: 'absolute',
-                        left: `${item.x}%`,
-                        top: `${item.y}%`,
-                        width: `${item.width}%`,
-                        height: `${item.height}%`,
-                        objectFit: 'fill' as const,
-                        opacity: itemOpacity,
-                        transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : 'none',
-                        zIndex: 1,
-                        pointerEvents: 'none',
-                    } : {
-                        position: 'absolute',
-                        inset: 0,
-                        width: '100%',
-                        height: '100%',
-                        objectFit: (item.objectFit || 'cover') as React.CSSProperties['objectFit'],
-                        opacity: itemOpacity,
-                        transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : 'none',
-                        zIndex: 1,
-                        pointerEvents: 'none',
-                    };
-                    if (meta.isVideo) {
-                        return <TrimmedVideo key={`credit-media-${idx}`} src={url} autoPlay muted loop trimStart={(item as any).trimStart} trimEnd={(item as any).trimEnd} playsInline style={mediaStyle} />;
-                    }
-                    return <img key={`credit-media-${idx}`} src={url} alt="" style={mediaStyle} />;
-                })}
-
-                {/* Credits scroll - uses dynamic measurement for proper full scroll */}
-                <CreditScrollContent command={command} hasBgs={hasBgs} hasMedia={hasMedia} onFinish={onFinish} />
-
-                {/* Skip hint */}
-                {command.allowSkip && (
-                    <div className="absolute bottom-4 right-4 text-xs opacity-50 z-[3]" style={{ color: command.textColor || '#FFFFFF' }}>
-                        Click to skip
-                    </div>
-                )}
             </div>
         );
     };

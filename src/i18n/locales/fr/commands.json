@@ -13,7 +13,8 @@
     "Screen FX": "Effets d'écran",
     "UI Elements": "Éléments d'interface",
     "Media": "Média",
-    "Flow Control": "Contrôle du flux"
+    "Flow Control": "Contrôle du flux",
+    "Phone": "Téléphone"
   },
   "names": {
     "Dialogue": "Dialogue",
@@ -59,6 +60,27 @@
     "Wait": "Attendre",
     "RunScript": "Exécuter un script",
     "CallCommonEvent": "Appeler un événement commun",
-    "Group": "Groupe"
+    "Group": "Groupe",
+    "SetCharacterLayer": "Définir le calque du personnage",
+    "ShowPhone": "Afficher le téléphone",
+    "HidePhone": "Masquer le téléphone",
+    "ShowPhoneText": "Afficher le message",
+    "HidePhoneText": "Masquer le message",
+    "PhoneIncomingText": "Message reçu",
+    "PhoneIncomingCall": "Appel entrant",
+    "StartPhoneCall": "Passer un appel",
+    "ShowMap": "Afficher la carte",
+    "ShowMiniGame": "Afficher le mini-jeu",
+    "PhoneNotify": "Notification du téléphone",
+    "MoveCharacter": "Déplacer le personnage",
+    "StartTimer": "Démarrer le minuteur",
+    "StopTimer": "Arrêter le minuteur",
+    "SetCharacterPose": "Changer de pose",
+    "PlayCharacterAnimation": "Lancer l'animation",
+    "BranchElseIf": "Sinon si",
+    "BranchElse": "Sinon"
+  },
+  "hc": {
+    "playFromHereTestThe": "Jouer à partir d'ici — teste le jeu depuis cette ligne (nouvelle partie ; la mise en place visuelle de cette scène est appliquée)"
   }
 }

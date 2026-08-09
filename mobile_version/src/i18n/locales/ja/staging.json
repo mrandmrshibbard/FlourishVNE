@@ -24,5 +24,26 @@
   "lightMarkerTitle": "{{type}} #{{n}} — ドラッグして配置",
   "lightCandle": "ろうそく",
   "lightStar": "星",
-  "lightChristmas": "クリスマス"
+  "lightChristmas": "クリスマス",
+  "characterSize": "サイズ：",
+  "fitHeight": "高さに合わせる",
+  "fitHeightTip": "キャラクターを画面の高さいっぱいに拡大縮小します",
+  "fitWidth": "幅に合わせる",
+  "fitWidthTip": "キャラクターを画面の幅いっぱいに拡大縮小します",
+  "resetSize": "100%",
+  "resetSizeTip": "キャラクターを元のサイズに戻します",
+  "snapToggle": "スナップ",
+  "snapTip": "端・中央・他の要素にスマートにスナップします。ドラッグ中に Alt を押すと自由に配置できます。",
+  "chromeShow": "キャンバスのボタンを表示",
+  "chromeHide": "キャンバスのボタンを隠します（位置合わせ中の絵を覆ってしまうことがあります）",
+  "zoomIn": "拡大（Ctrl+スクロール）",
+  "zoomOut": "縮小（Ctrl+スクロール）",
+  "zoomReset": "全体表示に戻す",
+  "fromCommonEvent": "イベント「{{name}}」の要素です。ここでの変更は、このイベントを呼び出すすべてのシーンに反映されます。ダブルクリックで開きます。",
+  "hudOverlayLabel": "HUD",
+  "hudOverlayTip": "ゲーム HUD のクリックできる範囲をこのキャンバスに表示します。ゲーム中の HUD はシーンより手前にあるため、その下に隠れたシーンのホットスポットはクリックを受け取れません。",
+  "hudOverlayToggle": "HUD の範囲",
+  "hc": {
+    "backgroundLayer": "背景レイヤー"
+  }
 }

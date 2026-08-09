@@ -24,5 +24,26 @@
   "lightMarkerTitle": "{{type}} #{{n}}——拖曳以定位",
   "lightCandle": "蠟燭",
   "lightStar": "星星",
-  "lightChristmas": "聖誕"
+  "lightChristmas": "聖誕",
+  "characterSize": "大小：",
+  "fitHeight": "符合高度",
+  "fitHeightTip": "將角色縮放到充滿螢幕高度",
+  "fitWidth": "符合寬度",
+  "fitWidthTip": "將角色縮放到橫跨螢幕寬度",
+  "resetSize": "100%",
+  "resetSizeTip": "將角色恢復為原始大小",
+  "snapToggle": "吸附",
+  "snapTip": "智慧吸附到邊緣、中心和其他元素。拖曳時按住 Alt 可自由擺放。",
+  "chromeShow": "顯示畫布按鈕",
+  "chromeHide": "隱藏畫布按鈕（它們可能遮住你正在對齊的素材）",
+  "zoomIn": "放大（Ctrl+滾輪）",
+  "zoomOut": "縮小（Ctrl+滾輪）",
+  "zoomReset": "恢復符合大小",
+  "fromCommonEvent": "來自事件：{{name}}——在此修改會影響所有呼叫它的場景。雙擊可開啟。",
+  "hudOverlayLabel": "HUD",
+  "hudOverlayTip": "在此畫布上顯示遊戲 HUD 的可點擊區域。遊戲中 HUD 位於場景之上——被它蓋住的場景熱區將收不到點擊。",
+  "hudOverlayToggle": "HUD 區域",
+  "hc": {
+    "backgroundLayer": "背景圖層"
+  }
 }

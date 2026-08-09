@@ -8,7 +8,8 @@
     "commonEvents": "Eventos",
     "storyBible": "Bíblia da História",
     "systems": "Sistemas",
-    "settings": "Configurações"
+    "settings": "Configurações",
+    "miniGames": "Minijogos"
   },
   "desc": {
     "scenes": "Crie e edite cenas da história com diálogos, escolhas e comandos",
@@ -19,8 +20,11 @@
     "commonEvents": "Sequências de comandos reutilizáveis acionadas pelas cenas",
     "storyBible": "Guarde sua sinopse, notas de personagens e o glossário de termos da história",
     "systems": "Sistemas de jogabilidade opcionais como Inventário, e o registro de itens",
-    "settings": "Configure as preferências e configurações do projeto"
+    "settings": "Configure as preferências e configurações do projeto",
+    "miniGames": "Crie minijogos jogáveis exibidos pelo comando Mostrar Minijogo"
   },
   "rightClickHint": " | Clique com o botão direito para focar a janela do gerenciador",
-  "openInWindow": "Abrir ou focar {{label}} em uma janela separada"
+  "openInWindow": "Abrir ou focar {{label}} em uma janela separada",
+  "expandLabels": "Mostrar os nomes das abas",
+  "collapseLabels": "Recolher as abas para ícones"
 }

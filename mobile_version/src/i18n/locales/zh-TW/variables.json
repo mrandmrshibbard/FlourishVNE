@@ -65,5 +65,88 @@
     "elSetsVariable": "元素「{{name}}」：設定變數",
     "elCyclesLayer": "元素「{{name}}」：循環圖層資源",
     "elTextRef": "元素「{{name}}」：在文字中被參考"
-  }
+  },
+  "list": {
+    "searchPlaceholder": "搜尋變數…",
+    "sortTitle": "清單的排序方式",
+    "sortProject": "建立順序",
+    "sortAz": "A → Z",
+    "sortType": "按類型",
+    "group": "分組",
+    "groupHint": "名為「hero_gold」和「hero_trust」的變數會歸入「hero」標題下",
+    "noResults": "沒有變數符合你的搜尋。",
+    "newFolder": "新建資料夾——把變數拖進去即可整理",
+    "newFolderName": "新建資料夾",
+    "dragHere": "把變數拖到這裡",
+    "noFolder": "未歸入資料夾",
+    "deleteFolderConfirm": "刪除資料夾「{{name}}」？其中的變數會保留，只是移出該資料夾。"
+  },
+  "xray": {
+    "title": "在哪裡被使用",
+    "count": "{{count}} 處",
+    "nowhere": "暫時沒有用到",
+    "rowCount": "在 {{count}} 處使用",
+    "rowNone": "還沒有任何地方用到它",
+    "jump": "帶我過去",
+    "noJump": "這一項無法直接開啟",
+    "up": "在 {{n}} 處增加",
+    "down": "在 {{n}} 處減少",
+    "changed": "在 {{n}} 處被修改",
+    "checked": "在 {{n}} 處被判斷",
+    "shown": "在 {{n}} 處被顯示",
+    "orphan": "你的故事中還沒有用到它，它會一直保持初始值。",
+    "neverChanged": "沒有任何地方改變它，因此整局遊戲都停留在初始值。你是不是打算在某處修改它？",
+    "neverUsed": "沒有任何地方判斷或顯示它，因此改變它不會影響玩家看到的內容。"
+  },
+  "picker": {
+    "placeholder": "選擇一個變數…",
+    "search": "搜尋，或輸入新名稱…",
+    "none": "還沒有變數。",
+    "nameTaken": "已存在同名變數。",
+    "createAs": "把「{{name}}」建立為…",
+    "type": {
+      "boolean": "是 / 否",
+      "number": "數字",
+      "string": "文字"
+    },
+    "typeHint": {
+      "boolean": "某件事發生了，或沒發生",
+      "number": "可以計數或衡量的東西",
+      "string": "文字——名字、路線、顏色"
+    }
+  },
+  "token": {
+    "insert": "把變數插入這段文字——遊戲執行時會顯示它的值",
+    "pick": "選擇哪個變數？"
+  },
+  "meaning": {
+    "iconTitle": "一個表情符號，方便一眼認出該變數",
+    "colorTitle": "一種顏色，該變數出現的所有地方都會使用",
+    "descPlaceholder": "它在你的故事中代表什麼——例如「雪對你的好感度」"
+  },
+  "bands": {
+    "label": "給數值區間取名",
+    "hint": "把區間命名一次——之後就能寫「當雪是『朋友』時」，而不是「當好感度 ≥ 41 時」。",
+    "startBlank": "從空白開始",
+    "presetHint": "先選一個作為起點——之後每個等級都可以改名、改色、改數值。",
+    "namePlaceholder": "朋友",
+    "iconTitle": "該等級的表情符號（選填）",
+    "colorTitle": "該等級的顏色",
+    "from": "從",
+    "andUp": "{{from}} 及以上",
+    "andUpShort": "及以上",
+    "add": "再新增一個等級",
+    "remove": "移除該等級",
+    "rowSummary_one": "{{count}} 個命名等級",
+    "rowSummary_other": "{{count}} 個命名等級",
+    "showAsLabel": "當它出現在故事文字中時",
+    "showAsNumber": "顯示數字——「34」",
+    "showAsBand": "顯示名稱——「朋友」",
+    "showAsBoth": "兩者都顯示——「朋友（34）」",
+    "showAsHint": "這就是 {{token}} 在對話和選項中輸出的內容。"
+  },
+  "valueBounds": "取值範圍（選填）",
+  "noMin": "無下限",
+  "noMax": "無上限",
+  "valueBoundsHint": "每一次修改（來自指令、按鈕或選項的「設定變數」）都會被限制在該範圍內，數值永遠不會超出你的預期（例如把好感度限制在 0 到 100 之間）。"
 }

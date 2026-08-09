@@ -188,47 +188,170 @@
       "effectsTip": "Combine os efeitos Tremer Tela, Flash de Tela e Tingir Tela com efeitos sonoros para momentos dramáticos impactantes como explosões ou revelações."
     },
     "commands": {
-      "GiveItem": { "desc": "Dá ao jogador uma quantidade de um item do inventário (define a quantidade como 1 para itens Únicos).", "example": "Após a cena do baú, Dar Item para Chave Dourada (quantidade 1) para o jogador abrir a porta trancada." },
-      "UseItem": { "desc": "Usa um item: executa seu efeito de uso e, se for consumível, diminui a quantidade em um.", "example": "Usar Item em uma Poção de Vida executa o efeito (aumenta a vida em 50) e remove uma poção da bolsa." },
-      "DestroyItem": { "desc": "Remove parte ou todo um item do jogador sem usá-lo; a quantidade nunca fica abaixo de zero.", "example": "Quando a ponte queima, Destruir Item em Corda com 'todos' ativado para retirar todas as cordas." },
-      "RestockCollection": { "desc": "Reabastece uma lista de itens (loja ou armazenamento) aos seus níveis de estoque, conforme a regra da lista.", "example": "Após 'Você descansa', Reabastecer Lista de Itens na Loja Geral para as mercadorias voltarem de manhã." },
-      "BuyItem": { "desc": "Compra um item de uma lista-loja, gastando a moeda dessa lista (não faz nada se não puder pagar ou faltar estoque).", "example": "Em uma cena, Comprar Item em uma Espada da lista do Ferreiro; o Ouro é descontado automaticamente." },
-      "SellItem": { "desc": "Vende um item que o jogador possui para uma lista-loja, pagando o preço vezes a taxa de venda da loja.", "example": "Após uma missão, Vender Item em um Anel Velho à lista do Mercador para removê-lo e pagar moedas." },
-      "Dialogue": { "desc": "Exibe o diálogo de um personagem com nome do falante e retrato opcionais.", "example": "Mostre Sakura dizendo \"Olá!\" no lado esquerdo da tela." },
-      "Choice": { "desc": "Apresenta ao jogador várias opções que afetam o caminho da história.", "example": "Pergunte ao jogador \"Para onde você vai?\" com as opções \"Parque\", \"Biblioteca\", \"Casa\"." },
-      "BranchStart": { "desc": "Inicia uma seção de ramificação nomeada para organizar visualmente os caminhos da história.", "example": "Inicie uma ramificação chamada \"Rota da Sakura\" colorida de rosa para agrupar comandos relacionados." },
-      "BranchEnd": { "desc": "Encerra uma seção de ramificação aberta anteriormente.", "example": "Feche o bloco de ramificação \"Rota da Sakura\"." },
-      "ShowCharacter": { "desc": "Exibe o sprite de um personagem na tela com posição e expressão.", "example": "Mostre Kai na posição central com expressão feliz, surgindo gradualmente em 0,5 segundos." },
-      "HideCharacter": { "desc": "Remove um personagem da tela com uma transição.", "example": "Oculte Sakura com uma transição de fade-out em 1 segundo." },
-      "SetBackground": { "desc": "Altera a imagem de plano de fundo da cena.", "example": "Defina o plano de fundo como \"corredor_escola\" com crossfade em 1 segundo." },
-      "ShowText": { "desc": "Exibe um texto sobreposto na tela em uma posição específica com estilização.", "example": "Mostre \"Capítulo 1\" centralizado na tela em texto branco grande, surgindo gradualmente." },
-      "HideText": { "desc": "Remove um texto sobreposto exibido anteriormente da tela.", "example": "Oculte o texto do título do capítulo com um fade-out." },
-      "ShowImage": { "desc": "Exibe uma imagem sobreposta na tela com posição, tamanho e rotação.", "example": "Mostre a imagem de uma carta centralizada na tela em 50% do tamanho, surgindo gradualmente." },
-      "HideImage": { "desc": "Remove uma imagem sobreposta exibida anteriormente da tela.", "example": "Oculte a imagem da carta com uma transição de fade-out." },
-      "ShowButton": { "desc": "Exibe um botão interativo na tela com estilização e ações de clique.", "example": "Mostre um botão \"Continuar\" na parte inferior central que pula para a próxima cena ao ser clicado." },
-      "HideButton": { "desc": "Remove um botão exibido anteriormente da tela.", "example": "Oculte o botão \"Continuar\" com um fade-out." },
-      "ShowdraggableImageElement": { "desc": "Exibe uma imagem com regiões de hot-spot clicáveis que disparam ações (pular, definir variável).", "example": "Mostre a imagem de um mapa-múndi com regiões de cidades clicáveis que pulam para cenas diferentes ao serem clicadas." },
-      "HidedraggableImageElement": { "desc": "Remove um mapa de imagem exibido anteriormente da tela.", "example": "Oculte o mapa-múndi com uma transição de fade-out." },
-      "PlayMusic": { "desc": "Inicia a reprodução da música de fundo. Repete por padrão.", "example": "Toque \"tema_romantico.mp3\" a 80% do volume com fade-in de 2s." },
-      "StopMusic": { "desc": "Para a música de fundo em reprodução.", "example": "Pare a música com um fade-out de 1 segundo." },
-      "PlaySoundEffect": { "desc": "Toca um efeito sonoro único.", "example": "Toque o som batida_na_porta no volume máximo." },
-      "StopSoundEffect": { "desc": "Para todos os efeitos sonoros em reprodução.", "example": "Pare todos os efeitos sonoros imediatamente." },
-      "PlayMovie": { "desc": "Reproduz um arquivo de vídeo. No modo tela cheia, é exibido sobre um fundo preto (cutscenes). No modo sobreposição, reproduz de forma transparente sobre a cena (efeitos como pétalas caindo, chuva).", "example": "Reproduza pétalas caindo como uma sobreposição transparente em loop enquanto o diálogo continua por baixo." },
-      "StopMovie": { "desc": "Para todas as sobreposições de vídeo em reprodução.", "example": "Pare a sobreposição de pétalas caindo quando a cena mudar." },
-      "SetVariable": { "desc": "Define uma variável do jogo com um valor. Usado para acompanhar escolhas e estatísticas.", "example": "Defina \"pontuacaoJogador\" como 10, ou adicione 5 a \"nivelDeAmizade\"." },
-      "TextInput": { "desc": "Pede ao jogador para digitar um texto e o armazena em uma variável.", "example": "Pergunte \"Qual é o seu nome?\" e armazene a resposta em \"nomeJogador\"." },
-      "Jump": { "desc": "Pula para outra cena imediatamente.", "example": "Pule para a cena \"inicio_capitulo2\"." },
-      "Label": { "desc": "Define um ponto de rótulo nomeado dentro de uma cena para o qual se pode pular.", "example": "Crie um rótulo chamado \"inicio_loop\" para marcar um ponto de retorno." },
-      "JumpToLabel": { "desc": "Pula para um rótulo nomeado dentro da cena atual.", "example": "Pule de volta para o rótulo \"inicio_loop\" para repetir uma seção." },
-      "Wait": { "desc": "Pausa por uma duração especificada antes de continuar.", "example": "Espere 2 segundos antes de mostrar o próximo diálogo, ou espere o clique do jogador." },
-      "ShowScreen": { "desc": "Exibe uma tela de UI personalizada (menus, inventários, etc.).", "example": "Mostre a sobreposição de UI \"tela_inventario\"." },
-      "ShakeScreen": { "desc": "Aplica um efeito de tremor de tela para impacto dramático.", "example": "Trema a tela por 0,5 segundos em intensidade média durante uma explosão." },
-      "TintScreen": { "desc": "Aplica uma sobreposição de cor a toda a tela.", "example": "Tinja a tela de vermelho em 1 segundo para indicar perigo." },
-      "FlashScreen": { "desc": "Pisca a tela com uma cor brilhante por um breve momento.", "example": "Pisque a tela de branco por 0,3 segundos para um efeito de relâmpago." },
-      "PanZoomScreen": { "desc": "Desloca e amplia a câmera para focar em uma área específica.", "example": "Amplie 2x no lado esquerdo da tela em 1 segundo." },
-      "ResetScreenEffects": { "desc": "Redefine todos os efeitos de tela ativos (tingimento, zoom, etc.) ao normal.", "example": "Redefina todos os efeitos de tela suavemente em 0,5 segundos." },
-      "SetScreenOverlayEffect": { "desc": "Aplica um efeito de sobreposição persistente como chuva, neve ou partículas.", "example": "Adicione um efeito suave de queda de neve a 50% de intensidade." },
-      "Group": { "desc": "Agrupa vários eventos para organização visual no editor.", "example": "Agrupe os eventos de \"entrar na sala de aula\" (plano de fundo, personagens, música)." }
+      "GiveItem": {
+        "desc": "Dá ao jogador uma quantidade de um item do inventário (define a quantidade como 1 para itens Únicos).",
+        "example": "Após a cena do baú, Dar Item para Chave Dourada (quantidade 1) para o jogador abrir a porta trancada."
+      },
+      "UseItem": {
+        "desc": "Usa um item: executa seu efeito de uso e, se for consumível, diminui a quantidade em um.",
+        "example": "Usar Item em uma Poção de Vida executa o efeito (aumenta a vida em 50) e remove uma poção da bolsa."
+      },
+      "DestroyItem": {
+        "desc": "Remove parte ou todo um item do jogador sem usá-lo; a quantidade nunca fica abaixo de zero.",
+        "example": "Quando a ponte queima, Destruir Item em Corda com 'todos' ativado para retirar todas as cordas."
+      },
+      "RestockCollection": {
+        "desc": "Reabastece uma lista de itens (loja ou armazenamento) aos seus níveis de estoque, conforme a regra da lista.",
+        "example": "Após 'Você descansa', Reabastecer Lista de Itens na Loja Geral para as mercadorias voltarem de manhã."
+      },
+      "BuyItem": {
+        "desc": "Compra um item de uma lista-loja, gastando a moeda dessa lista (não faz nada se não puder pagar ou faltar estoque).",
+        "example": "Em uma cena, Comprar Item em uma Espada da lista do Ferreiro; o Ouro é descontado automaticamente."
+      },
+      "SellItem": {
+        "desc": "Vende um item que o jogador possui para uma lista-loja, pagando o preço vezes a taxa de venda da loja.",
+        "example": "Após uma missão, Vender Item em um Anel Velho à lista do Mercador para removê-lo e pagar moedas."
+      },
+      "Dialogue": {
+        "desc": "Exibe o diálogo de um personagem com nome do falante e retrato opcionais.",
+        "example": "Mostre Sakura dizendo \"Olá!\" no lado esquerdo da tela."
+      },
+      "Choice": {
+        "desc": "Apresenta ao jogador várias opções que afetam o caminho da história.",
+        "example": "Pergunte ao jogador \"Para onde você vai?\" com as opções \"Parque\", \"Biblioteca\", \"Casa\"."
+      },
+      "BranchStart": {
+        "desc": "Inicia uma seção de ramificação nomeada para organizar visualmente os caminhos da história.",
+        "example": "Inicie uma ramificação chamada \"Rota da Sakura\" colorida de rosa para agrupar comandos relacionados."
+      },
+      "BranchEnd": {
+        "desc": "Encerra uma seção de ramificação aberta anteriormente.",
+        "example": "Feche o bloco de ramificação \"Rota da Sakura\"."
+      },
+      "ShowCharacter": {
+        "desc": "Exibe o sprite de um personagem na tela com posição e expressão.",
+        "example": "Mostre Kai na posição central com expressão feliz, surgindo gradualmente em 0,5 segundos."
+      },
+      "HideCharacter": {
+        "desc": "Remove um personagem da tela com uma transição.",
+        "example": "Oculte Sakura com uma transição de fade-out em 1 segundo."
+      },
+      "SetBackground": {
+        "desc": "Altera a imagem de plano de fundo da cena.",
+        "example": "Defina o plano de fundo como \"corredor_escola\" com crossfade em 1 segundo."
+      },
+      "ShowText": {
+        "desc": "Exibe um texto sobreposto na tela em uma posição específica com estilização.",
+        "example": "Mostre \"Capítulo 1\" centralizado na tela em texto branco grande, surgindo gradualmente."
+      },
+      "HideText": {
+        "desc": "Remove um texto sobreposto exibido anteriormente da tela.",
+        "example": "Oculte o texto do título do capítulo com um fade-out."
+      },
+      "ShowImage": {
+        "desc": "Exibe uma imagem sobreposta na tela com posição, tamanho e rotação.",
+        "example": "Mostre a imagem de uma carta centralizada na tela em 50% do tamanho, surgindo gradualmente."
+      },
+      "HideImage": {
+        "desc": "Remove uma imagem sobreposta exibida anteriormente da tela.",
+        "example": "Oculte a imagem da carta com uma transição de fade-out."
+      },
+      "ShowButton": {
+        "desc": "Exibe um botão interativo na tela com estilização e ações de clique.",
+        "example": "Mostre um botão \"Continuar\" na parte inferior central que pula para a próxima cena ao ser clicado."
+      },
+      "HideButton": {
+        "desc": "Remove um botão exibido anteriormente da tela.",
+        "example": "Oculte o botão \"Continuar\" com um fade-out."
+      },
+      "ShowdraggableImageElement": {
+        "desc": "Exibe uma imagem com regiões de hot-spot clicáveis que disparam ações (pular, definir variável).",
+        "example": "Mostre a imagem de um mapa-múndi com regiões de cidades clicáveis que pulam para cenas diferentes ao serem clicadas."
+      },
+      "HidedraggableImageElement": {
+        "desc": "Remove um mapa de imagem exibido anteriormente da tela.",
+        "example": "Oculte o mapa-múndi com uma transição de fade-out."
+      },
+      "PlayMusic": {
+        "desc": "Inicia a reprodução da música de fundo. Repete por padrão.",
+        "example": "Toque \"tema_romantico.mp3\" a 80% do volume com fade-in de 2s."
+      },
+      "StopMusic": {
+        "desc": "Para a música de fundo em reprodução.",
+        "example": "Pare a música com um fade-out de 1 segundo."
+      },
+      "PlaySoundEffect": {
+        "desc": "Toca um efeito sonoro único.",
+        "example": "Toque o som batida_na_porta no volume máximo."
+      },
+      "StopSoundEffect": {
+        "desc": "Para todos os efeitos sonoros em reprodução.",
+        "example": "Pare todos os efeitos sonoros imediatamente."
+      },
+      "PlayMovie": {
+        "desc": "Reproduz um arquivo de vídeo. No modo tela cheia, é exibido sobre um fundo preto (cutscenes). No modo sobreposição, reproduz de forma transparente sobre a cena (efeitos como pétalas caindo, chuva).",
+        "example": "Reproduza pétalas caindo como uma sobreposição transparente em loop enquanto o diálogo continua por baixo."
+      },
+      "StopMovie": {
+        "desc": "Para todas as sobreposições de vídeo em reprodução.",
+        "example": "Pare a sobreposição de pétalas caindo quando a cena mudar."
+      },
+      "SetVariable": {
+        "desc": "Define uma variável do jogo com um valor. Usado para acompanhar escolhas e estatísticas.",
+        "example": "Defina \"pontuacaoJogador\" como 10, ou adicione 5 a \"nivelDeAmizade\"."
+      },
+      "TextInput": {
+        "desc": "Pede ao jogador para digitar um texto e o armazena em uma variável.",
+        "example": "Pergunte \"Qual é o seu nome?\" e armazene a resposta em \"nomeJogador\"."
+      },
+      "Jump": {
+        "desc": "Pula para outra cena imediatamente.",
+        "example": "Pule para a cena \"inicio_capitulo2\"."
+      },
+      "Label": {
+        "desc": "Define um ponto de rótulo nomeado dentro de uma cena para o qual se pode pular.",
+        "example": "Crie um rótulo chamado \"inicio_loop\" para marcar um ponto de retorno."
+      },
+      "JumpToLabel": {
+        "desc": "Pula para um rótulo nomeado dentro da cena atual.",
+        "example": "Pule de volta para o rótulo \"inicio_loop\" para repetir uma seção."
+      },
+      "Wait": {
+        "desc": "Pausa por uma duração especificada antes de continuar.",
+        "example": "Espere 2 segundos antes de mostrar o próximo diálogo, ou espere o clique do jogador."
+      },
+      "ShowScreen": {
+        "desc": "Exibe uma tela de UI personalizada (menus, inventários, etc.).",
+        "example": "Mostre a sobreposição de UI \"tela_inventario\"."
+      },
+      "ShakeScreen": {
+        "desc": "Aplica um efeito de tremor de tela para impacto dramático.",
+        "example": "Trema a tela por 0,5 segundos em intensidade média durante uma explosão."
+      },
+      "TintScreen": {
+        "desc": "Aplica uma sobreposição de cor a toda a tela.",
+        "example": "Tinja a tela de vermelho em 1 segundo para indicar perigo."
+      },
+      "FlashScreen": {
+        "desc": "Pisca a tela com uma cor brilhante por um breve momento.",
+        "example": "Pisque a tela de branco por 0,3 segundos para um efeito de relâmpago."
+      },
+      "PanZoomScreen": {
+        "desc": "Desloca e amplia a câmera para focar em uma área específica.",
+        "example": "Amplie 2x no lado esquerdo da tela em 1 segundo."
+      },
+      "ResetScreenEffects": {
+        "desc": "Redefine todos os efeitos de tela ativos (tingimento, zoom, etc.) ao normal.",
+        "example": "Redefina todos os efeitos de tela suavemente em 0,5 segundos."
+      },
+      "SetScreenOverlayEffect": {
+        "desc": "Aplica um efeito de sobreposição persistente como chuva, neve ou partículas.",
+        "example": "Adicione um efeito suave de queda de neve a 50% de intensidade."
+      },
+      "Group": {
+        "desc": "Agrupa vários eventos para organização visual no editor.",
+        "example": "Agrupe os eventos de \"entrar na sala de aula\" (plano de fundo, personagens, música)."
+      }
     }
   },
   "assetSelector": {
@@ -330,5 +453,20 @@
     "enableBorder": "Ativar Borda",
     "width": "Largura (px)",
     "borderColor": "Cor da Borda"
+  },
+  "emoji": {
+    "pick": "Escolher um emoji",
+    "search": "Buscar — “bravo”, “chave”, “dinheiro”…",
+    "none": "Nenhum",
+    "noMatch": "Nada corresponde. Você pode colar o seu abaixo.",
+    "custom": "…ou digite / cole qualquer emoji",
+    "group": {
+      "feelings": "Sentimentos",
+      "love": "Amor e laços",
+      "status": "Estado e atributos",
+      "things": "Objetos",
+      "world": "Mundo",
+      "marks": "Marcas"
+    }
   }
 }

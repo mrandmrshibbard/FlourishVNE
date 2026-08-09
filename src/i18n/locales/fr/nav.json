@@ -7,7 +7,9 @@
     "variables": "Variables",
     "commonEvents": "Événements",
     "systems": "Systèmes",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "storyBible": "Bible de l'histoire",
+    "miniGames": "Mini-jeux"
   },
   "desc": {
     "scenes": "Créez et modifiez des scènes d'histoire avec des dialogues, des choix et des commandes",
@@ -17,8 +19,12 @@
     "variables": "Créez et gérez les variables d'histoire et l'état du jeu",
     "commonEvents": "Séquences de commandes réutilisables déclenchées depuis les scènes",
     "systems": "Systèmes de gameplay optionnels comme l'Inventaire et le registre d'objets",
-    "settings": "Configurez les paramètres et préférences du projet"
+    "settings": "Configurez les paramètres et préférences du projet",
+    "storyBible": "Conservez votre synopsis, vos notes de personnages et votre glossaire de termes",
+    "miniGames": "Créez des mini-jeux jouables affichés par la commande Afficher le mini-jeu"
   },
   "rightClickHint": " | Clic droit pour mettre au premier plan la fenêtre du gestionnaire",
-  "openInWindow": "Ouvrir ou mettre au premier plan {{label}} dans une fenêtre séparée"
+  "openInWindow": "Ouvrir ou mettre au premier plan {{label}} dans une fenêtre séparée",
+  "expandLabels": "Afficher les noms des onglets",
+  "collapseLabels": "Réduire les onglets en icônes"
 }

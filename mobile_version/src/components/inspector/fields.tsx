@@ -74,7 +74,9 @@ export const OrientationFields: React.FC<{
     flipY?: boolean;
     flipXLabel?: string;
     onChange: (patch: { rotation?: number; flipX?: boolean; flipY?: boolean }) => void;
-}> = ({ rotation, flipX, flipY, flipXLabel = 'Flip Horizontal', onChange }) => (
+}> = ({ rotation, flipX, flipY, flipXLabel, onChange }) => {
+    const { t } = useTranslation('properties');
+    return (
     <div className="space-y-1 pt-1 border-t border-[var(--border-subtle)] mt-2">
         <FormField label={`Rotation: ${rotation ?? 0}°`}>
             <div className="flex items-center gap-2">
@@ -86,22 +88,23 @@ export const OrientationFields: React.FC<{
                     type="button"
                     onClick={() => onChange({ rotation: 0 })}
                     className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
-                    title="Reset rotation to 0°"
+                    title={t('properties:hc.resetRotationTo0', 'Reset rotation to 0°')}
                 >0°</button>
             </div>
         </FormField>
         <div className="flex gap-4 pb-1">
             <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] cursor-pointer">
                 <input type="checkbox" checked={!!flipX} onChange={e => onChange({ flipX: e.target.checked })} className="cursor-pointer" />
-                {flipXLabel}
+                {flipXLabel ?? t('properties:hc.flipHorizontal', 'Flip Horizontal')}
             </label>
             <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] cursor-pointer">
                 <input type="checkbox" checked={!!flipY} onChange={e => onChange({ flipY: e.target.checked })} className="cursor-pointer" />
-                Flip Vertical
+                {t('properties:hc.flipVertical', 'Flip Vertical')}
             </label>
         </div>
     </div>
-);
+    );
+};
 
 /** Transition type + duration with a live preview. */
 export const TransitionFields: React.FC<{

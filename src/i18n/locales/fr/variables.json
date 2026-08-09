@@ -65,5 +65,88 @@
     "elSetsVariable": "Élément « {{name}} » : Définit la variable",
     "elCyclesLayer": "Élément « {{name}} » : Fait défiler la ressource du calque",
     "elTextRef": "Élément « {{name}} » : Référencée dans le texte"
-  }
+  },
+  "list": {
+    "searchPlaceholder": "Rechercher des variables…",
+    "sortTitle": "Ordre de la liste",
+    "sortProject": "Ordre de création",
+    "sortAz": "A → Z",
+    "sortType": "Par type",
+    "group": "Grouper",
+    "groupHint": "Les variables nommées « heros_or » et « heros_confiance » se regroupent sous un titre « heros »",
+    "noResults": "Aucune variable ne correspond à votre recherche.",
+    "newFolder": "Nouveau dossier — glissez-y des variables pour les ranger",
+    "newFolderName": "Nouveau dossier",
+    "dragHere": "Glissez des variables ici",
+    "noFolder": "Hors dossier",
+    "deleteFolderConfirm": "Supprimer le dossier « {{name}} » ? Les variables qu'il contient sont conservées — elles en sortent simplement."
+  },
+  "xray": {
+    "title": "Où cela est utilisé",
+    "count": "{{count}} endroits",
+    "nowhere": "nulle part pour l'instant",
+    "rowCount": "Utilisée à {{count}} endroits",
+    "rowNone": "Rien ne l'utilise pour l'instant",
+    "jump": "M'y emmener",
+    "noJump": "Celui-ci ne peut pas être ouvert directement",
+    "up": "augmente dans {{n}}",
+    "down": "diminue dans {{n}}",
+    "changed": "change dans {{n}}",
+    "checked": "vérifiée dans {{n}}",
+    "shown": "affichée dans {{n}}",
+    "orphan": "Rien dans votre histoire ne l'utilise encore. Elle restera à sa valeur de départ.",
+    "neverChanged": "Rien ne la modifie jamais : elle reste à sa valeur de départ pendant toute la partie. Vouliez-vous la changer quelque part ?",
+    "neverUsed": "Rien ne la vérifie ni ne l'affiche : la modifier ne change rien de ce que voit le joueur."
+  },
+  "picker": {
+    "placeholder": "Choisissez une variable…",
+    "search": "Recherchez, ou saisissez un nouveau nom…",
+    "none": "Aucune variable pour l'instant.",
+    "nameTaken": "Une variable porte déjà ce nom.",
+    "createAs": "Créer « {{name}} » en tant que…",
+    "type": {
+      "boolean": "Oui / Non",
+      "number": "Nombre",
+      "string": "Texte"
+    },
+    "typeHint": {
+      "boolean": "Quelque chose qui s'est produit ou non",
+      "number": "Quelque chose que l'on compte ou mesure",
+      "string": "Des mots — un nom, une route, une couleur"
+    }
+  },
+  "token": {
+    "insert": "Insérez une variable dans ce texte — sa valeur s'affichera pendant la partie",
+    "pick": "Quelle variable ?"
+  },
+  "meaning": {
+    "iconTitle": "Un émoji, pour repérer cette variable d'un coup d'œil",
+    "colorTitle": "Une couleur, utilisée partout où cette variable apparaît",
+    "descPlaceholder": "Ce que cela représente dans votre histoire — par ex. « À quel point Yuki vous apprécie »"
+  },
+  "bands": {
+    "label": "Donnez des noms aux nombres",
+    "hint": "Nommez les paliers une fois — vous pourrez ensuite écrire « quand Yuki est Amie » au lieu de « quand Affection vaut 41 ou plus ».",
+    "startBlank": "Partir de zéro",
+    "presetHint": "Choisissez-en un pour commencer — vous pourrez ensuite renommer, recolorer et renuméroter chaque palier.",
+    "namePlaceholder": "Ami",
+    "iconTitle": "Un émoji pour ce palier (facultatif)",
+    "colorTitle": "Couleur de ce palier",
+    "from": "à partir de",
+    "andUp": "{{from}} et plus",
+    "andUpShort": "et plus",
+    "add": "Ajouter un palier",
+    "remove": "Retirer ce palier",
+    "rowSummary_one": "{{count}} palier nommé",
+    "rowSummary_other": "{{count}} paliers nommés",
+    "showAsLabel": "Quand cela apparaît dans le texte de votre histoire",
+    "showAsNumber": "Afficher le nombre — « 34 »",
+    "showAsBand": "Afficher le nom — « Ami »",
+    "showAsBoth": "Afficher les deux — « Ami (34) »",
+    "showAsHint": "C'est ce que {{token}} affiche dans les dialogues et les choix."
+  },
+  "valueBounds": "Plage de valeurs (facultatif)",
+  "noMin": "Aucun minimum",
+  "noMax": "Aucun maximum",
+  "valueBoundsHint": "Chaque changement (Définir la variable via commandes, boutons ou choix) est ramené dans cette plage, si bien qu'une valeur ne dépasse jamais ce que vous voulez (par exemple garder l'affection entre 0 et 100)."
 }

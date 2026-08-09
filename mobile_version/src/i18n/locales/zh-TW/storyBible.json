@@ -1,0 +1,88 @@
+{
+  "title": "故事設定集",
+  "empty": {
+    "title": "你的故事設定集",
+    "body": "把與故事有關的一切集中在一處——梗概、角色筆記、地點、劇情線。只有你能看到，絕不會隨遊戲一起發布。",
+    "starterButton": "建立初始分區"
+  },
+  "starter": {
+    "synopsis": "故事梗概",
+    "chapters": "章節",
+    "characters": "角色",
+    "locations": "地點",
+    "arcs": "劇情線"
+  },
+  "sections": {
+    "add": "新增分區",
+    "newName": "新分區",
+    "unnamed": "未命名",
+    "none": "還沒有分區。",
+    "namePlaceholder": "分區名稱",
+    "delete": "刪除分區",
+    "deleteConfirm": "確定刪除「{{name}}」？",
+    "deleteConfirmWithSubs": "刪除「{{name}}」及其 {{count}} 個子分區？其中的筆記將一併遺失，且無法復原。",
+    "moveUp": "上移",
+    "moveDown": "下移"
+  },
+  "subsections": {
+    "add": "新增子分區",
+    "newName": "新子分區",
+    "namePlaceholder": "子分區名稱",
+    "delete": "刪除子分區",
+    "deleteConfirm": "確定刪除「{{name}}」？"
+  },
+  "editor": {
+    "edit": "✏ 編輯",
+    "preview": "👁 預覽",
+    "heading": "標題（再次點擊可變小）",
+    "bold": "粗體",
+    "italic": "斜體",
+    "bulletList": "項目符號清單",
+    "numberedList": "編號清單",
+    "placeholder": "在這裡寫下你的筆記……使用上方按鈕新增標題、粗體和清單。",
+    "placeholderWord": "文字"
+  },
+  "glossary": {
+    "title": "術語表",
+    "navHint": "玩家可在對話中停留查看解釋的詞語",
+    "back": "故事設定集",
+    "emptyTitle": "術語表",
+    "emptyBody": "新增玩家可能不了解的詞語。當它出現在對話中時會被標示，停留即可看到你的解釋。",
+    "addTerm": "新增詞條",
+    "newTerm": "新詞條",
+    "search": "搜尋詞條…",
+    "none": "還沒有詞條。",
+    "noResults": "沒有相符的詞條。",
+    "term": "詞語或短語",
+    "alternatives": "其他寫法或形式",
+    "alternativesHelp": "例如複數形式——按 Enter 新增",
+    "caseSensitive": "區分大小寫",
+    "color": "標示顏色",
+    "useDefaultColor": "使用預設顏色",
+    "tooltipTitle": "提示框標題（留空則用詞語本身）",
+    "description": "解釋",
+    "extra": "小註釋（選填）",
+    "enabledEntry": "在遊戲中顯示",
+    "preview": "在遊戲中的效果（把滑鼠移到該詞上）：",
+    "previewLine": "據說 {{term}} 只在夜裡出現。",
+    "previewNoMatch": "該詞條未能符合範例——若開啟了「區分大小寫」，請檢查大小寫。",
+    "delete": "刪除詞條",
+    "deleteConfirm": "從術語表中刪除「{{term}}」？",
+    "import": "匯入…",
+    "export": "匯出",
+    "importSuccess": "已匯入 {{count}} 個詞條",
+    "importError": "該檔案不是 Flourish 術語表。",
+    "settings": {
+      "enabled": "在遊戲中標示術語表詞條",
+      "defaultColor": "預設顏色",
+      "style": "詞條的突顯方式",
+      "styleUnderline": "底線",
+      "styleColor": "彩色文字",
+      "styleGlow": "柔和光暈"
+    }
+  },
+  "pluginBanner": {
+    "text": "故事設定集現已內建於編輯器，你在舊外掛中的筆記已匯入到這裡。可以放心從「工具 → 外掛管理員」解除安裝該外掛。",
+    "dismiss": "知道了"
+  }
+}

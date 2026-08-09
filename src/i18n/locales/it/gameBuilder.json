@@ -228,5 +228,16 @@
     "downloading": "Configurazione degli strumenti Android (una tantum)…",
     "continue": "Scarica e continua",
     "cancel": "Annulla"
-  }
+  },
+  "webOptions": {
+    "title": "Opzioni web",
+    "fullscreenLabel": "Aggiungi un pulsante a schermo intero",
+    "fullscreenHint": "Mostra un piccolo pulsante sopra il gioco che permette al giocatore di riempire tutto lo schermo — ottimo per itch.io, dove i giochi nel browser possono risultare piccoli.",
+    "fullscreenCorner": "Angolo del pulsante",
+    "cornerTopRight": "In alto a destra",
+    "cornerTopLeft": "In alto a sinistra",
+    "cornerBottomRight": "In basso a destra",
+    "cornerBottomLeft": "In basso a sinistra"
+  },
+  "cancelBuild": "Interrompi questa esportazione e pulisci"
 }

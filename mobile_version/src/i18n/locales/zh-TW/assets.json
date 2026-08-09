@@ -84,5 +84,10 @@
   "toastAcross": "，分布於 {{cats}}",
   "toastReplaced": "素材已取代——所有參照皆已保留",
   "toastReplaceFailed": "取代素材失敗",
-  "toastFolderExists": "此處已有名為「{{name}}」的資料夾"
+  "toastFolderExists": "此處已有名為「{{name}}」的資料夾",
+  "toastLargeAsset": "已新增大型檔案：{{files}}。大體積媒體會拖慢編輯器並使匯出檔案變大——建議壓縮。",
+  "defaultTrim": "預設裁剪（秒）",
+  "defaultTrimHint": "適用於該影片的每一次使用，除非某個指令或元素另行設定。",
+  "defaultShaping": "預設音效調整",
+  "defaultShapingHint": "適用於該音訊被使用的所有位置，除非某個指令或按鈕另行設定。「倒放」只對音效和語音有效——音樂始終正向播放。"
 }

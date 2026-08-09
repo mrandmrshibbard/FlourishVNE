@@ -7,7 +7,9 @@
     "variables": "變數",
     "commonEvents": "事件",
     "systems": "系統",
-    "settings": "設定"
+    "settings": "設定",
+    "storyBible": "故事設定集",
+    "miniGames": "小遊戲"
   },
   "desc": {
     "scenes": "建立並編輯包含對話、選項與指令的故事場景",
@@ -17,8 +19,12 @@
     "variables": "建立並管理故事變數與遊戲狀態",
     "commonEvents": "可從場景觸發的可重複使用指令序列",
     "systems": "選用的遊玩系統，例如物品欄與物品登錄表",
-    "settings": "設定專案設定與偏好"
+    "settings": "設定專案設定與偏好",
+    "storyBible": "保存你的故事梗概、角色筆記和術語表",
+    "miniGames": "製作可遊玩的小遊戲，由「顯示小遊戲」指令展示"
   },
   "rightClickHint": " | 按右鍵以聚焦管理視窗",
-  "openInWindow": "在獨立視窗中開啟或聚焦 {{label}}"
+  "openInWindow": "在獨立視窗中開啟或聚焦 {{label}}",
+  "expandLabels": "顯示所有標籤名稱",
+  "collapseLabels": "將標籤摺疊為圖示"
 }

@@ -7,7 +7,9 @@
     "variables": "Variabili",
     "commonEvents": "Eventi",
     "systems": "Sistemi",
-    "settings": "Impostazioni"
+    "settings": "Impostazioni",
+    "storyBible": "Bibbia della Storia",
+    "miniGames": "Minigiochi"
   },
   "desc": {
     "scenes": "Crea e modifica le scene della storia con dialoghi, scelte e comandi",
@@ -17,8 +19,12 @@
     "variables": "Crea e gestisci le variabili della storia e lo stato del gioco",
     "commonEvents": "Sequenze di comandi riutilizzabili attivate dalle scene",
     "systems": "Sistemi di gioco opzionali come l'Inventario e il registro degli oggetti",
-    "settings": "Configura le impostazioni e le preferenze del progetto"
+    "settings": "Configura le impostazioni e le preferenze del progetto",
+    "storyBible": "Conserva la sinossi, le note sui personaggi e il glossario dei termini della storia",
+    "miniGames": "Crea minigiochi giocabili mostrati dal comando Mostra Minigioco"
   },
   "rightClickHint": " | Clic destro per mettere a fuoco la finestra del gestore",
-  "openInWindow": "Apri o metti a fuoco {{label}} in una finestra separata"
+  "openInWindow": "Apri o metti a fuoco {{label}} in una finestra separata",
+  "expandLabels": "Mostra i nomi delle schede",
+  "collapseLabels": "Riduci le schede a icone"
 }

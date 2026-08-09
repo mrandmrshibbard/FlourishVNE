@@ -11,12 +11,15 @@ import UIActionsListEditor from '../ui/UIActionsListEditor';
 import { actionLabel, defaultActionForType } from '../../utils/actionMeta';
 
 /** Action types offered by the menu/screen ActionEditor dropdown, in display order.
- *  (Intentionally excludes PlayAnimation / ChangeImage, which are interactive-element-only.) */
+ *  (Intentionally excludes ChangeImage, which is interactive-element-only. PlayAnimation IS
+ *  offered — it animates a screen element; the character equivalent is PlayCharacterAnimation,
+ *  and the two are labelled distinctly so it's clear which one targets what.) */
 const MENU_ACTION_TYPES: UIActionType[] = [
     UIActionType.None, UIActionType.StartNewGame, UIActionType.ContinueGame, UIActionType.GoToScreen,
     UIActionType.LoadGame, UIActionType.SaveGame, UIActionType.DeleteSave, UIActionType.SaveSlotsNextPage, UIActionType.SaveSlotsPrevPage, UIActionType.ReturnToGame, UIActionType.ReturnToPreviousScreen,
     UIActionType.QuitToTitle, UIActionType.ExitGame, UIActionType.JumpToScene, UIActionType.JumpToLabel,
     UIActionType.SetVariable, UIActionType.ResetVariable, UIActionType.PlaySound, UIActionType.StopSound, UIActionType.PlayMusic, UIActionType.StopMusic, UIActionType.PlayVideo, UIActionType.CycleLayerAsset, UIActionType.ToggleScreen, UIActionType.OpenURL,
+    UIActionType.ChangePose, UIActionType.ChangeCharacter, UIActionType.PlayCharacterAnimation, UIActionType.PlayAnimation,
     UIActionType.ShowElement, UIActionType.HideElement,
     UIActionType.CallCommonEvent,
     UIActionType.GiveItem, UIActionType.UseItem, UIActionType.DestroyItem, UIActionType.UseSelectedItem, UIActionType.RestockCollection,

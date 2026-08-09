@@ -141,6 +141,39 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
         dispatch({ type: 'UPDATE_COMMON_EVENT_COMMAND', payload: { commonEventId: selectedEventId, commandIndex: index, updates: { isCollapsed: collapsed } as Partial<VNCommand> } });
     }, [dispatch, selectedEventId]);
 
+    /** Walk a branch block STRUCTURALLY (balanced Start/End) from its BranchStart row.
+     *  Position-based rather than branchId-based so a legacy/oddly-tagged branch still behaves,
+     *  and so a nested branch's own Otherwise never counts as this branch's. */
+    const branchBlock = useCallback((cmds: VNCommand[], startIndex: number) => {
+        let depth = 0, endIndex = -1, elseIndex = -1;
+        for (let i = startIndex; i < cmds.length; i++) {
+            const c = cmds[i];
+            if (c.type === CommandType.BranchStart) { depth++; continue; }
+            if (c.type === CommandType.BranchEnd) { depth--; if (depth === 0) { endIndex = i; break; } continue; }
+            if (depth === 1 && c.type === CommandType.BranchElse && elseIndex === -1) elseIndex = i;  // direct child only
+        }
+        return { endIndex, elseIndex, hasElse: elseIndex !== -1 };
+    }, []);
+
+    /** Add an "Otherwise if" / "Otherwise" segment to a branch — the Common Events twin of the
+     *  scene editor's branch-block buttons (these markers are deliberately absent from the command
+     *  palette, because a loose marker with a fresh branchId would belong to no branch).
+     *  Otherwise-if goes before any existing Otherwise; Otherwise goes just before the End. */
+    const addBranchSegment = useCallback((startIndex: number, segType: CommandType.BranchElseIf | CommandType.BranchElse) => {
+        if (!selectedEventId || !selectedEvent) return;
+        const cmds = selectedEvent.commands;
+        const branchId = (cmds[startIndex] as { branchId?: string })?.branchId;
+        if (!branchId) return;                                  // runtime pairs markers by branchId
+        const { endIndex, elseIndex } = branchBlock(cmds, startIndex);
+        if (endIndex === -1) return;                            // dangling branch — nothing to close
+        // Otherwise-if slots in before an existing Otherwise so the catch-all stays last.
+        const insertAt = (segType === CommandType.BranchElseIf && elseIndex !== -1) ? elseIndex : endIndex;
+        const marker = createCommand(segType, project, { branchId });
+        if (!marker) return;
+        // The reducer stamps an id when one is missing.
+        dispatch({ type: 'ADD_COMMON_EVENT_COMMAND', payload: { commonEventId: selectedEventId, command: marker as VNCommand, index: insertAt } });
+    }, [dispatch, selectedEventId, selectedEvent, project, branchBlock]);
+
     // A deep link's target command index, stashed (tagged with its event) so the "clear the command
     // editor when the event changes" effect below consumes it instead of wiping it.
     const pendingCommandIndexRef = useRef<{ eventId: VNID; index: number } | null>(null);
@@ -474,12 +507,12 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
                             onClick={handleExportLibrary}
                             disabled={commonEvents.length === 0}
                             className="flex-1 py-1 px-2 rounded text-[11px] bg-slate-700 hover:bg-slate-600 text-white transition-colors disabled:opacity-40"
-                            title="Export all common events to a JSON file"
+                            title={t('hc.exportAllCommonEventsTo', 'Export all common events to a JSON file')}
                         >
-                            Export
+                            {t('hc.export', 'Export')}
                         </button>
-                        <label className="flex-1 py-1 px-2 rounded text-[11px] bg-slate-700 hover:bg-slate-600 text-white transition-colors text-center cursor-pointer" title="Import common events from a JSON file">
-                            Import
+                        <label className="flex-1 py-1 px-2 rounded text-[11px] bg-slate-700 hover:bg-slate-600 text-white transition-colors text-center cursor-pointer" title={t('hc.importCommonEventsFromA', 'Import common events from a JSON file')}>
+                            {t('hc.import', 'Import')}
                             <input type="file" accept=".json" onChange={handleImportLibrary} className="hidden" />
                         </label>
                     </div>
@@ -836,6 +869,41 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project, init
                                                                 <TrashIcon className="w-3 h-3" />
                                                             </button>
                                                         </div>
+                                                        {/* Segment buttons on their OWN line under the Branch, indented to the
+                                                            branch body — mirrors the scene editor's branch-block header. These
+                                                            markers are not in the command palette (a loose one would belong to no
+                                                            branch), so this is the only way to build an if / else-if / else chain.
+                                                            On the row itself they were 9px grey text ~1000px right of the branch
+                                                            name: present, but nobody could find them. */}
+                                                        {branchCmd && !branchCmd.isCollapsed && (() => {
+                                                            const { hasElse } = branchBlock(selectedEvent.commands, index);
+                                                            const btn = "px-2 py-1 rounded text-[10px] font-medium border border-[var(--accent-cyan)]/40 text-[var(--accent-cyan)] hover:bg-[var(--accent-cyan)]/10 hover:border-[var(--accent-cyan)]";
+                                                            // A branch can only have ONE Otherwise. Show the button DISABLED with a
+                                                            // reason rather than hiding it — a button that silently vanishes reads
+                                                            // as "the feature is missing" (exactly how this was first reported).
+                                                            const btnOff = "px-2 py-1 rounded text-[10px] font-medium border border-[var(--border-subtle)] text-[var(--text-muted)] opacity-60 cursor-not-allowed";
+                                                            return (
+                                                                <div className="flex items-center gap-1.5 mt-0.5 mb-0.5" style={{ marginLeft: (depth + 1) * 14 }}>
+                                                                    <button
+                                                                        onClick={() => addBranchSegment(index, CommandType.BranchElseIf)}
+                                                                        className={btn}
+                                                                        title={t('addOtherwiseIfTip', 'Add an “Otherwise if” — another check, tried when the ones above do not match')}
+                                                                    >
+                                                                        {t('addOtherwiseIf', '+ Otherwise if')}
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => { if (!hasElse) addBranchSegment(index, CommandType.BranchElse); }}
+                                                                        disabled={hasElse}
+                                                                        className={hasElse ? btnOff : btn}
+                                                                        title={hasElse
+                                                                            ? t('addOtherwiseAlready', 'This branch already has an “Otherwise” — a branch can only have one.')
+                                                                            : t('addOtherwiseTip', 'Add an “Otherwise” — runs when nothing above matched')}
+                                                                    >
+                                                                        {t('addOtherwise', '+ Otherwise')}
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </React.Fragment>
                                                 );
                                             })

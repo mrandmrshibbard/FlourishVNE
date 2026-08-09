@@ -65,5 +65,88 @@
     "elSetsVariable": "Elemento \"{{name}}\": Imposta la variabile",
     "elCyclesLayer": "Elemento \"{{name}}\": Cicla l'asset del livello",
     "elTextRef": "Elemento \"{{name}}\": Referenziata nel testo"
-  }
+  },
+  "list": {
+    "searchPlaceholder": "Cerca variabili…",
+    "sortTitle": "Come è ordinato l'elenco",
+    "sortProject": "Ordine di creazione",
+    "sortAz": "A → Z",
+    "sortType": "Per tipo",
+    "group": "Raggruppa",
+    "groupHint": "Variabili chiamate \"eroe_oro\" ed \"eroe_fiducia\" finiscono sotto un titolo \"eroe\"",
+    "noResults": "Nessuna variabile corrisponde alla ricerca.",
+    "newFolder": "Nuova cartella: trascina dentro le variabili per organizzarle",
+    "newFolderName": "Nuova cartella",
+    "dragHere": "Trascina qui le variabili",
+    "noFolder": "Fuori dalle cartelle",
+    "deleteFolderConfirm": "Eliminare la cartella \"{{name}}\"? Le variabili al suo interno restano: escono soltanto dalla cartella."
+  },
+  "xray": {
+    "title": "Dove viene usata",
+    "count": "{{count}} punti",
+    "nowhere": "ancora da nessuna parte",
+    "rowCount": "Usata in {{count}} punti",
+    "rowNone": "Ancora nulla la usa",
+    "jump": "Portami lì",
+    "noJump": "Questo non può essere aperto direttamente",
+    "up": "sale in {{n}}",
+    "down": "scende in {{n}}",
+    "changed": "cambia in {{n}}",
+    "checked": "controllata in {{n}}",
+    "shown": "mostrata in {{n}}",
+    "orphan": "Nella tua storia non la usa ancora nulla. Resterà al suo valore iniziale.",
+    "neverChanged": "Niente la modifica mai, quindi resta al valore iniziale per tutto il gioco. Volevi cambiarla da qualche parte?",
+    "neverUsed": "Niente la controlla o la mostra mai, quindi modificarla non cambia nulla di ciò che vede il giocatore."
+  },
+  "picker": {
+    "placeholder": "Scegli una variabile…",
+    "search": "Cerca, oppure scrivi un nuovo nome…",
+    "none": "Ancora nessuna variabile.",
+    "nameTaken": "Esiste già una variabile con quel nome.",
+    "createAs": "Crea “{{name}}” come…",
+    "type": {
+      "boolean": "Sì / No",
+      "number": "Numero",
+      "string": "Testo"
+    },
+    "typeHint": {
+      "boolean": "Qualcosa che è successo oppure no",
+      "number": "Qualcosa che conti o misuri",
+      "string": "Parole — un nome, un percorso, un colore"
+    }
+  },
+  "token": {
+    "insert": "Inserisci una variabile in questo testo: mostrerà il valore durante il gioco",
+    "pick": "Quale variabile?"
+  },
+  "meaning": {
+    "iconTitle": "Un'emoji, per riconoscere questa variabile a colpo d'occhio",
+    "colorTitle": "Un colore, usato ovunque compaia questa variabile",
+    "descPlaceholder": "Che cosa significa nella tua storia — ad es. “Quanto le piaci a Yuki”"
+  },
+  "bands": {
+    "label": "Dai un nome ai numeri",
+    "hint": "Dai un nome agli intervalli una volta sola: poi potrai scrivere “quando Yuki è Amica” invece di “quando Affetto è 41 o più”.",
+    "startBlank": "Parti da zero",
+    "presetHint": "Scegline uno per iniziare: dopo puoi rinominare, ricolorare e rinumerare ogni gradino.",
+    "namePlaceholder": "Amico",
+    "iconTitle": "Un'emoji per questo gradino (facoltativa)",
+    "colorTitle": "Colore di questo gradino",
+    "from": "da",
+    "andUp": "{{from}} o più",
+    "andUpShort": "o più",
+    "add": "Aggiungi un altro gradino",
+    "remove": "Rimuovi questo gradino",
+    "rowSummary_one": "{{count}} gradino con nome",
+    "rowSummary_other": "{{count}} gradini con nome",
+    "showAsLabel": "Quando compare nel testo della tua storia",
+    "showAsNumber": "Mostra il numero — “34”",
+    "showAsBand": "Mostra il nome — “Amico”",
+    "showAsBoth": "Mostra entrambi — “Amico (34)”",
+    "showAsHint": "È ciò che {{token}} stampa nei dialoghi e nelle scelte."
+  },
+  "valueBounds": "Intervallo di valori (facoltativo)",
+  "noMin": "Nessun minimo",
+  "noMax": "Nessun massimo",
+  "valueBoundsHint": "Ogni modifica (Imposta variabile da comandi, pulsanti o scelte) viene limitata a questo intervallo, così il valore non supera mai ciò che intendi (ad esempio tenere l'affetto tra 0 e 100)."
 }

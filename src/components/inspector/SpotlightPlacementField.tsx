@@ -1,3 +1,7 @@
+/* Keys are namespace-prefixed on purpose: this field is rendered from BOTH the command
+   inspector and the screen FX editors, whose `t` carry different namespaces. Without the
+   prefix the same key would resolve in two places — and the coverage checker, which reads a
+   file's own useTranslation, could not see them at all. */
 import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { FormField, TextInput, RangeInput } from '../ui/Form';
@@ -60,24 +64,24 @@ export const SpotlightCanvasPicker: React.FC<{ cmd: any; onApply: (p: any) => vo
     return createPortal(
         <div className="fixed inset-0 z-[100000] bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
             <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-4 w-full max-w-2xl" onClick={e => e.stopPropagation()}>
-                <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">{t('fx.placeSpotlight', 'Place the spotlight')}</h3>
-                <p className="text-xs text-[var(--text-secondary)] mb-2">{t('fx.placeSpotlightHint', 'Click or drag to place the light source (it snaps to the screen edges). Use the Aim slider below to point the beam.')}</p>
+                <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">{t('ui:fx.placeSpotlight', 'Place the spotlight')}</h3>
+                <p className="text-xs text-[var(--text-secondary)] mb-2">{t('ui:fx.placeSpotlightHint', 'Click or drag to place the light source (it snaps to the screen edges). Use the Aim slider below to point the beam.')}</p>
                 <div ref={stageRef} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
                     className="relative w-full rounded-lg overflow-hidden cursor-crosshair select-none"
                     style={{ aspectRatio: '16 / 9', background: '#11141c', backgroundImage: 'linear-gradient(rgba(255,255,255,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.06) 1px,transparent 1px)', backgroundSize: '10% 10%', touchAction: 'none' }}>
                     <BeamPreview sx={sx} sy={sy} aim={aim} cmd={cmd} />
                     <div className="absolute w-3 h-3 rounded-full bg-amber-300 border border-black/50 -translate-x-1/2 -translate-y-1/2 pointer-events-none" style={{ left: `${sx}%`, top: `${sy}%` }} />
                 </div>
-                <FormField label={`${t('fx.aimAngle', 'Aim direction')} (${Math.round(aim)}°)`}>
+                <FormField label={`${t('ui:fx.aimAngle', 'Aim direction')} (${Math.round(aim)}°)`}>
                     <RangeInput min={-170} max={170} value={aim} onChange={e => setAim(clamp(parseFloat(e.target.value), -170, 170))} className="w-full accent-[var(--accent-lavender)]" />
                 </FormField>
                 <div className="grid grid-cols-2 gap-2 mt-1">
-                    <FormField label={t('fx.sourceX', 'Source X %')}><TextInput type="number" value={Math.round(sx)} onChange={e => setSx(clamp(parseFloat(e.target.value), 0, 100))} /></FormField>
-                    <FormField label={t('fx.sourceY', 'Source Y %')}><TextInput type="number" value={Math.round(sy)} onChange={e => setSy(clamp(parseFloat(e.target.value), 0, 100))} /></FormField>
+                    <FormField label={t('ui:fx.sourceX', 'Source X %')}><TextInput type="number" value={Math.round(sx)} onChange={e => setSx(clamp(parseFloat(e.target.value), 0, 100))} /></FormField>
+                    <FormField label={t('ui:fx.sourceY', 'Source Y %')}><TextInput type="number" value={Math.round(sy)} onChange={e => setSy(clamp(parseFloat(e.target.value), 0, 100))} /></FormField>
                 </div>
                 <div className="flex justify-end gap-2 mt-3">
-                    <button type="button" onClick={onClose} className="px-3 py-1.5 rounded-md text-xs border border-[var(--border-subtle)] text-[var(--text-secondary)]">{t('common.cancel', 'Cancel')}</button>
-                    <button type="button" onClick={() => onApply({ sourceX: Math.round(sx), sourceY: Math.round(sy), aimAngle: Math.round(aim) })} className="px-3 py-1.5 rounded-md text-xs bg-[var(--accent-purple)] text-white font-semibold">{t('common.apply', 'Apply')}</button>
+                    <button type="button" onClick={onClose} className="px-3 py-1.5 rounded-md text-xs border border-[var(--border-subtle)] text-[var(--text-secondary)]">{t('ui:common.cancel', 'Cancel')}</button>
+                    <button type="button" onClick={() => onApply({ sourceX: Math.round(sx), sourceY: Math.round(sy), aimAngle: Math.round(aim) })} className="px-3 py-1.5 rounded-md text-xs bg-[var(--accent-purple)] text-white font-semibold">{t('ui:common.apply', 'Apply')}</button>
                 </div>
             </div>
         </div>, document.body);
@@ -88,13 +92,13 @@ const SpotlightPlacementField: React.FC<{ cmd: any; updateCommand: (u: any) => v
     const sx = cmd.sourceX ?? 50, sy = cmd.sourceY ?? 0, aim = cmd.aimAngle ?? 0;
     return <>
         <div className="grid grid-cols-2 gap-2">
-            <FormField label={t('fx.sourceX', 'Source X %')}><TextInput type="number" value={sx} onChange={e => updateCommand({ sourceX: clamp(parseFloat(e.target.value), 0, 100) })} /></FormField>
-            <FormField label={t('fx.sourceY', 'Source Y %')}><TextInput type="number" value={sy} onChange={e => updateCommand({ sourceY: clamp(parseFloat(e.target.value), 0, 100) })} /></FormField>
+            <FormField label={t('ui:fx.sourceX', 'Source X %')}><TextInput type="number" value={sx} onChange={e => updateCommand({ sourceX: clamp(parseFloat(e.target.value), 0, 100) })} /></FormField>
+            <FormField label={t('ui:fx.sourceY', 'Source Y %')}><TextInput type="number" value={sy} onChange={e => updateCommand({ sourceY: clamp(parseFloat(e.target.value), 0, 100) })} /></FormField>
         </div>
-        <FormField label={`${t('fx.aimAngle', 'Aim direction')} (${aim}°)`}>
+        <FormField label={`${t('ui:fx.aimAngle', 'Aim direction')} (${aim}°)`}>
             <RangeInput min={-170} max={170} value={aim} onChange={e => updateCommand({ aimAngle: clamp(parseFloat(e.target.value), -170, 170) })} className="w-full accent-[var(--accent-lavender)]" />
         </FormField>
-        <button type="button" onClick={() => setOpen(true)} className="w-full mt-1 px-3 py-1.5 rounded-md text-xs border border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-purple)]">📍 {t('fx.pickOnCanvas', 'Place source on canvas')}</button>
+        <button type="button" onClick={() => setOpen(true)} className="w-full mt-1 px-3 py-1.5 rounded-md text-xs border border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-purple)]">📍 {t('ui:fx.pickOnCanvas', 'Place source on canvas')}</button>
         {open && <SpotlightCanvasPicker cmd={cmd} onApply={(p) => { updateCommand(p); setOpen(false); }} onClose={() => setOpen(false)} t={t} />}
     </>;
 };

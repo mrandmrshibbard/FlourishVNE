@@ -238,5 +238,6 @@
     "downloading": "Configurando as ferramentas Android (única vez)…",
     "continue": "Baixar e continuar",
     "cancel": "Cancelar"
-  }
+  },
+  "cancelBuild": "Parar esta exportação e limpar"
 }

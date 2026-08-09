@@ -13,6 +13,8 @@ export type CharacterAction =
     | { type: 'ADD_CHARACTER_LAYER', payload: { characterId: VNID, name: string } }
     | { type: 'UPDATE_CHARACTER_LAYER', payload: { characterId: VNID, layerId: VNID, name: string } }
     | { type: 'DELETE_CHARACTER_LAYER', payload: { characterId: VNID, layerId: VNID } }
+    /** Bulk delete from the layer list's multi-select — one atomic dispatch, see the case. */
+    | { type: 'DELETE_CHARACTER_LAYERS', payload: { characterId: VNID, layerIds: VNID[] } }
     | { type: 'ADD_LAYER_ASSET', payload: { characterId: VNID, layerId: VNID, name: string } & Partial<VNLayerAsset> }
     | { type: 'DELETE_LAYER_ASSET', payload: { characterId: VNID, layerId: VNID, assetId: VNID } }
     | { type: 'UPDATE_LAYER_ASSET', payload: { characterId: VNID, layerId: VNID, assetId: VNID, updates: Partial<VNLayerAsset> } }
@@ -43,6 +45,60 @@ export type CharacterAction =
     | { type: 'ADD_CHARACTER_ANIMATION', payload: { characterId: VNID, name: string } }
     | { type: 'UPDATE_CHARACTER_ANIMATION', payload: { characterId: VNID, animationId: VNID, updates: Partial<VNCharacterAnimation> } }
     | { type: 'DELETE_CHARACTER_ANIMATION', payload: { characterId: VNID, animationId: VNID } };
+
+/**
+ * Remove one or more layers from a character, cleaning up everywhere they're referenced.
+ *
+ * Shared by the single-layer and bulk delete actions so the cleanup can never drift between
+ * them: a layer also lives in every expression's `layerConfiguration` and in each pose's
+ * `layerOrder` / `hiddenLayers`, and leaving it behind in any of those leaves a dangling id
+ * that the layout resolver has to keep stepping around.
+ *
+ * All updates are immutable — an earlier in-place delete here mutated expression objects that
+ * the undo history still shared.
+ */
+const removeLayersFromCharacter = (character: VNCharacter, layerIds: Set<VNID>): VNCharacter => {
+    const remainingLayers: Record<VNID, VNCharacterLayer> = {};
+    for (const [id, layer] of Object.entries(character.layers)) {
+        if (!layerIds.has(id)) remainingLayers[id] = layer;
+    }
+
+    const newExpressions: Record<VNID, VNCharacterExpression> = {};
+    for (const [exprId, expr] of Object.entries(character.expressions)) {
+        const touched = Object.keys(expr.layerConfiguration).some(id => layerIds.has(id));
+        if (!touched) { newExpressions[exprId] = expr; continue; }
+        const restCfg: Record<VNID, VNID> = {};
+        for (const [id, assetId] of Object.entries(expr.layerConfiguration)) {
+            if (!layerIds.has(id)) restCfg[id] = assetId as VNID;
+        }
+        newExpressions[exprId] = { ...expr, layerConfiguration: restCfg };
+    }
+
+    // Drop the fields entirely once they empty, matching how poses store "nothing special here".
+    let newPoses = character.poses;
+    if (character.poses) {
+        const posesNext: Record<VNID, VNCharacterPose> = {};
+        for (const [poseId, pose] of Object.entries(character.poses)) {
+            let p = pose;
+            if (p.layerOrder?.some(id => layerIds.has(id))) {
+                const filtered = p.layerOrder.filter(id => !layerIds.has(id));
+                const { layerOrder: _lo, ...rest } = p;
+                p = filtered.length ? { ...rest, layerOrder: filtered } : rest as VNCharacterPose;
+            }
+            if (p.hiddenLayers?.some(id => layerIds.has(id))) {
+                const filtered = p.hiddenLayers.filter(id => !layerIds.has(id));
+                const { hiddenLayers: _hl, ...rest } = p;
+                p = filtered.length ? { ...rest, hiddenLayers: filtered } : rest as VNCharacterPose;
+            }
+            posesNext[poseId] = p;
+        }
+        newPoses = posesNext;
+    }
+
+    return newPoses !== character.poses
+        ? { ...character, layers: remainingLayers, expressions: newExpressions, poses: newPoses }
+        : { ...character, layers: remainingLayers, expressions: newExpressions };
+};
 
 export const characterReducer = (state: VNProject, action: CharacterAction): VNProject => {
   switch (action.type) {
@@ -131,42 +187,23 @@ export const characterReducer = (state: VNProject, action: CharacterAction): VNP
     case 'DELETE_CHARACTER_LAYER': {
         const { characterId, layerId } = action.payload;
         const character = state.characters[characterId];
-        if (!character) return state;
-        const { [layerId]: _, ...remainingLayers } = character.layers;
-        // Also remove this layer from all expressions (immutably — the old in-place delete
-        // mutated expression objects shared with the undo history).
-        const newExpressions: Record<VNID, VNCharacterExpression> = {};
-        for (const [exprId, expr] of Object.entries(character.expressions)) {
-            if (layerId in expr.layerConfiguration) {
-                const { [layerId]: _cfg, ...restCfg } = expr.layerConfiguration;
-                newExpressions[exprId] = { ...expr, layerConfiguration: restCfg };
-            } else {
-                newExpressions[exprId] = expr;
-            }
-        }
-        // And from every pose's layerOrder / hiddenLayers (drop the fields when they empty).
-        let newPoses = character.poses;
-        if (character.poses) {
-            const posesNext: Record<VNID, VNCharacterPose> = {};
-            for (const [poseId, pose] of Object.entries(character.poses)) {
-                let p = pose;
-                if (p.layerOrder?.includes(layerId)) {
-                    const filtered = p.layerOrder.filter(id => id !== layerId);
-                    const { layerOrder: _lo, ...rest } = p;
-                    p = filtered.length ? { ...rest, layerOrder: filtered } : rest as VNCharacterPose;
-                }
-                if (p.hiddenLayers?.includes(layerId)) {
-                    const filtered = p.hiddenLayers.filter(id => id !== layerId);
-                    const { hiddenLayers: _hl, ...rest } = p;
-                    p = filtered.length ? { ...rest, hiddenLayers: filtered } : rest as VNCharacterPose;
-                }
-                posesNext[poseId] = p;
-            }
-            newPoses = posesNext;
-        }
-        const updatedChar: VNCharacter = newPoses !== character.poses
-            ? { ...character, layers: remainingLayers, expressions: newExpressions, poses: newPoses }
-            : { ...character, layers: remainingLayers, expressions: newExpressions };
+        if (!character?.layers[layerId]) return state;
+        const updatedChar = removeLayersFromCharacter(character, new Set([layerId]));
+        return { ...state, characters: { ...state.characters, [characterId]: updatedChar } };
+    }
+
+    /**
+     * Bulk delete. ONE dispatch on purpose: deleting selected layers one at a time would make
+     * each removal re-render and re-resolve against a character that has already changed — the
+     * same class of bug the scene editor's multi-delete comment warns about with indices.
+     */
+    case 'DELETE_CHARACTER_LAYERS': {
+        const { characterId, layerIds } = action.payload;
+        const character = state.characters[characterId];
+        if (!character || !layerIds?.length) return state;
+        const wanted = new Set(layerIds.filter(id => character.layers[id]));
+        if (wanted.size === 0) return state;
+        const updatedChar = removeLayersFromCharacter(character, wanted);
         return { ...state, characters: { ...state.characters, [characterId]: updatedChar } };
     }
 

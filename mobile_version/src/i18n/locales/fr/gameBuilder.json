@@ -228,5 +228,16 @@
     "downloading": "Configuration des outils Android (unique)…",
     "continue": "Télécharger et continuer",
     "cancel": "Annuler"
-  }
+  },
+  "webOptions": {
+    "title": "Options web",
+    "fullscreenLabel": "Ajouter un bouton plein écran",
+    "fullscreenHint": "Affiche un petit bouton par-dessus le jeu qui permet au joueur de remplir tout son écran — idéal pour itch.io, où les jeux navigateur paraissent souvent petits.",
+    "fullscreenCorner": "Coin du bouton",
+    "cornerTopRight": "En haut à droite",
+    "cornerTopLeft": "En haut à gauche",
+    "cornerBottomRight": "En bas à droite",
+    "cornerBottomLeft": "En bas à gauche"
+  },
+  "cancelBuild": "Arrêter cette exportation et nettoyer"
 }

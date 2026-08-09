@@ -1,0 +1,88 @@
+{
+  "title": "故事设定集",
+  "empty": {
+    "title": "你的故事设定集",
+    "body": "把与故事有关的一切集中在一处——梗概、角色笔记、地点、剧情线。只有你能看到，绝不会随游戏一起发布。",
+    "starterButton": "创建初始分区"
+  },
+  "starter": {
+    "synopsis": "故事梗概",
+    "chapters": "章节",
+    "characters": "角色",
+    "locations": "地点",
+    "arcs": "剧情线"
+  },
+  "sections": {
+    "add": "添加分区",
+    "newName": "新分区",
+    "unnamed": "未命名",
+    "none": "还没有分区。",
+    "namePlaceholder": "分区名称",
+    "delete": "删除分区",
+    "deleteConfirm": "确定删除“{{name}}”？",
+    "deleteConfirmWithSubs": "删除“{{name}}”及其 {{count}} 个子分区？其中的笔记将一并丢失，且无法撤销。",
+    "moveUp": "上移",
+    "moveDown": "下移"
+  },
+  "subsections": {
+    "add": "添加子分区",
+    "newName": "新子分区",
+    "namePlaceholder": "子分区名称",
+    "delete": "删除子分区",
+    "deleteConfirm": "确定删除“{{name}}”？"
+  },
+  "editor": {
+    "edit": "✏ 编辑",
+    "preview": "👁 预览",
+    "heading": "标题（再次点击可变小）",
+    "bold": "加粗",
+    "italic": "斜体",
+    "bulletList": "项目符号列表",
+    "numberedList": "编号列表",
+    "placeholder": "在这里写下你的笔记……使用上方按钮添加标题、加粗和列表。",
+    "placeholderWord": "文字"
+  },
+  "glossary": {
+    "title": "术语表",
+    "navHint": "玩家可在对话中悬停查看解释的词语",
+    "back": "故事设定集",
+    "emptyTitle": "术语表",
+    "emptyBody": "添加玩家可能不了解的词语。当它出现在对话中时会被高亮，悬停即可看到你的解释。",
+    "addTerm": "添加词条",
+    "newTerm": "新词条",
+    "search": "搜索词条…",
+    "none": "还没有词条。",
+    "noResults": "没有匹配的词条。",
+    "term": "词语或短语",
+    "alternatives": "其他写法或形式",
+    "alternativesHelp": "例如复数形式——按回车添加",
+    "caseSensitive": "区分大小写",
+    "color": "高亮颜色",
+    "useDefaultColor": "使用默认颜色",
+    "tooltipTitle": "提示框标题（留空则用词语本身）",
+    "description": "解释",
+    "extra": "小注释（可选）",
+    "enabledEntry": "在游戏中显示",
+    "preview": "在游戏中的效果（把鼠标移到该词上）：",
+    "previewLine": "据说 {{term}} 只在夜里出现。",
+    "previewNoMatch": "该词条未能匹配示例——若开启了“区分大小写”，请检查大小写。",
+    "delete": "删除词条",
+    "deleteConfirm": "从术语表中删除“{{term}}”？",
+    "import": "导入…",
+    "export": "导出",
+    "importSuccess": "已导入 {{count}} 个词条",
+    "importError": "该文件不是 Flourish 术语表。",
+    "settings": {
+      "enabled": "在游戏中高亮术语表词条",
+      "defaultColor": "默认颜色",
+      "style": "词条的突出方式",
+      "styleUnderline": "下划线",
+      "styleColor": "彩色文字",
+      "styleGlow": "柔和辉光"
+    }
+  },
+  "pluginBanner": {
+    "text": "故事设定集现已内置于编辑器，你在旧插件中的笔记已导入到这里。可以放心从“工具 → 插件管理器”卸载该插件。",
+    "dismiss": "知道了"
+  }
+}

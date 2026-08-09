@@ -1,7 +1,7 @@
 {
   "name": "flourish-visual-novel-engine",
   "private": true,
-  "version": "4.1.2",
+  "version": "4.1.4",
   "description": "Flourish Visual Novel Engine",
   "author": "Memento_Morii",
   "type": "module",
@@ -25,6 +25,7 @@
     "electron:build:mac": "npm run stage:build-tools && npm run build:full && electron-builder --mac",
     "electron:build:linux": "npm run stage:build-tools && npm run build:full && electron-builder --linux",
     "dist": "npm run stage:build-tools && npm run build:full && electron-builder --win --x64",
+    "i18n:check": "node scripts/i18n-check.cjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

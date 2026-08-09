@@ -362,6 +362,64 @@ const ActionFields: React.FC<{
                 </>))}
             </>);
         }
+        case UIActionType.ChangePose: {
+            const poseChar = a.characterId ? project.characters[a.characterId] : undefined;
+            const poses = poseChar ? Object.values(poseChar.poses || {}) : [];
+            return group('purple', <>
+                {field(t('actionEditor.character', 'Character'), sel(a.characterId || '', v => set({ characterId: v, poseId: null }), <>
+                    <option value="">—</option>
+                    {Object.values(project.characters).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </>))}
+                {field(t('actionEditor.pose', 'Pose'), sel(a.poseId || '', v => set({ poseId: v || null }), <>
+                    <option value="">{t('actionEditor.poseDefault', 'Default pose')}</option>
+                    {poses.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </>))}
+                <p className="text-[10px] col-span-2" style={{ color: 'var(--text-muted)' }}>
+                    {t('actionEditor.changePoseHint', 'Only works while that character is on stage. Their outfit and position stay exactly as they are.')}
+                </p>
+            </>);
+        }
+        case UIActionType.ChangeCharacter: {
+            const incoming = a.toCharacterId ? project.characters[a.toCharacterId] : undefined;
+            return group('purple', <>
+                {field(t('actionEditor.swapFrom', 'Replace who is on stage'), sel(a.fromCharacterId || '', v => set({ fromCharacterId: v }), <>
+                    <option value="">—</option>
+                    {Object.values(project.characters).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </>))}
+                {field(t('actionEditor.swapTo', 'With this character'), sel(a.toCharacterId || '', v => set({ toCharacterId: v, expressionId: null, poseId: null }), <>
+                    <option value="">—</option>
+                    {Object.values(project.characters).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </>))}
+                {incoming && field(t('actionEditor.expression', 'Expression'), sel(a.expressionId || '', v => set({ expressionId: v || null }), <>
+                    <option value="">{t('actionEditor.expressionFirst', 'Their first expression')}</option>
+                    {Object.values(incoming.expressions || {}).map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                </>))}
+                {incoming && field(t('actionEditor.pose', 'Pose'), sel(a.poseId || '', v => set({ poseId: v || null }), <>
+                    <option value="">{t('actionEditor.poseDefault', 'Default pose')}</option>
+                    {Object.values(incoming.poses || {}).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </>))}
+                <p className="text-[10px] col-span-2" style={{ color: 'var(--text-muted)' }}>
+                    {t('actionEditor.changeCharacterHint', 'The newcomer takes over the same spot — same position and size as the character they replace.')}
+                </p>
+            </>);
+        }
+        case UIActionType.PlayCharacterAnimation: {
+            const animChar = a.characterId ? project.characters[a.characterId] : undefined;
+            const anims = animChar ? Object.values((animChar as any).animations || {}) : [];
+            return group('purple', <>
+                {field(t('actionEditor.character', 'Character'), sel(a.characterId || '', v => set({ characterId: v, animationId: null }), <>
+                    <option value="">—</option>
+                    {Object.values(project.characters).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </>))}
+                {field(t('actionEditor.animation', 'Animation'), sel(a.animationId || '', v => set({ animationId: v || null }), <>
+                    <option value="">{t('actionEditor.animationStop', 'Stop the current animation')}</option>
+                    {anims.map((an: any) => <option key={an.id} value={an.id}>{an.name}</option>)}
+                </>))}
+                <p className="text-[10px] col-span-2" style={{ color: 'var(--text-muted)' }}>
+                    {t('actionEditor.playCharacterAnimationHint', 'Plays one of the character\'s own animations (made in the Animation Studio). Only works while they are on stage.')}
+                </p>
+            </>);
+        }
         case UIActionType.OpenURL:
             return group('sky', <>
                 {field(t('actionEditor.url', 'URL'), txt(a.url || '', v => set({ url: v }), { placeholder: t('actionEditor.urlPlaceholder', 'https://…') }))}

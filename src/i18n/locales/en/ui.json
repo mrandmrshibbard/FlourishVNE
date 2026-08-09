@@ -53,7 +53,7 @@
     "cycleLayerAsset": "Cycle Layer Asset",
     "toggleScreen": "Toggle Screen",
     "openURL": "Open URL",
-    "playAnimation": "Play Animation",
+    "playAnimation": "Play Animation (screen element)",
     "changeImage": "Change Image",
     "showElement": "Show Element",
     "hideElement": "Hide Element",
@@ -74,7 +74,10 @@
     "openPauseMenu": "Open Pause Menu",
     "startTimer": "Start Timer",
     "stopTimer": "Stop Timer",
-    "clearUiPalette": "Reset UI Colors (undo mini-game palette)"
+    "clearUiPalette": "Reset UI Colors (undo mini-game palette)",
+    "changePose": "Change Pose",
+    "changeCharacter": "Change Character",
+    "playCharacterAnimation": "Play Character Animation"
   },
   "actionsList": {
     "actions": "Actions",

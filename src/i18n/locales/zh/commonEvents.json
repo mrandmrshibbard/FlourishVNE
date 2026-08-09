@@ -55,5 +55,24 @@
   "emptyTitle": "公共事件",
   "emptyDescNew": "创建可从任何场景调用的可复用命令序列。公共事件的工作方式类似函数 —— 编写一次，处处复用。",
   "emptyDescSelect": "从侧边栏选择一个公共事件进行编辑。",
-  "createFirst": "创建第一个公共事件"
+  "createFirst": "创建第一个公共事件",
+  "branchEndTip": "用于结束上方的分支——它会随分支一起移动和删除。",
+  "branchEndLabel": "分支结束",
+  "dragToReorder": "点击编辑 · 拖动排序",
+  "expandBranch": "展开分支",
+  "collapseBranch": "折叠分支",
+  "moveUp": "上移",
+  "moveDown": "下移",
+  "removeBranchTip": "删除该分支（其中的指令会保留）",
+  "addOtherwiseIf": "+ 否则如果",
+  "addOtherwiseIfTip": "添加一个“否则如果”——当上面的条件都不满足时再检查它",
+  "addOtherwise": "+ 否则",
+  "addOtherwiseTip": "添加一个“否则”——当上面都不满足时执行",
+  "addOtherwiseAlready": "该分支已经有一个“否则”——每个分支只能有一个。",
+  "hc": {
+    "exportAllCommonEventsTo": "将所有公共事件导出为 JSON 文件",
+    "importCommonEventsFromA": "从 JSON 文件导入公共事件",
+    "export": "导出",
+    "import": "导入"
+  }
 }

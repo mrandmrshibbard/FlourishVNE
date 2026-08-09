@@ -65,5 +65,88 @@
     "elSetsVariable": "要素「{{name}}」: 変数を設定",
     "elCyclesLayer": "要素「{{name}}」: レイヤーアセットを循環",
     "elTextRef": "要素「{{name}}」: テキストで参照"
-  }
+  },
+  "list": {
+    "searchPlaceholder": "変数を検索…",
+    "sortTitle": "並び順",
+    "sortProject": "作成順",
+    "sortAz": "A → Z",
+    "sortType": "種類ごと",
+    "group": "まとめる",
+    "groupHint": "「hero_gold」「hero_trust」のような名前の変数は「hero」という見出しにまとまります",
+    "noResults": "検索に一致する変数がありません。",
+    "newFolder": "新しいフォルダー。変数をドラッグして入れると整理できます",
+    "newFolderName": "新しいフォルダー",
+    "dragHere": "ここに変数をドラッグ",
+    "noFolder": "フォルダーなし",
+    "deleteFolderConfirm": "フォルダー「{{name}}」を削除しますか？中の変数は残り、フォルダーから出るだけです。"
+  },
+  "xray": {
+    "title": "使われている場所",
+    "count": "{{count}} か所",
+    "nowhere": "まだどこにもありません",
+    "rowCount": "{{count}} か所で使用",
+    "rowNone": "まだ何にも使われていません",
+    "jump": "そこへ移動",
+    "noJump": "これは直接開けません",
+    "up": "{{n}} か所で増える",
+    "down": "{{n}} か所で減る",
+    "changed": "{{n}} か所で変更",
+    "checked": "{{n}} か所で判定",
+    "shown": "{{n}} か所で表示",
+    "orphan": "物語のどこでもまだ使われていません。開始時の値のままになります。",
+    "neverChanged": "どこでも変更されないため、ゲーム中ずっと初期値のままです。どこかで変えるつもりでしたか？",
+    "neverUsed": "どこでも判定にも表示にも使われていないため、変更してもプレイヤーに見える結果は変わりません。"
+  },
+  "picker": {
+    "placeholder": "変数を選択…",
+    "search": "検索、または新しい名前を入力…",
+    "none": "変数はまだありません。",
+    "nameTaken": "その名前の変数はすでにあります。",
+    "createAs": "「{{name}}」を次として作成…",
+    "type": {
+      "boolean": "はい / いいえ",
+      "number": "数値",
+      "string": "テキスト"
+    },
+    "typeHint": {
+      "boolean": "起きたか、起きなかったか",
+      "number": "数えたり測ったりするもの",
+      "string": "言葉 — 名前、ルート、色など"
+    }
+  },
+  "token": {
+    "insert": "この文章に変数を差し込みます。プレイ中はその値が表示されます",
+    "pick": "どの変数にしますか？"
+  },
+  "meaning": {
+    "iconTitle": "ひと目で見分けるための絵文字",
+    "colorTitle": "この変数が出てくる場所すべてで使われる色",
+    "descPlaceholder": "物語の中での意味 — 例：「ユキがあなたをどれくらい好きか」"
+  },
+  "bands": {
+    "label": "数値に名前をつける",
+    "hint": "範囲に一度名前をつけておけば、「好感度が 41 以上のとき」ではなく「ユキが『友だち』のとき」と書けます。",
+    "startBlank": "空から始める",
+    "presetHint": "まずは 1 つ選んでください。名前・色・数値はあとから自由に変えられます。",
+    "namePlaceholder": "友だち",
+    "iconTitle": "この段階の絵文字（任意）",
+    "colorTitle": "この段階の色",
+    "from": "この値から",
+    "andUp": "{{from}} 以上",
+    "andUpShort": "以上",
+    "add": "段階をもう 1 つ追加",
+    "remove": "この段階を削除",
+    "rowSummary_one": "名前つきの段階 {{count}} 件",
+    "rowSummary_other": "名前つきの段階 {{count}} 件",
+    "showAsLabel": "物語の文章に出てくるときの表示",
+    "showAsNumber": "数値を表示 —「34」",
+    "showAsBand": "名前を表示 —「友だち」",
+    "showAsBoth": "両方を表示 —「友だち（34）」",
+    "showAsHint": "会話や選択肢の中で {{token}} が表示する内容です。"
+  },
+  "valueBounds": "値の範囲（任意）",
+  "noMin": "下限なし",
+  "noMax": "上限なし",
+  "valueBoundsHint": "コマンド・ボタン・選択肢からの「変数を設定」による変更はすべてこの範囲に収められます。値が意図を超えて増減することはありません（例：好感度を 0〜100 に保つ）。"
 }

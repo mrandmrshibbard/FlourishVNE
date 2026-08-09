@@ -473,6 +473,7 @@ interface UIAssetsSettingsProps {
 }
 
 const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }) => {
+    const { t } = useTranslation('settings');
     const allImages = Object.values(project.images || {}) as any[];
 
     editorDebugLog('[UIAssetsSettings] Rendering with images:', allImages.length, allImages.map((i: any) => i.name));
@@ -548,11 +549,11 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                 onChange={(e) => onChange(e.target.value)}
                 className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
             >
-                <option value="stretch">Stretch (fill box)</option>
-                <option value="contain">Contain (fit inside)</option>
-                <option value="cover">Cover (fill &amp; crop)</option>
-                <option value="tile">Tile (repeat)</option>
-                <option value="nine-slice">9-Slice (preserve corners)</option>
+                <option value="stretch">{t('hc.stretchFillBox', 'Stretch (fill box)')}</option>
+                <option value="contain">{t('hc.containFitInside', 'Contain (fit inside)')}</option>
+                <option value="cover">{t('hc.coverFillCrop', 'Cover (fill & crop)')}</option>
+                <option value="tile">{t('hc.tileRepeat', 'Tile (repeat)')}</option>
+                <option value="nine-slice">{t('hc.9SlicePreserveCorners', '9-Slice (preserve corners)')}</option>
             </select>
             <p className="mt-1 text-xs text-[var(--text-secondary)]">
                 {value === 'stretch' && 'Stretches image to fill the entire box. May distort if aspect ratios differ.'}
@@ -586,7 +587,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
             </div>
             <div className="mt-1 h-4 rounded border border-[var(--border-default)]"
                  style={{ backgroundColor: colorValue, opacity: opacityValue / 100 }}
-                 title="Color preview at current opacity"
+                 title={t('hc.colorPreviewAtCurrentOpacity', 'Color preview at current opacity')}
             />
         </div>
     );
@@ -594,29 +595,29 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
     return (
         <div className="p-6">
             <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-white">UI Assets</h3>
+                <h3 className="text-xl font-bold text-white">{t('hc.uiAssets', 'UI Assets')}</h3>
                 {!showResetConfirm ? (
                     <button
                         onClick={() => setShowResetConfirm(true)}
                         className="px-3 py-1.5 text-xs rounded-md border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-amber-400 hover:border-amber-500/50 transition-colors"
-                        title="Reset all dialogue and choice styling to defaults"
+                        title={t('hc.resetAllDialogueAndChoice', 'Reset all dialogue and choice styling to defaults')}
                     >
-                        Reset to Defaults
+                        {t('hc.resetToDefaults', 'Reset to Defaults')}
                     </button>
                 ) : (
                     <div className="flex items-center gap-2">
-                        <span className="text-xs text-amber-400">Reset all UI assets &amp; fonts?</span>
+                        <span className="text-xs text-amber-400">{t('hc.resetAllUiAssetsFonts', 'Reset all UI assets & fonts?')}</span>
                         <button
                             onClick={handleResetToDefaults}
                             className="px-2 py-1 text-xs rounded bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30 transition-colors"
                         >
-                            Confirm
+                            {t('hc.confirm', 'Confirm')}
                         </button>
                         <button
                             onClick={() => setShowResetConfirm(false)}
                             className="px-2 py-1 text-xs rounded bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
                         >
-                            Cancel
+                            {t('hc.cancel', 'Cancel')}
                         </button>
                     </div>
                 )}
@@ -624,7 +625,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
 
             <div className="space-y-6 max-w-md">
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Dialogue Box Image</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.dialogueBoxImage', 'Dialogue Box Image')}</label>
                     <select
                         value={project.ui.dialogueBoxImage?.id || ''}
                         onChange={(e) => {
@@ -651,16 +652,16 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         const url = img?.imageUrl;
                         return url ? (
                             <div className="mt-2 rounded-md overflow-hidden border border-[var(--border-default)]" style={{ maxHeight: '80px' }}>
-                                <img src={url} alt="Dialogue box preview" className="w-full h-full object-contain" style={{ maxHeight: '80px' }} />
+                                <img src={url} alt={t('hc.dialogueBoxPreview', 'Dialogue box preview')} className="w-full h-full object-contain" style={{ maxHeight: '80px' }} />
                             </div>
                         ) : (
-                            <p className="mt-1 text-xs text-amber-400">⚠ Selected image not found in project assets</p>
+                            <p className="mt-1 text-xs text-amber-400">{t('hc.selectedImageNotFoundIn', '⚠ Selected image not found in project assets')}</p>
                         );
                     })()}
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Dialogue Box Border Image</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.dialogueBoxBorderImage', 'Dialogue Box Border Image')}</label>
                     <select
                         value={project.ui.dialogueBoxBorderImage?.id || ''}
                         onChange={(e) => {
@@ -684,10 +685,10 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         const url = img?.imageUrl;
                         return url ? (
                             <div className="mt-2 rounded-md overflow-hidden border border-[var(--border-default)]" style={{ maxHeight: '80px' }}>
-                                <img src={url} alt="Dialogue border preview" className="w-full h-full object-contain" style={{ maxHeight: '80px' }} />
+                                <img src={url} alt={t('hc.dialogueBorderPreview', 'Dialogue border preview')} className="w-full h-full object-contain" style={{ maxHeight: '80px' }} />
                             </div>
                         ) : (
-                            <p className="mt-1 text-xs text-amber-400">⚠ Selected image not found in project assets</p>
+                            <p className="mt-1 text-xs text-amber-400">{t('hc.selectedImageNotFoundIn', '⚠ Selected image not found in project assets')}</p>
                         );
                     })()}
                 </div>
@@ -706,7 +707,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                 )}
 
                 <div className="border-t border-[var(--border-subtle)] pt-4">
-                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Dialogue Box Dimensions</h4>
+                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">{t('hc.dialogueBoxDimensions', 'Dialogue Box Dimensions')}</h4>
                     <div className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Width ({project.ui.dialogueBoxWidth ?? 100}%)</label>
@@ -719,7 +720,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Height (px, 0 = auto)</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.heightPx0Auto', 'Height (px, 0 = auto)')}</label>
                             <input
                                 type="number"
                                 min="0"
@@ -755,7 +756,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
 
                 {/* ─── Dialogue Box Appearance ─── */}
                 <div className="border-t border-[var(--border-subtle)] pt-4">
-                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Dialogue Box Appearance</h4>
+                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">{t('hc.dialogueBoxAppearance', 'Dialogue Box Appearance')}</h4>
                     <div className="space-y-4">
                         {project.ui.dialogueBoxImage && (
                             <ImageFitModeSelect
@@ -773,7 +774,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                     onChange={(e) => onUpdate({ dialogueBoxSlice: parseInt(e.target.value) })}
                                     className="w-full accent-[var(--accent-lavender)]"
                                 />
-                                <p className="mt-1 text-xs text-[var(--text-secondary)]">How many pixels from each edge to preserve as corners/borders. Increase if corners look distorted.</p>
+                                <p className="mt-1 text-xs text-[var(--text-secondary)]">{t('hc.howManyPixelsFromEach', 'How many pixels from each edge to preserve as corners/borders. Increase if corners look distorted.')}</p>
                             </div>
                         )}
                         <ColorOpacityControl
@@ -798,10 +799,10 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
 
                 {/* ─── Namebox (Character Name Label) ─── */}
                 <div className="border-t border-[var(--border-subtle)] pt-4">
-                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Namebox (Character Name)</h4>
+                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">{t('hc.nameboxCharacterName', 'Namebox (Character Name)')}</h4>
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Namebox Image</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.nameboxImage', 'Namebox Image')}</label>
                             <select
                                 value={project.ui.nameboxImage?.id || ''}
                                 onChange={(e) => {
@@ -813,7 +814,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                 }}
                                 className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                             >
-                                <option value="">None (use color)</option>
+                                <option value="">{t('hc.noneUseColor', 'None (use color)')}</option>
                                 {allImages.map(image => (
                                     <option key={image.id} value={image.id}>
                                         {image.name}
@@ -825,10 +826,10 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                 const url = img?.imageUrl;
                                 return url ? (
                                     <div className="mt-2 rounded-md overflow-hidden border border-[var(--border-default)]" style={{ maxHeight: '50px' }}>
-                                        <img src={url} alt="Namebox preview" className="w-full h-full object-contain" style={{ maxHeight: '50px' }} />
+                                        <img src={url} alt={t('hc.nameboxPreview', 'Namebox preview')} className="w-full h-full object-contain" style={{ maxHeight: '50px' }} />
                                     </div>
                                 ) : (
-                                    <p className="mt-1 text-xs text-amber-400">⚠ Selected image not found in project assets</p>
+                                    <p className="mt-1 text-xs text-amber-400">{t('hc.selectedImageNotFoundIn', '⚠ Selected image not found in project assets')}</p>
                                 );
                             })()}
                         </div>
@@ -900,7 +901,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Choice Button Image</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.choiceButtonImage', 'Choice Button Image')}</label>
                     <select
                         value={project.ui.choiceButtonImage?.id || ''}
                         onChange={(e) => {
@@ -924,16 +925,16 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         const url = img?.imageUrl;
                         return url ? (
                             <div className="mt-2 rounded-md overflow-hidden border border-[var(--border-default)]" style={{ maxHeight: '60px' }}>
-                                <img src={url} alt="Choice button preview" className="w-full h-full object-contain" style={{ maxHeight: '60px' }} />
+                                <img src={url} alt={t('hc.choiceButtonPreview', 'Choice button preview')} className="w-full h-full object-contain" style={{ maxHeight: '60px' }} />
                             </div>
                         ) : (
-                            <p className="mt-1 text-xs text-amber-400">⚠ Selected image not found in project assets</p>
+                            <p className="mt-1 text-xs text-amber-400">{t('hc.selectedImageNotFoundIn', '⚠ Selected image not found in project assets')}</p>
                         );
                     })()}
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Choice Button Border Image</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.choiceButtonBorderImage', 'Choice Button Border Image')}</label>
                     <select
                         value={project.ui.choiceButtonBorderImage?.id || ''}
                         onChange={(e) => {
@@ -957,10 +958,10 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         const url = img?.imageUrl;
                         return url ? (
                             <div className="mt-2 rounded-md overflow-hidden border border-[var(--border-default)]" style={{ maxHeight: '60px' }}>
-                                <img src={url} alt="Choice border preview" className="w-full h-full object-contain" style={{ maxHeight: '60px' }} />
+                                <img src={url} alt={t('hc.choiceBorderPreview', 'Choice border preview')} className="w-full h-full object-contain" style={{ maxHeight: '60px' }} />
                             </div>
                         ) : (
-                            <p className="mt-1 text-xs text-amber-400">⚠ Selected image not found in project assets</p>
+                            <p className="mt-1 text-xs text-amber-400">{t('hc.selectedImageNotFoundIn', '⚠ Selected image not found in project assets')}</p>
                         );
                     })()}
                 </div>
@@ -979,10 +980,10 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                 )}
 
                 <div className="border-t border-[var(--border-subtle)] pt-4">
-                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Choice Button Dimensions</h4>
+                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">{t('hc.choiceButtonDimensions', 'Choice Button Dimensions')}</h4>
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Width (px, 0 = auto)</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.widthPx0Auto', 'Width (px, 0 = auto)')}</label>
                             <input
                                 type="number"
                                 min="0"
@@ -994,7 +995,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Height (px, 0 = auto)</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.heightPx0Auto', 'Height (px, 0 = auto)')}</label>
                             <input
                                 type="number"
                                 min="0"
@@ -1020,7 +1021,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
 
                 {/* ─── Choice Button Appearance ─── */}
                 <div className="border-t border-[var(--border-subtle)] pt-4">
-                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Choice Button Appearance</h4>
+                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">{t('hc.choiceButtonAppearance', 'Choice Button Appearance')}</h4>
                     <div className="space-y-4">
                         {project.ui.choiceButtonImage && (
                             <ImageFitModeSelect
@@ -1058,7 +1059,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Hover Image (optional)</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.hoverImageOptional', 'Hover Image (optional)')}</label>
                             <select
                                 value={project.ui.choiceHoverImage?.id || ''}
                                 onChange={(e) => {
@@ -1070,7 +1071,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                 }}
                                 className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                             >
-                                <option value="">None (use brightness effect)</option>
+                                <option value="">{t('hc.noneUseBrightnessEffect', 'None (use brightness effect)')}</option>
                                 {allImages.map(image => (
                                     <option key={image.id} value={image.id}>
                                         {image.name}
@@ -1082,13 +1083,13 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                 const url = img?.imageUrl;
                                 return url ? (
                                     <div className="mt-2 rounded-md overflow-hidden border border-[var(--border-default)]" style={{ maxHeight: '50px' }}>
-                                        <img src={url} alt="Choice hover preview" className="w-full h-full object-contain" style={{ maxHeight: '50px' }} />
+                                        <img src={url} alt={t('hc.choiceHoverPreview', 'Choice hover preview')} className="w-full h-full object-contain" style={{ maxHeight: '50px' }} />
                                     </div>
                                 ) : null;
                             })()}
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Hover Background Color</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.hoverBackgroundColor', 'Hover Background Color')}</label>
                             <ColorInput value={project.ui.choiceHoverColor ?? '#334155'} onChange={v => onUpdate({ choiceHoverColor: v })} />
                         </div>
                     </div>
@@ -1096,10 +1097,10 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
 
                 {/* ─── Text Input Box Customization ─── */}
                 <div className="border-t border-[var(--border-subtle)] pt-4">
-                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Text Input Box</h4>
+                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">{t('hc.textInputBox', 'Text Input Box')}</h4>
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Input Box Image</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.inputBoxImage', 'Input Box Image')}</label>
                             <select
                                 value={project.ui.inputBoxImage?.id || ''}
                                 onChange={(e) => {
@@ -1111,7 +1112,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                 }}
                                 className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                             >
-                                <option value="">None (glass-morphism default)</option>
+                                <option value="">{t('hc.noneGlassMorphismDefault', 'None (glass-morphism default)')}</option>
                                 {allImages.map(image => (
                                     <option key={image.id} value={image.id}>
                                         {image.name}
@@ -1123,16 +1124,16 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                 const url = img?.imageUrl;
                                 return url ? (
                                     <div className="mt-2 rounded-md overflow-hidden border border-[var(--border-default)]" style={{ maxHeight: '60px' }}>
-                                        <img src={url} alt="Input box preview" className="w-full h-full object-contain" style={{ maxHeight: '60px' }} />
+                                        <img src={url} alt={t('hc.inputBoxPreview', 'Input box preview')} className="w-full h-full object-contain" style={{ maxHeight: '60px' }} />
                                     </div>
                                 ) : (
-                                    <p className="mt-1 text-xs text-amber-400">Selected image not found in project assets</p>
+                                    <p className="mt-1 text-xs text-amber-400">{t('hc.selectedImageNotFoundIn2', 'Selected image not found in project assets')}</p>
                                 );
                             })()}
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Input Box Border Image</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.inputBoxBorderImage', 'Input Box Border Image')}</label>
                             <select
                                 value={project.ui.inputBoxBorderImage?.id || ''}
                                 onChange={(e) => {
@@ -1167,7 +1168,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         )}
 
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Width (px, 0 = auto)</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.widthPx0Auto', 'Width (px, 0 = auto)')}</label>
                             <input
                                 type="number"
                                 min="0"
@@ -1194,7 +1195,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
 
                 {/* ─── Input Box Appearance ─── */}
                 <div className="border-t border-[var(--border-subtle)] pt-4">
-                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Input Box Appearance</h4>
+                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">{t('hc.inputBoxAppearance', 'Input Box Appearance')}</h4>
                     <div className="space-y-4">
                         {project.ui.inputBoxImage && (
                             <ImageFitModeSelect
@@ -1236,11 +1237,11 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
 
                 {/* ─── Quick Menu (Skip/Auto/Log/Back) ─── */}
                 <div className="border-t border-[var(--border-subtle)] pt-4">
-                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Quick Menu Buttons</h4>
-                    <p className="text-xs text-[var(--text-secondary)] mb-3">Style the Skip, Auto, Log, and Back buttons shown during gameplay.</p>
+                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">{t('hc.quickMenuButtons', 'Quick Menu Buttons')}</h4>
+                    <p className="text-xs text-[var(--text-secondary)] mb-3">{t('hc.styleTheSkipAutoLog', 'Style the Skip, Auto, Log, and Back buttons shown during gameplay.')}</p>
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Position</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('hc.position', 'Position')}</label>
                             <select
                                 value={project.ui.quickMenuPosition ?? 'above-dialogue'}
                                 onChange={(e) => onUpdate({
@@ -1254,11 +1255,11 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                 })}
                                 className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                             >
-                                <option value="above-dialogue">Above Dialogue Box</option>
-                                <option value="top-right">Top Right</option>
-                                <option value="top-left">Top Left</option>
-                                <option value="bottom-right">Bottom Right (pushes dialogue up)</option>
-                                <option value="bottom-left">Bottom Left (pushes dialogue up)</option>
+                                <option value="above-dialogue">{t('hc.aboveDialogueBox', 'Above Dialogue Box')}</option>
+                                <option value="top-right">{t('hc.topRight', 'Top Right')}</option>
+                                <option value="top-left">{t('hc.topLeft', 'Top Left')}</option>
+                                <option value="bottom-right">{t('hc.bottomRightPushesDialogueUp', 'Bottom Right (pushes dialogue up)')}</option>
+                                <option value="bottom-left">{t('hc.bottomLeftPushesDialogueUp', 'Bottom Left (pushes dialogue up)')}</option>
                                 <option value="hidden">Hidden</option>
                             </select>
                             {(project.ui.quickMenuX !== undefined || project.ui.quickMenuY !== undefined || project.ui.quickMenuWidth !== undefined || project.ui.quickMenuHeight !== undefined) && (
@@ -1266,9 +1267,9 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                     type="button"
                                     onClick={() => onUpdate({ quickMenuX: undefined, quickMenuY: undefined, quickMenuWidth: undefined, quickMenuHeight: undefined })}
                                     className="mt-2 text-xs px-3 py-1.5 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] border border-[var(--border-default)] text-[var(--text-secondary)]"
-                                    title="Discard custom drag position and snap the Quick Menu back to the selected preset."
+                                    title={t('hc.discardCustomDragPositionAnd', 'Discard custom drag position and snap the Quick Menu back to the selected preset.')}
                                 >
-                                    Reset to Preset Position
+                                    {t('hc.resetToPresetPosition', 'Reset to Preset Position')}
                                 </button>
                             )}
                         </div>

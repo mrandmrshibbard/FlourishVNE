@@ -55,5 +55,24 @@
   "emptyTitle": "コモンイベント",
   "emptyDescNew": "どのシーンからでも呼び出せる再利用可能なコマンドシーケンスを作成しましょう。コモンイベントは関数のように動作し、一度作れば、どこでも再利用できます。",
   "emptyDescSelect": "サイドバーからコモンイベントを選択して編集してください。",
-  "createFirst": "最初のコモンイベントを作成"
+  "createFirst": "最初のコモンイベントを作成",
+  "branchEndTip": "上の分岐を閉じます。分岐と一緒に移動・削除されます。",
+  "branchEndLabel": "分岐の終わり",
+  "dragToReorder": "クリックで編集・ドラッグで並べ替え",
+  "expandBranch": "分岐を展開",
+  "collapseBranch": "分岐を折りたたむ",
+  "moveUp": "上へ移動",
+  "moveDown": "下へ移動",
+  "removeBranchTip": "分岐を削除します（中のコマンドは残ります）",
+  "addOtherwiseIf": "＋それ以外で、もし",
+  "addOtherwiseIfTip": "「それ以外で、もし」を追加します（上の条件が当てはまらないときに試される、もう一つの条件）",
+  "addOtherwise": "＋それ以外",
+  "addOtherwiseTip": "「それ以外」を追加します（上のどれにも当てはまらないときに実行）",
+  "addOtherwiseAlready": "この分岐にはすでに「それ以外」があります（1 つだけ設定できます）。",
+  "hc": {
+    "exportAllCommonEventsTo": "コモンイベントをすべて JSON ファイルに書き出す",
+    "importCommonEventsFromA": "JSON ファイルからコモンイベントを読み込む",
+    "export": "書き出し",
+    "import": "読み込み"
+  }
 }

@@ -13,7 +13,8 @@
     "Screen FX": "螢幕特效",
     "UI Elements": "UI 元素",
     "Media": "媒體",
-    "Flow Control": "流程控制"
+    "Flow Control": "流程控制",
+    "Phone": "手機"
   },
   "names": {
     "Dialogue": "對話",
@@ -59,6 +60,27 @@
     "Wait": "等待",
     "RunScript": "執行指令碼",
     "CallCommonEvent": "呼叫共用事件",
-    "Group": "群組"
+    "Group": "群組",
+    "SetCharacterLayer": "設定角色圖層",
+    "ShowPhone": "顯示手機",
+    "HidePhone": "隱藏手機",
+    "ShowPhoneText": "顯示簡訊",
+    "HidePhoneText": "隱藏簡訊",
+    "PhoneIncomingText": "收到簡訊",
+    "PhoneIncomingCall": "來電",
+    "StartPhoneCall": "撥打電話",
+    "ShowMap": "顯示地圖",
+    "ShowMiniGame": "顯示小遊戲",
+    "PhoneNotify": "手機通知",
+    "MoveCharacter": "移動角色",
+    "StartTimer": "啟動計時器",
+    "StopTimer": "停止計時器",
+    "SetCharacterPose": "更換姿勢",
+    "PlayCharacterAnimation": "播放動畫",
+    "BranchElseIf": "否則如果",
+    "BranchElse": "否則"
+  },
+  "hc": {
+    "playFromHereTestThe": "從這裡開始試玩——從這一行開始測試遊戲（全新一局；會套用本場景的畫面佈置）"
   }
 }

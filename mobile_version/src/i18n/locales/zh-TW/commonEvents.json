@@ -55,5 +55,24 @@
   "emptyTitle": "共用事件",
   "emptyDescNew": "建立可從任何場景呼叫的可重複使用指令序列。共用事件的運作方式如同函式 — 撰寫一次，處處重複使用。",
   "emptyDescSelect": "從側邊欄選擇一個共用事件以編輯它。",
-  "createFirst": "建立第一個共用事件"
+  "createFirst": "建立第一個共用事件",
+  "branchEndTip": "用於結束上方的分支——它會隨分支一起移動和刪除。",
+  "branchEndLabel": "分支結束",
+  "dragToReorder": "點擊編輯 · 拖曳排序",
+  "expandBranch": "展開分支",
+  "collapseBranch": "摺疊分支",
+  "moveUp": "上移",
+  "moveDown": "下移",
+  "removeBranchTip": "刪除該分支（其中的指令會保留）",
+  "addOtherwiseIf": "+ 否則如果",
+  "addOtherwiseIfTip": "新增一個「否則如果」——當上面的條件都不滿足時再檢查它",
+  "addOtherwise": "+ 否則",
+  "addOtherwiseTip": "新增一個「否則」——當上面都不滿足時執行",
+  "addOtherwiseAlready": "該分支已經有一個「否則」——每個分支只能有一個。",
+  "hc": {
+    "exportAllCommonEventsTo": "將所有公共事件匯出為 JSON 檔案",
+    "importCommonEventsFromA": "從 JSON 檔案匯入公共事件",
+    "export": "匯出",
+    "import": "匯入"
+  }
 }

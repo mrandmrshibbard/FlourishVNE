@@ -329,7 +329,7 @@ const CommandItem: React.FC<{
                 <button
                     onClick={(e) => { e.stopPropagation(); onPlayFromHere(); }}
                     className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 p-0.5 rounded text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15"
-                    title="Play from here — test the game starting at this line (fresh run; this scene's visual setup is applied)"
+                    title={t('hc.playFromHereTestThe', 'Play from here — test the game starting at this line (fresh run; this scene\'s visual setup is applied)')}
                 >
                     <PlayIcon className="w-3.5 h-3.5" />
                 </button>

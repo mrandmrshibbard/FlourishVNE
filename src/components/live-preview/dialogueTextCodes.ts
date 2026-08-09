@@ -12,9 +12,71 @@
  */
 import { CommandType, VNCommand } from '../../features/scene/types';
 
-const PAUSE_RE = /\[pause(?:\s+(\d+(?:\.\d+)?))?\]/gi;
 /** Bare `[pause]` (and an appended part with no pause set) waits this long. */
 export const DEFAULT_PAUSE_MS = 400;
+
+/**
+ * Text effects that can be applied to PART of a line, e.g. `I said [shake]NO[/shake].`
+ * These are exactly the whole-line effect types, so an author learns one vocabulary.
+ * An optional number sets intensity, mirroring `[pause N]`: `[shake 2]LOUDER[/shake]`.
+ */
+const EFFECT_TAGS = new Set(['shake', 'wave', 'rainbow', 'glitch', 'pulse', 'fade-in', 'bounce', 'typewriter-bounce']);
+
+/** One `[tag]`-shaped run in the raw text. Anything not recognised stays literal text. */
+type Token =
+    | { kind: 'text'; value: string }
+    | { kind: 'pause'; ms: number }
+    | { kind: 'open'; effect: string; intensity?: number }
+    | { kind: 'close'; effect: string };
+
+// A tag is a bracketed lowercase word, optionally closing (`/`) and optionally carrying a number.
+const TAG_RE = /\[(\/?)([a-z][a-z-]*)(?:\s+(\d+(?:\.\d+)?))?\]/gi;
+
+/**
+ * Split raw dialogue into text and recognised codes. Unknown brackets — `[wink]`, `[3]`,
+ * `[Note to self]` — come back as ordinary text, which is the promise the file's header makes
+ * and what keeps existing scripts rendering exactly as written.
+ */
+export const tokenizeDialogueText = (raw: string): Token[] => {
+    const out: Token[] = [];
+    let last = 0;
+    // Which effects are currently open, so a closing tag that matches nothing can be handed back
+    // as literal text instead of silently vanishing — the author should see what they typed.
+    const openNames: string[] = [];
+    const pushText = (value: string) => {
+        if (!value) return;
+        const prev = out[out.length - 1];
+        if (prev && prev.kind === 'text') prev.value += value;   // keep runs contiguous
+        else out.push({ kind: 'text', value });
+    };
+    TAG_RE.lastIndex = 0;
+    for (let m = TAG_RE.exec(raw); m; m = TAG_RE.exec(raw)) {
+        const [whole, slash, rawName, num] = m;
+        const name = rawName.toLowerCase();
+        const known = name === 'pause' ? 'pause' : EFFECT_TAGS.has(name) ? 'effect' : null;
+        // `[/pause]` is meaningless, and unknown names pass through verbatim.
+        if (!known || (slash && known === 'pause')) { pushText(raw.slice(last, m.index) + whole); last = m.index + whole.length; continue; }
+        if (known === 'effect' && slash && !openNames.includes(name)) {
+            // Closing something that was never opened: not a code, just text the author typed.
+            pushText(raw.slice(last, m.index) + whole);
+            last = m.index + whole.length;
+            continue;
+        }
+        pushText(raw.slice(last, m.index));
+        if (known === 'pause') {
+            out.push({ kind: 'pause', ms: num !== undefined ? Math.max(0, parseFloat(num) * 1000) : DEFAULT_PAUSE_MS });
+        } else if (slash) {
+            openNames.splice(openNames.lastIndexOf(name), 1);
+            out.push({ kind: 'close', effect: name });
+        } else {
+            openNames.push(name);
+            out.push({ kind: 'open', effect: name, ...(num !== undefined ? { intensity: parseFloat(num) } : {}) });
+        }
+        last = m.index + whole.length;
+    }
+    pushText(raw.slice(last));
+    return out;
+};
 
 export interface ParsedDialogueCodes {
     /** Text pieces between pause codes. Always pausesMs.length + 1 entries. */
@@ -26,14 +88,13 @@ export interface ParsedDialogueCodes {
 export const parseDialogueTextCodes = (raw: string): ParsedDialogueCodes => {
     const segments: string[] = [];
     const pausesMs: number[] = [];
-    let last = 0;
-    PAUSE_RE.lastIndex = 0;
-    for (let m = PAUSE_RE.exec(raw); m; m = PAUSE_RE.exec(raw)) {
-        segments.push(raw.slice(last, m.index));
-        pausesMs.push(m[1] !== undefined ? Math.max(0, parseFloat(m[1]) * 1000) : DEFAULT_PAUSE_MS);
-        last = m.index + m[0].length;
+    let current = '';
+    for (const token of tokenizeDialogueText(raw)) {
+        if (token.kind === 'text') current += token.value;
+        else if (token.kind === 'pause') { segments.push(current); current = ''; pausesMs.push(token.ms); }
+        // Effect tags contribute no text and no pause — they're stripped like any other code.
     }
-    segments.push(raw.slice(last));
+    segments.push(current);
     return { segments, pausesMs };
 };
 
@@ -41,29 +102,63 @@ export const parseDialogueTextCodes = (raw: string): ParsedDialogueCodes => {
 export const stripDialogueTextCodes = (raw: string): string =>
     parseDialogueTextCodes(raw).segments.join('');
 
+/** A stretch of the CLEAN text that carries its own effect. `end` is exclusive. */
+export interface EffectSpan {
+    start: number;
+    end: number;
+    effect: string;
+    intensity?: number;
+}
+
 export interface ProcessedDialogueText {
     /** Interpolated text with codes removed — the ONLY text anything downstream renders. */
     cleanText: string;
     /** Pause before the character at `index` (clean-text index) is typed. */
     pauses: Array<{ index: number; ms: number }>;
+    /** Per-word/phrase effects, in clean-text coordinates. Empty when the line has no tags. */
+    effectSpans: EffectSpan[];
 }
 
 /**
- * Parse codes, interpolate each segment, and rejoin. Interpolating per segment keeps the pause
- * positions correct even when a {Variable}'s value is longer or shorter than its token.
+ * Parse codes, interpolate each text run, and rejoin. Interpolating run-by-run keeps pause
+ * positions and effect boundaries correct even when a {Variable}'s value is longer or shorter
+ * than its token — and, because codes are read from the RAW text first, a variable's VALUE can
+ * never inject one.
+ *
+ * Unclosed tags run to the end of the line (forgiving, like a missing closing quote in prose);
+ * a stray closing tag with nothing open is ignored.
  */
 export const processDialogueText = (
     raw: string,
     interpolate: (segment: string) => string
 ): ProcessedDialogueText => {
-    const { segments, pausesMs } = parseDialogueTextCodes(raw);
     let cleanText = '';
     const pauses: Array<{ index: number; ms: number }> = [];
-    segments.forEach((segment, i) => {
-        cleanText += interpolate(segment);
-        if (i < pausesMs.length) pauses.push({ index: cleanText.length, ms: pausesMs[i] });
-    });
-    return { cleanText, pauses };
+    const effectSpans: EffectSpan[] = [];
+    const open: Array<{ effect: string; intensity?: number; start: number }> = [];
+
+    for (const token of tokenizeDialogueText(raw)) {
+        if (token.kind === 'text') {
+            cleanText += interpolate(token.value);
+        } else if (token.kind === 'pause') {
+            pauses.push({ index: cleanText.length, ms: token.ms });
+        } else if (token.kind === 'open') {
+            open.push({ effect: token.effect, intensity: token.intensity, start: cleanText.length });
+        } else {
+            // Close the most recent matching open tag, so nesting behaves sensibly.
+            const at = [...open].reverse().findIndex(o => o.effect === token.effect);
+            if (at === -1) continue;                       // stray close — ignore
+            const idx = open.length - 1 - at;
+            const [o] = open.splice(idx, 1);
+            if (cleanText.length > o.start) effectSpans.push({ start: o.start, end: cleanText.length, effect: o.effect, intensity: o.intensity });
+        }
+    }
+    // Anything still open runs to the end of the line.
+    for (const o of open) {
+        if (cleanText.length > o.start) effectSpans.push({ start: o.start, end: cleanText.length, effect: o.effect, intensity: o.intensity });
+    }
+    effectSpans.sort((a, b) => a.start - b.start || a.end - b.end);
+    return { cleanText, pauses, effectSpans };
 };
 
 /**

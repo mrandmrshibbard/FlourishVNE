@@ -55,5 +55,24 @@
   "emptyTitle": "Eventi Comuni",
   "emptyDescNew": "Crea sequenze di comandi riutilizzabili che possono essere chiamate da qualsiasi scena. Gli Eventi Comuni funzionano come funzioni — crealo una volta, riutilizzalo ovunque.",
   "emptyDescSelect": "Seleziona un Evento Comune dalla barra laterale per modificarlo.",
-  "createFirst": "Crea il Primo Evento Comune"
+  "createFirst": "Crea il Primo Evento Comune",
+  "branchEndTip": "Chiude la Diramazione qui sopra: si sposta e viene rimossa insieme a essa.",
+  "branchEndLabel": "fine della diramazione",
+  "dragToReorder": "Clicca per modificare · trascina per riordinare",
+  "expandBranch": "Espandi diramazione",
+  "collapseBranch": "Comprimi diramazione",
+  "moveUp": "Sposta su",
+  "moveDown": "Sposta giù",
+  "removeBranchTip": "Rimuovi la diramazione (i comandi al suo interno restano)",
+  "addOtherwiseIf": "+ Altrimenti se",
+  "addOtherwiseIfTip": "Aggiungi un “Altrimenti se”: un altro controllo, provato quando quelli sopra non corrispondono",
+  "addOtherwise": "+ Altrimenti",
+  "addOtherwiseTip": "Aggiungi un “Altrimenti”: viene eseguito quando nulla sopra corrisponde",
+  "addOtherwiseAlready": "Questa diramazione ha già un “Altrimenti”: può essercene uno solo.",
+  "hc": {
+    "exportAllCommonEventsTo": "Esporta tutti gli eventi comuni in un file JSON",
+    "importCommonEventsFromA": "Importa eventi comuni da un file JSON",
+    "export": "Esporta",
+    "import": "Importa"
+  }
 }

@@ -88,6 +88,7 @@ const announceOpenFileResult = (detail: { kind: string; message?: string; lost?:
 };
 
 const App = () => {
+    const { t } = useTranslation('hub');
     const [activeProject, setActiveProject] = useState<VNProject | null>(null);
     // Once a project has been opened, the hub chiptune must never (re)start. Guards the
     // autoplay click-fallback, whose closure would otherwise restart music on the very
@@ -239,7 +240,7 @@ const App = () => {
         if (!activeProject) {
             return (
                 <ToastProvider>
-                    <div className="h-screen flex items-center justify-center bg-black text-white text-sm">Loading…</div>
+                    <div className="h-screen flex items-center justify-center bg-black text-white text-sm">{t('hc.loading', 'Loading…')}</div>
                 </ToastProvider>
             );
         }
@@ -261,7 +262,7 @@ const App = () => {
             return (
                 <ToastProvider>
                     <div className="h-screen flex items-center justify-center bg-[var(--bg-primary)] text-[var(--text-secondary)] text-sm">
-                        Loading…
+                        {t('hc.loading', 'Loading…')}
                     </div>
                 </ToastProvider>
             );

@@ -228,5 +228,16 @@
     "downloading": "Configurando las herramientas de Android (única vez)…",
     "continue": "Descargar y continuar",
     "cancel": "Cancelar"
-  }
+  },
+  "webOptions": {
+    "title": "Opciones web",
+    "fullscreenLabel": "Añadir un botón de pantalla completa",
+    "fullscreenHint": "Muestra un pequeño botón sobre el juego que permite al jugador ocupar toda la pantalla — ideal para itch.io, donde los juegos en navegador pueden verse pequeños.",
+    "fullscreenCorner": "Esquina del botón",
+    "cornerTopRight": "Arriba a la derecha",
+    "cornerTopLeft": "Arriba a la izquierda",
+    "cornerBottomRight": "Abajo a la derecha",
+    "cornerBottomLeft": "Abajo a la izquierda"
+  },
+  "cancelBuild": "Detener esta exportación y limpiar"
 }

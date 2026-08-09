@@ -63,5 +63,16 @@
   "emptyTitle": "Eventos Comuns",
   "emptyDescNew": "Crie sequências de comandos reutilizáveis que podem ser chamadas de qualquer cena. Eventos Comuns funcionam como funções — crie uma vez, reutilize em todo lugar.",
   "emptyDescSelect": "Selecione um Evento Comum na barra lateral para editá-lo.",
-  "createFirst": "Criar Primeiro Evento Comum"
+  "createFirst": "Criar Primeiro Evento Comum",
+  "addOtherwiseIf": "+ Caso contrário, se",
+  "addOtherwiseIfTip": "Adicionar um “Caso contrário, se” — outra verificação, testada quando as de cima não batem",
+  "addOtherwise": "+ Caso contrário",
+  "addOtherwiseTip": "Adicionar um “Caso contrário” — roda quando nada acima bateu",
+  "addOtherwiseAlready": "Esta ramificação já tem um “Caso contrário” — só pode haver um.",
+  "hc": {
+    "exportAllCommonEventsTo": "Exportar todos os eventos comuns para um arquivo JSON",
+    "importCommonEventsFromA": "Importar eventos comuns de um arquivo JSON",
+    "export": "Exportar",
+    "import": "Importar"
+  }
 }

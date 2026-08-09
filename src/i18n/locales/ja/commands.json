@@ -13,7 +13,8 @@
     "Screen FX": "画面エフェクト",
     "UI Elements": "UI要素",
     "Media": "メディア",
-    "Flow Control": "フロー制御"
+    "Flow Control": "フロー制御",
+    "Phone": "スマホ"
   },
   "names": {
     "Dialogue": "会話",
@@ -59,6 +60,27 @@
     "Wait": "待機",
     "RunScript": "スクリプトを実行",
     "CallCommonEvent": "コモンイベントを呼び出す",
-    "Group": "グループ"
+    "Group": "グループ",
+    "SetCharacterLayer": "キャラクターのレイヤー設定",
+    "ShowPhone": "スマホを表示",
+    "HidePhone": "スマホを隠す",
+    "ShowPhoneText": "メッセージを表示",
+    "HidePhoneText": "メッセージを隠す",
+    "PhoneIncomingText": "メッセージ着信",
+    "PhoneIncomingCall": "着信",
+    "StartPhoneCall": "電話をかける",
+    "ShowMap": "マップを表示",
+    "ShowMiniGame": "ミニゲームを表示",
+    "PhoneNotify": "スマホの通知",
+    "MoveCharacter": "キャラクターを移動",
+    "StartTimer": "タイマーを開始",
+    "StopTimer": "タイマーを停止",
+    "SetCharacterPose": "ポーズを変える",
+    "PlayCharacterAnimation": "アニメを再生",
+    "BranchElseIf": "それ以外で、もし",
+    "BranchElse": "それ以外"
+  },
+  "hc": {
+    "playFromHereTestThe": "ここから再生 — この行からゲームをテストします（新規プレイ。このシーンの画面設定は適用されます）"
   }
 }

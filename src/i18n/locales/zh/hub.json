@@ -33,7 +33,9 @@
     "prompt": "发现了上一次会话中自动保存的项目。是否要恢复其中一个？",
     "savedAt": "保存于 {{time}}",
     "startFresh": "重新开始",
-    "discardAll": "全部丢弃"
+    "discardAll": "全部丢弃",
+    "checkpoint": "较早的副本",
+    "discardConfirm": "删除所有项目的全部备份副本？如果某个项目文件丢失或损坏，这些备份是唯一的找回途径。此操作无法撤销。"
   },
   "time": {
     "justNow": "刚刚",
@@ -61,6 +63,16 @@
     "projectRecovered": "项目已恢复！",
     "couldNotLoadSaved": "无法加载已保存的项目。",
     "recoverFailed": "无法恢复项目。",
-    "autoSavesCleared": "自动保存已清除。"
+    "autoSavesCleared": "自动保存已清除。",
+    "repaired": "该项目文件曾损坏（保存过程被中断），但内容已全部恢复。请立即重新保存，使文件恢复完整。",
+    "repairedPartial": "该项目文件曾损坏（保存过程被中断）。故事内容已恢复，但有 {{count}} 个媒体文件丢失，需要重新导入。请立即保存，使文件恢复完整。"
+  },
+  "holiday": {
+    "activeLabel": "{{theme}} 主题",
+    "turnOff": "关闭",
+    "turnOffTip": "切换回你的常用主题（随时可在主题菜单中重新选择）"
+  },
+  "hc": {
+    "loading": "加载中…"
   }
 }

@@ -188,47 +188,170 @@
       "effectsTip": "Combina los efectos Sacudir pantalla, Destello de pantalla y Tintar pantalla con efectos de sonido para momentos dramáticos impactantes como explosiones o revelaciones."
     },
     "commands": {
-      "GiveItem": { "desc": "Da al jugador una cantidad de un objeto del inventario (define la cantidad en 1 para objetos Únicos).", "example": "Tras la escena de un cofre, usa Dar objeto en Llave Dorada (cantidad 1) para que el jugador pueda abrir la puerta cerrada." },
-      "UseItem": { "desc": "Usa un objeto: ejecuta su efecto de uso y, si el objeto es consumible, reduce su cantidad en uno.", "example": "Usar objeto en una Poción de vida ejecuta su efecto (aumentar la salud en 50) y quita una poción de la bolsa." },
-      "DestroyItem": { "desc": "Quita una parte o la totalidad de un objeto al jugador sin usarlo; la cantidad nunca baja de cero.", "example": "Cuando el puente arde, usa Destruir objeto en Cuerda con 'todo' activado para quitarle todas las cuerdas al jugador." },
-      "RestockCollection": { "desc": "Reabastece una lista de objetos de tienda o almacén a sus niveles de stock, según la regla de reabastecimiento de esa lista.", "example": "Tras 'Descansas por la noche', usa Reabastecer lista de objetos en la Tienda general para que sus mercancías vuelvan por la mañana." },
-      "BuyItem": { "desc": "Compra un objeto de una lista de tienda, gastando la moneda de esa lista (no hace nada si no se puede pagar o no hay stock).", "example": "En una cinemática, usa Comprar objeto en una Espada de la lista del Herrero; el Oro se descuenta automáticamente." },
-      "SellItem": { "desc": "Vende un objeto que el jugador posee a una lista de tienda, pagando su precio multiplicado por la tasa de venta de la tienda.", "example": "Tras una misión, usa Vender objeto en un Anillo viejo a la lista del Mercader para quitarlo y pagar monedas." },
-      "Dialogue": { "desc": "Muestra el diálogo de un personaje con nombre del hablante y retrato opcionales.", "example": "Muestra a Sakura diciendo \"¡Hola!\" en el lado izquierdo de la pantalla." },
-      "Choice": { "desc": "Presenta al jugador varias opciones que afectan el camino de la historia.", "example": "Pregunta al jugador \"¿A dónde vas?\" con las opciones \"Parque\", \"Biblioteca\", \"Casa\"." },
-      "BranchStart": { "desc": "Inicia una sección de rama con nombre para organizar visualmente los caminos de la historia.", "example": "Inicia una rama llamada \"Ruta de Sakura\" coloreada de rosa para agrupar comandos relacionados." },
-      "BranchEnd": { "desc": "Finaliza una sección de rama abierta anteriormente.", "example": "Cierra el bloque de rama \"Ruta de Sakura\"." },
-      "ShowCharacter": { "desc": "Muestra el sprite de un personaje en pantalla con posición y expresión.", "example": "Muestra a Kai en la posición central con expresión feliz, apareciendo gradualmente en 0,5 segundos." },
-      "HideCharacter": { "desc": "Quita un personaje de la pantalla con una transición.", "example": "Oculta a Sakura con una transición de fundido de salida en 1 segundo." },
-      "SetBackground": { "desc": "Cambia la imagen de fondo de la escena.", "example": "Define el fondo como \"pasillo_escuela\" con fundido cruzado en 1 segundo." },
-      "ShowText": { "desc": "Muestra un texto superpuesto en pantalla en una posición específica con estilo.", "example": "Muestra \"Capítulo 1\" centrado en pantalla en texto blanco grande, apareciendo gradualmente." },
-      "HideText": { "desc": "Quita de la pantalla un texto superpuesto mostrado anteriormente.", "example": "Oculta el texto del título del capítulo con un fundido de salida." },
-      "ShowImage": { "desc": "Muestra una imagen superpuesta en pantalla con posición, tamaño y rotación.", "example": "Muestra la imagen de una carta centrada en pantalla al 50% del tamaño, apareciendo gradualmente." },
-      "HideImage": { "desc": "Quita de la pantalla una imagen superpuesta mostrada anteriormente.", "example": "Oculta la imagen de la carta con una transición de fundido de salida." },
-      "ShowButton": { "desc": "Muestra un botón interactivo en pantalla con estilo y acciones de clic.", "example": "Muestra un botón \"Continuar\" en el centro inferior que salta a la siguiente escena al hacer clic." },
-      "HideButton": { "desc": "Quita de la pantalla un botón mostrado anteriormente.", "example": "Oculta el botón \"Continuar\" con un fundido de salida." },
-      "ShowdraggableImageElement": { "desc": "Muestra una imagen con regiones de puntos activos en las que se puede hacer clic y que disparan acciones (saltar, definir variable).", "example": "Muestra la imagen de un mapamundi con regiones de ciudades en las que se puede hacer clic y que saltan a distintas escenas." },
-      "HidedraggableImageElement": { "desc": "Quita de la pantalla un mapa de imagen mostrado anteriormente.", "example": "Oculta el mapamundi con una transición de fundido de salida." },
-      "PlayMusic": { "desc": "Inicia la reproducción de la música de fondo. Se repite en bucle de forma predeterminada.", "example": "Reproduce \"tema_romantico.mp3\" al 80% de volumen con fundido de entrada de 2 s." },
-      "StopMusic": { "desc": "Detiene la música de fondo que se está reproduciendo.", "example": "Detén la música con un fundido de salida de 1 segundo." },
-      "PlaySoundEffect": { "desc": "Reproduce un efecto de sonido único.", "example": "Reproduce el sonido golpe_de_puerta a volumen máximo." },
-      "StopSoundEffect": { "desc": "Detiene todos los efectos de sonido que se están reproduciendo.", "example": "Detén todos los efectos de sonido de inmediato." },
-      "PlayMovie": { "desc": "Reproduce un archivo de vídeo. En modo pantalla completa, se muestra sobre un fondo negro (cinemáticas). En modo superposición, se reproduce de forma transparente sobre la escena (efectos como pétalas que caen, lluvia).", "example": "Reproduce pétalas que caen como una superposición transparente en bucle mientras el diálogo continúa por debajo." },
-      "StopMovie": { "desc": "Detiene todas las superposiciones de vídeo que se están reproduciendo.", "example": "Detén la superposición de pétalas que caen cuando cambie la escena." },
-      "SetVariable": { "desc": "Define una variable del juego con un valor. Se usa para seguir decisiones y estadísticas.", "example": "Define \"puntuacionJugador\" en 10, o suma 5 a \"nivelAmistad\"." },
-      "TextInput": { "desc": "Pide al jugador que escriba un texto y lo guarda en una variable.", "example": "Pregunta \"¿Cómo te llamas?\" y guarda la respuesta en \"nombreJugador\"." },
-      "Jump": { "desc": "Salta a otra escena de inmediato.", "example": "Salta a la escena \"inicio_capitulo2\"." },
-      "Label": { "desc": "Define un punto de etiqueta con nombre dentro de una escena al que se puede saltar.", "example": "Crea una etiqueta llamada \"inicio_bucle\" para marcar un punto de retorno." },
-      "JumpToLabel": { "desc": "Salta a una etiqueta con nombre dentro de la escena actual.", "example": "Salta de vuelta a la etiqueta \"inicio_bucle\" para repetir una sección." },
-      "Wait": { "desc": "Pausa durante una duración especificada antes de continuar.", "example": "Espera 2 segundos antes de mostrar el siguiente diálogo, o espera el clic del jugador." },
-      "ShowScreen": { "desc": "Muestra una pantalla de UI personalizada (menús, inventarios, etc.).", "example": "Muestra la superposición de UI \"pantalla_inventario\"." },
-      "ShakeScreen": { "desc": "Aplica un efecto de sacudida de pantalla para dar impacto dramático.", "example": "Sacude la pantalla durante 0,5 segundos a intensidad media durante una explosión." },
-      "TintScreen": { "desc": "Aplica una superposición de color tintada a toda la pantalla.", "example": "Tinta la pantalla de rojo en 1 segundo para indicar peligro." },
-      "FlashScreen": { "desc": "Hace destellar la pantalla con un color brillante por un breve instante.", "example": "Haz destellar la pantalla de blanco durante 0,3 segundos para un efecto de relámpago." },
-      "PanZoomScreen": { "desc": "Desplaza y acerca la cámara para enfocar un área específica.", "example": "Acerca 2x el lado izquierdo de la pantalla en 1 segundo." },
-      "ResetScreenEffects": { "desc": "Restablece todos los efectos de pantalla activos (tinte, zoom, etc.) a la normalidad.", "example": "Restablece todos los efectos de pantalla suavemente en 0,5 segundos." },
-      "SetScreenOverlayEffect": { "desc": "Aplica un efecto de superposición persistente como lluvia, nieve o partículas.", "example": "Añade un efecto suave de nevada al 50% de intensidad." },
-      "Group": { "desc": "Agrupa varios eventos para organizarlos visualmente en el editor.", "example": "Agrupa los eventos de \"entrar al aula\" (fondo, personajes, música)." }
+      "GiveItem": {
+        "desc": "Da al jugador una cantidad de un objeto del inventario (define la cantidad en 1 para objetos Únicos).",
+        "example": "Tras la escena de un cofre, usa Dar objeto en Llave Dorada (cantidad 1) para que el jugador pueda abrir la puerta cerrada."
+      },
+      "UseItem": {
+        "desc": "Usa un objeto: ejecuta su efecto de uso y, si el objeto es consumible, reduce su cantidad en uno.",
+        "example": "Usar objeto en una Poción de vida ejecuta su efecto (aumentar la salud en 50) y quita una poción de la bolsa."
+      },
+      "DestroyItem": {
+        "desc": "Quita una parte o la totalidad de un objeto al jugador sin usarlo; la cantidad nunca baja de cero.",
+        "example": "Cuando el puente arde, usa Destruir objeto en Cuerda con 'todo' activado para quitarle todas las cuerdas al jugador."
+      },
+      "RestockCollection": {
+        "desc": "Reabastece una lista de objetos de tienda o almacén a sus niveles de stock, según la regla de reabastecimiento de esa lista.",
+        "example": "Tras 'Descansas por la noche', usa Reabastecer lista de objetos en la Tienda general para que sus mercancías vuelvan por la mañana."
+      },
+      "BuyItem": {
+        "desc": "Compra un objeto de una lista de tienda, gastando la moneda de esa lista (no hace nada si no se puede pagar o no hay stock).",
+        "example": "En una cinemática, usa Comprar objeto en una Espada de la lista del Herrero; el Oro se descuenta automáticamente."
+      },
+      "SellItem": {
+        "desc": "Vende un objeto que el jugador posee a una lista de tienda, pagando su precio multiplicado por la tasa de venta de la tienda.",
+        "example": "Tras una misión, usa Vender objeto en un Anillo viejo a la lista del Mercader para quitarlo y pagar monedas."
+      },
+      "Dialogue": {
+        "desc": "Muestra el diálogo de un personaje con nombre del hablante y retrato opcionales.",
+        "example": "Muestra a Sakura diciendo \"¡Hola!\" en el lado izquierdo de la pantalla."
+      },
+      "Choice": {
+        "desc": "Presenta al jugador varias opciones que afectan el camino de la historia.",
+        "example": "Pregunta al jugador \"¿A dónde vas?\" con las opciones \"Parque\", \"Biblioteca\", \"Casa\"."
+      },
+      "BranchStart": {
+        "desc": "Inicia una sección de rama con nombre para organizar visualmente los caminos de la historia.",
+        "example": "Inicia una rama llamada \"Ruta de Sakura\" coloreada de rosa para agrupar comandos relacionados."
+      },
+      "BranchEnd": {
+        "desc": "Finaliza una sección de rama abierta anteriormente.",
+        "example": "Cierra el bloque de rama \"Ruta de Sakura\"."
+      },
+      "ShowCharacter": {
+        "desc": "Muestra el sprite de un personaje en pantalla con posición y expresión.",
+        "example": "Muestra a Kai en la posición central con expresión feliz, apareciendo gradualmente en 0,5 segundos."
+      },
+      "HideCharacter": {
+        "desc": "Quita un personaje de la pantalla con una transición.",
+        "example": "Oculta a Sakura con una transición de fundido de salida en 1 segundo."
+      },
+      "SetBackground": {
+        "desc": "Cambia la imagen de fondo de la escena.",
+        "example": "Define el fondo como \"pasillo_escuela\" con fundido cruzado en 1 segundo."
+      },
+      "ShowText": {
+        "desc": "Muestra un texto superpuesto en pantalla en una posición específica con estilo.",
+        "example": "Muestra \"Capítulo 1\" centrado en pantalla en texto blanco grande, apareciendo gradualmente."
+      },
+      "HideText": {
+        "desc": "Quita de la pantalla un texto superpuesto mostrado anteriormente.",
+        "example": "Oculta el texto del título del capítulo con un fundido de salida."
+      },
+      "ShowImage": {
+        "desc": "Muestra una imagen superpuesta en pantalla con posición, tamaño y rotación.",
+        "example": "Muestra la imagen de una carta centrada en pantalla al 50% del tamaño, apareciendo gradualmente."
+      },
+      "HideImage": {
+        "desc": "Quita de la pantalla una imagen superpuesta mostrada anteriormente.",
+        "example": "Oculta la imagen de la carta con una transición de fundido de salida."
+      },
+      "ShowButton": {
+        "desc": "Muestra un botón interactivo en pantalla con estilo y acciones de clic.",
+        "example": "Muestra un botón \"Continuar\" en el centro inferior que salta a la siguiente escena al hacer clic."
+      },
+      "HideButton": {
+        "desc": "Quita de la pantalla un botón mostrado anteriormente.",
+        "example": "Oculta el botón \"Continuar\" con un fundido de salida."
+      },
+      "ShowdraggableImageElement": {
+        "desc": "Muestra una imagen con regiones de puntos activos en las que se puede hacer clic y que disparan acciones (saltar, definir variable).",
+        "example": "Muestra la imagen de un mapamundi con regiones de ciudades en las que se puede hacer clic y que saltan a distintas escenas."
+      },
+      "HidedraggableImageElement": {
+        "desc": "Quita de la pantalla un mapa de imagen mostrado anteriormente.",
+        "example": "Oculta el mapamundi con una transición de fundido de salida."
+      },
+      "PlayMusic": {
+        "desc": "Inicia la reproducción de la música de fondo. Se repite en bucle de forma predeterminada.",
+        "example": "Reproduce \"tema_romantico.mp3\" al 80% de volumen con fundido de entrada de 2 s."
+      },
+      "StopMusic": {
+        "desc": "Detiene la música de fondo que se está reproduciendo.",
+        "example": "Detén la música con un fundido de salida de 1 segundo."
+      },
+      "PlaySoundEffect": {
+        "desc": "Reproduce un efecto de sonido único.",
+        "example": "Reproduce el sonido golpe_de_puerta a volumen máximo."
+      },
+      "StopSoundEffect": {
+        "desc": "Detiene todos los efectos de sonido que se están reproduciendo.",
+        "example": "Detén todos los efectos de sonido de inmediato."
+      },
+      "PlayMovie": {
+        "desc": "Reproduce un archivo de vídeo. En modo pantalla completa, se muestra sobre un fondo negro (cinemáticas). En modo superposición, se reproduce de forma transparente sobre la escena (efectos como pétalas que caen, lluvia).",
+        "example": "Reproduce pétalas que caen como una superposición transparente en bucle mientras el diálogo continúa por debajo."
+      },
+      "StopMovie": {
+        "desc": "Detiene todas las superposiciones de vídeo que se están reproduciendo.",
+        "example": "Detén la superposición de pétalas que caen cuando cambie la escena."
+      },
+      "SetVariable": {
+        "desc": "Define una variable del juego con un valor. Se usa para seguir decisiones y estadísticas.",
+        "example": "Define \"puntuacionJugador\" en 10, o suma 5 a \"nivelAmistad\"."
+      },
+      "TextInput": {
+        "desc": "Pide al jugador que escriba un texto y lo guarda en una variable.",
+        "example": "Pregunta \"¿Cómo te llamas?\" y guarda la respuesta en \"nombreJugador\"."
+      },
+      "Jump": {
+        "desc": "Salta a otra escena de inmediato.",
+        "example": "Salta a la escena \"inicio_capitulo2\"."
+      },
+      "Label": {
+        "desc": "Define un punto de etiqueta con nombre dentro de una escena al que se puede saltar.",
+        "example": "Crea una etiqueta llamada \"inicio_bucle\" para marcar un punto de retorno."
+      },
+      "JumpToLabel": {
+        "desc": "Salta a una etiqueta con nombre dentro de la escena actual.",
+        "example": "Salta de vuelta a la etiqueta \"inicio_bucle\" para repetir una sección."
+      },
+      "Wait": {
+        "desc": "Pausa durante una duración especificada antes de continuar.",
+        "example": "Espera 2 segundos antes de mostrar el siguiente diálogo, o espera el clic del jugador."
+      },
+      "ShowScreen": {
+        "desc": "Muestra una pantalla de UI personalizada (menús, inventarios, etc.).",
+        "example": "Muestra la superposición de UI \"pantalla_inventario\"."
+      },
+      "ShakeScreen": {
+        "desc": "Aplica un efecto de sacudida de pantalla para dar impacto dramático.",
+        "example": "Sacude la pantalla durante 0,5 segundos a intensidad media durante una explosión."
+      },
+      "TintScreen": {
+        "desc": "Aplica una superposición de color tintada a toda la pantalla.",
+        "example": "Tinta la pantalla de rojo en 1 segundo para indicar peligro."
+      },
+      "FlashScreen": {
+        "desc": "Hace destellar la pantalla con un color brillante por un breve instante.",
+        "example": "Haz destellar la pantalla de blanco durante 0,3 segundos para un efecto de relámpago."
+      },
+      "PanZoomScreen": {
+        "desc": "Desplaza y acerca la cámara para enfocar un área específica.",
+        "example": "Acerca 2x el lado izquierdo de la pantalla en 1 segundo."
+      },
+      "ResetScreenEffects": {
+        "desc": "Restablece todos los efectos de pantalla activos (tinte, zoom, etc.) a la normalidad.",
+        "example": "Restablece todos los efectos de pantalla suavemente en 0,5 segundos."
+      },
+      "SetScreenOverlayEffect": {
+        "desc": "Aplica un efecto de superposición persistente como lluvia, nieve o partículas.",
+        "example": "Añade un efecto suave de nevada al 50% de intensidad."
+      },
+      "Group": {
+        "desc": "Agrupa varios eventos para organizarlos visualmente en el editor.",
+        "example": "Agrupa los eventos de \"entrar al aula\" (fondo, personajes, música)."
+      }
     }
   },
   "assetSelector": {
@@ -330,5 +453,20 @@
     "enableBorder": "Activar borde",
     "width": "Ancho (px)",
     "borderColor": "Color del borde"
+  },
+  "emoji": {
+    "pick": "Elegir un emoji",
+    "search": "Buscar — “enfadado”, “llave”, “dinero”…",
+    "none": "Ninguno",
+    "noMatch": "No hay coincidencias. Puedes pegar el tuyo abajo.",
+    "custom": "…o escribe / pega cualquier emoji",
+    "group": {
+      "feelings": "Sentimientos",
+      "love": "Amor y vínculos",
+      "status": "Estado y atributos",
+      "things": "Objetos",
+      "world": "Mundo",
+      "marks": "Marcas"
+    }
   }
 }

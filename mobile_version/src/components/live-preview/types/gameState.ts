@@ -732,6 +732,20 @@ export interface HistoryEntry {
     variablesSnapshot?: Record<VNID, string | number | boolean>;
     /** Music state snapshot for backward navigation */
     musicSnapshot?: MusicState;
+    /**
+     * The command list `commandIndex` actually points into, plus the call stack at the time.
+     *
+     * A line spoken inside a Common Event indexes THAT EVENT's command array while `sceneId`
+     * still names the calling scene — so restoring "the scene's commands at commandIndex"
+     * lands on a different command, or past the end, which used to dump the player back at
+     * the title screen. Skip-backward restores these instead of re-deriving from the scene.
+     *
+     * Both are references to arrays the engine only ever replaces (never mutates), so this
+     * costs no copying. Absent on entries recorded before this existed — those still rewind
+     * the old way, which is correct for them because they were always scene-level lines.
+     */
+    commandsSnapshot?: VNCommand[];
+    commandStackSnapshot?: PlayerState['commandStack'];
 }
 
 export interface GameSettings {

@@ -84,5 +84,10 @@
   "toastAcross": " in {{cats}}",
   "toastReplaced": "Risorsa sostituita — tutti i riferimenti preservati",
   "toastReplaceFailed": "Impossibile sostituire la risorsa",
-  "toastFolderExists": "Esiste già una cartella chiamata \"{{name}}\" qui"
+  "toastFolderExists": "Esiste già una cartella chiamata \"{{name}}\" qui",
+  "toastLargeAsset": "File di grandi dimensioni aggiunto: {{files}}. I media pesanti rallentano l'editor e ingrandiscono le esportazioni — valuta di comprimerlo.",
+  "defaultTrim": "Taglio predefinito (secondi)",
+  "defaultTrimHint": "Vale per ogni uso di questo video, a meno che un comando o elemento non lo sovrascriva.",
+  "defaultShaping": "Regolazione audio predefinita",
+  "defaultShapingHint": "Vale ovunque venga usato questo suono, a meno che un comando o pulsante non lo sovrascriva. \"Riproduci al contrario\" riguarda solo effetti sonori e voci — la musica va sempre in avanti."
 }

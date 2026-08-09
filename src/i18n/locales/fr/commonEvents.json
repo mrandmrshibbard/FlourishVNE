@@ -55,5 +55,24 @@
   "emptyTitle": "Événements communs",
   "emptyDescNew": "Créez des séquences de commandes réutilisables qui peuvent être appelées depuis n'importe quelle scène. Les événements communs fonctionnent comme des fonctions : créez-les une fois, réutilisez-les partout.",
   "emptyDescSelect": "Sélectionnez un événement commun dans la barre latérale pour le modifier.",
-  "createFirst": "Créer le premier événement commun"
+  "createFirst": "Créer le premier événement commun",
+  "branchEndTip": "Ferme la Branche ci-dessus — elle se déplace et se supprime avec elle.",
+  "branchEndLabel": "fin de la branche",
+  "dragToReorder": "Cliquez pour modifier · glissez pour réorganiser",
+  "expandBranch": "Développer la branche",
+  "collapseBranch": "Réduire la branche",
+  "moveUp": "Monter",
+  "moveDown": "Descendre",
+  "removeBranchTip": "Supprimer la branche (les commandes qu'elle contient sont conservées)",
+  "addOtherwiseIf": "+ Sinon si",
+  "addOtherwiseIfTip": "Ajouter un « Sinon si » — une autre vérification, tentée quand celles du dessus ne correspondent pas",
+  "addOtherwise": "+ Sinon",
+  "addOtherwiseTip": "Ajouter un « Sinon » — s'exécute quand rien au-dessus ne correspond",
+  "addOtherwiseAlready": "Cette branche a déjà un « Sinon » — il ne peut y en avoir qu'un.",
+  "hc": {
+    "exportAllCommonEventsTo": "Exporter tous les événements communs vers un fichier JSON",
+    "importCommonEventsFromA": "Importer des événements communs depuis un fichier JSON",
+    "export": "Exporter",
+    "import": "Importer"
+  }
 }

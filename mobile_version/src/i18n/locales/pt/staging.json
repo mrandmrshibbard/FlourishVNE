@@ -30,5 +30,20 @@
   "chromeHide": "Esconder botões do canvas (eles podem cobrir a arte que você está alinhando)",
   "zoomIn": "Aproximar (Ctrl+rolagem)",
   "zoomOut": "Afastar (Ctrl+rolagem)",
-  "zoomReset": "Voltar ao ajuste"
+  "zoomReset": "Voltar ao ajuste",
+  "characterSize": "Tamanho:",
+  "fitHeight": "Ajustar à altura",
+  "fitHeightTip": "Redimensiona o personagem para preencher a altura da tela",
+  "fitWidth": "Ajustar à largura",
+  "fitWidthTip": "Redimensiona o personagem para ocupar a largura da tela",
+  "resetSize": "100%",
+  "resetSizeTip": "Voltar o personagem ao tamanho original",
+  "snapToggle": "Encaixe",
+  "snapTip": "Encaixe inteligente em bordas, centros e outros elementos. Segure Alt ao arrastar para posicionar livremente.",
+  "hudOverlayLabel": "HUD",
+  "hudOverlayTip": "Mostra as áreas clicáveis do HUD do jogo neste canvas. No jogo o HUD fica acima da cena — um ponto de interação da cena embaixo de um deles não recebe cliques.",
+  "hudOverlayToggle": "Áreas do HUD",
+  "hc": {
+    "backgroundLayer": "camada de fundo"
+  }
 }

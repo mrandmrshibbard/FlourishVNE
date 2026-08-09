@@ -23,5 +23,23 @@
   "exitWithoutSaving": "不儲存直接離開",
   "exportError": "匯出錯誤",
   "exportingProject": "正在匯出專案…",
-  "packagingFiles": "正在打包您的專案檔案"
+  "packagingFiles": "正在打包您的專案檔案",
+  "toast": {
+    "savedMissingAssets": "已儲存——但有 {{count}} 個媒體檔案在磁碟上找不到，並未包含在儲存的檔案中。專案仍可開啟，但這些美術/音訊缺失。請檢查你的圖片和聲音。",
+    "saved": "專案已儲存"
+  },
+  "saveAs": "另存新檔…",
+  "saveAsTip": "選擇該專案的儲存位置（之後會繼續儲存到那裡）",
+  "compareMerge": "比較與合併",
+  "extensionPanels": "擴充面板",
+  "extensionTools": "擴充工具",
+  "extensionData": "擴充資料",
+  "savingInProgress": "正在儲存…",
+  "playInWindow": "在獨立視窗中試玩（帶重新載入）",
+  "largeExport": {
+    "title": "該專案體積較大",
+    "body": "其中的媒體檔案約有 {{size}}。匯出仍然可以完成，但可能較慢並產生很大的檔案。壓縮體積最大的素材能讓一切保持輕快。",
+    "biggest": "最大的素材",
+    "proceed": "仍然匯出"
+  }
 }

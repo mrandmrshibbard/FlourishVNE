@@ -7,6 +7,7 @@
  * All copy is plain language for non-coders — "steps", not "commands"; "Nothing leads here", not
  * "unreachable node".
  */
+import { useTranslation } from 'react-i18next';
 import React from 'react';
 import { FlowNode, FlowNodeKind } from '../../utils/storyGraph';
 import { NODE_W, NODE_H } from './FlowEdgeLayer';
@@ -35,7 +36,6 @@ interface Props {
     onPointerDown: (e: React.PointerEvent, key: string) => void;
     onDoubleClick: (node: FlowNode) => void;
     onHover: (key: string | null) => void;
-    t: (k: string, d: string, o?: any) => string;
 }
 
 const Badge: React.FC<{ colour: string; children: React.ReactNode; title?: string }> = ({ colour, children, title }) => (
@@ -47,8 +47,11 @@ const Badge: React.FC<{ colour: string; children: React.ReactNode; title?: strin
 );
 
 const FlowNodeCard: React.FC<Props> = ({
-    node, pos, isActive, isSelected, isDimmed, softenUnreachable, played, flow, sceneNameById, onPointerDown, onDoubleClick, onHover, t,
+    node, pos, isActive, isSelected, isDimmed, softenUnreachable, played, flow, sceneNameById, onPointerDown, onDoubleClick, onHover,
 }) => {
+    // Owns its namespace rather than taking `t` as a prop, so the i18n coverage check can see
+    // these keys (it only reads files that call useTranslation).
+    const { t } = useTranslation('scenes');
     const meta = KIND_META[node.kind];
     const isEnding = node.isTerminalOnly;
 

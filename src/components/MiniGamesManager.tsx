@@ -1064,7 +1064,7 @@ const MiniGamesManager: React.FC<{ project?: VNProject }> = () => {
                     {!!s.hintButton && (
                         <div className="grid grid-cols-2 gap-2">
                             <FormField label={t('miniGames.hiddenHintLabel', 'Hint button label')}>
-                                <TextInput value={s.hintLabel || ''} placeholder="💡 Hint" onChange={(e: any) => patchStage(s.id, { hintLabel: e.target.value || undefined })} />
+                                <TextInput value={s.hintLabel || ''} placeholder={t('hc.hint', '💡 Hint')} onChange={(e: any) => patchStage(s.id, { hintLabel: e.target.value || undefined })} />
                             </FormField>
                             <FormField label={t('miniGames.hiddenHintCooldown', 'Cooldown (seconds)')}>
                                 <TextInput type="number" min={1} max={120} value={s.hintCooldownSec ?? 10} onChange={(e: any) => patchStage(s.id, { hintCooldownSec: Math.max(1, Number(e.target.value) || 10) })} />

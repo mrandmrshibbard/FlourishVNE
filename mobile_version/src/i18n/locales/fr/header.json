@@ -23,5 +23,23 @@
   "exitWithoutSaving": "Quitter sans enregistrer",
   "exportError": "Erreur d'exportation",
   "exportingProject": "Exportation du projet...",
-  "packagingFiles": "Empaquetage des fichiers de votre projet"
+  "packagingFiles": "Empaquetage des fichiers de votre projet",
+  "toast": {
+    "savedMissingAssets": "Enregistré — mais {{count}} fichier(s) multimédias sont introuvables sur le disque et ne sont PAS dans le fichier enregistré. Le projet s'ouvrira quand même, mais ces images/sons manquent. Vérifiez vos images et vos sons.",
+    "saved": "Projet enregistré"
+  },
+  "saveAs": "Enregistrer sous…",
+  "saveAsTip": "Choisissez où enregistrer ce projet (et continuez d'y enregistrer)",
+  "compareMerge": "Comparer et fusionner",
+  "extensionPanels": "Panneaux d'extension",
+  "extensionTools": "Outils d'extension",
+  "extensionData": "Données d'extension",
+  "savingInProgress": "Enregistrement…",
+  "playInWindow": "Jouer dans une fenêtre séparée (avec Recharger)",
+  "largeExport": {
+    "title": "Ce projet est volumineux",
+    "body": "Ses médias totalisent environ {{size}}. L'export fonctionnera, mais il risque d'être lent et de produire un gros fichier. Compresser vos plus gros fichiers garde tout rapide et léger.",
+    "biggest": "Fichiers les plus lourds",
+    "proceed": "Exporter quand même"
+  }
 }

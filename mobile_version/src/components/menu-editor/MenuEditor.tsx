@@ -1,3 +1,5 @@
+import { useCanvasZoom } from '../../hooks/useCanvasZoom';
+import CanvasZoomControls from '../ui/CanvasZoomControls';
 import React, { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import Panel from '../ui/Panel';
@@ -317,6 +319,7 @@ const CustomizerSprite: React.FC<{ cz: UICustomizerElement, project: VNProject, 
 /** The category pickers panel for a Customizer (swatch/arrow/button/dropdown styles). Shared by the
  *  preset-layout preview and the free-placement pickers box. Non-interactive mirror of the runtime. */
 const CustomizerPickers: React.FC<{ cz: UICustomizerElement, project: VNProject }> = ({ cz, project }) => {
+    const { t } = useTranslation('ui');
     const czChar = cz.characterId ? project.characters[cz.characterId] : null;
     if (!czChar) return null;
     const czFallback = (cz.expressionId && czChar.expressions[cz.expressionId]) || Object.values(czChar.expressions)[0];
@@ -384,7 +387,7 @@ const CustomizerPickers: React.FC<{ cz: UICustomizerElement, project: VNProject 
                     </div>
                 );
             })}
-            {(cz.categories || []).length === 0 && <div className="text-[10px] text-white/50">No categories yet — set them up in the Customizer's properties.</div>}
+            {(cz.categories || []).length === 0 && <div className="text-[10px] text-white/50">{t('hc.noCategoriesYetSetThem', 'No categories yet — set them up in the Customizer\'s properties.')}</div>}
             {(cz.showRandomize || cz.showReset) && (cz.categories || []).length > 0 && (
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
                     {cz.showRandomize && <span style={{ fontSize: 10, padding: '4px 12px', borderRadius: 6, background: czButtonColor, color: czButtonText }}>{cz.randomizeLabel || 'Randomize'}</span>}
@@ -869,7 +872,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
         case UIElementType.Customizer: {
             const cz = element as UICustomizerElement;
             const czChar = cz.characterId ? project.characters[cz.characterId] : null;
-            if (!czChar) return <div className="w-full h-full border-2 border-dashed border-[var(--accent-purple)] flex items-center justify-center text-[var(--text-secondary)]"><span className="bg-black/50 p-1 rounded text-xs">Customizer — pick a character</span></div>;
+            if (!czChar) return <div className="w-full h-full border-2 border-dashed border-[var(--accent-purple)] flex items-center justify-center text-[var(--text-secondary)]"><span className="bg-black/50 p-1 rounded text-xs">{t('hc.customizerPickACharacter', 'Customizer — pick a character')}</span></div>;
             // Free layout is rendered as two independent draggable boxes by the canvas (see the
             // free-customizer branch in the element map) — this whole-element preview is only for the
             // preset layouts (preview-left/right/top).
@@ -892,7 +895,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
         case UIElementType.Custom: {
             const el = element as UICustomElement;
             const def = pluginManager.getUIElementType(el.pluginType);
-            if (!def) return <div className="w-full h-full bg-amber-500/20 text-amber-300 text-[10px] flex items-center justify-center text-center p-1">Custom element — its extension isn't enabled.</div>;
+            if (!def) return <div className="w-full h-full bg-amber-500/20 text-amber-300 text-[10px] flex items-center justify-center text-center p-1">{t('hc.customElementItsExtensionIsn', 'Custom element — its extension isn\'t enabled.')}</div>;
             const getVar = (nameOrId: string) => {
                 let id = nameOrId;
                 if (!(project.variables as any)[id]) {
@@ -903,11 +906,11 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             };
             let html = '';
             try { html = def.render(el.props || {}, { getVariable: getVar, isEditor: true }); }
-            catch (e) { html = '<div style="color:#f87171;font:11px sans-serif;padding:4px">render error</div>'; }
+            catch (e) { html = '<div style="color:#f87171;font:11px sans-serif;padding:4px">' + t('hc.renderError', 'render error') + '</div>'; }
             return <div className="w-full h-full overflow-hidden" style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: html }} />;
         }
         default:
-            return <div className="w-full h-full bg-red-500/20 text-red-300">Unknown Element</div>;
+            return <div className="w-full h-full bg-red-500/20 text-red-300">{t('hc.unknownElement', 'Unknown Element')}</div>;
     }
 }
 
@@ -945,6 +948,11 @@ const MenuEditor: React.FC<{
     const [showTemplateSelector, setShowTemplateSelector] = useState(false);
 
     const stageRef = useRef<HTMLDivElement>(null);
+    // Canvas zoom, shared with the scene canvas. The ref is the SCROLL container (the stage's
+    // parent), which is both what Ctrl+wheel listens on and what pans when zoomed past 100%.
+    const zoomContainerRef = useRef<HTMLDivElement>(null);
+    const zoomCtl = useCanvasZoom(zoomContainerRef);
+    const zoom = zoomCtl.zoom;
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
     const rafRef = useRef<number | null>(null);
     
@@ -1032,6 +1040,11 @@ const MenuEditor: React.FC<{
             let w = pw;
             let h = w / ar;
             if (h > ph) { h = ph; w = h * ar; }
+            // Zoom scales the fitted size; >1 overflows the scroll container, which then pans.
+            // It MUST be baked into the pixel size rather than applied as a transform — element
+            // drag/resize math divides by this size, so a transform would break dragging.
+            w *= zoom;
+            h *= zoom;
             if (w > 0 && h > 0) {
                 setStageSize(prev => (Math.round(prev.width) === Math.round(w) && Math.round(prev.height) === Math.round(h))
                     ? prev
@@ -1052,7 +1065,7 @@ const MenuEditor: React.FC<{
                 cancelAnimationFrame(rafRef.current);
             }
         };
-    }, [activeScreenId, project.gameResolution?.width, project.gameResolution?.height]);
+    }, [activeScreenId, project.gameResolution?.width, project.gameResolution?.height, zoom]);
 
     // --- Clipboard helpers (hooks must be above early return) ---
     const generateNewId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}` as VNID;
@@ -1405,7 +1418,11 @@ const MenuEditor: React.FC<{
                 title={`Editing Menu: ${screen.name}`} 
                 className="flex-1 min-h-0"
             >
-                <div className="bg-slate-900/50 rounded-md relative overflow-hidden m-auto" ref={stageRef}
+                {/* Scroll container: at 100% the stage letterboxes inside it, and zooming past
+                    100% makes the stage overflow so this pans. Also where Ctrl+wheel is caught. */}
+                <div className="relative w-full h-full">
+                <div ref={zoomContainerRef} className="w-full h-full flex overflow-auto p-2">
+                <div className="bg-slate-900/50 rounded-md relative overflow-hidden" ref={stageRef}
                     onMouseDown={() => setSelectedElementIds([])}
                     style={{
                         ...getBackground(),
@@ -1414,8 +1431,12 @@ const MenuEditor: React.FC<{
                         isolation: 'isolate',
                         // Explicit aspect-fit size (computed from the parent above) + auto margins
                         // to center it — letterboxes instead of stretching. Matches the runtime.
+                        // The size already includes zoom, which is what keeps element dragging
+                        // accurate at any zoom level (see useCanvasZoom).
                         width: stageSize.width || '100%',
                         height: stageSize.height || undefined,
+                        margin: 'auto',
+                        flexShrink: 0,
                         '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1,
                     } as React.CSSProperties}
                 >
@@ -1650,6 +1671,9 @@ const MenuEditor: React.FC<{
                         return null;
                     })}
                 </div>
+                </div>
+                <CanvasZoomControls zoom={zoomCtl} />
+                </div>
             </Panel>
             
             {/* Element Toolbar - Always Visible */}
@@ -1670,19 +1694,19 @@ const MenuEditor: React.FC<{
                     <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text</button>
                     <button onClick={() => handleAddElement(UIElementType.Image)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Image</button>
                     <button onClick={handleAddVideoElement} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Video</button>
-                    <button onClick={() => handleAddElement(UIElementType.Customizer)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Customizer</button>
-                    <button onClick={() => handleAddElement(UIElementType.CharacterPreview)} title="Show a character (or the player's created character) on this screen" className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Character</button>
-                    <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text Input</button>
-                    <button onClick={() => handleAddElement(UIElementType.Dropdown)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Dropdown</button>
-                    <button onClick={() => handleAddElement(UIElementType.Checkbox)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Checkbox</button>
+                    <button onClick={() => handleAddElement(UIElementType.Customizer)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> {t('hc.customizer', 'Customizer')}</button>
+                    <button onClick={() => handleAddElement(UIElementType.CharacterPreview)} title={t('hc.showACharacterOrThe', 'Show a character (or the player\'s created character) on this screen')} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> {t('hc.character', 'Character')}</button>
+                    <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> {t('hc.textInput', 'Text Input')}</button>
+                    <button onClick={() => handleAddElement(UIElementType.Dropdown)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> {t('hc.dropdown', 'Dropdown')}</button>
+                    <button onClick={() => handleAddElement(UIElementType.Checkbox)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> {t('hc.checkbox', 'Checkbox')}</button>
                     <button onClick={() => handleAddElement(UIElementType.SettingsSlider)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Slider</button>
                     <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Toggle</button>
-                    <button onClick={() => handleAddElement(UIElementType.CGGallery)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> CG Gallery</button>
-                    <button onClick={() => handleAddElement(UIElementType.MusicGallery)} title="An unlockable-songs music player: song list, cover art, and playback controls you can fully redesign" className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Music Gallery</button>
-                    <button onClick={() => handleAddElement(UIElementType.Inventory)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Inventory</button>
+                    <button onClick={() => handleAddElement(UIElementType.CGGallery)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> {t('hc.cgGallery', 'CG Gallery')}</button>
+                    <button onClick={() => handleAddElement(UIElementType.MusicGallery)} title={t('hc.anUnlockableSongsMusicPlayer', 'An unlockable-songs music player: song list, cover art, and playback controls you can fully redesign')} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> {t('hc.musicGallery', 'Music Gallery')}</button>
+                    <button onClick={() => handleAddElement(UIElementType.Inventory)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> {t('hc.inventory', 'Inventory')}</button>
                     <button onClick={() => handleAddElement(UIElementType.Meter)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Meter</button>
-                    <button onClick={() => handleAddElement(UIElementType.Timer)} title="Runs actions after a delay when this screen opens" className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Timer</button>
-                    <button onClick={() => handleAddElement(UIElementType.Item)} title="Show a registry item: a draggable showcase of something the player owns, or a click-to-take pickup" className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Item</button>
+                    <button onClick={() => handleAddElement(UIElementType.Timer)} title={t('hc.runsActionsAfterADelay', 'Runs actions after a delay when this screen opens')} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Timer</button>
+                    <button onClick={() => handleAddElement(UIElementType.Item)} title={t('hc.showARegistryItemA', 'Show a registry item: a draggable showcase of something the player owns, or a click-to-take pickup')} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Item</button>
                     {extensionUIElementTypes.map(({ def }) => (
                         <button key={def.type} onClick={() => handleAddCustomElement(def)} title={`From extension: ${def.type}`} className="bg-violet-700 hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-violet-400/30"><PlusIcon /> {def.icon ? def.icon + ' ' : ''}{def.displayName}</button>
                     ))}

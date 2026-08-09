@@ -272,7 +272,7 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
                 summary={`${c.presentation === 'silent' ? t('phoneCmd.notifSilentSum', 'silent') : t('phoneCmd.sumBanner', 'banner + ding')}${c.icon || c.iconImage ? ` · ${t('phoneCmd.sumIcon', 'icon')}` : ''}`}>
                 <FormField label={t('phoneCmd.notifIcon', 'Icon')}>
                     <Select value={c.icon || ''} onChange={e => updateCommand({ icon: e.target.value || undefined } as any)}>
-                        <option value="">🔔 default</option>
+                        <option value="">{t('hc.default', '🔔 default')}</option>
                         {Object.keys(PHONE_GLYPHS).map(k => <option key={k} value={k}>{PHONE_GLYPHS[k]} {k}</option>)}
                     </Select>
                 </FormField>
@@ -360,6 +360,7 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
         return <HideTargetGroup groupId={groupId} command={command} updateCommand={updateCommand} project={project} t={t} ctx={ctx} />;
     }
     if (command.type === CommandType.BranchStart || command.type === CommandType.BranchEnd || command.type === CommandType.Group
+        || command.type === CommandType.BranchElseIf || command.type === CommandType.BranchElse
         || command.type === CommandType.RunScript || command.type === CommandType.StopParticles || command.type === CommandType.CallCommonEvent) {
         return <NicheCommandGroup groupId={groupId} command={command} updateCommand={updateCommand} project={project} t={t} ctx={ctx} />;
     }
@@ -392,7 +393,7 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
                     {Object.values(project.scenes).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </Select>
             </FormField>
-            {!project.scenes[c.targetSceneId] && <p className="text-red-500 text-xs">Warning: Target scene not found.</p>}
+            {!project.scenes[c.targetSceneId] && <p className="text-red-500 text-xs">{t('hc.warningTargetSceneNotFound', 'Warning: Target scene not found.')}</p>}
             <FormField label={t('jump.transition', 'Scene transition')}>
                 <SceneTransitionSelect value={c.transition} customTransitions={project.customTransitions} onChange={v => updateCommand({ transition: v } as any)} />
             </FormField>
@@ -531,7 +532,7 @@ const DialogueGroup: React.FC<{ groupId: InspectorGroupId; cmd: DialogueCommand;
                     ? updateCommand({ characterSource: 'player' } as any)
                     : updateCommand({ characterSource: 'fixed', characterId: v || null } as any)} placeholder={t('shared.selectCharacter')} />
             </FormField>
-            {cmd.characterSource === 'player' && <p className="text-[11px] text-[var(--text-muted)] -mt-1">Speaks as the player-created character; the name box shows the player's chosen name.</p>}
+            {cmd.characterSource === 'player' && <p className="text-[11px] text-[var(--text-muted)] -mt-1">{t('hc.speaksAsThePlayerCreated', "Speaks as the player-created character; the name box shows the player's chosen name.")}</p>}
             <FormField label={t('dialogue.text')}>
                 <TextArea ref={dialogueTextRef} value={cmd.text} onChange={e => updateCommand({ text: e.target.value } as any)} />
                 <div className="flex items-center gap-1.5 mt-1">
@@ -556,6 +557,30 @@ const DialogueGroup: React.FC<{ groupId: InspectorGroupId; cmd: DialogueCommand;
                     >
                         {t('dialogue.insertPause', '[pause]')}
                     </button>
+                </div>
+                {/* Wrap the selected words in an effect tag. The tags can be typed by hand, but
+                    almost nobody discovers a markup language on their own — this is how people
+                    find out it exists. Nothing is selected = wrap a placeholder word to edit. */}
+                <div className="flex items-center gap-1 mt-1 flex-wrap">
+                    <span className="text-[10px] text-[var(--text-muted)] mr-0.5">{t('dialogue.effectOnPart', 'Effect on part of the line:')}</span>
+                    {(['shake', 'wave', 'rainbow', 'glitch', 'pulse', 'bounce'] as const).map(fx => (
+                        <button
+                            key={fx}
+                            onClick={() => {
+                                const el = dialogueTextRef.current;
+                                const text = cmd.text || '';
+                                const focused = el && document.activeElement === el;
+                                const from = focused ? (el!.selectionStart ?? text.length) : text.length;
+                                const to = focused ? (el!.selectionEnd ?? from) : from;
+                                const chosen = text.slice(from, to) || t('dialogue.effectPlaceholder', 'these words');
+                                updateCommand({ text: `${text.slice(0, from)}[${fx}]${chosen}[/${fx}]${text.slice(to)}` } as any);
+                            }}
+                            className="px-1.5 py-0.5 rounded border border-[var(--border-default)] text-[10px] text-[var(--text-secondary)] hover:text-white hover:border-[var(--accent-lavender)] font-mono"
+                            title={t('dialogue.wrapInEffect', 'Select some words first, then click to make just those words {{effect}}').replace('{{effect}}', fx)}
+                        >
+                            {fx}
+                        </button>
+                    ))}
                 </div>
                 <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('dialogue.pauseCodeHint', 'Type [pause 0.5] anywhere in the text to make the typing hold for half a second.')}</p>
             </FormField>
@@ -1038,7 +1063,7 @@ const ShowCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowCharact
                         onChange={value => { if (value === PLAYER_CHARACTER_OPTION) { updateCommand({ characterSource: 'player' } as any); return; } const nc = project.characters[value]; const fe = nc ? Object.keys(nc.expressions)[0] : ''; updateCommand({ characterSource: 'fixed', characterId: value, expressionId: fe || '' } as any); }}
                         placeholder={Object.keys(project.characters).length === 0 ? t('shared.noCharacters') : t('shared.selectCharacter')} />
                 </FormField>
-                {isPlayer && <p className="text-[11px] text-[var(--text-muted)] -mt-1">Shows the character the player created (set one up in <strong>Systems → Character Creator</strong>). Until a player character exists, a default character is shown here so you can preview. Expression falls back automatically.</p>}
+                {isPlayer && <p className="text-[11px] text-[var(--text-muted)] -mt-1">{t('hc.showsTheCharacterThePlayer', 'Shows the character the player created (set one up in')} <strong>{t('hc.systemsCharacterCreator', 'Systems → Character Creator')}</strong>{t('hc.untilAPlayerCharacterExists', '). Until a player character exists, a default character is shown here so you can preview. Expression falls back automatically.')}</p>}
                 {!isPlayer && <FormField label={t('shared.expression')}>
                     <SearchableSelect options={expressionOptions} value={cmd.expressionId}
                         onChange={value => updateCommand({ expressionId: value } as any)}
@@ -1065,12 +1090,12 @@ const ShowCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowCharact
                         updateCommand({ layerOverrides: Object.keys(ov).length ? ov : undefined } as any);
                     };
                     return (
-                        <CollapsibleSection title="Per-layer overrides" hint="Override individual layers on top of the expression — compose looks (e.g. happy face + school outfit + blush on) without a dedicated expression.">
+                        <CollapsibleSection title={t('hc.perLayerOverrides', 'Per-layer overrides')} hint="Override individual layers on top of the expression — compose looks (e.g. happy face + school outfit + blush on) without a dedicated expression.">
                             {Object.values(character.layers).map((layer: any) => (
                                 <FormField key={layer.id} label={layer.name}>
                                     <Select value={ovValue(layer.id)} onChange={e => setOv(layer.id, e.target.value)}>
-                                        <option value="__preset__">Use preset</option>
-                                        <option value="">None (hide layer)</option>
+                                        <option value="__preset__">{t('hc.usePreset', 'Use preset')}</option>
+                                        <option value="">{t('hc.noneHideLayer', 'None (hide layer)')}</option>
                                         {Object.values(layer.assets).map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
                                     </Select>
                                 </FormField>
@@ -1194,7 +1219,7 @@ const SetCharacterLayerGroup: React.FC<{ groupId: InspectorGroupId; cmd: SetChar
             {character && (
                 <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                        <span className="text-xs text-[var(--text-secondary)]">Layers to change</span>
+                        <span className="text-xs text-[var(--text-secondary)]">{t('hc.layersToChange', 'Layers to change')}</span>
                         <button onClick={() => setRows([...rows, { layerId: (layers[0]?.id) || '', assetId: null }])} className="text-xs px-2 py-0.5 rounded bg-purple-600/30 hover:bg-purple-600/50 text-white flex items-center gap-1"><PlusIcon className="w-3 h-3" /> Add</button>
                     </div>
                     {rows.map((row, i) => {
@@ -1207,14 +1232,14 @@ const SetCharacterLayerGroup: React.FC<{ groupId: InspectorGroupId; cmd: SetChar
                                     {layers.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                                 </Select>
                                 <Select value={row.assetId ?? ''} onChange={e => setRows(rows.map((r, j) => j === i ? { ...r, assetId: e.target.value || null } : r))}>
-                                    <option value="">None (hide)</option>
+                                    <option value="">{t('hc.noneHide', 'None (hide)')}</option>
                                     {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                                 </Select>
                                 <button onClick={() => setRows(rows.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-300 text-xs flex-shrink-0" title="Remove">✕</button>
                             </div>
                         );
                     })}
-                    {rows.length === 0 && <p className="text-[11px] text-[var(--text-muted)]">No layers yet — Add one to change it on the on-stage character (e.g. Blush → On).</p>}
+                    {rows.length === 0 && <p className="text-[11px] text-[var(--text-muted)]">{t('hc.noLayersYetAddOne', 'No layers yet — Add one to change it on the on-stage character (e.g. Blush → On).')}</p>}
                 </div>
             )}
         </>;
@@ -1256,7 +1281,7 @@ const SetBackgroundGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; update
             {!useColor && (
                 <label className="flex items-center gap-2 mt-1 cursor-pointer text-xs text-[var(--text-secondary)]">
                     <input type="checkbox" checked={cmd.loop ?? true} onChange={e => updateCommand({ loop: e.target.checked } as any)} className="w-4 h-4" />
-                    <span>Loop video <span className="text-[10px]">(videos only; off = play once &amp; hold last frame)</span></span>
+                    <span>{t('hc.loopVideo', 'Loop video')} <span className="text-[10px]">{t('hc.videosOnlyOffPlayOnce', '(videos only; off = play once & hold last frame)')}</span></span>
                 </label>
             )}
             {!useColor && !!cmd.backgroundId && !!(project.videos?.[cmd.backgroundId] || (project.images?.[cmd.backgroundId] as any)?.videoUrl || (project.backgrounds?.[cmd.backgroundId] as any)?.videoUrl) && (
@@ -1701,7 +1726,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                         <VarFollowSelect value={cmd.darknessVariableId} onChange={id => updateCommand({ darknessVariableId: id } as any)} project={project} range="0–1" mode="live" />
                     </FormField>
                     <FormField label={t('fx.darkColor')}><TextInput type="text" value={cmd.color ?? '#000000'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
-                    <FormField label={t('fx.playerToggleKey')}><TextInput type="text" value={cmd.toggleKey ?? ''} onChange={e => updateCommand({ toggleKey: e.target.value || undefined } as any)} placeholder="e.g. f" maxLength={1} /></FormField>
+                    <FormField label={t('fx.playerToggleKey')}><TextInput type="text" value={cmd.toggleKey ?? ''} onChange={e => updateCommand({ toggleKey: e.target.value || undefined } as any)} placeholder={t('hc.egF', 'e.g. f')} maxLength={1} /></FormField>
                     <FormField label={t('fx.soundOnToggle')}>
                         <Select value={cmd.sfxId || ''} onChange={e => updateCommand({ sfxId: e.target.value || null } as any)}>
                             <option value="">{t('fx.none')}</option>
@@ -1734,7 +1759,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                     <FormField label={t('fx.beamColor', 'Beam color')}><TextInput type="text" value={cmd.color ?? '#fff3d6'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
                     <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.followMouse !== false} onChange={e => updateCommand({ followMouse: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.spotlightSwivel', 'Swivel the beam toward the mouse')}</span></label>
                     {cmd.followMouse !== false && <FormField label={`${t('fx.spotlightSwivelMax', 'Max swivel')} (${cmd.swivelMax ?? 30}°)`}><RangeInput min="0" max="80" value={cmd.swivelMax ?? 30} onChange={e => updateCommand({ swivelMax: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>}
-                    <FormField label={t('fx.playerToggleKey')}><TextInput type="text" value={cmd.toggleKey ?? ''} onChange={e => updateCommand({ toggleKey: e.target.value || undefined } as any)} placeholder="e.g. f" maxLength={1} /></FormField>
+                    <FormField label={t('fx.playerToggleKey')}><TextInput type="text" value={cmd.toggleKey ?? ''} onChange={e => updateCommand({ toggleKey: e.target.value || undefined } as any)} placeholder={t('hc.egF', 'e.g. f')} maxLength={1} /></FormField>
                     <FormField label={t('fx.soundOnToggle')}>
                         <Select value={cmd.sfxId || ''} onChange={e => updateCommand({ sfxId: e.target.value || null } as any)}>
                             <option value="">{t('fx.none')}</option>
@@ -2188,7 +2213,7 @@ const PhoneIncomingCallGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; up
             <CollapsibleSection title={t('phoneCmd.callConversation', 'In-call conversation (optional)')} badge={String(cmd.conversation?.lines?.length || 0)}
                 summary={cmd.conversation?.lines?.length ? `${cmd.conversation.lines.length} ${t('phoneCmd.sumLines', 'lines')}` : t('phoneCmd.sumNone', 'none')}
                 hint={t('phoneCmd.callConversationHint', "Answering plays these lines on the call screen — voiced, with tappable replies. Leave empty for the classic behavior (accept just runs the actions above).")}
-                action={<button onClick={() => setStudioOpen(true)} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30" title={t('phoneCmd.openStudio', 'Open the big chat-style editor')}>⛶ Studio</button>}>
+                action={<button onClick={() => setStudioOpen(true)} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30" title={t('phoneCmd.openStudio', 'Open the big chat-style editor')}>{t('hc.studio', '⛶ Studio')}</button>}>
                 <PhoneCallConversationEditor conversation={cmd.conversation} onChange={c => updateCommand({ conversation: c } as any)} project={project} t={t} />
             </CollapsibleSection>
         </div>
@@ -2334,7 +2359,7 @@ const StartPhoneCallGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updat
             <CollapsibleSection title={t('phoneCmd.callConversation2', 'Call conversation')} defaultOpen badge={String(cmd.conversation?.lines?.length || 0)}
                 summary={cmd.conversation?.lines?.length ? `${cmd.conversation.lines.length} ${t('phoneCmd.sumLines', 'lines')}` : t('phoneCmd.sumNone', 'none')}
                 hint={t('phoneCmd.callConversation2Hint', "The voiced lines of the call. Leave empty to use the contact's saved conversation instead.")}
-                action={<button onClick={() => setStudioOpen(true)} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30" title={t('phoneCmd.openStudio', 'Open the big chat-style editor')}>⛶ Studio</button>}>
+                action={<button onClick={() => setStudioOpen(true)} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30" title={t('phoneCmd.openStudio', 'Open the big chat-style editor')}>{t('hc.studio', '⛶ Studio')}</button>}>
                 <PhoneCallConversationEditor conversation={cmd.conversation} onChange={c => updateCommand({ conversation: c } as any)} project={project} t={t} />
             </CollapsibleSection>
         </div>
@@ -3271,6 +3296,14 @@ const NicheCommandGroup: React.FC<{ groupId: InspectorGroupId; command: VNComman
             const matchingStart = cmds.find(c => c.type === CommandType.BranchStart && (c as any).branchId === cmd.branchId) as any;
             return <p className="text-xs text-[var(--text-secondary)]">{t('branch.endInfo', { name: matchingStart?.name || t('branch.unknownBranch') })}</p>;
         }
+        case CommandType.BranchElseIf:
+            return <p className="text-xs text-[var(--text-secondary)]">
+                {t('branch.elseIfInfo', 'This “Otherwise if” segment runs only when its conditions are met and none of the segments above it matched.')}
+            </p>;
+        case CommandType.BranchElse:
+            return <p className="text-xs text-[var(--text-secondary)]">
+                {t('branch.elseInfo', 'This “Otherwise” segment runs when none of the conditions above it matched. It has no conditions of its own.')}
+            </p>;
         case CommandType.Group:
             return <>
                 <FormField label={t('group.name')}><TextInput value={cmd.name || ''} onChange={e => updateCommand({ name: e.target.value } as any)} placeholder={t('group.namePlaceholder')} /></FormField>
@@ -3293,7 +3326,7 @@ const NicheCommandGroup: React.FC<{ groupId: InspectorGroupId; command: VNComman
                 </div>}
                 {selectedScript && (selectedScript as any).params && (selectedScript as any).params.length > 0 && (
                     <div className="mt-1">
-                        <h4 className="font-bold text-xs mb-1 text-[var(--text-secondary)]">Arguments</h4>
+                        <h4 className="font-bold text-xs mb-1 text-[var(--text-secondary)]">{t('hc.arguments', 'Arguments')}</h4>
                         {(selectedScript as any).params.map((p: any) => {
                             const argVal = cmd.arguments?.[p.id];
                             const current = argVal !== undefined ? argVal : p.defaultValue;

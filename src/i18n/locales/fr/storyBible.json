@@ -1,0 +1,88 @@
+{
+  "title": "Bible de l'histoire",
+  "empty": {
+    "title": "Votre Bible de l'histoire",
+    "body": "Gardez tout ce qui concerne votre histoire au même endroit : synopsis, notes de personnages, lieux, arcs narratifs. Vous seul le voyez : cela n'est jamais inclus dans votre jeu.",
+    "starterButton": "Créer les sections de départ"
+  },
+  "starter": {
+    "synopsis": "Synopsis",
+    "chapters": "Chapitres",
+    "characters": "Personnages",
+    "locations": "Lieux",
+    "arcs": "Arcs narratifs"
+  },
+  "sections": {
+    "add": "Ajouter une section",
+    "newName": "Nouvelle section",
+    "unnamed": "Sans titre",
+    "none": "Aucune section pour l'instant.",
+    "namePlaceholder": "Nom de la section",
+    "delete": "Supprimer la section",
+    "deleteConfirm": "Supprimer « {{name}} » ?",
+    "deleteConfirmWithSubs": "Supprimer « {{name}} » et ses {{count}} sous-sections ? Action irréversible : les notes qu'elles contiennent seront perdues.",
+    "moveUp": "Monter",
+    "moveDown": "Descendre"
+  },
+  "subsections": {
+    "add": "Ajouter une sous-section",
+    "newName": "Nouvelle sous-section",
+    "namePlaceholder": "Nom de la sous-section",
+    "delete": "Supprimer la sous-section",
+    "deleteConfirm": "Supprimer « {{name}} » ?"
+  },
+  "editor": {
+    "edit": "✏ Modifier",
+    "preview": "👁 Aperçu",
+    "heading": "Titre (cliquez encore pour un plus petit)",
+    "bold": "Gras",
+    "italic": "Italique",
+    "bulletList": "Liste à puces",
+    "numberedList": "Liste numérotée",
+    "placeholder": "Écrivez vos notes ici… Utilisez les boutons ci-dessus pour les titres, le gras et les listes.",
+    "placeholderWord": "texte"
+  },
+  "glossary": {
+    "title": "Glossaire",
+    "navHint": "Mots que vos joueurs peuvent survoler dans les dialogues pour obtenir une explication",
+    "back": "Bible de l'histoire",
+    "emptyTitle": "Glossaire",
+    "emptyBody": "Ajoutez des mots que vos joueurs ne connaissent peut-être pas. Lorsqu'un mot apparaît dans un dialogue, il est mis en évidence et son survol affiche votre explication.",
+    "addTerm": "Ajouter un terme",
+    "newTerm": "Nouveau terme",
+    "search": "Rechercher des termes…",
+    "none": "Aucun terme pour l'instant.",
+    "noResults": "Aucun terme ne correspond.",
+    "term": "Mot ou expression",
+    "alternatives": "Autres orthographes ou formes",
+    "alternativesHelp": "par ex. le pluriel — appuyez sur Entrée pour ajouter",
+    "caseSensitive": "Respecter les majuscules",
+    "color": "Couleur de la mise en évidence",
+    "useDefaultColor": "Utiliser la couleur par défaut",
+    "tooltipTitle": "Titre de l'infobulle (vide = le mot lui-même)",
+    "description": "Explication",
+    "extra": "Petite note de bas de page (facultatif)",
+    "enabledEntry": "Afficher dans le jeu",
+    "preview": "Rendu dans le jeu (survolez le mot) :",
+    "previewLine": "On dit que le {{term}} n'apparaît que la nuit.",
+    "previewNoMatch": "Le terme ne correspond pas à l'exemple — vérifiez les majuscules si « Respecter les majuscules » est activé.",
+    "delete": "Supprimer le terme",
+    "deleteConfirm": "Supprimer « {{term}} » du glossaire ?",
+    "import": "Importer…",
+    "export": "Exporter",
+    "importSuccess": "{{count}} termes importés",
+    "importError": "Ce fichier n'est pas un glossaire Flourish.",
+    "settings": {
+      "enabled": "Mettre en évidence les termes du glossaire dans le jeu",
+      "defaultColor": "Couleur par défaut",
+      "style": "Comment les termes ressortent",
+      "styleUnderline": "Souligné",
+      "styleColor": "Texte coloré",
+      "styleGlow": "Lueur douce"
+    }
+  },
+  "pluginBanner": {
+    "text": "La Bible de l'histoire est désormais intégrée à l'éditeur, et vos notes de l'ancien plugin ont été importées ici. Vous pouvez désinstaller le plugin en toute sécurité depuis Outils → Gestionnaire de plugins.",
+    "dismiss": "Compris"
+  }
+}

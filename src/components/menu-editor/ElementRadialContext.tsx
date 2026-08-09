@@ -145,7 +145,7 @@ const ElementGroupPopover: React.FC<{
                     <span>{meta.glyph}</span>{t(meta.i18nKey)}
                 </span>
                 <div className="flex items-center gap-1">
-                    <button onClick={onExpand} title="Open full inspector" className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-primary)] text-[var(--text-secondary)]">⤢</button>
+                    <button onClick={onExpand} title={t('hc.openFullInspector', 'Open full inspector')} className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-primary)] text-[var(--text-secondary)]">⤢</button>
                     <button onClick={onClose} title="Close" className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] px-1">✕</button>
                 </div>
             </div>
