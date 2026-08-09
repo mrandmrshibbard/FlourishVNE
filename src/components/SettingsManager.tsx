@@ -97,7 +97,7 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
                     <FontSettings project={project} onUpdate={updateUI} />
                 )}
                 {activeSection === 'screens' && (
-                    <ScreenSettings project={project} onUpdate={updateUI} />
+                    <ScreenSettings project={project} onUpdate={updateUI} onUpdateProject={updateProject} />
                 )}
                 {activeSection === 'accessibility' && (
                     <AccessibilitySettings />
@@ -1437,11 +1437,16 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
 interface ScreenSettingsProps {
     project: VNProject;
     onUpdate: (updates: Partial<VNProjectUI>) => void;
+    onUpdateProject: (updates: Partial<VNProject>) => void;
 }
 
-const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) => {
+const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate, onUpdateProject }) => {
     const { t } = useTranslation('settings');
     const allScreens = Object.values(project.uiScreens || {}) as any[];
+
+    /* The Language slot only appears once the game HAS another language — until then it would be
+     * a setting for a feature the author hasn't opted into, which is just clutter. */
+    const hasLanguages = ((project as any).localization?.languages?.length || 0) > 0;
 
     const screenSlots: { key: keyof VNProjectUI; label: string; description: string }[] = [
         { key: 'titleScreenId', label: t('screens.slots.titleScreen'), description: t('screens.slots.titleScreenDesc') },
@@ -1449,9 +1454,28 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) =>
         { key: 'saveScreenId', label: t('screens.slots.saveScreen'), description: t('screens.slots.saveScreenDesc') },
         { key: 'loadScreenId', label: t('screens.slots.loadScreen'), description: t('screens.slots.loadScreenDesc') },
         { key: 'pauseScreenId', label: t('screens.slots.pauseScreen'), description: t('screens.slots.pauseScreenDesc') },
+        ...(hasLanguages ? [{
+            key: 'languageScreenId' as keyof VNProjectUI,
+            label: t('screens.slots.languageScreen', 'Language Screen'),
+            description: t('screens.slots.languageScreenDesc',
+                'Where players pick the language they want to play in.'),
+        }] : []),
         // Game HUD is now set per-screen in the screen's "Overlay behavior" properties (the
         // "Use as game HUD" toggle), alongside the other overlay settings.
     ];
+
+    /* Stored as 'firstRun' | 'everyBoot' | 'never'. The checkbox is the plain-language version of
+     * it: on = show it the first time someone plays, off = never show it on its own. Either way
+     * the screen still exists and any button pointing at it still works — turning this off means
+     * "don't offer it unprompted", not "delete the screen". */
+    const showMode = (project as any).localization?.showLanguageScreen ?? 'firstRun';
+    const setShowLanguageScreen = (show: boolean) => {
+        const localization = (project as any).localization;
+        if (!localization) return;
+        onUpdateProject({
+            localization: { ...localization, showLanguageScreen: show ? 'firstRun' : 'never' },
+        } as Partial<VNProject>);
+    };
 
     return (
         <div className="p-6">
@@ -1488,6 +1512,32 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) =>
                         </select>
                         {(project.ui[key] as string) && !allScreens.find((s: any) => s.id === project.ui[key]) && (
                             <p className="mt-1 text-xs text-amber-400">{t('screens.missing')}</p>
+                        )}
+
+                        {key === 'languageScreenId' && (
+                            <div className="mt-3 pt-3 border-t border-[var(--border-subtle)]">
+                                <label className="flex items-start gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        className="mt-0.5"
+                                        checked={showMode !== 'never'}
+                                        onChange={(e) => setShowLanguageScreen(e.target.checked)}
+                                    />
+                                    <span>
+                                        <span className="block text-sm text-white">
+                                            {t('screens.slots.languageScreenAuto',
+                                                'Ask new players which language they want')}
+                                        </span>
+                                        <span className="block text-xs text-[var(--text-secondary)]">
+                                            {showMode !== 'never'
+                                                ? t('screens.slots.languageScreenAutoOn',
+                                                    'Shown once, the first time someone plays. Players already using one of your languages skip it automatically.')
+                                                : t('screens.slots.languageScreenAutoOff',
+                                                    'Never shown on its own — players reach it only from a button you place.')}
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
                         )}
                     </div>
                 ))}

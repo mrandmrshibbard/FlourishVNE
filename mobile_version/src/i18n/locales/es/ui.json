@@ -71,7 +71,8 @@
     "clearUiPalette": "Restablecer colores de la interfaz (deshacer la paleta del minijuego)",
     "changePose": "Cambiar pose",
     "changeCharacter": "Cambiar personaje",
-    "playCharacterAnimation": "Reproducir animación del personaje"
+    "playCharacterAnimation": "Reproducir animación del personaje",
+    "setLanguage": "Cambiar idioma"
   },
   "actionsList": {
     "actions": "Acciones",
@@ -1189,7 +1190,11 @@
     "changeCharacterHint": "El nuevo personaje ocupa el mismo sitio: misma posición y tamaño que aquel al que sustituye.",
     "animation": "Animación",
     "animationStop": "Detener la animación actual",
-    "playCharacterAnimationHint": "Reproduce una de las animaciones propias del personaje (hechas en el Estudio de Animación). Solo funciona mientras esté en escena."
+    "playCharacterAnimationHint": "Reproduce una de las animaciones propias del personaje (hechas en el Estudio de Animación). Solo funciona mientras esté en escena.",
+    "language": "Idioma",
+    "languageOriginal": "El idioma en el que está escrito el juego",
+    "noLanguagesYet": "Aún no has añadido idiomas: añade uno primero en Traduce tu juego.",
+    "languageIsSource": "Este es el idioma en el que está escrito el juego."
   },
   "effectStyle": {
     "label": "Estilo del efecto",

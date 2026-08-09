@@ -173,6 +173,9 @@ export interface VNProjectUI {
     loadScreenId: VNID | null;
     pauseScreenId: VNID | null;
     gameHudScreenId: VNID | null;
+    /** The screen that lets the player choose a language. Auto-created the first time a second
+     *  language is added; null/absent = the game never asks. Additive-optional. */
+    languageScreenId?: VNID | null;
     /** "Player's Character" pointers — the persistent string variables that remember the character
      *  the player created in a Character Creator: which base character (a character id) and their
      *  chosen name. Set by the Character Creator wizard. Read by commands/elements whose

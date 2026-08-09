@@ -86,7 +86,12 @@
       "pauseScreen": "Schermata di pausa",
       "pauseScreenDesc": "Mostrata quando il giocatore preme Esc durante il gioco. Di solito offre Riprendi, Salva, Carica, Impostazioni ed Esci.",
       "gameHud": "Schermata HUD di gioco",
-      "gameHudDesc": "Sovrapposizione persistente mostrata sopra il gioco, es. barre di pulsanti personalizzate, indicatori di stato o misuratori di affinità."
+      "gameHudDesc": "Sovrapposizione persistente mostrata sopra il gioco, es. barre di pulsanti personalizzate, indicatori di stato o misuratori di affinità.",
+      "languageScreen": "Schermata della lingua",
+      "languageScreenDesc": "Dove i giocatori scelgono la lingua in cui vogliono giocare.",
+      "languageScreenAuto": "Chiedi ai nuovi giocatori quale lingua preferiscono",
+      "languageScreenAutoOn": "Mostrata una volta, alla prima partita. Chi usa già una delle tue lingue la salta automaticamente.",
+      "languageScreenAutoOff": "Non viene mai mostrata da sola: i giocatori la raggiungono solo da un pulsante che aggiungi tu."
     }
   },
   "cgGallery": {

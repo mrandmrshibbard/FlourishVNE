@@ -86,7 +86,12 @@
       "pauseScreen": "暂停屏幕",
       "pauseScreenDesc": "玩家在游戏过程中按下 Escape 键时显示。通常提供继续、保存、读取、设置和退出。",
       "gameHud": "游戏 HUD 屏幕",
-      "gameHudDesc": "显示在游戏画面之上的持久叠加层，例如自定义按钮栏、状态指示器或好感度计。"
+      "gameHudDesc": "显示在游戏画面之上的持久叠加层，例如自定义按钮栏、状态指示器或好感度计。",
+      "languageScreen": "语言选择界面",
+      "languageScreenDesc": "玩家在这里选择想用的游戏语言。",
+      "languageScreenAuto": "询问首次游玩的玩家想用哪种语言",
+      "languageScreenAutoOn": "仅在第一次游玩时显示一次。已在使用你所支持语言的玩家会自动跳过。",
+      "languageScreenAutoOff": "不会自动显示 — 玩家只能通过你放置的按钮进入。"
     }
   },
   "cgGallery": {

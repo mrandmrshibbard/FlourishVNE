@@ -718,7 +718,6 @@ const Header: React.FC<{
             <LocalizationPanel
                 isOpen={showLocalization}
                 onClose={() => setShowLocalization(false)}
-                project={project}
             />
         )}
         

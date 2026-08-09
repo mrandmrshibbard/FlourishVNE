@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
 import { flushSync, createPortal } from 'react-dom';
-import { useProject } from '../contexts/ProjectContext';
+import { useProject, ProjectContext } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import { interpolateVariables, resolveCharacterDisplayName, findCharacterBySpokenName, makeDisplayNameResolver } from '../utils/variableInterpolation';
 import { createCommand } from '../utils/commandFactory';
@@ -15,6 +15,7 @@ import TrimmedVideo from './ui/TrimmedVideo';
 import { resolveVideoTrim } from '../utils/videoTrim';
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject, CGGalleryEntry } from '../types/project';
+import { applyGameLanguage, detectStartLanguage, shouldShowLanguageScreen } from '../features/localization/applyGameLanguage';
 import { visibleSongs, VisibleSong, formatTimeLabel, buildPlayOrder, stepIndex, GALLERY_PLAYER_EVENT, MUSIC_CONTROL_GLYPHS } from '../utils/musicGallery';
 import {
     VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, SaveGameAction, LoadGameAction, DeleteSaveAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, CallCommonEventAction, OpenPhoneAppAction, ShowMapAction, ShowMiniGameAction, SaveSlotsPageAction, RESET_ALL_VARIABLES
@@ -323,6 +324,30 @@ function savePersistentVariables(projectId: string, vars: Record<string, string 
         console.error('Failed to save persistent variables:', e);
     }
 }
+
+/* ── The language the player is playing in ────────────────────────────────────────────────
+ * Kept per project and OUTSIDE the save file: it's a preference about the player, not a fact
+ * about the story, so it must survive Quit to Title, starting a new game, and loading someone
+ * else's save — the same reasoning as the persistent variables above. */
+const getGameLanguageKey = (projectId: string) => `flourish:gameLanguage:${projectId}`;
+
+function loadGameLanguage(projectId: string): string | null {
+    try { return localStorage.getItem(getGameLanguageKey(projectId)); } catch { return null; }
+}
+
+function saveGameLanguage(projectId: string, language: string): void {
+    try {
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.storage) {
+            (window as any).electronAPI.storage.setItem(getGameLanguageKey(projectId), language);
+        }
+        localStorage.setItem(getGameLanguageKey(projectId), language);
+    } catch (e) {
+        console.error('Failed to save the chosen language:', e);
+    }
+}
+
+/** Fired by the language screen (and by `SetLanguage`) to switch languages mid-play. */
+export const SET_GAME_LANGUAGE_EVENT = 'flourish:setGameLanguage';
 
 // ── Remembered timers ("Remember between play sessions") ───────────────────────────────
 // A remembered timer's PROGRESS is stored here so it picks up where it was on the next
@@ -5493,10 +5518,22 @@ const UIScreenRenderer: React.FC<{
                                 const selectedOption = el.options.find(opt => String(opt.value) === e.target.value);
                                 if (selectedOption) {
                                     onVariableChange?.(el.variableId, selectedOption.value);
-                                    
+
                                     // Execute additional actions
                                     if (el.actions && el.actions.length > 0) {
-                                        el.actions.forEach(action => onAction(action));
+                                        el.actions.forEach(action => {
+                                            /* A language dropdown's SetLanguage action means "the
+                                             * option just chosen". We hand it the selected value
+                                             * directly rather than letting it re-read the variable
+                                             * we only just wrote — variable writes go through the
+                                             * dirty-uiVars path, so reading straight back is a
+                                             * race. `fromSelection` is only ever set here. */
+                                            if (action?.type === UIActionType.SetLanguage && (action as any).fromSelection) {
+                                                onAction({ ...action, languageCode: String(selectedOption.value) } as any);
+                                            } else {
+                                                onAction(action);
+                                            }
+                                        });
                                     }
                                 }
                             }}
@@ -7005,7 +7042,44 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
      *  Editor-only; the standalone player never passes it. */
     startScreenId?: VNID | null;
 }> = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false, startAt = null, startScreenId = null }) => {
-    const { project } = useProject();
+    const outerProjectContext = useProject();
+    const { project: authoredProject } = outerProjectContext;
+
+    /* ── Language ────────────────────────────────────────────────────────────────────────
+     * 🔴 The ONE place the game becomes translated. `applyGameLanguage` returns a copy of the
+     * project with the translated text already in place, so every render site below — dialogue,
+     * choices, names, items, screens, phone, mini-games, credits — works in every language
+     * without knowing languages exist. A game with no translations gets the identical object
+     * back, so nothing about an untranslated game changes. */
+    const [gameLanguage, setGameLanguage] = useState<string>(() =>
+        detectStartLanguage(authoredProject, { saved: loadGameLanguage(authoredProject?.id || '') }));
+
+    const project = useMemo(
+        () => applyGameLanguage(authoredProject, gameLanguage) as typeof authoredProject,
+        [authoredProject, gameLanguage],
+    );
+
+    /* 🔴 Child components call `useProject()` for themselves — the screen renderer does, and so
+     * does the element renderer. Translating only this component's `project` local left every one
+     * of them reading the AUTHORED text, which is why menus stayed in English while dialogue
+     * switched. Re-providing the context with the translated project fixes all of them at once,
+     * including any added later, which is the promise this design was supposed to make. */
+    const translatedProjectContext = useMemo(
+        () => ({ ...outerProjectContext, project }),
+        [outerProjectContext, project],
+    );
+
+    const changeGameLanguage = useCallback((code: string) => {
+        if (!code) return;
+        setGameLanguage(code);
+        if (authoredProject?.id) saveGameLanguage(authoredProject.id, code);
+    }, [authoredProject?.id]);
+
+    useEffect(() => {
+        const onSet = (e: Event) => changeGameLanguage((e as CustomEvent).detail?.language);
+        window.addEventListener(SET_GAME_LANGUAGE_EVENT, onSet as EventListener);
+        return () => window.removeEventListener(SET_GAME_LANGUAGE_EVENT, onSet as EventListener);
+    }, [changeGameLanguage]);
     const toast = useToast();
     // Stable notify bridge for scripts (game.notify) and surfaced script errors.
     const notify = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
@@ -7036,9 +7110,26 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const titleScreenId = getValidTitleScreenId();
     // "Play from here" skips the title menu entirely — the mount effect below starts the game.
     // "Test this screen" boots straight into the requested screen instead of the title.
+    /* Boot gate: a game with more than one language can open on the language screen. Only on a
+     * real play-through — the editor's "Play from here" and "Test this screen" go where the author
+     * asked. Deliberately checked ONCE, in the initializer, so it can't re-fire mid-session. */
+    /* ⚠ In the EDITOR, every test play counts as a first run for this gate.
+     * "Show it once, then never again" is right for players but makes the setting untestable for
+     * the author: after picking a language once, the choice is remembered and the screen can never
+     * be seen again without clearing browser storage. A test play is the author looking at their
+     * game fresh, so they get the new-player experience. Built games keep the once-only rule.
+     * (The saved choice still decides which LANGUAGE starts — this only affects the gate.) */
+    const languageGateId = (!startScreenId && !startAt
+        && shouldShowLanguageScreen(authoredProject, {
+            saved: isStandalone ? loadGameLanguage(authoredProject?.id || '') : null,
+        }))
+        ? (authoredProject as any)?.ui?.languageScreenId
+        : null;
+
     const [screenStack, setScreenStack] = useState<VNID[]>(
         (startScreenId && project.uiScreens[startScreenId]) ? [startScreenId]
         : startAt ? []
+        : (languageGateId && project.uiScreens[languageGateId]) ? [languageGateId]
         : (titleScreenId ? [titleScreenId] : []));
     // hudStack holds screens shown as in-game overlays while in 'playing' mode
     const [hudStack, setHudStack] = useState<VNID[]>([]);
@@ -13577,6 +13668,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     window.location.href = openUrlAction.url;
                 }
             }
+        } else if (action.type === UIActionType.SetLanguage) {
+            // Empty code = back to the language the game was written in. The swap is a re-render,
+            // not a reload: the player keeps their exact place in the story.
+            const code = (action as any).languageCode || authoredProject?.localization?.sourceLanguage || '';
+            runtimeDebugLog('SetLanguage action triggered:', code);
+            changeGameLanguage(code);
+            // If this IS the boot gate, choosing a language is the answer to the question — carry
+            // on to the title. The same screen is also reachable mid-game from a button the author
+            // placed, and there the player must stay put, which is why this isn't on the button.
+            setScreenStack(stack => (
+                languageGateId && stack.length === 1 && stack[0] === languageGateId && titleScreenId
+                    ? [titleScreenId]
+                    : stack
+            ));
         } else if (action.type === UIActionType.CallCommonEvent) {
             // Invoke a Common Event from a button/choice — pushes the current position onto
             // the command stack and switches to the CE's commands; returns to the next command
@@ -16561,6 +16666,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }
 
     return (
+        <ProjectContext.Provider value={translatedProjectContext}>
         <div className="fixed inset-0 bg-black z-[9000] flex items-center justify-center">
             <style>{`
                 /* ── Built-game parity CSS ──────────────────────────────────────────────
@@ -17657,6 +17763,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 </>
             )}
         </div>
+        </ProjectContext.Provider>
     );
 };
 

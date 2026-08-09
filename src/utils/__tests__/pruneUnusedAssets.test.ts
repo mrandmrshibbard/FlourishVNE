@@ -69,6 +69,23 @@ describe('pruneUnusedAssets', () => {
         expect(pruned).toBe(2); // only the audio jingle + test clip remain unreferenced
     });
 
+    it('🔴 keeps art referenced ONLY as a localized replacement', () => {
+        // A Spanish version of a sign is referenced from nowhere but `localization.assetOverrides`.
+        // If pruning missed it, the Spanish build would ship with a missing image — and it would
+        // look fine in the editor, because the editor never prunes.
+        const p = makeProject();
+        p.localization = {
+            sourceLanguage: 'en',
+            languages: [{ code: 'es', name: 'Español', enabled: true }],
+            strings: {},
+            assetOverrides: { es: { im_used: 'im_orphan', bg_used: 'bg_orphan' } },
+        };
+        const { project, pruned } = pruneUnusedAssets(p);
+        expect(Object.keys((project as any).images)).toContain('im_orphan');
+        expect(Object.keys((project as any).backgrounds)).toContain('bg_orphan');
+        expect(pruned).toBe(2);   // only the unreferenced audio + video go
+    });
+
     it('keeps everything when every asset is referenced', () => {
         const p = makeProject();
         p.scenes.s1.commands.push(

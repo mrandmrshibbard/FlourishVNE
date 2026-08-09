@@ -150,6 +150,9 @@ export enum UIActionType {
     ShowElement = 'ShowElement',
     /** Hides a target element (fades it out + makes it click-through). Counterpart to ShowElement. */
     HideElement = 'HideElement',
+    /** Switch the language the game is played in. The player's choice is remembered between
+     *  sessions and survives Quit to Title, so it belongs to the player, not to the save file. */
+    SetLanguage = 'SetLanguage',
     ContinueGame = 'ContinueGame',
     // ─── Quick-menu equivalents (let any user-designed button drive these features) ─── //
     /** Opens the text history / log overlay. */
@@ -251,6 +254,14 @@ export interface ShowMiniGameAction extends BaseUIAction { type: UIActionType.Sh
 export interface CycleLayerAssetAction extends BaseUIAction { type: UIActionType.CycleLayerAsset; characterId: VNID; layerId: VNID; variableId: VNID; direction: 'next' | 'prev'; }
 export interface ToggleScreenAction extends BaseUIAction { type: UIActionType.ToggleScreen; targetScreenId: VNID; }
 export interface OpenURLAction extends BaseUIAction { type: UIActionType.OpenURL; url: string; newTab?: boolean; }
+/** Empty `languageCode` means "back to the language the game was written in". */
+export interface SetLanguageAction extends BaseUIAction {
+    type: UIActionType.SetLanguage;
+    languageCode: string;
+    /** Set only on a language DROPDOWN: use whichever option the player just picked, rather than a
+     *  fixed code. The dropdown supplies the value at click time. */
+    fromSelection?: boolean;
+}
 export interface PlayAnimationAction extends BaseUIAction { type: UIActionType.PlayAnimation; targetElementId: VNID; animation: string; duration?: number; }
 export interface ChangeImageAction extends BaseUIAction { type: UIActionType.ChangeImage; targetElementId: VNID; newImageId: VNID; }
 /** Change an on-stage character's pose. Empty poseId = back to their Default pose. */
@@ -281,4 +292,4 @@ export interface SetTimeOfDayAction extends BaseUIAction { type: UIActionType.Se
 /** Clear the palette→UI restyle applied by a coloring mini game. */
 export interface ClearUiPaletteAction extends BaseUIAction { type: UIActionType.ClearUiPalette; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | PlayMusicAction | StopMusicAction | SaveSlotsPageAction | ShowSpotlightAction | HideSpotlightAction | ShowFlashlightAction | HideFlashlightAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ChangePoseAction | ChangeCharacterAction | PlayCharacterAnimationAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | OpenPhoneAppAction | ShowMapAction | ShowMiniGameAction | StartTimerAction | StopTimerAction | SetTimeOfDayAction | ClearUiPaletteAction | StopSoundAction | PlayVideoAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | PlayMusicAction | StopMusicAction | SaveSlotsPageAction | ShowSpotlightAction | HideSpotlightAction | ShowFlashlightAction | HideFlashlightAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ChangePoseAction | ChangeCharacterAction | PlayCharacterAnimationAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | OpenPhoneAppAction | ShowMapAction | ShowMiniGameAction | StartTimerAction | StopTimerAction | SetTimeOfDayAction | ClearUiPaletteAction | StopSoundAction | PlayVideoAction | SetLanguageAction;

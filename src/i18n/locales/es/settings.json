@@ -86,7 +86,12 @@
       "pauseScreen": "Pantalla de pausa",
       "pauseScreenDesc": "Se muestra cuando el jugador pulsa Escape durante el juego. Normalmente ofrece Reanudar, Guardar, Cargar, Ajustes y Salir.",
       "gameHud": "Pantalla de HUD del juego",
-      "gameHudDesc": "Superposición persistente que se muestra sobre el juego, ej. barras de botones personalizadas, indicadores de estado o medidores de afecto."
+      "gameHudDesc": "Superposición persistente que se muestra sobre el juego, ej. barras de botones personalizadas, indicadores de estado o medidores de afecto.",
+      "languageScreen": "Pantalla de idioma",
+      "languageScreenDesc": "Donde los jugadores eligen el idioma en el que quieren jugar.",
+      "languageScreenAuto": "Preguntar a los jugadores nuevos qué idioma prefieren",
+      "languageScreenAutoOn": "Se muestra una vez, la primera vez que alguien juega. Quienes ya usan uno de tus idiomas se la saltan automáticamente.",
+      "languageScreenAutoOff": "No se muestra por sí sola: los jugadores solo llegan a ella desde un botón que tú coloques."
     }
   },
   "cgGallery": {

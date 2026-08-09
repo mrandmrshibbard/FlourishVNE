@@ -86,7 +86,12 @@
       "pauseScreen": "暫停畫面",
       "pauseScreenDesc": "玩家在遊玩過程中按下 Escape 時顯示。通常提供繼續、存檔、讀檔、設定與離開。",
       "gameHud": "遊戲 HUD 畫面",
-      "gameHudDesc": "顯示於遊玩畫面上方的持續性疊加層，例如自訂按鈕列、狀態指示器或好感度計量條。"
+      "gameHudDesc": "顯示於遊玩畫面上方的持續性疊加層，例如自訂按鈕列、狀態指示器或好感度計量條。",
+      "languageScreen": "語言選擇畫面",
+      "languageScreenDesc": "玩家在這裡選擇想使用的遊戲語言。",
+      "languageScreenAuto": "詢問首次遊玩的玩家想使用哪種語言",
+      "languageScreenAutoOn": "僅在第一次遊玩時顯示一次。已在使用你所支援語言的玩家會自動略過。",
+      "languageScreenAutoOff": "不會自動顯示 — 玩家只能透過你放置的按鈕進入。"
     }
   },
   "cgGallery": {

@@ -71,7 +71,8 @@
     "clearUiPalette": "UI の色をリセット（ミニゲームの配色を戻す）",
     "changePose": "ポーズを変える",
     "changeCharacter": "キャラクターを入れ替える",
-    "playCharacterAnimation": "キャラクターのアニメーションを再生"
+    "playCharacterAnimation": "キャラクターのアニメーションを再生",
+    "setLanguage": "言語を切り替え"
   },
   "actionsList": {
     "actions": "アクション",
@@ -1189,7 +1190,11 @@
     "changeCharacterHint": "入れ替わったキャラクターは同じ場所に立ちます — 位置も大きさも元のキャラクターのままです。",
     "animation": "アニメーション",
     "animationStop": "再生中のアニメーションを止める",
-    "playCharacterAnimationHint": "そのキャラクター自身のアニメーション（アニメーションスタジオで作ったもの）を再生します。舞台にいるときだけ働きます。"
+    "playCharacterAnimationHint": "そのキャラクター自身のアニメーション（アニメーションスタジオで作ったもの）を再生します。舞台にいるときだけ働きます。",
+    "language": "言語",
+    "languageOriginal": "ゲームが書かれている言語",
+    "noLanguagesYet": "まだ言語が追加されていません。［ゲームを翻訳する］で追加してください。",
+    "languageIsSource": "これはゲームが書かれている言語です。"
   },
   "effectStyle": {
     "label": "効果のスタイル",

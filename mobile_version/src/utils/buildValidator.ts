@@ -1,6 +1,8 @@
 import { VNProject } from '../types/project';
 import { CommandType, VNCommand } from '../features/scene/types';
 import { VNID } from '../types';
+import { collectTranslatableText } from '../features/localization/walkTranslatable';
+import { hashSource } from '../features/localization/store';
 
 export interface ValidationIssue {
     severity: 'error' | 'warning';
@@ -163,11 +165,90 @@ export function validateProjectForBuild(project: VNProject): ValidationResult {
         });
     }
 
+    validateLanguages(project, warnings);
+
     return {
         isValid: errors.length === 0,
         errors,
         warnings
     };
+}
+
+/**
+ * What's worth saying about a game that ships in more than one language.
+ *
+ * All WARNINGS, never errors — shipping a partly-translated game is a legitimate choice (early
+ * access, a language a fan is still working on), and the untranslated lines fall back to the
+ * original rather than breaking. The author needs to know, not to be stopped.
+ *
+ * The wording matters here: this is the last thing between an author and a public release, so each
+ * message says what the player will actually experience, not what a field is set to.
+ */
+function validateLanguages(project: VNProject, warnings: ValidationIssue[]): void {
+    const localization: any = (project as any).localization;
+    if (!localization?.languages?.length) return;
+
+    const enabled = localization.languages.filter((l: any) => l?.enabled);
+    if (!enabled.length) return;
+
+    const sites = collectTranslatableText(project);
+    const total = sites.length;
+    if (!total) return;
+
+    for (const language of enabled) {
+        let translated = 0, needsReview = 0, stale = 0;
+        for (const site of sites) {
+            const entry = localization.strings?.[site.key]?.[language.code];
+            if (!entry?.text) continue;
+            translated++;
+            if (entry.needsReview) needsReview++;
+            if (entry.sourceHash && entry.sourceHash !== hashSource(site.value)) stale++;
+        }
+
+        const name = `${language.name || language.code} (${language.code})`;
+        const percent = Math.round((translated / total) * 100);
+
+        if (translated === 0) {
+            warnings.push({
+                severity: 'warning',
+                message: `${name} is offered to players but nothing has been translated into it yet — they'd see the whole game in the original language.`,
+                location: 'Languages',
+            });
+            continue;
+        }
+
+        if (translated < total) {
+            warnings.push({
+                severity: 'warning',
+                message: `${name} is ${percent}% translated. The remaining ${total - translated} lines will appear in the original language.`,
+                location: 'Languages',
+            });
+        }
+
+        if (needsReview > 0) {
+            warnings.push({
+                severity: 'warning',
+                message: `${name} has ${needsReview} machine-translated ${needsReview === 1 ? 'line' : 'lines'} nobody has checked yet. Machine translation is a starting point — it's worth reading before players do.`,
+                location: 'Languages',
+            });
+        }
+
+        if (stale > 0) {
+            warnings.push({
+                severity: 'warning',
+                message: `${name} has ${stale} ${stale === 1 ? 'translation' : 'translations'} made from wording you've since changed, so ${stale === 1 ? 'it no longer matches' : 'they no longer match'} the original.`,
+                location: 'Languages',
+            });
+        }
+    }
+
+    if (enabled.length && !(project as any).ui?.languageScreenId) {
+        warnings.push({
+            severity: 'warning',
+            message: `This game has other languages but no language screen, so players have no way to switch. Add one under Settings → Screens, or a button with the "Set Language" action.`,
+            location: 'Languages',
+        });
+    }
 }
 
 function validateCommand(

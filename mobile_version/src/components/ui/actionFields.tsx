@@ -428,6 +428,26 @@ const ActionFields: React.FC<{
                     {t('actionEditor.openNewTab', 'Open in a new tab')}
                 </label>
             </>);
+        case UIActionType.SetLanguage: {
+            const langs = ((project as any).localization?.languages || []) as { code: string; name: string }[];
+            const sourceLanguage = (project as any).localization?.sourceLanguage || 'en';
+            return group('sky', <>
+                {field(t('actionEditor.language', 'Language'), sel(a.languageCode ?? '', v => set({ languageCode: v }), <>
+                    <option value="">{t('actionEditor.languageOriginal', 'The language the game is written in')}</option>
+                    {langs.map(l => <option key={l.code} value={l.code}>{l.name} ({l.code})</option>)}
+                </>))}
+                {!langs.length && (
+                    <p className={variant === 'form' ? 'text-xs text-amber-400' : 'text-[10px] text-amber-400'}>
+                        {t('actionEditor.noLanguagesYet', 'No languages added yet — add one in Translate your game first.')}
+                    </p>
+                )}
+                {a.languageCode === sourceLanguage && (
+                    <p className={variant === 'form' ? 'text-xs text-slate-400' : 'text-[10px] text-[var(--text-secondary)]'}>
+                        {t('actionEditor.languageIsSource', 'This is the language the game is written in.')}
+                    </p>
+                )}
+            </>);
+        }
         case UIActionType.CallCommonEvent:
             return group('sky', field(t('actionEditor.commonEvent', 'Common Event'), sel(a.commonEventId || '', v => set({ commonEventId: v }), <>
                 <option value="">{t('actionEditor.selectCommonEvent', 'Select a common event…')}</option>

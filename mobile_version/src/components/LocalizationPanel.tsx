@@ -1,373 +1,650 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+/**
+ * The translation workspace.
+ *
+ * 🔴 Rebuilt on `project.localization`. The previous version kept everything in a service object
+ * held in component state and never dispatched, so every translation an author typed was thrown
+ * away the moment the panel closed — the bug this feature exists to fix. Every write here goes
+ * through `dispatch`, which means it lands in the project, in undo history, and in the save file.
+ */
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LocalizationService, StringEntry, LanguageConfig } from '../features/localization/LocalizationService';
+import JSZip from 'jszip';
+import { useProject } from '../contexts/ProjectContext';
+import { VNLanguage } from '../types/project';
+import { VNID } from '../types';
+import {
+    buildTranslationSheets, buildTranslationCsv, readTranslationSheets, readTranslationCsv,
+    ImportChange, ImportResult,
+} from '../features/localization/translationSheet';
+import { writeXlsx, parseXlsx, parseCsv } from '../features/localization/tabular';
+import {
+    applyTranslations, languageProgress, upsertTranslation, emptyLocalization, hashSource,
+} from '../features/localization/store';
+import { collectTranslatableText } from '../features/localization/walkTranslatable';
+import {
+    createLanguageScreen, addMissingLanguageButtons, createLanguageVariable, LanguagePickerStyle,
+    languagePickerStyle, setLanguagePickerStyle, removeLanguageFromScreen,
+} from '../features/localization/languageScreen';
+import { describeTokens } from '../features/localization/tokenGuard';
+import { downloadBlob } from '../utils/gameBundler';
+import ImportReport from './localization/ImportReport';
+import ReviewChanges from './localization/ReviewChanges';
+import LocalizedArt from './localization/LocalizedArt';
 
 interface LocalizationPanelProps {
-  isOpen: boolean;
-  onClose: () => void;
-  project: any;
+    isOpen: boolean;
+    onClose: () => void;
 }
 
+/** Names are written in the language itself — that's what a speaker of it looks for in a list. */
 const COMMON_LANGUAGES: { code: string; name: string }[] = [
-  { code: 'en', name: 'English' },
-  { code: 'ja', name: 'Japanese' },
-  { code: 'es', name: 'Spanish' },
-  { code: 'fr', name: 'French' },
-  { code: 'de', name: 'German' },
-  { code: 'ko', name: 'Korean' },
-  { code: 'zh', name: 'Chinese' },
-  { code: 'pt', name: 'Portuguese' },
-  { code: 'ru', name: 'Russian' },
-  { code: 'ar', name: 'Arabic' },
+    { code: 'es', name: 'Español' }, { code: 'fr', name: 'Français' }, { code: 'de', name: 'Deutsch' },
+    { code: 'pt-BR', name: 'Português (Brasil)' }, { code: 'it', name: 'Italiano' }, { code: 'ru', name: 'Русский' },
+    { code: 'ja', name: '日本語' }, { code: 'ko', name: '한국어' }, { code: 'zh-CN', name: '简体中文' },
+    { code: 'zh-TW', name: '繁體中文' }, { code: 'ar', name: 'العربية' }, { code: 'pl', name: 'Polski' },
+    { code: 'tr', name: 'Türkçe' }, { code: 'nl', name: 'Nederlands' },
 ];
 
-const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, project }) => {
-  const { t } = useTranslation('contextPanels');
-  const [service] = useState(() => new LocalizationService());
-  const [languages, setLanguages] = useState<LanguageConfig[]>([]);
-  const [strings, setStrings] = useState<StringEntry[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [tagFilter, setTagFilter] = useState<string>('all');
-  const [showLangDropdown, setShowLangDropdown] = useState(false);
-  const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+type Filter = 'all' | 'untranslated' | 'needsReview' | 'stale';
 
-  useEffect(() => {
-    if (isOpen && project) {
-      service.initializeFromProject(project);
-      refreshState();
-    }
-  }, [isOpen, project]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowLangDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const refreshState = () => {
-    setLanguages([...service.getLanguages()]);
-    setStrings([...service.getStrings()]);
-  };
-
-  const handleAddLanguage = (code: string, name: string) => {
-    service.addLanguage(code, name);
-    refreshState();
-    setShowLangDropdown(false);
-  };
-
-  const handleRemoveLanguage = (code: string) => {
-    service.removeLanguage(code);
-    refreshState();
-  };
-
-  const handleTranslationChange = (stringId: string, langCode: string, text: string) => {
-    service.setTranslation(stringId, langCode, text);
-    refreshState();
-  };
-
-  const handleExportCSV = () => {
-    const csv = service.exportCSV();
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'localization.csv';
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const content = ev.target?.result as string;
-      const result = service.importCSV(content);
-      setImportResult(result);
-      refreshState();
-      setTimeout(() => setImportResult(null), 5000);
-    };
-    reader.readAsText(file);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const additionalLanguages = languages.filter(l => !l.isDefault);
-  const availableToAdd = COMMON_LANGUAGES.filter(cl => !languages.find(l => l.code === cl.code));
-
-  const filteredStrings = useMemo(() => {
-    let result = strings;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(s =>
-        s.key.toLowerCase().includes(q) ||
-        s.defaultText.toLowerCase().includes(q) ||
-        (s.context || '').toLowerCase().includes(q)
-      );
-    }
-    if (tagFilter !== 'all') {
-      result = result.filter(s => s.tags.includes(tagFilter));
-    }
-    return result;
-  }, [strings, searchQuery, tagFilter]);
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-[var(--bg-primary)] w-[95vw] h-[90vh] rounded-xl border border-[var(--border-subtle)] flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">🌐</span>
-            <h2 className="text-xl font-bold text-white">{t('localizationPanel.title')}</h2>
-            <span className="text-sm text-[var(--text-secondary)]">
-              {t('localizationPanel.stringCount', { count: strings.length })}
-            </span>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-[var(--text-secondary)] hover:text-white p-2 rounded-lg hover:bg-[var(--bg-primary)] transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-              <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="px-6 py-3 border-b border-[var(--border-subtle)] flex items-center gap-3 flex-wrap">
-          {languages.map(lang => (
-            <div
-              key={lang.code}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border"
-              style={{
-                background: lang.isDefault ? 'rgba(59, 130, 246, 0.15)' : 'rgba(100, 116, 139, 0.15)',
-                borderColor: lang.isDefault ? 'rgba(59, 130, 246, 0.4)' : 'rgba(100, 116, 139, 0.3)',
-                color: lang.isDefault ? '#93c5fd' : '#cbd5e1'
-              }}
-            >
-              <span className="font-medium">{lang.name}</span>
-              <span className="text-xs opacity-70">({lang.code})</span>
-              <span
-                className="text-xs font-mono px-1.5 py-0.5 rounded"
-                style={{
-                  background: lang.completionPercent === 100
-                    ? 'rgba(34, 197, 94, 0.2)'
-                    : lang.completionPercent > 50
-                      ? 'rgba(234, 179, 8, 0.2)'
-                      : 'rgba(239, 68, 68, 0.2)',
-                  color: lang.completionPercent === 100
-                    ? '#86efac'
-                    : lang.completionPercent > 50
-                      ? '#fde047'
-                      : '#fca5a5'
-                }}
-              >
-                {lang.completionPercent}%
-              </span>
-              {!lang.isDefault && (
-                <button
-                  onClick={() => handleRemoveLanguage(lang.code)}
-                  className="text-[var(--text-muted)] hover:text-red-400 transition-colors ml-1"
-                  title={t('localizationPanel.removeLanguageTip', { name: lang.name })}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                    <path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          ))}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setShowLangDropdown(!showLangDropdown)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-[var(--bg-primary)] border border-[var(--border-default)] text-[var(--text-primary)] hover:text-white hover:border-[var(--border-default)] transition-colors"
-              disabled={availableToAdd.length === 0}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
-                <path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" />
-              </svg>
-              {t('localizationPanel.addLanguage')}
+/** Words vs. pictures — the two kinds of thing that need translating. */
+const TabSwitch: React.FC<{ tab: 'text' | 'art'; setTab: (t: 'text' | 'art') => void; t: any }> = ({ tab, setTab, t }) => (
+    <div className="flex gap-1 border-b border-slate-700 px-4 py-1.5">
+        {([
+            ['text', t('localizationPanel.tabText', 'Words')],
+            ['art', t('localizationPanel.tabArt', 'Pictures with words in them')],
+        ] as const).map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)}
+                className={`rounded px-3 py-1 text-sm ${tab === id ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:text-slate-200'}`}>
+                {label}
             </button>
-            {showLangDropdown && availableToAdd.length > 0 && (
-              <div className="absolute top-full left-0 mt-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg shadow-xl z-10 py-1 min-w-[180px]">
-                {availableToAdd.map(lang => (
-                  <button
-                    key={lang.code}
-                    onClick={() => handleAddLanguage(lang.code, lang.name)}
-                    className="w-full text-left px-4 py-2 text-sm text-[var(--text-primary)] hover:text-white hover:bg-[var(--bg-secondary)] transition-colors"
-                  >
-                    {lang.name} <span className="text-[var(--text-muted)]">({lang.code})</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="px-6 py-3 border-b border-[var(--border-subtle)] flex items-center gap-3">
-          <div className="relative flex-1 max-w-md">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]">
-              <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
-            </svg>
-            <input
-              type="text"
-              autoFocus
-              placeholder={t('localizationPanel.searchPlaceholder')}
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
-            />
-          </div>
-          <div className="flex items-center gap-1">
-            {([
-              { value: 'all', label: t('localizationPanel.filterAll') },
-              { value: 'dialogue', label: t('localizationPanel.filterDialogue') },
-              { value: 'choice', label: t('localizationPanel.filterChoice') },
-            ] as { value: string; label: string }[]).map(tag => (
-              <button
-                key={tag.value}
-                onClick={() => setTagFilter(tag.value)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  tagFilter === tag.value
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
-                    : 'bg-[var(--bg-primary)] text-[var(--text-secondary)] border border-[var(--border-default)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                {tag.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-auto">
-          {filteredStrings.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">
-              <span className="text-4xl mb-3">📝</span>
-              <p className="text-lg font-medium">{t('localizationPanel.emptyNoStrings')}</p>
-              <p className="text-sm mt-1">
-                {strings.length === 0
-                  ? t('localizationPanel.emptyNoStringsHintScan')
-                  : t('localizationPanel.emptyNoStringsHintFilter')}
-              </p>
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-[var(--bg-primary)] z-10">
-                <tr className="border-b border-[var(--border-subtle)]">
-                  <th className="text-left px-4 py-3 text-[var(--text-secondary)] font-medium w-[200px] min-w-[200px]">{t('localizationPanel.colKey')}</th>
-                  <th className="text-left px-4 py-3 text-[var(--text-secondary)] font-medium w-[140px] min-w-[140px]">{t('localizationPanel.colContext')}</th>
-                  <th className="text-left px-4 py-3 text-[var(--text-secondary)] font-medium min-w-[200px]">{t('localizationPanel.colDefaultText')}</th>
-                  {additionalLanguages.map(lang => (
-                    <th key={lang.code} className="text-left px-4 py-3 text-[var(--text-secondary)] font-medium min-w-[200px]">
-                      {lang.name} ({lang.code})
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredStrings.map(entry => (
-                  <tr key={entry.id} className="border-b border-slate-800 hover:bg-[var(--bg-primary)]/50 transition-colors">
-                    <td className="px-4 py-2 font-mono text-xs text-[var(--text-secondary)] break-all border-r border-slate-800">
-                      {entry.key}
-                      <div className="flex gap-1 mt-1">
-                        {entry.tags.map(t => (
-                          <span
-                            key={t}
-                            className="px-1.5 py-0.5 rounded text-[10px] font-medium"
-                            style={{
-                              background: t === 'dialogue' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(168, 85, 247, 0.15)',
-                              color: t === 'dialogue' ? '#93c5fd' : '#c4b5fd'
-                            }}
-                          >
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2 text-xs text-[var(--text-muted)] border-r border-slate-800">{entry.context}</td>
-                    <td className="px-4 py-2 text-[var(--text-primary)] border-r border-slate-800">
-                      {entry.defaultText}
-                    </td>
-                    {additionalLanguages.map(lang => {
-                      const translation = entry.translations[lang.code] || '';
-                      const isEmpty = !translation.trim();
-                      return (
-                        <td
-                          key={lang.code}
-                          className="px-2 py-1 border-r border-slate-800"
-                          style={isEmpty ? { background: 'rgba(234, 179, 8, 0.08)' } : undefined}
-                        >
-                          <input
-                            type="text"
-                            value={translation}
-                            onChange={e => handleTranslationChange(entry.id, lang.code, e.target.value)}
-                            placeholder={t('localizationPanel.translationPlaceholder')}
-                            className="w-full bg-transparent text-[var(--text-primary)] placeholder-slate-600 px-2 py-1.5 rounded border border-transparent focus:border-blue-500 focus:outline-none transition-colors text-sm"
-                            style={isEmpty ? { borderColor: 'rgba(234, 179, 8, 0.3)' } : undefined}
-                          />
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <div className="px-6 py-3 border-t border-[var(--border-subtle)] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleExportCSV}
-              disabled={strings.length === 0}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[var(--bg-primary)] border border-[var(--border-default)] text-[var(--text-primary)] hover:text-white hover:border-[var(--border-default)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" />
-                <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
-              </svg>
-              {t('localizationPanel.exportCsv')}
-            </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[var(--bg-primary)] border border-[var(--border-default)] text-[var(--text-primary)] hover:text-white hover:border-[var(--border-default)] transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                <path d="M9.25 13.25a.75.75 0 0 0 1.5 0V4.636l2.955 3.129a.75.75 0 0 0 1.09-1.03l-4.25-4.5a.75.75 0 0 0-1.09 0l-4.25 4.5a.75.75 0 1 0 1.09 1.03L9.25 4.636v8.614Z" />
-                <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
-              </svg>
-              {t('localizationPanel.importCsv')}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              onChange={handleImportCSV}
-              className="hidden"
-            />
-          </div>
-          {importResult && (
-            <div className="text-sm">
-              <span className="text-green-400">{t('localizationPanel.importSuccess', { count: importResult.imported })}</span>
-              {importResult.errors.length > 0 && (
-                <span className="text-yellow-400 ml-2">
-                  {t('localizationPanel.importErrors', { count: importResult.errors.length })} {importResult.errors.slice(0, 3).join(', ')}
-                </span>
-              )}
-            </div>
-          )}
-          <div className="text-xs text-[var(--text-muted)]">
-            {t('localizationPanel.showingCount', { filtered: filteredStrings.length, total: strings.length })}
-          </div>
-        </div>
-      </div>
+        ))}
     </div>
-  );
+);
+
+/**
+ * One translation cell.
+ *
+ * 🔴 Keeps the text in LOCAL state while typing and commits on blur — dispatching per keystroke
+ * would rewrite the whole project on every letter. But the local copy must follow the stored value
+ * when it changes from OUTSIDE (an import, an undo): this was a plain uncontrolled `defaultValue`,
+ * and React never updates one of those after mount, so imported translations didn't appear until
+ * the panel was closed and reopened. The `useEffect` is the fix, not a nicety.
+ */
+const TranslationBox: React.FC<{
+    value: string;
+    onCommit: (text: string) => void;
+    placeholder: string;
+    rows: number;
+}> = ({ value, onCommit, placeholder, rows }) => {
+    const [text, setText] = useState(value);
+    useEffect(() => { setText(value); }, [value]);
+
+    return (
+        <textarea
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onBlur={() => { if (text !== value) onCommit(text); }}
+            placeholder={placeholder}
+            rows={rows}
+            className="w-full rounded border border-slate-600 bg-slate-800 p-2 text-sm text-slate-100"
+        />
+    );
+};
+
+const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose }) => {
+    const { t } = useTranslation('contextPanels');
+    const { project, dispatch } = useProject();
+
+    const localization = project?.localization;
+    const languages: VNLanguage[] = localization?.languages || [];
+    const [active, setActive] = useState<string>('');
+    const [filter, setFilter] = useState<Filter>('all');
+    const [search, setSearch] = useState('');
+    const [report, setReport] = useState<ImportResult | null>(null);
+    const [pendingReview, setPendingReview] = useState<ImportChange[] | null>(null);
+    const [reviewFirst, setReviewFirst] = useState(false);          // opt-in, per Brad
+    const [addingLanguage, setAddingLanguage] = useState(false);
+    const [confirmRemove, setConfirmRemove] = useState<VNLanguage | null>(null);
+    const [screenNotice, setScreenNotice] = useState<string | null>(null);
+    const [tab, setTab] = useState<'text' | 'art'>('text');
+    /* How the language screen lets players choose. Ten buttons is a wall of text on screen, so a
+     * dropdown is offered — chosen BEFORE the screen is generated, since it decides what's built. */
+    const [pickerStyle, setPickerStyle] = useState<LanguagePickerStyle>('buttons');
+    const [dragging, setDragging] = useState(false);
+    const [busy, setBusy] = useState('');
+    const fileInput = useRef<HTMLInputElement>(null);
+
+    const language = active || languages[0]?.code || '';
+    const sites = useMemo(() => (project ? collectTranslatableText(project) : []), [project]);
+    const progress = useMemo(
+        () => (project && language ? languageProgress(project, language) : null),
+        [project, language],
+    );
+
+    const update = (next: any) => dispatch({ type: 'UPDATE_PROJECT', payload: { localization: next } });
+
+    /* ── Languages ─────────────────────────────────────────────────────────────────────── */
+
+    /**
+     * Adding a language also makes sure the game HAS a way for players to choose it.
+     *
+     * The screen is a real, editable UI screen (see `languageScreen.ts`) created the first time
+     * it's needed and topped up with a button afterwards — never rebuilt, since by then it's the
+     * author's screen. Doing this here means an author can't end up with a translated game that
+     * players have no way to switch into, which is the obvious trap.
+     */
+    const addLanguage = (code: string, name: string) => {
+        if (!project || languages.some(l => l.code === code)) return;
+        const base = localization || emptyLocalization();
+        const nextLocalization = { ...base, languages: [...base.languages, { code, name, enabled: true }] };
+        const withLanguage: any = { ...project, localization: nextLocalization };
+
+        const existingId = (project.ui as any)?.languageScreenId;
+        const existing = existingId ? (project.uiScreens as any)?.[existingId] : null;
+        const payload: any = { localization: nextLocalization };
+
+        if (existing) {
+            const topped = addMissingLanguageButtons(withLanguage, existing);
+            if (topped !== existing) payload.uiScreens = { ...project.uiScreens, [existingId]: topped };
+        } else {
+            // A dropdown needs somewhere to store the selection, so it brings a variable with it.
+            const needsVariable = pickerStyle === 'dropdown';
+            const languageVar = needsVariable ? createLanguageVariable(withLanguage) : null;
+            const screen = createLanguageScreen(withLanguage, 'Language', pickerStyle, languageVar?.id);
+
+            payload.uiScreens = { ...project.uiScreens, [screen.id]: screen };
+            payload.ui = { ...project.ui, languageScreenId: screen.id };
+            if (languageVar) {
+                payload.variables = { ...(project.variables || {}), [languageVar.id]: languageVar.variable };
+            }
+            setScreenNotice(screen.name);
+        }
+
+        dispatch({ type: 'UPDATE_PROJECT', payload });
+        setActive(code);
+        setAddingLanguage(false);
+    };
+
+    const setLanguageEnabled = (code: string, enabled: boolean) => {
+        const base = localization || emptyLocalization();
+        update({ ...base, languages: base.languages.map(l => l.code === code ? { ...l, enabled } : l) });
+    };
+
+    /* The style shown in the toolbar: whatever the existing screen actually uses, or the pending
+     * choice for a screen that doesn't exist yet. Reading it off the screen means the control can
+     * never disagree with what the author will see when they open it. */
+    const existingScreen: any = (project?.ui as any)?.languageScreenId
+        ? (project?.uiScreens as any)?.[(project!.ui as any).languageScreenId]
+        : null;
+    const currentPickerStyle: LanguagePickerStyle = existingScreen
+        ? languagePickerStyle(existingScreen)
+        : pickerStyle;
+
+    /** Convert an existing screen's picker, or just remember the choice if there's no screen yet. */
+    const changePickerStyle = (style: LanguagePickerStyle) => {
+        setPickerStyle(style);
+        if (!project || !existingScreen || style === currentPickerStyle) return;
+
+        const payload: any = {};
+        let variableId: VNID | undefined;
+        if (style === 'dropdown') {
+            // Reuse the language variable if one is already there — switching back and forth
+            // shouldn't litter the project with a new variable each time.
+            const existingVar = Object.values<any>(project.variables || {})
+                .find(v => v?.name === 'Language');
+            if (existingVar) {
+                variableId = existingVar.id;
+            } else {
+                const made = createLanguageVariable(project);
+                variableId = made.id;
+                payload.variables = { ...(project.variables || {}), [made.id]: made.variable };
+            }
+        }
+
+        const next = setLanguagePickerStyle(project, existingScreen, style, variableId);
+        if (next === existingScreen) return;
+        payload.uiScreens = { ...project.uiScreens, [existingScreen.id]: next };
+        dispatch({ type: 'UPDATE_PROJECT', payload });
+    };
+
+    /** How much work is at stake, so the confirmation can say a number rather than "some data". */
+    const translationCount = (code: string) =>
+        Object.values(localization?.strings || {}).filter((byLang: any) => byLang?.[code]?.text).length;
+
+    /**
+     * Removing a language deletes its translations too.
+     *
+     * Keeping them was the first behaviour, and it was wrong in a way only using it reveals:
+     * re-adding the language brought the old translations back from nowhere, which reads like a
+     * bug even when it's deliberate. Deleting is what "remove" means. The confirmation names the
+     * number of translations first, and it's a single dispatch, so Undo brings the whole thing back.
+     */
+    const removeLanguage = (code: string) => {
+        const base = localization || emptyLocalization();
+        const strings: any = {};
+        for (const [key, byLang] of Object.entries<any>(base.strings || {})) {
+            const { [code]: _removed, ...rest } = byLang || {};
+            if (Object.keys(rest).length) strings[key] = rest;      // drop keys left with nothing
+        }
+        const payload: any = {
+            localization: { ...base, languages: base.languages.filter(l => l.code !== code), strings },
+        };
+
+        // ...and take it off the language screen, or players keep seeing a button that switches
+        // into a language the game no longer has.
+        if (existingScreen) {
+            const trimmed = removeLanguageFromScreen(project!, existingScreen, code);
+            if (trimmed !== existingScreen) {
+                payload.uiScreens = { ...project!.uiScreens, [existingScreen.id]: trimmed };
+            }
+        }
+
+        dispatch({ type: 'UPDATE_PROJECT', payload });
+        if (active === code) setActive('');
+        setConfirmRemove(null);
+    };
+
+    /* ── Editing ───────────────────────────────────────────────────────────────────────── */
+
+    const setTranslation = (key: string, text: string, source: string) => {
+        update(upsertTranslation(localization, key, language, {
+            text,
+            origin: 'human',
+            needsReview: false,                 // a person typed it — that IS the review
+            sourceHash: hashSource(source),
+        }));
+    };
+
+    const approve = (key: string, source: string) => {
+        const current = localization?.strings?.[key]?.[language];
+        if (!current) return;
+        update(upsertTranslation(localization, key, language, {
+            ...current, needsReview: false, sourceHash: hashSource(source),
+        }));
+    };
+
+    /* ── Export ────────────────────────────────────────────────────────────────────────── */
+
+    const exportFile = async (format: 'csv' | 'xlsx') => {
+        if (!project || !language) return;
+        setBusy(t('localizationPanel.preparing', 'Preparing the file…'));
+        try {
+            const options = {
+                languageCode: language,
+                languageName: languages.find(l => l.code === language)?.name,
+                existing: localization?.strings,
+            };
+            const safeTitle = (project.title || 'game').replace(/[^\w.-]+/g, '_');
+            const filename = `${safeTitle}_${language}.${format}`;
+            const api = (window as any).electronAPI;
+
+            if (format === 'csv') {
+                const csv = buildTranslationCsv(project, options);
+                if (api?.saveProjectToPath) await api.saveProjectToPath(csv, filename, undefined, 'csv');
+                else downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), filename);
+            } else {
+                const bytes = await writeXlsx(buildTranslationSheets(project, options), JSZip);
+                if (api?.saveProjectToPath) await api.saveProjectToPath(bytes, filename, undefined, 'xlsx');
+                else downloadBlob(new Blob([bytes as any], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
+            }
+        } finally {
+            setBusy('');
+        }
+    };
+
+    /* ── Import ────────────────────────────────────────────────────────────────────────── */
+
+    const importFile = async (file: File) => {
+        if (!project || !language) return;
+        setBusy(t('localizationPanel.reading', 'Reading the file…'));
+        try {
+            const existing = localization?.strings;
+            let result: ImportResult;
+            if (/\.xlsx$/i.test(file.name)) {
+                const sheets = await parseXlsx(new Uint8Array(await file.arrayBuffer()), JSZip);
+                result = readTranslationSheets(project, sheets, { languageCode: language, existing });
+            } else {
+                result = readTranslationCsv(project, await file.text(), { languageCode: language, existing });
+            }
+            setReport(result);
+            if (reviewFirst && result.changes.length) setPendingReview(result.changes);
+            else if (result.changes.length) {
+                dispatch({
+                    type: 'UPDATE_PROJECT',
+                    payload: { localization: applyTranslations(project, result.changes, { language }).localization },
+                });
+            }
+        } catch (error: any) {
+            setReport({
+                language, changes: [], counts: { rowsRead: 0, changed: 0, unchanged: 0, blank: 0, refused: 0 },
+                issues: [{
+                    kind: 'no-key-column', blocking: true, sheet: file.name, row: 1,
+                    message: t('localizationPanel.unreadable',
+                        "Couldn't read that spreadsheet. If it came from another program, open it and re-save it as CSV, then try again."),
+                }],
+            });
+        } finally {
+            setBusy('');
+        }
+    };
+
+    const applyReviewed = (accepted: ImportChange[]) => {
+        if (project && accepted.length) {
+            dispatch({
+                type: 'UPDATE_PROJECT',
+                payload: { localization: applyTranslations(project, accepted, { language }).localization },
+            });
+        }
+        setPendingReview(null);
+    };
+
+    /* ── Rows ──────────────────────────────────────────────────────────────────────────── */
+
+    const rows = useMemo(() => {
+        const strings = localization?.strings || {};
+        const needle = search.trim().toLowerCase();
+        return sites.filter(site => {
+            const entry = strings[site.key]?.[language];
+            if (filter === 'untranslated' && entry?.text) return false;
+            if (filter === 'needsReview' && !entry?.needsReview) return false;
+            if (filter === 'stale' && !(entry?.text && entry.sourceHash && entry.sourceHash !== hashSource(site.value))) return false;
+            if (needle && !site.value.toLowerCase().includes(needle) && !site.where.toLowerCase().includes(needle)) return false;
+            return true;
+        });
+    }, [sites, localization, language, filter, search]);
+
+    if (!isOpen) return null;
+
+    const filters: { id: Filter; label: string }[] = [
+        { id: 'all', label: t('localizationPanel.filterAll', 'All') },
+        { id: 'untranslated', label: t('localizationPanel.filterUntranslated', 'Not translated') },
+        { id: 'needsReview', label: t('localizationPanel.filterNeedsReview', 'Needs review') },
+        { id: 'stale', label: t('localizationPanel.filterStale', 'Out of date') },
+    ];
+
+    return (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-4"
+            onClick={onClose}>
+            <div className={`relative flex h-[85vh] w-full max-w-6xl flex-col rounded-xl bg-slate-900 shadow-2xl ${dragging ? 'ring-2 ring-emerald-500' : ''}`}
+                onClick={e => e.stopPropagation()}
+                /* Dropping the returned spreadsheet onto the panel is the natural gesture, so it
+                 * works anywhere on it. `onDragOver` MUST preventDefault or the browser navigates
+                 * away to the file instead of handing it over. */
+                onDragOver={e => { e.preventDefault(); if (!dragging) setDragging(true); }}
+                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false); }}
+                onDrop={e => {
+                    e.preventDefault();
+                    setDragging(false);
+                    const file = e.dataTransfer?.files?.[0];
+                    if (file && language) importFile(file);
+                }}>
+
+                {dragging && language && (
+                    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-slate-900/80 text-lg text-emerald-300">
+                        {t('localizationPanel.dropHere', 'Drop the translated file here')}
+                    </div>
+                )}
+
+                {confirmRemove && (
+                    <div className="absolute inset-0 z-20 flex items-center justify-center rounded-xl bg-black/70 p-4">
+                        <div className="w-full max-w-md rounded-lg border border-slate-600 bg-slate-800 p-4">
+                            <h3 className="mb-2 text-base font-semibold text-slate-100">
+                                {t('localizationPanel.confirmRemoveTitle', 'Remove {{name}}?', { name: confirmRemove.name })}
+                            </h3>
+                            <p className="mb-4 text-sm text-slate-300">
+                                {translationCount(confirmRemove.code) > 0
+                                    ? t('localizationPanel.confirmRemoveBody',
+                                        'This also deletes {{count}} translations for this language. You can undo it straight away with Ctrl+Z.',
+                                        { count: translationCount(confirmRemove.code) })
+                                    : t('localizationPanel.confirmRemoveEmpty',
+                                        'Nothing has been translated into this language yet.')}
+                            </p>
+                            <div className="flex justify-end gap-2">
+                                <button onClick={() => setConfirmRemove(null)}
+                                    className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-100 hover:bg-slate-600">
+                                    {t('localizationPanel.cancel', 'Cancel')}
+                                </button>
+                                <button onClick={() => removeLanguage(confirmRemove.code)}
+                                    className="rounded bg-rose-600 px-3 py-1.5 text-sm text-white hover:bg-rose-500">
+                                    {t('localizationPanel.confirmRemoveAction', 'Remove and delete')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
+                    <div>
+                        <h2 className="text-lg font-semibold text-slate-100">
+                            {t('localizationPanel.title', 'Translate your game')}
+                        </h2>
+                        <p className="text-xs text-slate-400">
+                            {t('localizationPanel.subtitle', 'Add a language, then translate here or send a spreadsheet to a translator.')}
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100">✕</button>
+                </div>
+
+                {/* Languages */}
+                <div className="flex flex-wrap items-center gap-2 border-b border-slate-700 px-4 py-2">
+                    {languages.map(lang => (
+                        <div key={lang.code}
+                            className={`flex items-center gap-1 rounded-full border px-3 py-1 text-sm ${lang.code === language ? 'border-emerald-500 bg-emerald-950/40 text-emerald-200' : 'border-slate-600 text-slate-300'}`}>
+                            <button onClick={() => setActive(lang.code)}>{lang.name}</button>
+                            <label className="ml-1 flex cursor-pointer items-center gap-1 text-xs text-slate-400"
+                                title={t('localizationPanel.enabledHint', 'Offer this language to players')}>
+                                <input type="checkbox" checked={lang.enabled}
+                                    onChange={e => setLanguageEnabled(lang.code, e.target.checked)} />
+                            </label>
+                            <button onClick={() => setConfirmRemove(lang)}
+                                className="ml-1 text-slate-500 hover:text-rose-400"
+                                title={t('localizationPanel.removeLanguage', 'Remove this language')}>✕</button>
+                        </div>
+                    ))}
+
+                    {/* Always available. Hiding this once a screen existed meant an author who
+                        generated buttons could never change their mind — "we never rebuild your
+                        screen" shouldn't mean "you're stuck with the first choice". */}
+                    <label className="ml-auto flex items-center gap-1 text-xs text-slate-400">
+                        {t('localizationPanel.pickerStyle', 'Players choose with')}
+                        <select value={currentPickerStyle}
+                            aria-label={t('localizationPanel.pickerStyle', 'Players choose with')}
+                            onChange={e => changePickerStyle(e.target.value as LanguagePickerStyle)}
+                            className="rounded border border-slate-600 bg-slate-800 px-1.5 py-0.5 text-slate-100">
+                            <option value="buttons">{t('localizationPanel.pickerButtons', 'A button per language')}</option>
+                            <option value="dropdown">{t('localizationPanel.pickerDropdown', 'A drop-down list')}</option>
+                        </select>
+                    </label>
+
+                    {addingLanguage ? (
+                        <select autoFocus defaultValue=""
+                            aria-label={t('localizationPanel.chooseLanguage', 'Choose a language…')}
+                            onChange={e => {
+                                const found = COMMON_LANGUAGES.find(l => l.code === e.target.value);
+                                if (found) addLanguage(found.code, found.name);
+                            }}
+                            onBlur={() => setAddingLanguage(false)}
+                            className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100">
+                            <option value="" disabled>{t('localizationPanel.chooseLanguage', 'Choose a language…')}</option>
+                            {COMMON_LANGUAGES.filter(l => !languages.some(x => x.code === l.code))
+                                .map(l => <option key={l.code} value={l.code}>{l.name} ({l.code})</option>)}
+                        </select>
+                    ) : (
+                        <button onClick={() => setAddingLanguage(true)}
+                            className="rounded-full border border-dashed border-slate-600 px-3 py-1 text-sm text-slate-300 hover:border-slate-400">
+                            + {t('localizationPanel.addLanguage', 'Add a language')}
+                        </button>
+                    )}
+                </div>
+
+                {screenNotice && (
+                    <div className="flex items-start justify-between gap-3 border-b border-slate-700 bg-emerald-950/30 px-4 py-2 text-sm text-emerald-200">
+                        <span>
+                            {t('localizationPanel.screenCreated',
+                                'A "{{name}}" screen was added so players can choose their language. You can restyle it like any other screen under Screens.',
+                                { name: screenNotice })}
+                        </span>
+                        <button onClick={() => setScreenNotice(null)}
+                            className="shrink-0 text-emerald-300/70 hover:text-emerald-100">✕</button>
+                    </div>
+                )}
+
+                {!language ? (
+                    <div className="flex flex-1 items-center justify-center p-8 text-center text-slate-400">
+                        {t('localizationPanel.emptyState', 'Add a language to get started. Your game keeps working exactly as it does now until you do.')}
+                    </div>
+                ) : pendingReview ? (
+                    <div className="flex-1 min-h-0 p-4">
+                        <ReviewChanges changes={pendingReview} onApply={applyReviewed} onCancel={() => setPendingReview(null)} />
+                    </div>
+                ) : tab === 'art' ? (
+                    <>
+                        <TabSwitch tab={tab} setTab={setTab} t={t} />
+                        <LocalizedArt
+                            project={project}
+                            language={language}
+                            languageName={languages.find(l => l.code === language)?.name || language}
+                            overrides={localization?.assetOverrides?.[language] || {}}
+                            onChange={next => {
+                                const base = localization || emptyLocalization();
+                                update({
+                                    ...base,
+                                    assetOverrides: { ...(base.assetOverrides || {}), [language]: next },
+                                });
+                            }}
+                        />
+                    </>
+                ) : (
+                    <>
+                        <TabSwitch tab={tab} setTab={setTab} t={t} />
+                        {/* Toolbar */}
+                        <div className="flex flex-wrap items-center gap-2 border-b border-slate-700 px-4 py-2">
+                            {progress && (
+                                <div className="mr-2 text-sm text-slate-300">
+                                    <span className="font-medium text-slate-100">{progress.percent}%</span>{' '}
+                                    <span className="text-slate-400">
+                                        ({progress.translated}/{progress.total})
+                                    </span>
+                                    {progress.needsReview > 0 && (
+                                        <span className="ml-2 text-amber-400">
+                                            {t('localizationPanel.needsReviewCount', '{{count}} to review', { count: progress.needsReview })}
+                                        </span>
+                                    )}
+                                    {progress.stale > 0 && (
+                                        <span className="ml-2 text-orange-400">
+                                            {t('localizationPanel.staleCount', '{{count}} out of date', { count: progress.stale })}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="flex gap-1">
+                                {filters.map(f => (
+                                    <button key={f.id} onClick={() => setFilter(f.id)}
+                                        className={`rounded px-2 py-1 text-xs ${filter === f.id ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:text-slate-200'}`}>
+                                        {f.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <input value={search} onChange={e => setSearch(e.target.value)}
+                                placeholder={t('localizationPanel.search', 'Search…')}
+                                className="ml-auto w-40 rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100" />
+
+                            <button onClick={() => exportFile('xlsx')} disabled={!!busy}
+                                className="rounded bg-slate-700 px-3 py-1 text-sm text-slate-100 hover:bg-slate-600 disabled:opacity-50">
+                                {t('localizationPanel.exportXlsx', 'Send to a translator (Excel)')}
+                            </button>
+                            <button onClick={() => exportFile('csv')} disabled={!!busy}
+                                className="rounded bg-slate-700 px-3 py-1 text-sm text-slate-100 hover:bg-slate-600 disabled:opacity-50">
+                                {t('localizationPanel.exportCsv', 'CSV')}
+                            </button>
+                            <button onClick={() => fileInput.current?.click()} disabled={!!busy}
+                                className="rounded bg-emerald-600 px-3 py-1 text-sm text-white hover:bg-emerald-500 disabled:opacity-50">
+                                {t('localizationPanel.import', 'Bring a file back in')}
+                            </button>
+                            <input ref={fileInput} type="file" accept=".csv,.xlsx" className="hidden"
+                                onChange={e => {
+                                    const file = e.target.files?.[0];
+                                    if (file) importFile(file);
+                                    e.target.value = '';       // so the same file can be picked twice
+                                }} />
+                        </div>
+
+                        {/* ⚠ MOBILE FORK: machine translation is desktop-only (it needs
+                            Electron and a ~40MB model download), so the MachineDraft block
+                            from the main fork is deliberately absent here — along with the
+                            @xenova/transformers dependency. Do NOT full-copy this file from
+                            the main fork without re-stripping it. */}
+
+                        <label className="flex items-center gap-2 border-b border-slate-700 px-4 py-1.5 text-xs text-slate-400">
+                            <input type="checkbox" checked={reviewFirst} onChange={e => setReviewFirst(e.target.checked)} />
+                            {t('localizationPanel.reviewFirst', 'Let me review each change before it is applied')}
+                        </label>
+
+                        {(report || busy) && (
+                            <div className="border-b border-slate-700 px-4 py-2">
+                                {busy
+                                    ? <div className="text-sm text-slate-300">{busy}</div>
+                                    : <ImportReport result={report!} onDismiss={() => setReport(null)} />}
+                            </div>
+                        )}
+
+                        {/* The table */}
+                        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2">
+                            {rows.length === 0 ? (
+                                <div className="py-10 text-center text-sm text-slate-400">
+                                    {t('localizationPanel.noRows', 'Nothing here — try a different filter.')}
+                                </div>
+                            ) : rows.map(site => {
+                                const entry = localization?.strings?.[site.key]?.[language];
+                                const stale = !!(entry?.text && entry.sourceHash && entry.sourceHash !== hashSource(site.value));
+                                const notes = describeTokens(site.value);
+                                return (
+                                    <div key={site.key} className="mb-2 rounded border border-slate-700 bg-slate-800/40 p-2">
+                                        <div className="mb-1 flex items-center justify-between gap-2 text-xs text-slate-400">
+                                            <span>{site.where}</span>
+                                            <span className="flex items-center gap-2">
+                                                {entry?.origin === 'machine' && (
+                                                    <span className="rounded bg-sky-950 px-1.5 py-0.5 text-sky-300">
+                                                        {t('localizationPanel.machineBadge', 'Machine draft')}
+                                                    </span>
+                                                )}
+                                                {stale && (
+                                                    <span className="rounded bg-orange-950 px-1.5 py-0.5 text-orange-300">
+                                                        {t('localizationPanel.staleBadge', 'Out of date')}
+                                                    </span>
+                                                )}
+                                                {(entry?.needsReview || stale) && entry?.text && (
+                                                    <button onClick={() => approve(site.key, site.value)}
+                                                        className="rounded bg-slate-700 px-2 py-0.5 text-slate-200 hover:bg-slate-600">
+                                                        {t('localizationPanel.looksGood', 'Looks good')}
+                                                    </button>
+                                                )}
+                                            </span>
+                                        </div>
+                                        <div className="grid gap-2 md:grid-cols-2">
+                                            <div className="whitespace-pre-wrap rounded bg-slate-900/60 p-2 text-sm text-slate-300">
+                                                {site.value}
+                                            </div>
+                                            <TranslationBox
+                                                value={entry?.text || ''}
+                                                onCommit={text => setTranslation(site.key, text, site.value)}
+                                                placeholder={t('localizationPanel.translationPlaceholder', 'Translation…')}
+                                                rows={Math.min(6, Math.max(2, Math.ceil(site.value.length / 60)))}
+                                            />
+                                        </div>
+                                        {notes && <div className="mt-1 text-xs text-amber-400/90">{notes}</div>}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </>
+                )}
+            </div>
+        </div>
+    );
 };
 
 export default LocalizationPanel;

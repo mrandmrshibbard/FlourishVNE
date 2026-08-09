@@ -20,7 +20,7 @@ export const DEFAULT_PAUSE_MS = 400;
  * These are exactly the whole-line effect types, so an author learns one vocabulary.
  * An optional number sets intensity, mirroring `[pause N]`: `[shake 2]LOUDER[/shake]`.
  */
-const EFFECT_TAGS = new Set(['shake', 'wave', 'rainbow', 'glitch', 'pulse', 'fade-in', 'bounce', 'typewriter-bounce']);
+export const EFFECT_TAGS = new Set(['shake', 'wave', 'rainbow', 'glitch', 'pulse', 'fade-in', 'bounce', 'typewriter-bounce']);
 
 /** One `[tag]`-shaped run in the raw text. Anything not recognised stays literal text. */
 type Token =
@@ -31,6 +31,15 @@ type Token =
 
 // A tag is a bracketed lowercase word, optionally closing (`/`) and optionally carrying a number.
 const TAG_RE = /\[(\/?)([a-z][a-z-]*)(?:\s+(\d+(?:\.\d+)?))?\]/gi;
+
+/**
+ * A FRESH matcher for the same tag shape, for code outside the engine that needs to find codes in
+ * a line (the translation export's "keep these codes" notes, and its import validator).
+ *
+ * Deliberately a factory rather than the shared `TAG_RE`: that one is `/g`, so it carries
+ * `lastIndex` between callers and handing it out would let two unrelated loops corrupt each other.
+ */
+export const dialogueTagMatcher = (): RegExp => new RegExp(TAG_RE.source, 'gi');
 
 /**
  * Split raw dialogue into text and recognised codes. Unknown brackets — `[wink]`, `[3]`,

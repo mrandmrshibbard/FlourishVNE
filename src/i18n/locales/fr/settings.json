@@ -86,7 +86,12 @@
       "pauseScreen": "Écran de pause",
       "pauseScreenDesc": "Affiché lorsque le joueur appuie sur Échap pendant le jeu. Propose généralement Reprendre, Enregistrer, Charger, Paramètres et Quitter.",
       "gameHud": "Écran ATH du jeu",
-      "gameHudDesc": "Superposition persistante affichée par-dessus le jeu, par exemple des barres de boutons personnalisées, des indicateurs d'état ou des jauges d'affection."
+      "gameHudDesc": "Superposition persistante affichée par-dessus le jeu, par exemple des barres de boutons personnalisées, des indicateurs d'état ou des jauges d'affection.",
+      "languageScreen": "Écran de langue",
+      "languageScreenDesc": "Là où les joueurs choisissent la langue dans laquelle ils veulent jouer.",
+      "languageScreenAuto": "Demander aux nouveaux joueurs quelle langue ils préfèrent",
+      "languageScreenAutoOn": "Affiché une seule fois, à la première partie. Les joueurs utilisant déjà une de vos langues le passent automatiquement.",
+      "languageScreenAutoOff": "Jamais affiché de lui-même — les joueurs y accèdent uniquement via un bouton que vous placez."
     }
   },
   "cgGallery": {

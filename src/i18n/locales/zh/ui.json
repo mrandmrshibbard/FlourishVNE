@@ -71,7 +71,8 @@
     "clearUiPalette": "重置界面颜色（撤销小游戏配色）",
     "changePose": "更改姿势",
     "changeCharacter": "更换角色",
-    "playCharacterAnimation": "播放角色动画"
+    "playCharacterAnimation": "播放角色动画",
+    "setLanguage": "切换语言"
   },
   "actionsList": {
     "actions": "操作",
@@ -1189,7 +1190,11 @@
     "changeCharacterHint": "新角色会接管同一位置——与被替换角色的位置和大小相同。",
     "animation": "动画",
     "animationStop": "停止当前动画",
-    "playCharacterAnimationHint": "播放该角色自己的动画（在动画工作室中制作）。仅在其在场时有效。"
+    "playCharacterAnimationHint": "播放该角色自己的动画（在动画工作室中制作）。仅在其在场时有效。",
+    "language": "语言",
+    "languageOriginal": "游戏原本使用的语言",
+    "noLanguagesYet": "尚未添加语言 — 请先在“翻译你的游戏”中添加。",
+    "languageIsSource": "这是游戏原本使用的语言。"
   },
   "effectStyle": {
     "label": "特效风格",

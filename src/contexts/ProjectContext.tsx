@@ -11,6 +11,7 @@ import { migrateProjectRemoveLegacyCommands } from '../utils/legacyCommandMigrat
 import { migrateItemCountVariableBounds, migrateStatVariables, repairOrphanBranchMarkers } from '../utils/itemVariableMigration';
 import { migrateInventorySlotButton } from '../utils/inventoryElementMigration';
 import { migrateMapLocationActions } from '../utils/mapLocationMigration';
+import { repairIncompleteScreens } from '../utils/screenShapeRepair';
 import { migrateStoryBiblePluginStorage } from '../utils/storyBibleMigration';
 import { pluginManager } from '../features/plugins/PluginManagerService';
 import { externalizeProjectAssets, type MigrationProgress } from '../utils/assetMigration';
@@ -81,6 +82,9 @@ export const ProjectProvider: React.FC<{
       fence('orphanBranchMarkers', repairOrphanBranchMarkers),
       fence('mapLocationActions', migrateMapLocationActions),
       fence('storyBiblePluginStorage', migrateStoryBiblePluginStorage),
+      // Fills in screen fields the renderer assumes exist. A screen missing `background`/`music`
+      // white-screens the editor the moment it's opened, and older projects already contain one.
+      fence('incompleteScreens', repairIncompleteScreens),
     ].reduce((p, step) => step(p), initialProject);
     return { past: [], present: migrated, future: [] };
   });

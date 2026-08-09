@@ -77,7 +77,8 @@
     "clearUiPalette": "Reset UI Colors (undo mini-game palette)",
     "changePose": "Change Pose",
     "changeCharacter": "Change Character",
-    "playCharacterAnimation": "Play Character Animation"
+    "playCharacterAnimation": "Play Character Animation",
+    "setLanguage": "Set Language"
   },
   "actionsList": {
     "actions": "Actions",
@@ -1041,6 +1042,10 @@
     "url": "URL",
     "urlPlaceholder": "https://example.com",
     "openNewTab": "Open in new tab",
-    "runOnlyIf": "Run only if (optional)"
+    "runOnlyIf": "Run only if (optional)",
+    "language": "Language",
+    "languageOriginal": "The language the game is written in",
+    "noLanguagesYet": "No languages added yet — add one in Translate your game first.",
+    "languageIsSource": "This is the language the game is written in."
   }
 }

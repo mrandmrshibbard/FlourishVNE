@@ -194,7 +194,8 @@
     "stopTimer": "Parar Cronômetro",
     "changePose": "Mudar pose",
     "changeCharacter": "Trocar personagem",
-    "playCharacterAnimation": "Tocar animação do personagem"
+    "playCharacterAnimation": "Tocar animação do personagem",
+    "setLanguage": "Alterar idioma"
   },
   "actionsList": {
     "actions": "Ações",
@@ -1408,7 +1409,11 @@
     "changeCharacterHint": "O novo personagem assume o mesmo lugar — mesma posição e tamanho de quem ele substitui.",
     "animation": "Animação",
     "animationStop": "Parar a animação atual",
-    "playCharacterAnimationHint": "Toca uma das animações do próprio personagem (feitas no Estúdio de Animação). Só funciona enquanto ele estiver em cena."
+    "playCharacterAnimationHint": "Toca uma das animações do próprio personagem (feitas no Estúdio de Animação). Só funciona enquanto ele estiver em cena.",
+    "language": "Idioma",
+    "languageOriginal": "O idioma em que o jogo foi escrito",
+    "noLanguagesYet": "Nenhum idioma adicionado ainda — adicione um em Traduza o seu jogo.",
+    "languageIsSource": "Este é o idioma em que o jogo foi escrito."
   },
   "character": {
     "defaultPose": "Padrão (arte normal)",

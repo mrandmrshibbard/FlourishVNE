@@ -83,7 +83,12 @@
       "pauseScreen": "Pause Screen",
       "pauseScreenDesc": "Shown when the player presses Escape during gameplay. Usually offers Resume, Save, Load, Settings, and Quit.",
       "gameHud": "Game HUD Screen",
-      "gameHudDesc": "Persistent overlay displayed on top of gameplay, e.g. custom button bars, status indicators, or affection meters."
+      "gameHudDesc": "Persistent overlay displayed on top of gameplay, e.g. custom button bars, status indicators, or affection meters.",
+      "languageScreen": "Language Screen",
+      "languageScreenDesc": "Where players pick the language they want to play in.",
+      "languageScreenAuto": "Ask new players which language they want",
+      "languageScreenAutoOn": "Shown once, the first time someone plays. Players already using one of your languages skip it automatically.",
+      "languageScreenAutoOff": "Never shown on its own — players reach it only from a button you place."
     }
   },
   "cgGallery": {

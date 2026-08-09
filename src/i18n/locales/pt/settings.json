@@ -86,7 +86,12 @@
       "pauseScreen": "Tela de Pausa",
       "pauseScreenDesc": "Exibida quando o jogador pressiona Esc durante o jogo. Geralmente oferece Retomar, Salvar, Carregar, Configurações e Sair.",
       "gameHud": "Tela de HUD do Jogo",
-      "gameHudDesc": "Sobreposição persistente exibida sobre o jogo, ex. barras de botões personalizadas, indicadores de status ou medidores de afinidade."
+      "gameHudDesc": "Sobreposição persistente exibida sobre o jogo, ex. barras de botões personalizadas, indicadores de status ou medidores de afinidade.",
+      "languageScreen": "Tela de idioma",
+      "languageScreenDesc": "Onde os jogadores escolhem o idioma em que querem jogar.",
+      "languageScreenAuto": "Perguntar aos novos jogadores qual idioma preferem",
+      "languageScreenAutoOn": "Mostrada uma vez, na primeira partida. Quem já usa um dos seus idiomas pula automaticamente.",
+      "languageScreenAutoOff": "Nunca aparece sozinha — os jogadores só chegam nela por um botão que você colocar."
     }
   },
   "cgGallery": {

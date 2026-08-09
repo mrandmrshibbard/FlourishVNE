@@ -23,6 +23,13 @@ export default defineConfig(({ mode }) => {
           '@': path.resolve(__dirname, '.'),
         }
       },
+      /* The machine-translation worker dynamically imports transformers.js, which means the worker
+       * bundle has to be code-split — and Vite's default worker format (`iife`) cannot split, so
+       * the build fails outright. ES-module workers are supported everywhere this app runs
+       * (Electron and modern browsers). */
+      worker: {
+        format: 'es',
+      },
       build: {
         rollupOptions: {
           output: {

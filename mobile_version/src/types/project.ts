@@ -222,6 +222,50 @@ export interface VNGlossarySettings {
     highlightStyle?: 'color' | 'glow' | 'underline';
 }
 
+/** One language the finished game can be played in. */
+export interface VNLanguage {
+    /** BCP-47-ish code the game and the browser both understand — 'es', 'pt-BR', 'ja'. */
+    code: string;
+    /** What the player sees in the language picker, written in that language ("Español"). */
+    name: string;
+    /** Off = translated but not yet offered to players. Lets an author work in private. */
+    enabled: boolean;
+}
+
+/**
+ * One translated string.
+ *
+ * `origin` and `sourceHash` exist so a translation can go **stale** rather than silently wrong:
+ * machine drafts are flagged for review everywhere they appear, and when the author later edits
+ * the English, the hash stops matching and the row is shown as out-of-date instead of shipping
+ * a translation of a line that no longer exists.
+ */
+export interface VNTranslatedString {
+    text: string;
+    /** Machine drafts are marked so they can never be mistaken for reviewed work. */
+    origin?: 'human' | 'machine';
+    /** Cleared when a human approves or edits it. */
+    needsReview?: boolean;
+    /** Hash of the source text this was translated FROM. */
+    sourceHash?: string;
+}
+
+export interface VNLocalization {
+    /** The language the project is authored in — the "Source" column translators work from. */
+    sourceLanguage: string;
+    languages: VNLanguage[];
+    /** translation key → language code → the translation. Keys come from `translationKeys.ts`
+     *  and are built from stable ids, so editing or reordering the story never detaches one. */
+    strings: Record<string, Record<string, VNTranslatedString>>;
+    /** Per-language art swaps: language code → original asset id → replacement asset id.
+     *  For signs, logos and anything with words baked into the picture. */
+    assetOverrides?: Record<string, Record<VNID, VNID>>;
+    /** When the game offers its language picker (default 'firstRun'). */
+    showLanguageScreen?: 'firstRun' | 'everyBoot' | 'never';
+    /** Start in the player's own language if the game has it (default true). */
+    autoDetectLanguage?: boolean;
+}
+
 export interface VNProject {
     id: VNID;
     title: string;
@@ -279,6 +323,10 @@ export interface VNProject {
     /** Glossary: terms auto-highlighted in the dialogue box with hover tooltips. SHIPS with
      *  exported games. Additive-optional. */
     glossary?: { entries: Record<VNID, VNGlossaryEntry>; settings?: VNGlossarySettings };
+    /** Translations of every player-facing string, plus which languages the game offers.
+     *  SHIPS with exported games. Absent = today's behavior exactly (one language, no
+     *  language picker). Additive-optional. */
+    localization?: VNLocalization;
     /** Editor-side variable folders (Variables tab organisation; engine ignores them).
      *  Variables reference one via `folderId`. Additive-optional. */
     variableFolders?: Record<VNID, VNVariableFolder>;
