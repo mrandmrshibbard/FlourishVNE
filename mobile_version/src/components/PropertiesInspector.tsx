@@ -747,7 +747,7 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.StopMusic: {
                 const cmd = command as StopMusicCommand;
-                return <FormField label="Fade Duration (s)"><TextInput type="number" min="0" step="0.1" value={cmd.fadeDuration} onChange={e => updateCommand({ fadeDuration: parseFloat(e.target.value) || 0 })}/></FormField>;
+                return <FormField label={t('hc.fadeDurationS', 'Fade Duration (s)')}><TextInput type="number" min="0" step="0.1" value={cmd.fadeDuration} onChange={e => updateCommand({ fadeDuration: parseFloat(e.target.value) || 0 })}/></FormField>;
             }
              case CommandType.PlaySoundEffect: {
                 const cmd = command as PlaySoundEffectCommand;

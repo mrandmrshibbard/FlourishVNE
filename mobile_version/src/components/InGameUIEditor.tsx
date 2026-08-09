@@ -1352,8 +1352,8 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                     </label>
                     {ui.speakerEmphasisEnabled && (
                         <div className="grid grid-cols-2 gap-2 mt-2">
-                            <NumInput label="Non-speaker brightness %" value={ui.speakerEmphasisDim != null ? Math.round(ui.speakerEmphasisDim * 100) : undefined} fallback={50} min={10} max={100} onChange={v => onUpdate({ speakerEmphasisDim: Math.max(0.1, Math.min(1, v / 100)) })} />
-                            <NumInput label="Speaker zoom %" value={ui.speakerEmphasisScale != null ? Math.round(ui.speakerEmphasisScale * 100) : undefined} fallback={104} min={100} max={120} onChange={v => onUpdate({ speakerEmphasisScale: Math.max(1, Math.min(1.3, v / 100)) })} />
+                            <NumInput label={t('hc.nonSpeakerBrightness', 'Non-speaker brightness %')} value={ui.speakerEmphasisDim != null ? Math.round(ui.speakerEmphasisDim * 100) : undefined} fallback={50} min={10} max={100} onChange={v => onUpdate({ speakerEmphasisDim: Math.max(0.1, Math.min(1, v / 100)) })} />
+                            <NumInput label={t('hc.speakerZoom', 'Speaker zoom %')} value={ui.speakerEmphasisScale != null ? Math.round(ui.speakerEmphasisScale * 100) : undefined} fallback={104} min={100} max={120} onChange={v => onUpdate({ speakerEmphasisScale: Math.max(1, Math.min(1.3, v / 100)) })} />
                         </div>
                     )}
                 </CollapsibleSection>
@@ -1905,38 +1905,38 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                             </div>
                         </Field>
                         <div className="grid grid-cols-2 gap-2">
-                            <NumInput label="Width (%)" value={ui.phoneWidth} fallback={26} min={10} max={100} onChange={v => onUpdate({ phoneWidth: v })} />
-                            <NumInput label="Height (%)" value={ui.phoneHeight} fallback={82} min={20} max={100} onChange={v => onUpdate({ phoneHeight: v })} />
+                            <NumInput label={t('hc.width', 'Width (%)')} value={ui.phoneWidth} fallback={26} min={10} max={100} onChange={v => onUpdate({ phoneWidth: v })} />
+                            <NumInput label={t('hc.height', 'Height (%)')} value={ui.phoneHeight} fallback={82} min={20} max={100} onChange={v => onUpdate({ phoneHeight: v })} />
                             <NumInput label="X (%)" value={ui.phoneX} fallback={72} min={0} max={100} onChange={v => onUpdate({ phoneX: v })} />
                             <NumInput label="Y (%)" value={ui.phoneY} fallback={16} min={0} max={100} onChange={v => onUpdate({ phoneY: v })} />
                         </div>
-                        <ColorField label="Shell color" value={ui.phoneShellColor ?? '#0b0d12'} onChange={v => onUpdate({ phoneShellColor: v })} />
-                        <Field label="Shell image">
+                        <ColorField label={t('hc.shellColor', 'Shell color')} value={ui.phoneShellColor ?? '#0b0d12'} onChange={v => onUpdate({ phoneShellColor: v })} />
+                        <Field label={t('hc.shellImage', 'Shell image')}>
                             <select className={inputCls} value={ui.phoneShellImage?.id || ''} onChange={e => onUpdate({ phoneShellImage: e.target.value ? { type: 'image', id: e.target.value as VNID } : null })}>
                                 <option value="">{t('hc.noneSolidColor', 'None (solid color)')}</option>
                                 {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                             </select>
                         </Field>
                         <div className="grid grid-cols-2 gap-2">
-                            <NumInput label="Corner radius" value={ui.phoneBorderRadius} fallback={28} min={0} max={80} onChange={v => onUpdate({ phoneBorderRadius: v })} />
+                            <NumInput label={t('hc.cornerRadius', 'Corner radius')} value={ui.phoneBorderRadius} fallback={28} min={0} max={80} onChange={v => onUpdate({ phoneBorderRadius: v })} />
                             <OpacityField label="Opacity" value={ui.phoneOpacity ?? 100} onChange={v => onUpdate({ phoneOpacity: v })} />
                         </div>
                         <div className="grid grid-cols-2 gap-2">
-                            <NumInput label="Bezel width (px)" value={ui.phoneBezelWidth} fallback={8} min={0} max={40} onChange={v => onUpdate({ phoneBezelWidth: v })} />
-                            <ColorField label="Screen color" value={ui.phoneScreenColor ?? '#0b0d12'} onChange={v => onUpdate({ phoneScreenColor: v })} />
+                            <NumInput label={t('hc.bezelWidthPx', 'Bezel width (px)')} value={ui.phoneBezelWidth} fallback={8} min={0} max={40} onChange={v => onUpdate({ phoneBezelWidth: v })} />
+                            <ColorField label={t('hc.screenColor', 'Screen color')} value={ui.phoneScreenColor ?? '#0b0d12'} onChange={v => onUpdate({ phoneScreenColor: v })} />
                         </div>
-                        <ColorField label="Screen border" value={ui.phoneScreenBorderColor ?? '#ffffff1f'} onChange={v => onUpdate({ phoneScreenBorderColor: v })} />
-                        <Field label="Home button">
+                        <ColorField label={t('hc.screenBorder', 'Screen border')} value={ui.phoneScreenBorderColor ?? '#ffffff1f'} onChange={v => onUpdate({ phoneScreenBorderColor: v })} />
+                        <Field label={t('hc.homeButton', 'Home button')}>
                             <input type="checkbox" checked={ui.phoneShowHomeButton !== false} onChange={e => onUpdate({ phoneShowHomeButton: e.target.checked })} className="cursor-pointer" />
                             <span className="text-xs text-[var(--text-secondary)] ml-2">{t('hc.aRoundButtonOnThe', 'A round button on the chin (also closes the phone).')}</span>
                         </Field>
                         {ui.phoneShowHomeButton !== false && (
-                            <ColorField label="Home button color" value={ui.phoneHomeButtonColor ?? '#ffffff47'} onChange={v => onUpdate({ phoneHomeButtonColor: v })} />
+                            <ColorField label={t('hc.homeButtonColor', 'Home button color')} value={ui.phoneHomeButtonColor ?? '#ffffff47'} onChange={v => onUpdate({ phoneHomeButtonColor: v })} />
                         )}
-                        <Field label="Open hotkey">
+                        <Field label={t('hc.openHotkey', 'Open hotkey')}>
                             <input className={inputCls} maxLength={1} value={ui.phoneOpenHotkey ?? ''} placeholder={t('hc.egP', 'e.g. p')} onChange={e => onUpdate({ phoneOpenHotkey: e.target.value || undefined })} />
                         </Field>
-                        <Field label="On close">
+                        <Field label={t('hc.onClose', 'On close')}>
                             <select className={inputCls} value={ui.phoneOnCloseBehavior || 'resume'} onChange={e => onUpdate({ phoneOnCloseBehavior: e.target.value === 'resume' ? undefined : e.target.value as any })}>
                                 <option value="resume">{t('hc.doNothingPlayerAdvances', 'Do nothing (player advances)')}</option>
                                 <option value="advance">{t('hc.advanceTheStoryOneStep', 'Advance the story one step')}</option>
@@ -1948,27 +1948,27 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
 
                 <CollapsibleSection title={t('hc.statusBar', 'Status bar')}>
                     <div className="space-y-2">
-                        <Field label="Show status bar">
+                        <Field label={t('hc.showStatusBar', 'Show status bar')}>
                             <input type="checkbox" checked={ui.phoneShowStatusBar !== false} onChange={e => onUpdate({ phoneShowStatusBar: e.target.checked })} className="cursor-pointer" />
                         </Field>
-                        <Field label="Clock text">
+                        <Field label={t('hc.clockText', 'Clock text')}>
                             <input className={inputCls} value={ui.phoneClockText ?? ''} placeholder="08:30 or {time}" onChange={e => onUpdate({ phoneClockText: e.target.value || undefined })} />
                         </Field>
                         <div className="grid grid-cols-2 gap-2">
-                            <ColorField label="Bar color" value={ui.phoneStatusBarColor ?? '#00000000'} onChange={v => onUpdate({ phoneStatusBarColor: v })} />
-                            <ColorField label="Icon/text color" value={ui.phoneStatusIconColor ?? '#ffffff'} onChange={v => onUpdate({ phoneStatusIconColor: v })} />
+                            <ColorField label={t('hc.barColor', 'Bar color')} value={ui.phoneStatusBarColor ?? '#00000000'} onChange={v => onUpdate({ phoneStatusBarColor: v })} />
+                            <ColorField label={t('hc.iconTextColor', 'Icon/text color')} value={ui.phoneStatusIconColor ?? '#ffffff'} onChange={v => onUpdate({ phoneStatusIconColor: v })} />
                         </div>
                         <div className="grid grid-cols-2 gap-2">
-                            <Field label="Signal icon"><input type="checkbox" checked={!!ui.phoneShowSignal} onChange={e => onUpdate({ phoneShowSignal: e.target.checked })} className="cursor-pointer" /></Field>
-                            <Field label="Battery icon"><input type="checkbox" checked={!!ui.phoneShowBattery} onChange={e => onUpdate({ phoneShowBattery: e.target.checked })} className="cursor-pointer" /></Field>
+                            <Field label={t('hc.signalIcon', 'Signal icon')}><input type="checkbox" checked={!!ui.phoneShowSignal} onChange={e => onUpdate({ phoneShowSignal: e.target.checked })} className="cursor-pointer" /></Field>
+                            <Field label={t('hc.batteryIcon', 'Battery icon')}><input type="checkbox" checked={!!ui.phoneShowBattery} onChange={e => onUpdate({ phoneShowBattery: e.target.checked })} className="cursor-pointer" /></Field>
                         </div>
                         {ui.phoneShowSignal && (
                             <div className="pl-2 border-l-2 border-[var(--accent-lavender)]/30 space-y-2">
                                 <div className="grid grid-cols-2 gap-2">
-                                    <NumInput label="Signal bars" value={ui.phoneSignalBars} fallback={4} min={1} max={8} onChange={v => onUpdate({ phoneSignalBars: v })} />
-                                    <ColorField label="Signal color" value={ui.phoneSignalColor ?? (ui.phoneStatusIconColor || '#ffffff')} onChange={v => onUpdate({ phoneSignalColor: v })} />
+                                    <NumInput label={t('hc.signalBars', 'Signal bars')} value={ui.phoneSignalBars} fallback={4} min={1} max={8} onChange={v => onUpdate({ phoneSignalBars: v })} />
+                                    <ColorField label={t('hc.signalColor', 'Signal color')} value={ui.phoneSignalColor ?? (ui.phoneStatusIconColor || '#ffffff')} onChange={v => onUpdate({ phoneSignalColor: v })} />
                                 </div>
-                                <Field label="Bars filled from variable">
+                                <Field label={t('hc.barsFilledFromVariable', 'Bars filled from variable')}>
                                     <select className={inputCls} value={ui.phoneSignalVariableId || ''} onChange={e => onUpdate({ phoneSignalVariableId: (e.target.value || undefined) as VNID | undefined })}>
                                         <option value="">{t('hc.allBarsFilled', 'All bars filled')}</option>
                                         {numberVars.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -1979,8 +1979,8 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         )}
                         {ui.phoneShowBattery && (
                             <div className="pl-2 border-l-2 border-[var(--accent-lavender)]/30 space-y-2">
-                                <ColorField label="Battery color" value={ui.phoneBatteryColor ?? (ui.phoneStatusIconColor || '#ffffff')} onChange={v => onUpdate({ phoneBatteryColor: v })} />
-                                <Field label="Battery % from variable">
+                                <ColorField label={t('hc.batteryColor', 'Battery color')} value={ui.phoneBatteryColor ?? (ui.phoneStatusIconColor || '#ffffff')} onChange={v => onUpdate({ phoneBatteryColor: v })} />
+                                <Field label={t('hc.batteryFromVariable', 'Battery % from variable')}>
                                     <select className={inputCls} value={ui.phoneBatteryVariableId || ''} onChange={e => onUpdate({ phoneBatteryVariableId: (e.target.value || undefined) as VNID | undefined })}>
                                         <option value="">{t('hc.full100', 'Full (100%)')}</option>
                                         {numberVars.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -1993,13 +1993,13 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
 
                 <CollapsibleSection title={t('hc.headerChatBubbles', 'Header & chat bubbles')}>
                     <div className="space-y-2">
-                        <Field label="Header text"><input className={inputCls} value={ui.phoneHeaderText ?? ''} placeholder="MESSAGES" onChange={e => onUpdate({ phoneHeaderText: e.target.value || undefined })} /></Field>
+                        <Field label={t('hc.headerText', 'Header text')}><input className={inputCls} value={ui.phoneHeaderText ?? ''} placeholder="MESSAGES" onChange={e => onUpdate({ phoneHeaderText: e.target.value || undefined })} /></Field>
                         <div className="grid grid-cols-2 gap-2">
-                            <ColorField label="Incoming bubble" value={ui.phoneIncomingBubbleColor ?? '#2a2f3a'} onChange={v => onUpdate({ phoneIncomingBubbleColor: v })} />
-                            <ColorField label="Your bubble" value={ui.phoneOutgoingBubbleColor ?? '#2f6bff'} onChange={v => onUpdate({ phoneOutgoingBubbleColor: v })} />
+                            <ColorField label={t('hc.incomingBubble', 'Incoming bubble')} value={ui.phoneIncomingBubbleColor ?? '#2a2f3a'} onChange={v => onUpdate({ phoneIncomingBubbleColor: v })} />
+                            <ColorField label={t('hc.yourBubble', 'Your bubble')} value={ui.phoneOutgoingBubbleColor ?? '#2f6bff'} onChange={v => onUpdate({ phoneOutgoingBubbleColor: v })} />
                         </div>
-                        <ColorField label="Bubble text" value={ui.phoneBubbleTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneBubbleTextColor: v })} />
-                        <Field label="Show avatars"><input type="checkbox" checked={ui.phoneShowAvatars !== false} onChange={e => onUpdate({ phoneShowAvatars: e.target.checked })} className="cursor-pointer" /></Field>
+                        <ColorField label={t('hc.bubbleText', 'Bubble text')} value={ui.phoneBubbleTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneBubbleTextColor: v })} />
+                        <Field label={t('hc.showAvatars', 'Show avatars')}><input type="checkbox" checked={ui.phoneShowAvatars !== false} onChange={e => onUpdate({ phoneShowAvatars: e.target.checked })} className="cursor-pointer" /></Field>
                     </div>
                 </CollapsibleSection>
 
@@ -2014,23 +2014,23 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         </Field>
                         <p className="text-[10px] text-[var(--text-muted)] -mt-1">{t('hc.homeGridFillsTheHome', 'Home grid fills the home screen with app icons in rows, like a real phone. Free placement positions each button by its own X/Y.')}</p>
                         <div className="grid grid-cols-2 gap-2">
-                            <ColorField label="Bar color" value={ui.phoneButtonBarColor ?? '#00000059'} onChange={v => onUpdate({ phoneButtonBarColor: v })} />
-                            <ColorField label="Icon color" value={ui.phoneButtonIconColor ?? '#cbd5e1'} onChange={v => onUpdate({ phoneButtonIconColor: v })} />
+                            <ColorField label={t('hc.barColor', 'Bar color')} value={ui.phoneButtonBarColor ?? '#00000059'} onChange={v => onUpdate({ phoneButtonBarColor: v })} />
+                            <ColorField label={t('hc.iconColor', 'Icon color')} value={ui.phoneButtonIconColor ?? '#cbd5e1'} onChange={v => onUpdate({ phoneButtonIconColor: v })} />
                         </div>
                         {ui.phoneButtonLayout === 'grid' && (
                             <div className="space-y-2 border border-[var(--border-subtle)] rounded p-2">
                                 <div className="grid grid-cols-2 gap-2">
-                                    <NumInput label="Icons per row" value={ui.phoneHomeGridColumns} fallback={3} min={1} max={6} onChange={v => onUpdate({ phoneHomeGridColumns: v })} />
-                                    <NumInput label="Icon size %" value={ui.phoneHomeIconSize} fallback={18} min={6} max={40} onChange={v => onUpdate({ phoneHomeIconSize: v })} />
+                                    <NumInput label={t('hc.iconsPerRow', 'Icons per row')} value={ui.phoneHomeGridColumns} fallback={3} min={1} max={6} onChange={v => onUpdate({ phoneHomeGridColumns: v })} />
+                                    <NumInput label={t('hc.iconSize', 'Icon size %')} value={ui.phoneHomeIconSize} fallback={18} min={6} max={40} onChange={v => onUpdate({ phoneHomeIconSize: v })} />
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
-                                    <ColorField label="Icon backing" value={ui.phoneHomeIconBgColor ?? '#00000000'} onChange={v => onUpdate({ phoneHomeIconBgColor: v })} />
-                                    <NumInput label="Backing radius" value={ui.phoneHomeIconRadius} fallback={14} min={0} max={60} onChange={v => onUpdate({ phoneHomeIconRadius: v })} />
+                                    <ColorField label={t('hc.iconBacking', 'Icon backing')} value={ui.phoneHomeIconBgColor ?? '#00000000'} onChange={v => onUpdate({ phoneHomeIconBgColor: v })} />
+                                    <NumInput label={t('hc.backingRadius', 'Backing radius')} value={ui.phoneHomeIconRadius} fallback={14} min={0} max={60} onChange={v => onUpdate({ phoneHomeIconRadius: v })} />
                                 </div>
                                 <label className="flex items-center gap-2 text-xs cursor-pointer">
                                     <input type="checkbox" checked={ui.phoneHomeShowLabels !== false} onChange={e => onUpdate({ phoneHomeShowLabels: e.target.checked ? undefined : false })} className="w-3.5 h-3.5" /> Show labels under icons
                                 </label>
-                                <FontEditor label="Label font" font={(ui.phoneHomeLabelFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneHomeLabelFont: { ...((ui.phoneHomeLabelFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
+                                <FontEditor label={t('hc.labelFont', 'Label font')} font={(ui.phoneHomeLabelFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneHomeLabelFont: { ...((ui.phoneHomeLabelFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
                             </div>
                         )}
                         {buttons.map((b, i) => (
@@ -2045,7 +2045,7 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                                             {PHONE_ICON_KEYS.map(k => <option key={k} value={k}>{PHONE_GLYPHS[k]} {k}</option>)}
                                         </select>
                                     </Field>
-                                    <Field label="Custom icon">
+                                    <Field label={t('hc.customIcon', 'Custom icon')}>
                                         <select className={inputCls} value={b.iconImage?.id || ''} onChange={e => updateBtn(i, { iconImage: e.target.value ? { type: 'image', id: e.target.value as VNID } : null })}>
                                             <option value="">{t('hc.useBuiltIn', 'Use built-in')}</option>
                                             {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
@@ -2084,36 +2084,36 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
 
                 <CollapsibleSection title="Fonts">
                     <div className="space-y-2">
-                        <FontEditor label="Header font" font={(ui.phoneTitleFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneTitleFont: { ...((ui.phoneTitleFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
-                        <FontEditor label="Chat font" font={(ui.phoneFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneFont: { ...((ui.phoneFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
+                        <FontEditor label={t('hc.headerFont', 'Header font')} font={(ui.phoneTitleFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneTitleFont: { ...((ui.phoneTitleFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
+                        <FontEditor label={t('hc.chatFont', 'Chat font')} font={(ui.phoneFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneFont: { ...((ui.phoneFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
                     </div>
                 </CollapsibleSection>
 
                 <CollapsibleSection title={t('hc.incomingTextBadge', 'Incoming text & badge')}>
                     <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('hc.usedByTheIncomingText', "Used by the \"Incoming Text\" command. The banner slides in when a text arrives; the badge marks unread.")}</p>
-                    <Field label="Banner position">
+                    <Field label={t('hc.bannerPosition', 'Banner position')}>
                         <select className={inputCls} value={ui.phoneNotifPosition || 'top'} onChange={e => onUpdate({ phoneNotifPosition: e.target.value as any })}>
                             <option value="top">Top</option>
                             <option value="bottom">Bottom</option>
                         </select>
                     </Field>
                     <div className="grid grid-cols-2 gap-2">
-                        <ColorField label="Banner color" value={ui.phoneNotifColor ?? '#12141a'} onChange={v => onUpdate({ phoneNotifColor: v })} />
-                        <ColorField label="Banner text" value={ui.phoneNotifTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneNotifTextColor: v })} />
+                        <ColorField label={t('hc.bannerColor', 'Banner color')} value={ui.phoneNotifColor ?? '#12141a'} onChange={v => onUpdate({ phoneNotifColor: v })} />
+                        <ColorField label={t('hc.bannerText', 'Banner text')} value={ui.phoneNotifTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneNotifTextColor: v })} />
                     </div>
-                    <Field label="Default ding sound">
+                    <Field label={t('hc.defaultDingSound', 'Default ding sound')}>
                         <select className={inputCls} value={ui.phoneNotifSoundId || ''} onChange={e => onUpdate({ phoneNotifSoundId: (e.target.value || null) as any })}>
                             <option value="">None</option>
                             {(Object.values(project.audio || {}) as any[]).map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
                         </select>
                     </Field>
-                    <NumInput label="Auto-dismiss (ms, 0 = stay)" value={ui.phoneNotifAutoMs} fallback={6000} min={0} max={60000} onChange={v => onUpdate({ phoneNotifAutoMs: v })} />
+                    <NumInput label={t('hc.autoDismissMs0Stay', 'Auto-dismiss (ms, 0 = stay)')} value={ui.phoneNotifAutoMs} fallback={6000} min={0} max={60000} onChange={v => onUpdate({ phoneNotifAutoMs: v })} />
                     <hr className="border-[var(--border-subtle)] my-2" />
                     <div className="grid grid-cols-2 gap-2">
-                        <ColorField label="Badge color" value={ui.phoneBadgeColor ?? '#ef4444'} onChange={v => onUpdate({ phoneBadgeColor: v })} />
-                        <ColorField label="Badge text" value={ui.phoneBadgeTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneBadgeTextColor: v })} />
+                        <ColorField label={t('hc.badgeColor', 'Badge color')} value={ui.phoneBadgeColor ?? '#ef4444'} onChange={v => onUpdate({ phoneBadgeColor: v })} />
+                        <ColorField label={t('hc.badgeText', 'Badge text')} value={ui.phoneBadgeTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneBadgeTextColor: v })} />
                     </div>
-                    <Field label="Badge style">
+                    <Field label={t('hc.badgeStyle', 'Badge style')}>
                         <select className={inputCls} value={ui.phoneBadgeShape || 'dot'} onChange={e => onUpdate({ phoneBadgeShape: e.target.value as any })}>
                             <option value="dot">Dot</option>
                             <option value="count">Count</option>
@@ -2124,7 +2124,7 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         </select>
                     </Field>
                     {ui.phoneBadgeShape === 'icon' && (
-                        <Field label="Badge icon">
+                        <Field label={t('hc.badgeIcon', 'Badge icon')}>
                             <select className={inputCls} value={ui.phoneBadgeIcon || ''} onChange={e => onUpdate({ phoneBadgeIcon: e.target.value || undefined })}>
                                 <option value="">{t('hc.default', '💬 default')}</option>
                                 {PHONE_ICON_KEYS.map(k => <option key={k} value={k}>{PHONE_GLYPHS[k]} {k}</option>)}
@@ -2132,55 +2132,55 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         </Field>
                     )}
                     <div className="grid grid-cols-2 gap-2">
-                        <Field label="Caption (under badge)"><input className={inputCls} value={ui.phoneBadgeLabel ?? ''} placeholder='e.g. "Messages"' onChange={e => onUpdate({ phoneBadgeLabel: e.target.value || undefined })} /></Field>
-                        <ColorField label="Caption color" value={ui.phoneBadgeLabelColor ?? '#ffffff'} onChange={v => onUpdate({ phoneBadgeLabelColor: v })} />
+                        <Field label={t('hc.captionUnderBadge', 'Caption (under badge)')}><input className={inputCls} value={ui.phoneBadgeLabel ?? ''} placeholder='e.g. "Messages"' onChange={e => onUpdate({ phoneBadgeLabel: e.target.value || undefined })} /></Field>
+                        <ColorField label={t('hc.captionColor', 'Caption color')} value={ui.phoneBadgeLabelColor ?? '#ffffff'} onChange={v => onUpdate({ phoneBadgeLabelColor: v })} />
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                        <NumInput label="Badge size (px)" value={ui.phoneBadgeSize} fallback={16} min={6} max={48} onChange={v => onUpdate({ phoneBadgeSize: v })} />
-                        <NumInput label="Badge X (%)" value={ui.phoneBadgeX} fallback={95} min={0} max={100} onChange={v => onUpdate({ phoneBadgeX: v })} />
-                        <NumInput label="Badge Y (%)" value={ui.phoneBadgeY} fallback={4} min={0} max={100} onChange={v => onUpdate({ phoneBadgeY: v })} />
+                        <NumInput label={t('hc.badgeSizePx', 'Badge size (px)')} value={ui.phoneBadgeSize} fallback={16} min={6} max={48} onChange={v => onUpdate({ phoneBadgeSize: v })} />
+                        <NumInput label={t('hc.badgeX', 'Badge X (%)')} value={ui.phoneBadgeX} fallback={95} min={0} max={100} onChange={v => onUpdate({ phoneBadgeX: v })} />
+                        <NumInput label={t('hc.badgeY', 'Badge Y (%)')} value={ui.phoneBadgeY} fallback={4} min={0} max={100} onChange={v => onUpdate({ phoneBadgeY: v })} />
                     </div>
-                    <ColorField label="Typing dots color" value={ui.phoneTypingColor ?? '#ffffff'} onChange={v => onUpdate({ phoneTypingColor: v })} />
+                    <ColorField label={t('hc.typingDotsColor', 'Typing dots color')} value={ui.phoneTypingColor ?? '#ffffff'} onChange={v => onUpdate({ phoneTypingColor: v })} />
                 </CollapsibleSection>
 
                 <CollapsibleSection title={t('hc.incomingCall', 'Incoming call')}>
                     <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('hc.usedByTheIncomingCall', 'Used by the "Incoming Call" command (full-screen accept/decline, or a corner ring).')}</p>
-                    <ColorField label="Call background" value={ui.phoneCallBgColor ?? '#080a0e'} onChange={v => onUpdate({ phoneCallBgColor: v })} />
-                    <Field label="Call background image">
+                    <ColorField label={t('hc.callBackground', 'Call background')} value={ui.phoneCallBgColor ?? '#080a0e'} onChange={v => onUpdate({ phoneCallBgColor: v })} />
+                    <Field label={t('hc.callBackgroundImage', 'Call background image')}>
                         <select className={inputCls} value={ui.phoneCallBgImage?.id || ''} onChange={e => onUpdate({ phoneCallBgImage: e.target.value ? { type: 'image', id: e.target.value as VNID } : null })}>
                             <option value="">{t('hc.noneSolidColor', 'None (solid color)')}</option>
                             {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                         </select>
                     </Field>
-                    <Field label="Default ringtone">
+                    <Field label={t('hc.defaultRingtone', 'Default ringtone')}>
                         <select className={inputCls} value={ui.phoneCallRingtoneId || ''} onChange={e => onUpdate({ phoneCallRingtoneId: (e.target.value || null) as any })}>
                             <option value="">None</option>
                             {(Object.values(project.audio || {}) as any[]).map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
                         </select>
                     </Field>
-                    <Field label="Caller portrait shape">
+                    <Field label={t('hc.callerPortraitShape', 'Caller portrait shape')}>
                         <select className={inputCls} value={ui.phoneCallPortraitShape || 'circle'} onChange={e => onUpdate({ phoneCallPortraitShape: e.target.value as any })}>
                             <option value="circle">Circle</option>
                             <option value="square">{t('hc.roundedSquare', 'Rounded square')}</option>
                         </select>
                     </Field>
-                    <FontEditor label="Caller name font" font={(ui.phoneCallNameFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneCallNameFont: { ...((ui.phoneCallNameFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
+                    <FontEditor label={t('hc.callerNameFont', 'Caller name font')} font={(ui.phoneCallNameFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneCallNameFont: { ...((ui.phoneCallNameFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
                     <hr className="border-[var(--border-subtle)] my-2" />
                     <div className="grid grid-cols-2 gap-2">
-                        <Field label="Accept label"><input className={inputCls} value={ui.phoneCallAcceptLabel ?? ''} placeholder="Accept" onChange={e => onUpdate({ phoneCallAcceptLabel: e.target.value })} /></Field>
-                        <ColorField label="Accept color" value={ui.phoneCallAcceptColor ?? '#22c55e'} onChange={v => onUpdate({ phoneCallAcceptColor: v })} />
+                        <Field label={t('hc.acceptLabel', 'Accept label')}><input className={inputCls} value={ui.phoneCallAcceptLabel ?? ''} placeholder="Accept" onChange={e => onUpdate({ phoneCallAcceptLabel: e.target.value })} /></Field>
+                        <ColorField label={t('hc.acceptColor', 'Accept color')} value={ui.phoneCallAcceptColor ?? '#22c55e'} onChange={v => onUpdate({ phoneCallAcceptColor: v })} />
                     </div>
-                    <Field label="Accept icon">
+                    <Field label={t('hc.acceptIcon', 'Accept icon')}>
                         <select className={inputCls} value={ui.phoneCallAcceptIcon || ''} onChange={e => onUpdate({ phoneCallAcceptIcon: e.target.value || undefined })}>
                             <option value="">{t('hc.default2', '📞 default')}</option>
                             {PHONE_ICON_KEYS.map(k => <option key={k} value={k}>{PHONE_GLYPHS[k]} {k}</option>)}
                         </select>
                     </Field>
                     <div className="grid grid-cols-2 gap-2">
-                        <Field label="Decline label"><input className={inputCls} value={ui.phoneCallDeclineLabel ?? ''} placeholder="Decline" onChange={e => onUpdate({ phoneCallDeclineLabel: e.target.value })} /></Field>
-                        <ColorField label="Decline color" value={ui.phoneCallDeclineColor ?? '#ef4444'} onChange={v => onUpdate({ phoneCallDeclineColor: v })} />
+                        <Field label={t('hc.declineLabel', 'Decline label')}><input className={inputCls} value={ui.phoneCallDeclineLabel ?? ''} placeholder="Decline" onChange={e => onUpdate({ phoneCallDeclineLabel: e.target.value })} /></Field>
+                        <ColorField label={t('hc.declineColor', 'Decline color')} value={ui.phoneCallDeclineColor ?? '#ef4444'} onChange={v => onUpdate({ phoneCallDeclineColor: v })} />
                     </div>
-                    <Field label="Decline icon">
+                    <Field label={t('hc.declineIcon', 'Decline icon')}>
                         <select className={inputCls} value={ui.phoneCallDeclineIcon || ''} onChange={e => onUpdate({ phoneCallDeclineIcon: e.target.value || undefined })}>
                             <option value="">{t('hc.default3', '⊘ default')}</option>
                             {PHONE_ICON_KEYS.map(k => <option key={k} value={k}>{PHONE_GLYPHS[k]} {k}</option>)}
@@ -2189,30 +2189,30 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                     <hr className="border-[var(--border-subtle)] my-2" />
                     <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('hc.inCallTranscriptScriptedCall', 'In-call transcript (scripted call conversations play on the phone\'s call screen).')}</p>
                     <div className="grid grid-cols-2 gap-2">
-                        <Field label="End Call label"><input className={inputCls} value={ui.phoneCallEndLabel ?? ''} placeholder={t('hc.endCall', 'End Call')} onChange={e => onUpdate({ phoneCallEndLabel: e.target.value || undefined })} /></Field>
-                        <ColorField label="End Call color" value={ui.phoneCallEndColor ?? '#ef4444'} onChange={v => onUpdate({ phoneCallEndColor: v })} />
+                        <Field label={t('hc.endCallLabel', 'End Call label')}><input className={inputCls} value={ui.phoneCallEndLabel ?? ''} placeholder={t('hc.endCall', 'End Call')} onChange={e => onUpdate({ phoneCallEndLabel: e.target.value || undefined })} /></Field>
+                        <ColorField label={t('hc.endCallColor', 'End Call color')} value={ui.phoneCallEndColor ?? '#ef4444'} onChange={v => onUpdate({ phoneCallEndColor: v })} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                        <ColorField label="Call timer" value={ui.phoneCallTimerColor ?? '#ffffffb3'} onChange={v => onUpdate({ phoneCallTimerColor: v })} />
+                        <ColorField label={t('hc.callTimer', 'Call timer')} value={ui.phoneCallTimerColor ?? '#ffffffb3'} onChange={v => onUpdate({ phoneCallTimerColor: v })} />
                         <Field label='"Calling…" text'><input className={inputCls} value={ui.phoneCallDialingText ?? ''} placeholder="Calling…" onChange={e => onUpdate({ phoneCallDialingText: e.target.value || undefined })} /></Field>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                        <ColorField label="Their line bubble" value={ui.phoneCallLineIncomingColor ?? '#2a2f3a'} onChange={v => onUpdate({ phoneCallLineIncomingColor: v })} />
-                        <ColorField label="Your line bubble" value={ui.phoneCallLineOutgoingColor ?? '#2f6bff'} onChange={v => onUpdate({ phoneCallLineOutgoingColor: v })} />
+                        <ColorField label={t('hc.theirLineBubble', 'Their line bubble')} value={ui.phoneCallLineIncomingColor ?? '#2a2f3a'} onChange={v => onUpdate({ phoneCallLineIncomingColor: v })} />
+                        <ColorField label={t('hc.yourLineBubble', 'Your line bubble')} value={ui.phoneCallLineOutgoingColor ?? '#2f6bff'} onChange={v => onUpdate({ phoneCallLineOutgoingColor: v })} />
                     </div>
                 </CollapsibleSection>
 
                 <CollapsibleSection title={t('hc.wallpapersSettingsApp', 'Wallpapers & Settings app')}>
                     <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('hc.givePlayersWallpapersToChoose', 'Give players wallpapers to choose from — a')} <b>{t('hc.settingsApp', 'Settings app')}</b> {t('hc.appearsOnThePhoneAdd', 'appears on the phone (add an app button that opens "Settings"). Their pick is remembered in saves. Wallpapers with conditions unlock over the story.')}</p>
-                    <Field label="Settings header"><input className={inputCls} value={ui.phoneSettingsHeader ?? ''} placeholder="Settings" onChange={e => onUpdate({ phoneSettingsHeader: e.target.value || undefined })} /></Field>
-                    <Field label="Wallpaper section label"><input className={inputCls} value={ui.phoneSettingsWallpaperLabel ?? ''} placeholder="Wallpaper" onChange={e => onUpdate({ phoneSettingsWallpaperLabel: e.target.value || undefined })} /></Field>
+                    <Field label={t('hc.settingsHeader', 'Settings header')}><input className={inputCls} value={ui.phoneSettingsHeader ?? ''} placeholder="Settings" onChange={e => onUpdate({ phoneSettingsHeader: e.target.value || undefined })} /></Field>
+                    <Field label={t('hc.wallpaperSectionLabel', 'Wallpaper section label')}><input className={inputCls} value={ui.phoneSettingsWallpaperLabel ?? ''} placeholder="Wallpaper" onChange={e => onUpdate({ phoneSettingsWallpaperLabel: e.target.value || undefined })} /></Field>
                     {(ui.phoneWallpapers || []).map((w, i) => (
                         <div key={w.id} className="border border-[var(--border-subtle)] rounded p-2 space-y-1.5 mb-1.5">
                             <div className="flex items-center gap-1">
                                 <input className={inputCls} value={w.name ?? ''} placeholder={t('hc.nameOptional', 'Name (optional)')} onChange={e => onUpdate({ phoneWallpapers: (ui.phoneWallpapers || []).map((x, xi) => xi === i ? { ...x, name: e.target.value || undefined } : x) })} />
                                 <button onClick={() => onUpdate({ phoneWallpapers: (ui.phoneWallpapers || []).filter((_, xi) => xi !== i) })} className="p-1 text-red-400 hover:text-red-300" title="Remove"><TrashIcon className="w-4 h-4" /></button>
                             </div>
-                            <Field label="Image / video">
+                            <Field label={t('hc.imageVideo', 'Image / video')}>
                                 <PhoneBgSelect project={project} value={w.image} onChange={ref => onUpdate({ phoneWallpapers: (ui.phoneWallpapers || []).map((x, xi) => xi === i ? { ...x, image: ref || x.image } : x) })} />
                             </Field>
                             <ConditionsEditor collapsible title={t('hc.unlockedWhen', 'Unlocked when…')} conditions={w.conditions || []} project={project} onChange={cond => onUpdate({ phoneWallpapers: (ui.phoneWallpapers || []).map((x, xi) => xi === i ? { ...x, conditions: cond && cond.length ? cond : undefined } : x) })} />
@@ -2258,15 +2258,15 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
 
                 <CollapsibleSection title={t('hc.mapApp', 'Map app')}>
                     <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('hc.freeRoamTravelFromThe', 'Free-roam travel from the phone: the player opens the Map app and taps a location to go there. Design maps in')} <b>{t('hc.systemsMapsTravel', 'Systems → Maps & Travel')}</b>{t('hc.browsingIsAlwaysAllowed', "; browsing is always allowed, traveling honors the gate below.")}</p>
-                    <Field label="Map shown in the app">
+                    <Field label={t('hc.mapShownInTheApp', 'Map shown in the app')}>
                         <select className={inputCls} value={ui.phoneMapId || ''} onChange={e => onUpdate({ phoneMapId: (e.target.value || null) as any })}>
                             <option value="">{t('hc.noneMapAppDisabled', 'None (Map app disabled)')}</option>
                             {(Object.values(project.maps || {}) as any[]).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                         </select>
                     </Field>
                     <Field label="Header"><input className={inputCls} value={ui.phoneMapHeader ?? ''} placeholder="Map" onChange={e => onUpdate({ phoneMapHeader: e.target.value || undefined })} /></Field>
-                    <ConditionsEditor collapsible title={t('hc.travelAllowedWhen', 'Travel allowed when…')} hint="Leave empty = always. E.g. add a 'can_travel is true' condition and flip that variable with Set Variable when the story permits moving." conditions={ui.phoneMapTravelConditions || []} project={project} onChange={cond => onUpdate({ phoneMapTravelConditions: cond && cond.length ? cond : undefined })} />
-                    <Field label="Blocked-travel message"><input className={inputCls} value={ui.phoneMapTravelLockedText ?? ''} placeholder={t('hc.youCanTLeaveRight', 'You can\'t leave right now.')} onChange={e => onUpdate({ phoneMapTravelLockedText: e.target.value || undefined })} /></Field>
+                    <ConditionsEditor collapsible title={t('hc.travelAllowedWhen', 'Travel allowed when…')} hint={t('hc.leaveEmptyAlwaysEG', 'Leave empty = always. E.g. add a \'can_travel is true\' condition and flip that variable with Set Variable when the story permits moving.')} conditions={ui.phoneMapTravelConditions || []} project={project} onChange={cond => onUpdate({ phoneMapTravelConditions: cond && cond.length ? cond : undefined })} />
+                    <Field label={t('hc.blockedTravelMessage', 'Blocked-travel message')}><input className={inputCls} value={ui.phoneMapTravelLockedText ?? ''} placeholder={t('hc.youCanTLeaveRight', 'You can\'t leave right now.')} onChange={e => onUpdate({ phoneMapTravelLockedText: e.target.value || undefined })} /></Field>
                 </CollapsibleSection>
 
                 <CollapsibleSection title={t('hc.galleryApp', 'Gallery app')}>
@@ -2274,7 +2274,7 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                     <Field label="Header"><input className={inputCls} value={ui.phoneGalleryHeader ?? ''} placeholder="Gallery" onChange={e => onUpdate({ phoneGalleryHeader: e.target.value || undefined })} /></Field>
                     <div className="grid grid-cols-2 gap-2">
                         <NumInput label="Columns" value={ui.phoneGalleryColumns} fallback={3} min={1} max={6} onChange={v => onUpdate({ phoneGalleryColumns: v })} />
-                        <Field label="Show CG tab">
+                        <Field label={t('hc.showCgTab', 'Show CG tab')}>
                             <select className={inputCls} value={ui.phoneGalleryShowCG === false ? 'no' : 'yes'} onChange={e => onUpdate({ phoneGalleryShowCG: e.target.value === 'no' ? false : undefined })}>
                                 <option value="yes">{t('hc.yesWhenACgGallery', 'Yes (when a CG gallery exists)')}</option>
                                 <option value="no">{t('hc.noPhotosOnly', 'No (photos only)')}</option>
@@ -2282,25 +2282,25 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         </Field>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                        <Field label="Photos tab label"><input className={inputCls} value={ui.phoneGalleryPhotosLabel ?? ''} placeholder="Photos" onChange={e => onUpdate({ phoneGalleryPhotosLabel: e.target.value || undefined })} /></Field>
-                        <Field label="CG tab label"><input className={inputCls} value={ui.phoneGalleryCGLabel ?? ''} placeholder="Collection" onChange={e => onUpdate({ phoneGalleryCGLabel: e.target.value || undefined })} /></Field>
+                        <Field label={t('hc.photosTabLabel', 'Photos tab label')}><input className={inputCls} value={ui.phoneGalleryPhotosLabel ?? ''} placeholder="Photos" onChange={e => onUpdate({ phoneGalleryPhotosLabel: e.target.value || undefined })} /></Field>
+                        <Field label={t('hc.cgTabLabel', 'CG tab label')}><input className={inputCls} value={ui.phoneGalleryCGLabel ?? ''} placeholder="Collection" onChange={e => onUpdate({ phoneGalleryCGLabel: e.target.value || undefined })} /></Field>
                     </div>
-                    <Field label="Empty text"><input className={inputCls} value={ui.phoneGalleryEmptyText ?? ''} placeholder={t('hc.noPhotosYet', 'No photos yet')} onChange={e => onUpdate({ phoneGalleryEmptyText: e.target.value || undefined })} /></Field>
+                    <Field label={t('hc.emptyText', 'Empty text')}><input className={inputCls} value={ui.phoneGalleryEmptyText ?? ''} placeholder={t('hc.noPhotosYet', 'No photos yet')} onChange={e => onUpdate({ phoneGalleryEmptyText: e.target.value || undefined })} /></Field>
                 </CollapsibleSection>
 
                 <CollapsibleSection title={t('hc.messagesAppThreadsInbox', 'Messages app (threads inbox)')}>
                     <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('hc.theMessagesAppOpensTo', "The Messages app opens to an inbox — one row per conversation with a preview and an unread pill; tapping a row opens that chat. Rows reuse the Contacts row colors.")}</p>
                     <Field label="Header"><input className={inputCls} value={ui.phoneMessagesHeader ?? ''} placeholder="Messages" onChange={e => onUpdate({ phoneMessagesHeader: e.target.value || undefined })} /></Field>
-                    <Field label="Empty text"><input className={inputCls} value={ui.phoneMessagesEmptyText ?? ''} placeholder={t('hc.noMessagesYet', 'No messages yet')} onChange={e => onUpdate({ phoneMessagesEmptyText: e.target.value || undefined })} /></Field>
-                    <Field label="New-conversation hint"><input className={inputCls} value={ui.phoneMessagesNewHint ?? ''} placeholder={t('hc.newConversation', 'New conversation')} onChange={e => onUpdate({ phoneMessagesNewHint: e.target.value || undefined })} /></Field>
+                    <Field label={t('hc.emptyText', 'Empty text')}><input className={inputCls} value={ui.phoneMessagesEmptyText ?? ''} placeholder={t('hc.noMessagesYet', 'No messages yet')} onChange={e => onUpdate({ phoneMessagesEmptyText: e.target.value || undefined })} /></Field>
+                    <Field label={t('hc.newConversationHint', 'New-conversation hint')}><input className={inputCls} value={ui.phoneMessagesNewHint ?? ''} placeholder={t('hc.newConversation', 'New conversation')} onChange={e => onUpdate({ phoneMessagesNewHint: e.target.value || undefined })} /></Field>
                 </CollapsibleSection>
 
                 <CollapsibleSection title={t('hc.recentsHistory', 'Recents (history)')}>
                     <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('hc.theCallLogViewOpened', 'The call log view, opened by a phone button with the "Show Phone History" action.')}</p>
                     <Field label="Header"><input className={inputCls} value={ui.phoneHistoryHeader ?? ''} placeholder="Recents" onChange={e => onUpdate({ phoneHistoryHeader: e.target.value })} /></Field>
                     <div className="grid grid-cols-2 gap-2">
-                        <ColorField label="Row color" value={ui.phoneHistoryRowColor ?? '#ffffff10'} onChange={v => onUpdate({ phoneHistoryRowColor: v })} />
-                        <ColorField label="Row text" value={ui.phoneHistoryTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneHistoryTextColor: v })} />
+                        <ColorField label={t('hc.rowColor', 'Row color')} value={ui.phoneHistoryRowColor ?? '#ffffff10'} onChange={v => onUpdate({ phoneHistoryRowColor: v })} />
+                        <ColorField label={t('hc.rowText', 'Row text')} value={ui.phoneHistoryTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneHistoryTextColor: v })} />
                     </div>
                 </CollapsibleSection>
 
@@ -2311,15 +2311,15 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                     )}
                     <Field label="Header"><input className={inputCls} value={ui.phoneContactsHeader ?? ''} placeholder="Contacts" onChange={e => onUpdate({ phoneContactsHeader: e.target.value || undefined })} /></Field>
                     <div className="grid grid-cols-2 gap-2">
-                        <ColorField label="Row color" value={ui.phoneContactRowColor ?? '#ffffff10'} onChange={v => onUpdate({ phoneContactRowColor: v })} />
-                        <ColorField label="Row text" value={ui.phoneContactTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneContactTextColor: v })} />
+                        <ColorField label={t('hc.rowColor', 'Row color')} value={ui.phoneContactRowColor ?? '#ffffff10'} onChange={v => onUpdate({ phoneContactRowColor: v })} />
+                        <ColorField label={t('hc.rowText', 'Row text')} value={ui.phoneContactTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneContactTextColor: v })} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                        <Field label="Call button label"><input className={inputCls} value={ui.phoneContactCallLabel ?? ''} placeholder="Call" onChange={e => onUpdate({ phoneContactCallLabel: e.target.value || undefined })} /></Field>
-                        <Field label="Message button label"><input className={inputCls} value={ui.phoneContactMessageLabel ?? ''} placeholder="Message" onChange={e => onUpdate({ phoneContactMessageLabel: e.target.value || undefined })} /></Field>
+                        <Field label={t('hc.callButtonLabel', 'Call button label')}><input className={inputCls} value={ui.phoneContactCallLabel ?? ''} placeholder="Call" onChange={e => onUpdate({ phoneContactCallLabel: e.target.value || undefined })} /></Field>
+                        <Field label={t('hc.messageButtonLabel', 'Message button label')}><input className={inputCls} value={ui.phoneContactMessageLabel ?? ''} placeholder="Message" onChange={e => onUpdate({ phoneContactMessageLabel: e.target.value || undefined })} /></Field>
                     </div>
-                    <FontEditor label="Contact name font" font={(ui.phoneContactNameFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneContactNameFont: { ...((ui.phoneContactNameFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
-                    <FontEditor label="Contact status font" font={(ui.phoneContactStatusFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneContactStatusFont: { ...((ui.phoneContactStatusFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
+                    <FontEditor label={t('hc.contactNameFont', 'Contact name font')} font={(ui.phoneContactNameFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneContactNameFont: { ...((ui.phoneContactNameFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
+                    <FontEditor label={t('hc.contactStatusFont', 'Contact status font')} font={(ui.phoneContactStatusFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneContactStatusFont: { ...((ui.phoneContactStatusFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
                     <div className="mt-2 flex flex-col gap-2">
                         {(ui.phoneContacts || []).map((c, i) => {
                             const update = (patch: Partial<PhoneContact>) => onUpdate({ phoneContacts: (ui.phoneContacts || []).map((x, idx) => idx === i ? { ...x, ...patch } : x) });
@@ -2334,15 +2334,15 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                                         <button onClick={() => onUpdate({ phoneContacts: (ui.phoneContacts || []).filter((_, idx) => idx !== i) })} className="text-red-400 hover:text-red-300 text-xs px-1" title="Remove">✕</button>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">
-                                        <Field label="Name (optional)"><input className={inputCls} value={c.displayName ?? ''} placeholder={t('hc.characterName', '(character name)')} onChange={e => update({ displayName: e.target.value || undefined })} /></Field>
-                                        <Field label="Status line"><input className={inputCls} value={c.statusText ?? ''} placeholder={t('hc.egAffection', 'e.g. Affection: {mia_love}')} onChange={e => update({ statusText: e.target.value || undefined })} /></Field>
+                                        <Field label={t('hc.nameOptional', 'Name (optional)')}><input className={inputCls} value={c.displayName ?? ''} placeholder={t('hc.characterName', '(character name)')} onChange={e => update({ displayName: e.target.value || undefined })} /></Field>
+                                        <Field label={t('hc.statusLine', 'Status line')}><input className={inputCls} value={c.statusText ?? ''} placeholder={t('hc.egAffection', 'e.g. Affection: {mia_love}')} onChange={e => update({ statusText: e.target.value || undefined })} /></Field>
                                     </div>
                                     <div className="flex gap-3 text-[10px] text-[var(--text-secondary)]">
                                         <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.hideCall} onChange={e => update({ hideCall: e.target.checked || undefined })} />{t('hc.hideCall', 'Hide Call')}</label>
                                         <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.hideMessage} onChange={e => update({ hideMessage: e.target.checked || undefined })} />{t('hc.hideMessage', 'Hide Message')}</label>
                                     </div>
                                     {c.characterId && <PhonePortraitPicker senderId={c.characterId} value={c.avatar} onChange={v => update({ avatar: v })} project={project} t={t} />}
-                                    <Field label="Chat background (this thread)">
+                                    <Field label={t('hc.chatBackgroundThisThread', 'Chat background (this thread)')}>
                                         <PhoneBgSelect project={project} cls={inputCls} value={c.chatBackground} onChange={v => update({ chatBackground: v })} />
                                     </Field>
                                     <CollapsibleSection title={t('hc.callConversations', 'Call conversations')} badge={String((c.callConversations || []).length)}
@@ -2380,28 +2380,28 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                 </CollapsibleSection>
 
                 <CollapsibleSection title={t('hc.soundsBackground', 'Sounds & background')}>
-                    <Field label="Open sound">
+                    <Field label={t('hc.openSound', 'Open sound')}>
                         <select className={inputCls} value={ui.phoneOpenSoundId || ''} onChange={e => onUpdate({ phoneOpenSoundId: (e.target.value || undefined) as any })}>
                             <option value="">None</option>
                             {(Object.values(project.audio || {}) as any[]).map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
                         </select>
                     </Field>
-                    <Field label="Close sound">
+                    <Field label={t('hc.closeSound', 'Close sound')}>
                         <select className={inputCls} value={ui.phoneCloseSoundId || ''} onChange={e => onUpdate({ phoneCloseSoundId: (e.target.value || undefined) as any })}>
                             <option value="">None</option>
                             {(Object.values(project.audio || {}) as any[]).map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
                         </select>
                     </Field>
-                    <Field label="Button tap sound">
+                    <Field label={t('hc.buttonTapSound', 'Button tap sound')}>
                         <select className={inputCls} value={ui.phoneTapSoundId || ''} onChange={e => onUpdate({ phoneTapSoundId: (e.target.value || undefined) as any })}>
                             <option value="">None</option>
                             {(Object.values(project.audio || {}) as any[]).map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
                         </select>
                     </Field>
-                    <Field label="Wallpaper (home / apps)">
+                    <Field label={t('hc.wallpaperHomeApps', 'Wallpaper (home / apps)')}>
                         <PhoneBgSelect project={project} cls={inputCls} value={ui.phoneWallpaperImage} onChange={v => onUpdate({ phoneWallpaperImage: v })} />
                     </Field>
-                    <Field label="Chat background (default for all threads)">
+                    <Field label={t('hc.chatBackgroundDefaultForAll', 'Chat background (default for all threads)')}>
                         <PhoneBgSelect project={project} cls={inputCls} value={ui.phoneChatBackgroundImage} onChange={v => onUpdate({ phoneChatBackgroundImage: v })} />
                     </Field>
                     <p className="text-[10px] text-[var(--text-muted)]">{t('hc.backgroundsCanBeAnImage', 'Backgrounds can be an image or a looping video. Videos play muted on a loop.')}</p>
@@ -2410,16 +2410,16 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                 <CollapsibleSection title={t('hc.portraitsAvatars', 'Portraits & avatars')}>
                     <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('hc.useContainASmallerSize', 'Use "contain" + a smaller size so a tall full-body sprite fits without cropping.')}</p>
                     <div className="grid grid-cols-2 gap-2">
-                        <Field label="Contacts avatar size (em)"><input type="number" step="0.1" min="1" max="6" className={inputCls} value={ui.phoneContactAvatarSize ?? 2.4} onChange={e => onUpdate({ phoneContactAvatarSize: parseFloat(e.target.value) || undefined })} /></Field>
-                        <Field label="Contacts avatar fit"><select className={inputCls} value={ui.phoneContactAvatarFit || 'cover'} onChange={e => onUpdate({ phoneContactAvatarFit: e.target.value as any })}><option value="cover">{t('hc.coverCrop', 'Cover (crop)')}</option><option value="contain">{t('hc.containWhole', 'Contain (whole)')}</option></select></Field>
-                        <Field label="Chat avatar size (em)"><input type="number" step="0.1" min="1" max="6" className={inputCls} value={ui.phoneChatAvatarSize ?? 2.2} onChange={e => onUpdate({ phoneChatAvatarSize: parseFloat(e.target.value) || undefined })} /></Field>
-                        <Field label="Chat avatar fit"><select className={inputCls} value={ui.phoneChatAvatarFit || 'cover'} onChange={e => onUpdate({ phoneChatAvatarFit: e.target.value as any })}><option value="cover">{t('hc.coverCrop', 'Cover (crop)')}</option><option value="contain">{t('hc.containWhole', 'Contain (whole)')}</option></select></Field>
+                        <Field label={t('hc.contactsAvatarSizeEm', 'Contacts avatar size (em)')}><input type="number" step="0.1" min="1" max="6" className={inputCls} value={ui.phoneContactAvatarSize ?? 2.4} onChange={e => onUpdate({ phoneContactAvatarSize: parseFloat(e.target.value) || undefined })} /></Field>
+                        <Field label={t('hc.contactsAvatarFit', 'Contacts avatar fit')}><select className={inputCls} value={ui.phoneContactAvatarFit || 'cover'} onChange={e => onUpdate({ phoneContactAvatarFit: e.target.value as any })}><option value="cover">{t('hc.coverCrop', 'Cover (crop)')}</option><option value="contain">{t('hc.containWhole', 'Contain (whole)')}</option></select></Field>
+                        <Field label={t('hc.chatAvatarSizeEm', 'Chat avatar size (em)')}><input type="number" step="0.1" min="1" max="6" className={inputCls} value={ui.phoneChatAvatarSize ?? 2.2} onChange={e => onUpdate({ phoneChatAvatarSize: parseFloat(e.target.value) || undefined })} /></Field>
+                        <Field label={t('hc.chatAvatarFit', 'Chat avatar fit')}><select className={inputCls} value={ui.phoneChatAvatarFit || 'cover'} onChange={e => onUpdate({ phoneChatAvatarFit: e.target.value as any })}><option value="cover">{t('hc.coverCrop', 'Cover (crop)')}</option><option value="contain">{t('hc.containWhole', 'Contain (whole)')}</option></select></Field>
                     </div>
                     <div className="grid grid-cols-2 gap-2 mt-1">
-                        <Field label="Call portrait size (%)"><input type="number" step="1" min="8" max="60" className={inputCls} value={ui.phoneCallPortraitSize ?? 22} onChange={e => onUpdate({ phoneCallPortraitSize: parseFloat(e.target.value) || undefined })} /></Field>
-                        <Field label="Call portrait fit"><select className={inputCls} value={ui.phoneCallPortraitFit || 'cover'} onChange={e => onUpdate({ phoneCallPortraitFit: e.target.value as any })}><option value="cover">{t('hc.coverCrop', 'Cover (crop)')}</option><option value="contain">{t('hc.containWhole', 'Contain (whole)')}</option></select></Field>
+                        <Field label={t('hc.callPortraitSize', 'Call portrait size (%)')}><input type="number" step="1" min="8" max="60" className={inputCls} value={ui.phoneCallPortraitSize ?? 22} onChange={e => onUpdate({ phoneCallPortraitSize: parseFloat(e.target.value) || undefined })} /></Field>
+                        <Field label={t('hc.callPortraitFit', 'Call portrait fit')}><select className={inputCls} value={ui.phoneCallPortraitFit || 'cover'} onChange={e => onUpdate({ phoneCallPortraitFit: e.target.value as any })}><option value="cover">{t('hc.coverCrop', 'Cover (crop)')}</option><option value="contain">{t('hc.containWhole', 'Contain (whole)')}</option></select></Field>
                     </div>
-                    <Field label="Call portrait focus (CSS object-position)"><input className={inputCls} value={ui.phoneCallPortraitPosition ?? ''} placeholder="center top" onChange={e => onUpdate({ phoneCallPortraitPosition: e.target.value || undefined })} /></Field>
+                    <Field label={t('hc.callPortraitFocusCssObject', 'Call portrait focus (CSS object-position)')}><input className={inputCls} value={ui.phoneCallPortraitPosition ?? ''} placeholder="center top" onChange={e => onUpdate({ phoneCallPortraitPosition: e.target.value || undefined })} /></Field>
                 </CollapsibleSection>
             </div>
         );
@@ -3185,7 +3185,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                                         width={portW} height={portW * (gameW / gameH)}
                                         anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
                                         onSelect={e => e.stopPropagation()} onUpdate={u => handleDragCallPortrait(u)}
-                                        snapGrid={1} snapEnabled={snapEnabled} onGuides={setInGameSnapGuides} label="Caller portrait">
+                                        snapGrid={1} snapEnabled={snapEnabled} onGuides={setInGameSnapGuides} label={t('hc.callerPortrait', 'Caller portrait')}>
                                         <div style={{ width: '100%', height: '100%', borderRadius: callShape === 'circle' ? '9999px' : '16px', overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
                                             {callSample?.baseImageUrl && <img src={callSample.baseImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: ui.phoneCallPortraitFit || 'cover', objectPosition: ui.phoneCallPortraitPosition || 'center' }} />}
                                         </div>
@@ -3214,7 +3214,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = tru
                                         x={regionRect.x} y={regionRect.y} width={regionRect.width} height={regionRect.height}
                                         anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
                                         onSelect={e => e.stopPropagation()} onUpdate={handleDragContactsRegion}
-                                        snapGrid={1} snapEnabled={snapEnabled} onGuides={setInGameSnapGuides} label="Contacts list">
+                                        snapGrid={1} snapEnabled={snapEnabled} onGuides={setInGameSnapGuides} label={t('hc.contactsList', 'Contacts list')}>
                                         <div style={{ width: '100%', height: '100%', border: '1px dashed rgba(124,131,253,0.7)', borderRadius: 8, background: 'rgba(124,131,253,0.08)' }} />
                                     </ResizableDraggable>
                                 </>);

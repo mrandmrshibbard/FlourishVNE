@@ -289,6 +289,11 @@
     "resetToDefaults": "Сбросить к стандартным",
     "confirm": "Подтвердить",
     "cancel": "Отмена",
-    "resetToPresetPosition": "Вернуть на выбранное место"
+    "resetToPresetPosition": "Вернуть на выбранное место",
+    "backgroundColorShownBehindInstead": "Цвет фона (за изображением или вместо него)",
+    "nameboxImageFitMode": "Вписывание изображения таблички имени",
+    "nameboxBackgroundColor": "Цвет фона таблички имени",
+    "buttonBackgroundColor": "Цвет фона кнопки",
+    "inputBoxBackgroundColor": "Цвет фона поля ввода"
   }
 }

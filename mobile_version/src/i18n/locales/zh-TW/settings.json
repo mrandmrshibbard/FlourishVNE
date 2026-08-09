@@ -289,6 +289,11 @@
     "resetToDefaults": "恢復預設",
     "confirm": "確認",
     "cancel": "取消",
-    "resetToPresetPosition": "回到所選的預設位置"
+    "resetToPresetPosition": "回到所選的預設位置",
+    "backgroundColorShownBehindInstead": "背景色（顯示在圖片之後或替代圖片）",
+    "nameboxImageFitMode": "名字框圖片的適應方式",
+    "nameboxBackgroundColor": "名字框背景色",
+    "buttonBackgroundColor": "按鈕背景色",
+    "inputBoxBackgroundColor": "輸入框背景色"
   }
 }

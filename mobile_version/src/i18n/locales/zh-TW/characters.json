@@ -248,7 +248,10 @@
     "dialogueTextbox": "對話框",
     "pickAReusableThemeAnd": "挑選一個可重複使用的主題，或設定自己的外觀。留空的部分會沿用專案的預設對話介面。",
     "createAndEditThemesIn": "可在「遊戲內 UI 編輯器 → 對話框主題」中建立與編輯主題。",
-    "everyLineThisCharacterSpeaks": "該角色的每句台詞都以此顏色顯示——一眼就知道是誰在說話。"
+    "everyLineThisCharacterSpeaks": "該角色的每句台詞都以此顏色顯示——一眼就知道是誰在說話。",
+    "textboxTheme": "對話框主題",
+    "speakInColor": "彩色台詞",
+    "dialogueTextColor": "對話文字顏色"
   },
   "textboxSummary": {
     "title": "該角色說話時",

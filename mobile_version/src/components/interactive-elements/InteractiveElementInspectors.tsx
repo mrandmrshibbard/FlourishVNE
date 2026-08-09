@@ -380,7 +380,7 @@ export const HotSpotProperties: React.FC<{
             <ConditionsEditor
                 collapsible
                 title={t('hotZone.visibilityConditions')}
-                hint="Hot spot is only active when all conditions are met."
+                hint={t('hc.hotSpotIsOnlyActive', 'Hot spot is only active when all conditions are met.')}
                 conditions={spot.conditions}
                 project={project}
                 onChange={conditions => onUpdate({ conditions })}
@@ -953,7 +953,7 @@ export const InteractiveElementProperties: React.FC<{
             <ConditionsEditor
                 collapsible
                 title={t('hotZone.visibilityConditions')}
-                hint="Element is only shown when all conditions are met."
+                hint={t('hc.elementIsOnlyShownWhen', 'Element is only shown when all conditions are met.')}
                 conditions={element.conditions}
                 project={project}
                 onChange={conditions => onUpdate({ conditions })}

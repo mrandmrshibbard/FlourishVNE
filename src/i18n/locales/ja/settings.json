@@ -289,6 +289,11 @@
     "resetToDefaults": "既定に戻す",
     "confirm": "決定",
     "cancel": "キャンセル",
-    "resetToPresetPosition": "選んだ配置に戻す"
+    "resetToPresetPosition": "選んだ配置に戻す",
+    "backgroundColorShownBehindInstead": "背景色（画像の後ろ、または画像の代わりに表示）",
+    "nameboxImageFitMode": "名前枠画像の合わせ方",
+    "nameboxBackgroundColor": "名前枠の背景色",
+    "buttonBackgroundColor": "ボタンの背景色",
+    "inputBoxBackgroundColor": "入力欄の背景色"
   }
 }

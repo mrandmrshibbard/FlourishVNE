@@ -248,7 +248,10 @@
     "dialogueTextbox": "Riquadro dei dialoghi",
     "pickAReusableThemeAnd": "Scegli un tema riutilizzabile e/o imposta un aspetto tuo. Ciò che lasci vuoto usa l'interfaccia dei dialoghi predefinita del progetto.",
     "createAndEditThemesIn": "Crea e modifica i temi nell'Editor UI di gioco → Temi del riquadro dei dialoghi.",
-    "everyLineThisCharacterSpeaks": "Ogni battuta di questo personaggio compare in questo colore — un segnale immediato di chi sta parlando."
+    "everyLineThisCharacterSpeaks": "Ogni battuta di questo personaggio compare in questo colore — un segnale immediato di chi sta parlando.",
+    "textboxTheme": "Tema del riquadro dei dialoghi",
+    "speakInColor": "Parla a colori",
+    "dialogueTextColor": "Colore del testo dei dialoghi"
   },
   "textboxSummary": {
     "title": "Quando parla",

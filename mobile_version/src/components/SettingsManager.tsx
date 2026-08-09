@@ -782,7 +782,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                             opacityValue={project.ui.dialogueBoxOpacity ?? 90}
                             onColorChange={(v) => onUpdate({ dialogueBoxColor: v })}
                             onOpacityChange={(v) => onUpdate({ dialogueBoxOpacity: v })}
-                            label="Background Color (shown behind/instead of image)"
+                            label={t('hc.backgroundColorShownBehindInstead', 'Background Color (shown behind/instead of image)')}
                         />
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Corner Radius ({project.ui.dialogueBoxBorderRadius ?? 8}px)</label>
@@ -837,7 +837,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                             <ImageFitModeSelect
                                 value={project.ui.nameboxSizeMode ?? 'stretch'}
                                 onChange={(v) => onUpdate({ nameboxSizeMode: v as any })}
-                                label="Namebox Image Fit Mode"
+                                label={t('hc.nameboxImageFitMode', 'Namebox Image Fit Mode')}
                             />
                         )}
                         <ColorOpacityControl
@@ -845,7 +845,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                             opacityValue={project.ui.nameboxOpacity ?? 92}
                             onColorChange={(v) => onUpdate({ nameboxColor: v })}
                             onOpacityChange={(v) => onUpdate({ nameboxOpacity: v })}
-                            label="Namebox Background Color"
+                            label={t('hc.nameboxBackgroundColor', 'Namebox Background Color')}
                         />
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Vertical Padding ({project.ui.nameboxPadding ?? 8}px)</label>
@@ -1046,7 +1046,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                             opacityValue={project.ui.choiceButtonOpacity ?? 90}
                             onColorChange={(v) => onUpdate({ choiceButtonColor: v })}
                             onOpacityChange={(v) => onUpdate({ choiceButtonOpacity: v })}
-                            label="Button Background Color"
+                            label={t('hc.buttonBackgroundColor', 'Button Background Color')}
                         />
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Corner Radius ({project.ui.choiceButtonBorderRadius ?? 8}px)</label>
@@ -1220,7 +1220,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                             opacityValue={project.ui.inputBoxOpacity ?? 92}
                             onColorChange={(v) => onUpdate({ inputBoxColor: v })}
                             onOpacityChange={(v) => onUpdate({ inputBoxOpacity: v })}
-                            label="Input Box Background Color"
+                            label={t('hc.inputBoxBackgroundColor', 'Input Box Background Color')}
                         />
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Corner Radius ({project.ui.inputBoxBorderRadius ?? 8}px)</label>
@@ -1280,7 +1280,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                     opacityValue={project.ui.quickMenuOpacity ?? 75}
                                     onColorChange={(v) => onUpdate({ quickMenuColor: v })}
                                     onOpacityChange={(v) => onUpdate({ quickMenuOpacity: v })}
-                                    label="Button Background Color"
+                                    label={t('hc.buttonBackgroundColor', 'Button Background Color')}
                                 />
                                 <div>
                                     <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Button Corner Radius ({project.ui.quickMenuBorderRadius ?? 4}px)</label>

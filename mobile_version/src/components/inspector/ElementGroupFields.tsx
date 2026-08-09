@@ -337,20 +337,20 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         <ConditionsEditor collapsible title={t('hc.whenConditions', 'When (conditions)')} conditions={st.conditions} project={project} onChange={cs => patchState(i, { conditions: cs })} />
                         <FormField label={mainColorLabel}><ColorInput value={st.primaryColor ?? ''} onChange={c => patchState(i, { primaryColor: c || undefined })} /></FormField>
                         {supportsImage && (
-                            <AssetSelector label="Swap image" assetType="images" allowVideo value={st.image?.id ?? null} onChange={id => patchState(i, { image: toUIAsset(id) })} />
+                            <AssetSelector label={t('hc.swapImage', 'Swap image')} assetType="images" allowVideo value={st.image?.id ?? null} onChange={id => patchState(i, { image: toUIAsset(id) })} />
                         )}
                         <div className="grid grid-cols-3 gap-2">
-                            <FormField label="Opacity %"><TextInput type="number" value={st.opacity != null ? Math.round(st.opacity * 100) : ''} onChange={e => patchState(i, { opacity: e.target.value === '' ? undefined : (parseInt(e.target.value, 10) || 0) / 100 })} placeholder="100" /></FormField>
-                            <FormField label="Scale ×"><TextInput type="number" step="0.05" value={st.scale ?? ''} onChange={e => patchState(i, { scale: e.target.value === '' ? undefined : parseFloat(e.target.value) })} placeholder="1" /></FormField>
-                            <FormField label="Rotate °"><TextInput type="number" value={st.rotation ?? ''} onChange={e => patchState(i, { rotation: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} placeholder="0" /></FormField>
+                            <FormField label={t('hc.opacity', 'Opacity %')}><TextInput type="number" value={st.opacity != null ? Math.round(st.opacity * 100) : ''} onChange={e => patchState(i, { opacity: e.target.value === '' ? undefined : (parseInt(e.target.value, 10) || 0) / 100 })} placeholder="100" /></FormField>
+                            <FormField label={t('hc.scale', 'Scale ×')}><TextInput type="number" step="0.05" value={st.scale ?? ''} onChange={e => patchState(i, { scale: e.target.value === '' ? undefined : parseFloat(e.target.value) })} placeholder="1" /></FormField>
+                            <FormField label={t('hc.rotate', 'Rotate °')}><TextInput type="number" value={st.rotation ?? ''} onChange={e => patchState(i, { rotation: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} placeholder="0" /></FormField>
                         </div>
                         {hasTypedPrimary && (
                             <div className="grid grid-cols-2 gap-2">
-                                <FormField label="Glow color"><ColorInput value={st.glowColor ?? ''} onChange={c => patchState(i, { glowColor: c || undefined })} /></FormField>
-                                <FormField label="Glow size px"><TextInput type="number" value={st.glowSize ?? ''} onChange={e => patchState(i, { glowSize: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} placeholder="8" /></FormField>
+                                <FormField label={t('hc.glowColor', 'Glow color')}><ColorInput value={st.glowColor ?? ''} onChange={c => patchState(i, { glowColor: c || undefined })} /></FormField>
+                                <FormField label={t('hc.glowSizePx', 'Glow size px')}><TextInput type="number" value={st.glowSize ?? ''} onChange={e => patchState(i, { glowSize: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} placeholder="8" /></FormField>
                             </div>
                         )}
-                        <FormField label="Transition (ms)"><TextInput type="number" value={st.transitionMs ?? ''} onChange={e => patchState(i, { transitionMs: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} placeholder="0 = instant" /></FormField>
+                        <FormField label={t('hc.transitionMs', 'Transition (ms)')}><TextInput type="number" value={st.transitionMs ?? ''} onChange={e => patchState(i, { transitionMs: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} placeholder="0 = instant" /></FormField>
                     </div>
                 ))}
             </div>
@@ -382,7 +382,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             <FormField label={t('elementInspector.hoverBackground')}><ColorInput value={el.hoverBackgroundColor || '#6B4C9A'} onChange={val => updateElement({ hoverBackgroundColor: val })} /></FormField>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
-                            <FormField label="Text Padding (%)">
+                            <FormField label={t('hc.textPadding', 'Text Padding (%)')}>
                                 <TextInput type="number" min={0} max={50} step={1} value={el.paddingX ?? 0} onChange={e => updateElement({ paddingX: Math.max(0, Number(e.target.value) || 0) })} />
                             </FormField>
                             <FormField label={t('elementInspector.borderRadius', 'Corner Radius (px)')}>
@@ -519,7 +519,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                 const el = element as UISaveSlotGridElement;
                 return {
                     content: <>
-                        <FormField label="Slot layout">
+                        <FormField label={t('hc.slotLayout', 'Slot layout')}>
                             <Select value={el.slotLayout || 'grid'} onChange={e => {
                                 if (e.target.value === 'free') {
                                     const rects = (el.slotRects && el.slotRects.length) ? el.slotRects : gridSeedRects(el, el.slotCount, 2);
@@ -794,7 +794,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             <FormField label={t('elementInspector.border')}><ColorInput value={el.borderColor || '#475569'} onChange={v => updateElement({ borderColor: v })} /></FormField>
                             <FormField label={t('elementInspector.hover')}><ColorInput value={el.hoverColor || '#334155'} onChange={v => updateElement({ hoverColor: v })} /></FormField>
                         </div>
-                        <FormField label="Arrow Side">
+                        <FormField label={t('hc.arrowSide', 'Arrow Side')}>
                             <Select value={el.arrowSide || 'right'} onChange={e => updateElement({ arrowSide: e.target.value as 'left' | 'right' })}>
                                 <option value="right">{t('hc.rightDefault', 'Right (default)')}</option>
                                 <option value="left">{t('hc.leftRtl', 'Left (RTL)')}</option>
@@ -856,7 +856,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                 return {
                     content: <>
                         <h4 className="font-bold my-1 text-slate-400 text-xs">{t('elementInspector.galleryLayout')}</h4>
-                        <FormField label="Slot layout">
+                        <FormField label={t('hc.slotLayout', 'Slot layout')}>
                             <Select value={el.slotLayout || 'grid'} onChange={e => {
                                 if (e.target.value === 'free') {
                                     const cols = el.columns || 4;
@@ -993,7 +993,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                 return {
                     content: <>
                         <h4 className="font-bold my-1 text-slate-400 text-xs">{t('hc.dataSource', 'Data source')}</h4>
-                        <FormField label="Bound list">
+                        <FormField label={t('hc.boundList', 'Bound list')}>
                             <Select value={el.collectionId || ''} onChange={e => updateElement({ collectionId: e.target.value || undefined })}>
                                 <option value="">{t('hc.playerInventoryOwnedItems', 'Player inventory (owned items)')}</option>
                                 {itemLists.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -1001,7 +1001,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         </FormField>
                         <p className="text-[9px] text-slate-500 -mt-1">{t('hc.whichStockpileThisGridShows', 'Which stockpile this grid shows. "Player inventory" = the items the player owns. Pick an item list (Systems → Inventory) to show a shop/library/chest\'s own separate stock.')}</p>
                         <h4 className="font-bold my-1 mt-2 text-slate-400 text-xs">{t('elementInspector.galleryLayout')}</h4>
-                        <FormField label="Slot layout">
+                        <FormField label={t('hc.slotLayout', 'Slot layout')}>
                             <Select value={el.slotLayout || 'grid'} onChange={e => {
                                 if (e.target.value === 'free') {
                                     const cols = el.columns || 4;
@@ -1029,8 +1029,8 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             </div>
                             <p className="text-[9px] text-slate-500 -mt-1">{t('hc.rowsMinimumSlotRowsPads', 'Rows = minimum slot rows (pads empty slots, like a backpack). Blank = grow with items.')}</p>
                             <div className="grid grid-cols-2 gap-2 mt-1">
-                                <FormField label="Column spacing"><TextInput type="number" min="0" max="48" value={String(el.columnGap ?? el.gap ?? 8)} onChange={e => updateElement({ columnGap: parseInt(e.target.value, 10) || 0 })} /></FormField>
-                                <FormField label="Row spacing"><TextInput type="number" min="0" max="48" value={String(el.rowGap ?? el.gap ?? 8)} onChange={e => updateElement({ rowGap: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                                <FormField label={t('hc.columnSpacing', 'Column spacing')}><TextInput type="number" min="0" max="48" value={String(el.columnGap ?? el.gap ?? 8)} onChange={e => updateElement({ columnGap: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                                <FormField label={t('hc.rowSpacing', 'Row spacing')}><TextInput type="number" min="0" max="48" value={String(el.rowGap ?? el.gap ?? 8)} onChange={e => updateElement({ rowGap: parseInt(e.target.value, 10) || 0 })} /></FormField>
                             </div>
                         </>}
                         <FormField label={t('elementInspector.categoryFilter')}>
@@ -1044,9 +1044,9 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         {!el.collectionId && <p className="text-[9px] text-slate-500 -mt-1">{t('hc.theseOverrideTheDefaultsIn', 'These override the defaults in Systems → Player Inventory.')}</p>}
                         {el.collectionId
                             ? <p className="text-[9px] text-slate-500">{t('hc.aBoundListAlwaysShows', 'A bound list always shows its full stock (0 = sold out). "Hide unowned" only applies to the player\'s inventory.')}</p>
-                            : <FormField label="Hide unowned items"><input type="checkbox" checked={el.hideUnowned !== false} onChange={e => updateElement({ hideUnowned: e.target.checked })} /></FormField>}
+                            : <FormField label={t('hc.hideUnownedItems', 'Hide unowned items')}><input type="checkbox" checked={el.hideUnowned !== false} onChange={e => updateElement({ hideUnowned: e.target.checked })} /></FormField>}
                         <FormField label={t('elementInspector.showNames')}><input type="checkbox" checked={el.showNames !== false} onChange={e => updateElement({ showNames: e.target.checked })} /></FormField>
-                        <FormField label="Show quantity badge"><input type="checkbox" checked={el.showQuantity !== false} onChange={e => updateElement({ showQuantity: e.target.checked })} /></FormField>
+                        <FormField label={t('hc.showQuantityBadge', 'Show quantity badge')}><input type="checkbox" checked={el.showQuantity !== false} onChange={e => updateElement({ showQuantity: e.target.checked })} /></FormField>
                         <FormField label={t('elementInspector.itemsPerPage', 'Items per page (0 = one long list)')}>
                             <TextInput type="number" min="0" value={el.itemsPerPage ?? 0}
                                 onChange={e => { const n = parseInt(e.target.value, 10) || 0; updateElement({ itemsPerPage: n > 0 ? n : undefined }); }} />
@@ -1070,7 +1070,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                 </FormField>
                             </>
                         )}
-                        <FormField label="Slot button">
+                        <FormField label={t('hc.slotButton', 'Slot button')}>
                             <Select value={curBtn}
                                 onChange={e => { const m = e.target.value as 'use' | 'buy' | 'sell' | 'discard' | 'none'; updateElement({ slotButton: m }); }}>
                                 {btnOpts.map(m => <option key={m} value={m}>{btnLabel(m)}{allowedBtns.includes(m) ? '' : ' (not valid for this data source)'}</option>)}
@@ -1115,7 +1115,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         })()}
                         {curBtn === 'sell' && allowedBtns.includes('sell') && (
                             <>
-                                <FormField label="Sell to shop">
+                                <FormField label={t('hc.sellToShop', 'Sell to shop')}>
                                     <Select value={el.sellToCollectionId || ''} onChange={e => updateElement({ sellToCollectionId: e.target.value || undefined })}>
                                         <option value="">{t('hc.selectAShopList', 'Select a shop list…')}</option>
                                         {sellShops.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -1128,8 +1128,8 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                 {sellShops.length === 0 && <p className="text-[9px] text-slate-500 -mt-1">{t('hc.noShopsYetAShop', 'No shops yet — a shop is an item list with a currency variable (Systems → Inventory).')}</p>}
                             </>
                         )}
-                        <FormField label="Player can rearrange"><input type="checkbox" checked={el.allowReorder !== false} onChange={e => updateElement({ allowReorder: e.target.checked })} /></FormField>
-                        <FormField label="Empty text"><TextInput value={el.emptyText || ''} onChange={e => updateElement({ emptyText: e.target.value })} placeholder={t('hc.yourBagIsEmpty', 'Your bag is empty')} /></FormField>
+                        <FormField label={t('hc.playerCanRearrange', 'Player can rearrange')}><input type="checkbox" checked={el.allowReorder !== false} onChange={e => updateElement({ allowReorder: e.target.checked })} /></FormField>
+                        <FormField label={t('hc.emptyText', 'Empty text')}><TextInput value={el.emptyText || ''} onChange={e => updateElement({ emptyText: e.target.value })} placeholder={t('hc.yourBagIsEmpty', 'Your bag is empty')} /></FormField>
                         <div className="mt-4 p-2 rounded bg-slate-700/30 text-xs text-slate-400">
                             <p>{t('hc.itemsAreManagedInThe', 'Items are managed in the')} <strong>Systems</strong> tab. {el.collectionId ? 'This grid shows the bound item list’s own stock (separate from the player’s inventory).' : 'This grid shows the player’s owned items.'}</p>
                             <p className="mt-1">{itemList.length} item{itemList.length === 1 ? '' : 's'} defined.</p>
@@ -1137,11 +1137,11 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                     </>,
                     appearance: <>
                         <h4 className="font-bold my-1 text-slate-400 text-xs">{t('hc.slotStyling', 'Slot styling')}</h4>
-                        <FormField label="Slot background"><ColorInput value={el.slotColor && el.slotColor.startsWith('#') ? el.slotColor : '#1e293b'} onChange={v => updateElement({ slotColor: v })} /></FormField>
+                        <FormField label={t('hc.slotBackground', 'Slot background')}><ColorInput value={el.slotColor && el.slotColor.startsWith('#') ? el.slotColor : '#1e293b'} onChange={v => updateElement({ slotColor: v })} /></FormField>
                         <FormField label={t('elementInspector.borderColor')}><ColorInput value={el.slotBorderColor || '#4D3273'} onChange={v => updateElement({ slotBorderColor: v })} /></FormField>
                         <FormField label={t('elementInspector.borderRadiusPx')}><TextInput type="number" min="0" max="32" value={String(el.slotBorderRadius ?? 8)} onChange={e => updateElement({ slotBorderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
-                        <FormField label="Selected ring"><ColorInput value={el.selectedBorderColor || '#38bdf8'} onChange={v => updateElement({ selectedBorderColor: v })} /></FormField>
-                        <FormField label="Square slots"><input type="checkbox" checked={el.squareSlots !== false} onChange={e => updateElement({ squareSlots: e.target.checked })} /></FormField>
+                        <FormField label={t('hc.selectedRing', 'Selected ring')}><ColorInput value={el.selectedBorderColor || '#38bdf8'} onChange={v => updateElement({ selectedBorderColor: v })} /></FormField>
+                        <FormField label={t('hc.squareSlots', 'Square slots')}><input type="checkbox" checked={el.squareSlots !== false} onChange={e => updateElement({ squareSlots: e.target.checked })} /></FormField>
                         <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer my-1">
                             <input type="checkbox" checked={el.hideSlotBox === true} onChange={e => updateElement({ hideSlotBox: e.target.checked })} className="accent-purple-500" />
                             Hide slot box &amp; border (show item only)
@@ -1183,15 +1183,15 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             return (
                             <>
                                 <h4 className="font-bold my-2 text-slate-400 text-xs">{defLabel} button</h4>
-                                <FormField label="Button text"><TextInput value={el.useButtonText || ''} onChange={e => updateElement({ useButtonText: e.target.value })} placeholder={defLabel} /></FormField>
-                                <AssetSelector label="Button art" assetType="images" allowVideo value={el.useButtonImage?.id || null} onChange={id => updateElement({ useButtonImage: id ? { type: 'image', id } : null })} />
-                                <AssetSelector label="Hover art" assetType="images" allowVideo value={el.useButtonHoverImage?.id || null} onChange={id => updateElement({ useButtonHoverImage: id ? { type: 'image', id } : null })} />
+                                <FormField label={t('hc.buttonText', 'Button text')}><TextInput value={el.useButtonText || ''} onChange={e => updateElement({ useButtonText: e.target.value })} placeholder={defLabel} /></FormField>
+                                <AssetSelector label={t('hc.buttonArt', 'Button art')} assetType="images" allowVideo value={el.useButtonImage?.id || null} onChange={id => updateElement({ useButtonImage: id ? { type: 'image', id } : null })} />
+                                <AssetSelector label={t('hc.hoverArt', 'Hover art')} assetType="images" allowVideo value={el.useButtonHoverImage?.id || null} onChange={id => updateElement({ useButtonHoverImage: id ? { type: 'image', id } : null })} />
                                 <div className="grid grid-cols-3 gap-1">
                                     <FormField label="BG"><ColorInput value={el.useButtonColor && el.useButtonColor.startsWith('#') ? el.useButtonColor : '#0ea5e9'} onChange={v => updateElement({ useButtonColor: v })} /></FormField>
                                     <FormField label="Hover"><ColorInput value={el.useButtonHoverColor && el.useButtonHoverColor.startsWith('#') ? el.useButtonHoverColor : '#0284c7'} onChange={v => updateElement({ useButtonHoverColor: v })} /></FormField>
                                     <FormField label="Text"><ColorInput value={el.useButtonTextColor && el.useButtonTextColor.startsWith('#') ? el.useButtonTextColor : '#ffffff'} onChange={v => updateElement({ useButtonTextColor: v })} /></FormField>
                                 </div>
-                                <FormField label="Corner radius (px)"><TextInput type="number" min="0" max="32" value={String(el.useButtonRadius ?? 6)} onChange={e => updateElement({ useButtonRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                                <FormField label={t('hc.cornerRadiusPx', 'Corner radius (px)')}><TextInput type="number" min="0" max="32" value={String(el.useButtonRadius ?? 6)} onChange={e => updateElement({ useButtonRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
                                 {el.useButtonFont
                                     ? <><h4 className="font-bold my-2 text-slate-400 text-xs">{t('hc.buttonFont', 'Button font')}</h4><FontEditor font={el.useButtonFont} onFontChange={(prop, value) => updateElement({ useButtonFont: { ...el.useButtonFont!, [prop]: value } })} /></>
                                     : <button onClick={() => updateElement({ useButtonFont: project.ui.dialogueTextFont })} className="text-xs text-sky-400 hover:text-sky-300 mt-1">{t('hc.customizeButtonFont', '+ Customize button font')}</button>}
@@ -1322,10 +1322,10 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                                 <button onClick={() => moveCat(idx, 1)} disabled={idx >= includedCats.length - 1} className="text-slate-400 hover:text-white disabled:opacity-25 text-sm px-1 flex-shrink-0" title={t('hc.moveDown', 'Move down')}>↓</button>
                                                 <button onClick={() => excludeLayer(cat.layerId)} className="text-red-400 hover:text-red-300 text-sm px-1 flex-shrink-0" title={t('hc.removeThisPart', 'Remove this part')}>✕</button>
                                             </div>
-                                            <FormField label="Label players see">
+                                            <FormField label={t('hc.labelPlayersSee', 'Label players see')}>
                                                 <TextInput value={cat.label ?? ''} placeholder={layerName} onChange={e => patchCat(cat.layerId, { label: e.target.value || undefined })} />
                                             </FormField>
-                                            <FormField label="How the player picks">
+                                            <FormField label={t('hc.howThePlayerPicks', 'How the player picks')}>
                                                 <Select value={cat.pickerStyle || 'swatches'} onChange={e => patchCat(cat.layerId, { pickerStyle: e.target.value as 'swatches' | 'arrows' | 'buttons' | 'dropdown' })}>
                                                     <option value="arrows">{t('hc.arrowsCycle', 'Arrows (◀ ▶ cycle)')}</option>
                                                     <option value="swatches">{t('hc.swatchesGridOfThumbnails', 'Swatches (grid of thumbnails)')}</option>
@@ -1354,7 +1354,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                     <details className="text-[10px] text-slate-400">
                                         <summary className="cursor-pointer select-none hover:text-slate-200">{t('hc.advancedBaseLookForParts', 'Advanced: base look for parts you didn\'t add')}</summary>
                                         <div className="pt-1.5">
-                                            <FormField label="Fallback expression">
+                                            <FormField label={t('hc.fallbackExpression', 'Fallback expression')}>
                                                 <Select value={el.expressionId || ''} onChange={e => updateElement({ expressionId: e.target.value || undefined })}>
                                                     <option value="">{t('hc.firstExpression', 'First expression')}</option>
                                                     {Object.values(czChar.expressions).map((ex: any) => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
@@ -1385,7 +1385,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                     <option value="free">{t('hc.freePlacement', 'Free placement')}</option>
                                 </Select>
                             </FormField>
-                            {el.layout !== 'free' && <FormField label="Preview size (%)"><TextInput type="number" min="20" max="80" value={String(el.previewPercent ?? 45)} onChange={e => updateElement({ previewPercent: Math.max(10, Math.min(90, parseInt(e.target.value, 10) || 45)) })} /></FormField>}
+                            {el.layout !== 'free' && <FormField label={t('hc.previewSize', 'Preview size (%)')}><TextInput type="number" min="20" max="80" value={String(el.previewPercent ?? 45)} onChange={e => updateElement({ previewPercent: Math.max(10, Math.min(90, parseInt(e.target.value, 10) || 45)) })} /></FormField>}
                         </div>
                         {el.layout === 'free' && (
                             <div className="p-2 rounded border border-slate-700 bg-slate-800/30 space-y-2">
@@ -1396,8 +1396,8 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                     <FormField label="Background"><ColorInput value={el.previewBackgroundColor ?? ''} onChange={c => updateElement({ previewBackgroundColor: c || undefined })} /></FormField>
                                     <FormField label="Border"><ColorInput value={el.previewBorderColor ?? ''} onChange={c => updateElement({ previewBorderColor: c || undefined })} /></FormField>
                                 </div>
-                                <AssetSelector label="Background image (optional)" assetType="images" allowVideo value={el.previewBackgroundImage?.id ?? null} onChange={id => updateElement({ previewBackgroundImage: id ? { type: 'image', id } : null })} />
-                                <FormField label="Corner radius (px)"><TextInput type="number" min="0" max="64" value={el.previewBorderRadius ?? ''} placeholder="0" onChange={e => updateElement({ previewBorderRadius: e.target.value === '' ? undefined : Math.max(0, parseInt(e.target.value, 10) || 0) })} /></FormField>
+                                <AssetSelector label={t('hc.backgroundImageOptional', 'Background image (optional)')} assetType="images" allowVideo value={el.previewBackgroundImage?.id ?? null} onChange={id => updateElement({ previewBackgroundImage: id ? { type: 'image', id } : null })} />
+                                <FormField label={t('hc.cornerRadiusPx', 'Corner radius (px)')}><TextInput type="number" min="0" max="64" value={el.previewBorderRadius ?? ''} placeholder="0" onChange={e => updateElement({ previewBorderRadius: e.target.value === '' ? undefined : Math.max(0, parseInt(e.target.value, 10) || 0) })} /></FormField>
                                 <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
                                     <input type="checkbox" checked={el.hidePickersPanel === true} onChange={e => updateElement({ hidePickersPanel: e.target.checked || undefined })} className="accent-purple-500" />
                                     {t('hc.hideControlsPanelLetThe', 'Hide controls panel (let the pickers float too)')}
@@ -1405,15 +1405,15 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             </div>
                         )}
                         {stepHeader(4, 'Player controls')}
-                        <FormField label="Show category labels"><input type="checkbox" checked={el.showLabels !== false} onChange={e => updateElement({ showLabels: e.target.checked })} /></FormField>
+                        <FormField label={t('hc.showCategoryLabels', 'Show category labels')}><input type="checkbox" checked={el.showLabels !== false} onChange={e => updateElement({ showLabels: e.target.checked })} /></FormField>
                         <div className="grid grid-cols-2 gap-2">
-                            <FormField label="Randomize button"><input type="checkbox" checked={!!el.showRandomize} onChange={e => updateElement({ showRandomize: e.target.checked })} /></FormField>
-                            <FormField label="Reset button"><input type="checkbox" checked={!!el.showReset} onChange={e => updateElement({ showReset: e.target.checked })} /></FormField>
+                            <FormField label={t('hc.randomizeButton', 'Randomize button')}><input type="checkbox" checked={!!el.showRandomize} onChange={e => updateElement({ showRandomize: e.target.checked })} /></FormField>
+                            <FormField label={t('hc.resetButton', 'Reset button')}><input type="checkbox" checked={!!el.showReset} onChange={e => updateElement({ showReset: e.target.checked })} /></FormField>
                         </div>
-                        {el.showRandomize && <FormField label="Randomize label"><TextInput value={el.randomizeLabel ?? ''} placeholder="Randomize" onChange={e => updateElement({ randomizeLabel: e.target.value || undefined })} /></FormField>}
-                        {el.showReset && <FormField label="Reset label"><TextInput value={el.resetLabel ?? ''} placeholder="Reset" onChange={e => updateElement({ resetLabel: e.target.value || undefined })} /></FormField>}
+                        {el.showRandomize && <FormField label={t('hc.randomizeLabel', 'Randomize label')}><TextInput value={el.randomizeLabel ?? ''} placeholder="Randomize" onChange={e => updateElement({ randomizeLabel: e.target.value || undefined })} /></FormField>}
+                        {el.showReset && <FormField label={t('hc.resetLabel', 'Reset label')}><TextInput value={el.resetLabel ?? ''} placeholder="Reset" onChange={e => updateElement({ resetLabel: e.target.value || undefined })} /></FormField>}
                         {(el.categories || []).length > 0 && czChar && (
-                            <CollapsibleSection title={t('hc.optionsRules', 'Options & rules')} hint="Lock options behind conditions, hide incompatible ones, or give an option a custom swatch.">
+                            <CollapsibleSection title={t('hc.optionsRules', 'Options & rules')} hint={t('hc.lockOptionsBehindConditionsHide', 'Lock options behind conditions, hide incompatible ones, or give an option a custom swatch.')}>
                                 {(el.categories || []).map(cat => {
                                     const layer = czChar.layers[cat.layerId];
                                     if (!layer) return null;
@@ -1433,7 +1433,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                                                     <option value="lock">{t('hc.lockIfUnmet', 'Lock if unmet')}</option>
                                                                 </Select>
                                                             </div>
-                                                            <AssetSelector label="Swatch (optional)" assetType="images" value={meta.swatchImage?.id || null} onChange={id => setOptionMeta(a.id, { swatchImage: id ? { type: 'image', id } : null })} />
+                                                            <AssetSelector label={t('hc.swatchOptional', 'Swatch (optional)')} assetType="images" value={meta.swatchImage?.id || null} onChange={id => setOptionMeta(a.id, { swatchImage: id ? { type: 'image', id } : null })} />
                                                             <ConditionsEditor collapsible title={t('hc.showUnlockWhen', 'Show / unlock when…')} conditions={meta.conditions} project={project} onChange={cs => setOptionMeta(a.id, { conditions: cs })} />
                                                         </div>
                                                     );
@@ -1447,7 +1447,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         )}
                     </>,
                     appearance: <>
-                        <FormField label="Panel background"><ColorInput value={el.backgroundColor || '#1e1e38'} onChange={v => updateElement({ backgroundColor: v })} /></FormField>
+                        <FormField label={t('hc.panelBackground', 'Panel background')}><ColorInput value={el.backgroundColor || '#1e1e38'} onChange={v => updateElement({ backgroundColor: v })} /></FormField>
                         <FormField label={t('elementInspector.borderColor')}>
                             <div className="flex items-center gap-2">
                                 <ColorInput value={el.borderColor || '#4D3273'} onChange={v => updateElement({ borderColor: v })} />
@@ -1455,24 +1455,24 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             </div>
                         </FormField>
                         <FormField label={t('elementInspector.borderRadiusPx')}><TextInput type="number" min="0" max="40" value={String(el.borderRadius ?? 8)} onChange={e => updateElement({ borderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
-                        <FormField label="Selected highlight"><ColorInput value={el.selectedColor || '#8a2be2'} onChange={v => updateElement({ selectedColor: v })} /></FormField>
+                        <FormField label={t('hc.selectedHighlight', 'Selected highlight')}><ColorInput value={el.selectedColor || '#8a2be2'} onChange={v => updateElement({ selectedColor: v })} /></FormField>
                         <div className="grid grid-cols-2 gap-2">
-                            <FormField label="Swatch size (px)"><TextInput type="number" min="16" max="160" value={String(el.swatchSize ?? 48)} onChange={e => updateElement({ swatchSize: parseInt(e.target.value, 10) || 48 })} /></FormField>
-                            <FormField label="Swatch gap (px)"><TextInput type="number" min="0" max="40" value={String(el.swatchGap ?? 6)} onChange={e => updateElement({ swatchGap: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                            <FormField label={t('hc.swatchSizePx', 'Swatch size (px)')}><TextInput type="number" min="16" max="160" value={String(el.swatchSize ?? 48)} onChange={e => updateElement({ swatchSize: parseInt(e.target.value, 10) || 48 })} /></FormField>
+                            <FormField label={t('hc.swatchGapPx', 'Swatch gap (px)')}><TextInput type="number" min="0" max="40" value={String(el.swatchGap ?? 6)} onChange={e => updateElement({ swatchGap: parseInt(e.target.value, 10) || 0 })} /></FormField>
                         </div>
                         <div className="space-y-2 p-2 rounded-md bg-slate-800/40 border border-slate-700/50">
                             <p className="text-[10px] text-slate-400 font-semibold">{t('hc.pickerTheming', 'Picker theming')}</p>
-                            <AssetSelector label="Frame image (optional)" assetType="images" value={el.backgroundImage?.id || null} onChange={id => updateElement({ backgroundImage: id ? { type: 'image', id } : null })} />
+                            <AssetSelector label={t('hc.frameImageOptional', 'Frame image (optional)')} assetType="images" value={el.backgroundImage?.id || null} onChange={id => updateElement({ backgroundImage: id ? { type: 'image', id } : null })} />
                             <p className="text-[9px] text-slate-500 -mt-1">{t('hc.aPanelFrameImageBehind', 'A panel/frame image behind the whole element.')}</p>
                             <div className="grid grid-cols-2 gap-2">
-                                <FormField label="Arrow color"><ColorInput value={el.arrowColor || '#ffffff'} onChange={v => updateElement({ arrowColor: v })} /></FormField>
-                                <FormField label="Arrow size (px)"><TextInput type="number" min="8" max="96" value={String(el.arrowSize ?? 28)} onChange={e => updateElement({ arrowSize: parseInt(e.target.value, 10) || 28 })} /></FormField>
+                                <FormField label={t('hc.arrowColor', 'Arrow color')}><ColorInput value={el.arrowColor || '#ffffff'} onChange={v => updateElement({ arrowColor: v })} /></FormField>
+                                <FormField label={t('hc.arrowSizePx', 'Arrow size (px)')}><TextInput type="number" min="8" max="96" value={String(el.arrowSize ?? 28)} onChange={e => updateElement({ arrowSize: parseInt(e.target.value, 10) || 28 })} /></FormField>
                             </div>
-                            <AssetSelector label="Arrow image (optional)" assetType="images" value={el.arrowImage?.id || null} onChange={id => updateElement({ arrowImage: id ? { type: 'image', id } : null })} />
+                            <AssetSelector label={t('hc.arrowImageOptional', 'Arrow image (optional)')} assetType="images" value={el.arrowImage?.id || null} onChange={id => updateElement({ arrowImage: id ? { type: 'image', id } : null })} />
                             <p className="text-[9px] text-slate-500 -mt-1">{t('hc.usedByTheArrowsPicker', 'Used by the Arrows picker style (left side is mirrored).')}</p>
                             <div className="grid grid-cols-2 gap-2">
-                                <FormField label="Button color"><ColorInput value={(el.buttonColor && el.buttonColor.startsWith('#')) ? el.buttonColor : '#334155'} onChange={v => updateElement({ buttonColor: v })} /></FormField>
-                                <FormField label="Button text"><ColorInput value={el.buttonTextColor || '#ffffff'} onChange={v => updateElement({ buttonTextColor: v })} /></FormField>
+                                <FormField label={t('hc.buttonColor', 'Button color')}><ColorInput value={(el.buttonColor && el.buttonColor.startsWith('#')) ? el.buttonColor : '#334155'} onChange={v => updateElement({ buttonColor: v })} /></FormField>
+                                <FormField label={t('hc.buttonText', 'Button text')}><ColorInput value={el.buttonTextColor || '#ffffff'} onChange={v => updateElement({ buttonTextColor: v })} /></FormField>
                             </div>
                             <p className="text-[9px] text-slate-500">{t('hc.setEachCategorySPicker', 'Set each category\'s picker style (Swatches / Arrows / Buttons / Dropdown) in the Content tab.')}</p>
                         </div>
@@ -1498,7 +1498,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                     : '';
                 return {
                     content: <>
-                        <FormField label="Variable to display">
+                        <FormField label={t('hc.variableToDisplay', 'Variable to display')}>
                             {/* Number-only: a meter on a Yes/No or a piece of text is meaningless. If none
                                 exists yet, the picker creates one from the name you type — no trip to the
                                 Variables tab and back. */}
@@ -1515,7 +1515,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             <FormField label="Maximum"><TextInput type="number" value={el.maxValue ?? ''} placeholder={String((boundVar as any)?.max ?? 100)} onChange={e => updateElement({ maxValue: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0) })} /></FormField>
                         </div>
                         <p className="text-[9px] text-slate-500 -mt-1">{t('hc.blankUseTheVariableS', 'Blank = use the variable\'s own range.')}</p>
-                        <FormField label="Bar style">
+                        <FormField label={t('hc.barStyle', 'Bar style')}>
                             <Select value={el.style || 'bar'} onChange={e => updateElement({ style: e.target.value as 'bar' | 'battery' | 'segments' | 'icons' })}>
                                 <option value="bar">{t('hc.barClassicFill', 'Bar (classic fill)')}</option>
                                 <option value="battery">Battery</option>
@@ -1526,18 +1526,18 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         {el.style === 'segments' && (
                             <div className="grid grid-cols-2 gap-2">
                                 <FormField label="Segments"><TextInput type="number" min="1" max="50" value={el.segmentCount ?? 10} onChange={e => updateElement({ segmentCount: parseInt(e.target.value) || 10 })} /></FormField>
-                                <FormField label="Gap (px)"><TextInput type="number" min="0" max="20" value={el.segmentGap ?? 2} onChange={e => updateElement({ segmentGap: parseInt(e.target.value) || 0 })} /></FormField>
+                                <FormField label={t('hc.gapPx', 'Gap (px)')}><TextInput type="number" min="0" max="20" value={el.segmentGap ?? 2} onChange={e => updateElement({ segmentGap: parseInt(e.target.value) || 0 })} /></FormField>
                             </div>
                         )}
                         {el.style === 'icons' && (
                             <div className="space-y-2 p-2 rounded-md bg-slate-800/40 border border-slate-700/50">
                                 <p className="text-[10px] text-slate-400">{t('hc.showASymbolRepeatedAcross', 'Show a symbol repeated across the bar — perfect for a hearts / lives system.')}</p>
-                                <AssetSelector label="Symbol image (full)" assetType="images" value={el.iconImage?.id || null} onChange={id => updateElement({ iconImage: id ? { type: 'image', id } : null })} />
-                                <AssetSelector label="Empty symbol (optional)" assetType="images" value={el.iconEmptyImage?.id || null} onChange={id => updateElement({ iconEmptyImage: id ? { type: 'image', id } : null })} />
+                                <AssetSelector label={t('hc.symbolImageFull', 'Symbol image (full)')} assetType="images" value={el.iconImage?.id || null} onChange={id => updateElement({ iconImage: id ? { type: 'image', id } : null })} />
+                                <AssetSelector label={t('hc.emptySymbolOptional', 'Empty symbol (optional)')} assetType="images" value={el.iconEmptyImage?.id || null} onChange={id => updateElement({ iconEmptyImage: id ? { type: 'image', id } : null })} />
                                 <p className="text-[9px] text-slate-500 -mt-1">{t('hc.noEmptyImageTheFull', 'No empty image → the full symbol shows dimmed for empty slots. With no image at all, colored boxes are used.')}</p>
                                 <div className="grid grid-cols-2 gap-2">
-                                    <FormField label="How many"><TextInput type="number" min="1" max="20" value={el.iconCount ?? 3} onChange={e => updateElement({ iconCount: parseInt(e.target.value) || 3 })} /></FormField>
-                                    <FormField label="Steps per symbol">
+                                    <FormField label={t('hc.howMany', 'How many')}><TextInput type="number" min="1" max="20" value={el.iconCount ?? 3} onChange={e => updateElement({ iconCount: parseInt(e.target.value) || 3 })} /></FormField>
+                                    <FormField label={t('hc.stepsPerSymbol', 'Steps per symbol')}>
                                         <Select value={el.iconStep || 'full'} onChange={e => updateElement({ iconStep: e.target.value as 'full' | 'half' | 'quarter' })}>
                                             <option value="full">{t('hc.wholeOnly', 'Whole only')}</option>
                                             <option value="half">{t('hc.half', 'Half (½)')}</option>
@@ -1546,14 +1546,14 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                     </FormField>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
-                                    <FormField label="Size (px)"><TextInput type="number" min="8" max="128" value={el.iconSize ?? 24} onChange={e => updateElement({ iconSize: parseInt(e.target.value) || 24 })} /></FormField>
-                                    <FormField label="Gap (px)"><TextInput type="number" min="0" max="40" value={el.iconGap ?? 4} onChange={e => updateElement({ iconGap: parseInt(e.target.value) || 0 })} /></FormField>
+                                    <FormField label={t('hc.sizePx', 'Size (px)')}><TextInput type="number" min="8" max="128" value={el.iconSize ?? 24} onChange={e => updateElement({ iconSize: parseInt(e.target.value) || 24 })} /></FormField>
+                                    <FormField label={t('hc.gapPx', 'Gap (px)')}><TextInput type="number" min="0" max="40" value={el.iconGap ?? 4} onChange={e => updateElement({ iconGap: parseInt(e.target.value) || 0 })} /></FormField>
                                 </div>
                                 <p className="text-[9px] text-slate-500">{t('hc.tipSetMaximumToYour', 'Tip: set Maximum to your number of lives so each symbol = 1 (use Half/Quarter for partial hearts).')}</p>
                             </div>
                         )}
                         {el.style !== 'battery' && el.style !== 'segments' && el.style !== 'icons' && (
-                        <FormField label="Fill direction">
+                        <FormField label={t('hc.fillDirection', 'Fill direction')}>
                             <Select value={el.direction || 'ltr'} onChange={e => updateElement({ direction: e.target.value as 'ltr' | 'rtl' | 'up' })}>
                                 <option value="ltr">{t('hc.leftRight', 'Left → right')}</option>
                                 <option value="rtl">{t('hc.rightLeft', 'Right → left')}</option>
@@ -1562,24 +1562,24 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         </FormField>
                         )}
                         <div className="grid grid-cols-2 gap-2">
-                            <FormField label="Align X">
+                            <FormField label={t('hc.alignX', 'Align X')}>
                                 <Select value={el.alignX || 'left'} onChange={e => updateElement({ alignX: e.target.value as 'left' | 'center' | 'right' })}>
                                     <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
                                 </Select>
                             </FormField>
-                            <FormField label="Align Y">
+                            <FormField label={t('hc.alignY', 'Align Y')}>
                                 <Select value={el.alignY || 'top'} onChange={e => updateElement({ alignY: e.target.value as 'top' | 'center' | 'bottom' })}>
                                     <option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option>
                                 </Select>
                             </FormField>
                         </div>
-                        <FormField label="Show label"><input type="checkbox" checked={el.showLabel !== false} onChange={e => updateElement({ showLabel: e.target.checked })} /></FormField>
+                        <FormField label={t('hc.showLabel', 'Show label')}><input type="checkbox" checked={el.showLabel !== false} onChange={e => updateElement({ showLabel: e.target.checked })} /></FormField>
                         {el.showLabel !== false && (
-                            <FormField label="Label text"><TextInput value={el.label || ''} onChange={e => updateElement({ label: e.target.value || undefined })} placeholder={boundVar?.name || 'Variable name'} /></FormField>
+                            <FormField label={t('hc.labelText', 'Label text')}><TextInput value={el.label || ''} onChange={e => updateElement({ label: e.target.value || undefined })} placeholder={boundVar?.name || 'Variable name'} /></FormField>
                         )}
-                        <FormField label="Show value"><input type="checkbox" checked={el.showValue !== false} onChange={e => updateElement({ showValue: e.target.checked })} /></FormField>
+                        <FormField label={t('hc.showValue', 'Show value')}><input type="checkbox" checked={el.showValue !== false} onChange={e => updateElement({ showValue: e.target.checked })} /></FormField>
                         {el.showValue !== false && (
-                            <FormField label="Value style">
+                            <FormField label={t('hc.valueStyle', 'Value style')}>
                                 <Select value={el.valueFormat || 'valueMax'} onChange={e => updateElement({ valueFormat: e.target.value as 'value' | 'valueMax' | 'percent' | 'band' })}>
                                     <option value="valueMax">47/100</option>
                                     <option value="value">47</option>
@@ -1590,25 +1590,25 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             </FormField>
                         )}
                         {meterHasBands && (
-                            <FormField label="Colour the bar by its step" hint="The bar takes the colour of whichever named step the value is in — so it warms up as it fills.">
+                            <FormField label={t('hc.colourTheBarByIts', 'Colour the bar by its step')} hint={t('hc.theBarTakesTheColour', 'The bar takes the colour of whichever named step the value is in — so it warms up as it fills.')}>
                                 <input type="checkbox" checked={!!el.fillFromBand} onChange={e => updateElement({ fillFromBand: e.target.checked })} />
                             </FormField>
                         )}
                     </>,
                     appearance: <>
-                        <FormField label="Fill color"><ColorInput value={el.fillColor || '#a78bfa'} onChange={v => updateElement({ fillColor: v })} /></FormField>
+                        <FormField label={t('hc.fillColor', 'Fill color')}><ColorInput value={el.fillColor || '#a78bfa'} onChange={v => updateElement({ fillColor: v })} /></FormField>
                         {boundStat?.color && boundStat.color !== el.fillColor && (
                             <button onClick={() => updateElement({ fillColor: boundStat.color })} className="text-xs text-sky-400 hover:text-sky-300 -mt-1 flex items-center gap-1.5">
                                 <span className="w-3 h-3 rounded-full inline-block" style={{ background: boundStat.color }} /> Use "{boundStat.name}" stat color
                             </button>
                         )}
-                        <FormField label="Gradient end (optional)">
+                        <FormField label={t('hc.gradientEndOptional', 'Gradient end (optional)')}>
                             <div className="flex items-center gap-2">
                                 <ColorInput value={el.fillColorEnd || '#f472b6'} onChange={v => updateElement({ fillColorEnd: v })} />
                                 {el.fillColorEnd && <button onClick={() => updateElement({ fillColorEnd: undefined })} className="text-xs text-red-400 hover:text-red-300">Clear</button>}
                             </div>
                         </FormField>
-                        <FormField label="Track color"><ColorInput value={el.backgroundColor && el.backgroundColor.startsWith('#') ? el.backgroundColor : '#1e293b'} onChange={v => updateElement({ backgroundColor: v })} /></FormField>
+                        <FormField label={t('hc.trackColor', 'Track color')}><ColorInput value={el.backgroundColor && el.backgroundColor.startsWith('#') ? el.backgroundColor : '#1e293b'} onChange={v => updateElement({ backgroundColor: v })} /></FormField>
                         <FormField label={t('elementInspector.borderColor')}>
                             <div className="flex items-center gap-2">
                                 <ColorInput value={el.borderColor || '#4D3273'} onChange={v => updateElement({ borderColor: v })} />
@@ -1618,7 +1618,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         <FormField label={t('elementInspector.borderRadiusPx')}><TextInput type="number" min="0" max="32" value={String(el.borderRadius ?? 6)} onChange={e => updateElement({ borderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
                         <div className="space-y-2 p-2 rounded-md bg-slate-800/40 border border-slate-700/50">
                             <p className="text-[10px] text-slate-400 font-semibold">{t('hc.resourceAnimations', 'Resource animations')}</p>
-                            <FormField label="Low when ≤ (% full)"><TextInput type="number" min="0" max="100" value={String(el.lowThresholdPct ?? 25)} onChange={e => updateElement({ lowThresholdPct: Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)) })} /></FormField>
+                            <FormField label={t('hc.lowWhenFull', 'Low when ≤ (% full)')}><TextInput type="number" min="0" max="100" value={String(el.lowThresholdPct ?? 25)} onChange={e => updateElement({ lowThresholdPct: Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)) })} /></FormField>
                             <div>
                                 <p className="text-[10px] text-slate-400 mb-1">{t('hc.animateWhileLowCombineAny', 'Animate while low (combine any):')}</p>
                                 <div className="grid grid-cols-2 gap-1">
@@ -1635,22 +1635,22 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                 </div>
                             </div>
                             {(el.lowAnimations || []).includes('flash') && (
-                                <FormField label="Low flash color"><ColorInput value={el.lowFlashColor || '#ef4444'} onChange={v => updateElement({ lowFlashColor: v })} /></FormField>
+                                <FormField label={t('hc.lowFlashColor', 'Low flash color')}><ColorInput value={el.lowFlashColor || '#ef4444'} onChange={v => updateElement({ lowFlashColor: v })} /></FormField>
                             )}
                             <div className="grid grid-cols-2 gap-2">
-                                <FormField label="On increase">
+                                <FormField label={t('hc.onIncrease', 'On increase')}>
                                     <Select value={el.changeAnimationUp || 'none'} onChange={e => updateElement({ changeAnimationUp: e.target.value as 'none' | 'pop' | 'flash' | 'shake' | 'wave' })}>
                                         <option value="none">None</option><option value="pop">Pop</option><option value="flash">Flash</option><option value="shake">Shake</option><option value="wave">Wave</option>
                                     </Select>
                                 </FormField>
-                                <FormField label="On decrease">
+                                <FormField label={t('hc.onDecrease', 'On decrease')}>
                                     <Select value={el.changeAnimationDown || 'none'} onChange={e => updateElement({ changeAnimationDown: e.target.value as 'none' | 'pop' | 'flash' | 'shake' | 'wave' })}>
                                         <option value="none">None</option><option value="pop">Pop</option><option value="flash">Flash</option><option value="shake">Shake</option><option value="wave">Wave</option>
                                     </Select>
                                 </FormField>
                             </div>
-                            {el.changeAnimationUp === 'flash' && <FormField label="Increase flash color"><ColorInput value={el.changeFlashColorUp || '#4ade80'} onChange={v => updateElement({ changeFlashColorUp: v })} /></FormField>}
-                            {el.changeAnimationDown === 'flash' && <FormField label="Decrease flash color"><ColorInput value={el.changeFlashColorDown || '#ef4444'} onChange={v => updateElement({ changeFlashColorDown: v })} /></FormField>}
+                            {el.changeAnimationUp === 'flash' && <FormField label={t('hc.increaseFlashColor', 'Increase flash color')}><ColorInput value={el.changeFlashColorUp || '#4ade80'} onChange={v => updateElement({ changeFlashColorUp: v })} /></FormField>}
+                            {el.changeAnimationDown === 'flash' && <FormField label={t('hc.decreaseFlashColor', 'Decrease flash color')}><ColorInput value={el.changeFlashColorDown || '#ef4444'} onChange={v => updateElement({ changeFlashColorDown: v })} /></FormField>}
                             <p className="text-[9px] text-slate-500">{t('hc.playsInTestPlayThe', 'Plays in test-play & the built game (the canvas stays still).')}</p>
                         </div>
                         {el.showLabel !== false && el.labelFont && (
@@ -1663,9 +1663,9 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         )}
                     </>,
                     media: <>
-                        <AssetSelector label="Fill art (optional)" assetType="images" allowVideo value={el.fillImage?.id || null} onChange={id => updateElement({ fillImage: id ? { type: 'image', id } : null })} />
+                        <AssetSelector label={t('hc.fillArtOptional', 'Fill art (optional)')} assetType="images" allowVideo value={el.fillImage?.id || null} onChange={id => updateElement({ fillImage: id ? { type: 'image', id } : null })} />
                         <p className="text-[9px] text-slate-500 -mt-1">{t('hc.anImageRevealedLeftTo', 'An image revealed left-to-right as the bar fills (replaces the fill color).')}</p>
-                        <AssetSelector label="Track art (optional)" assetType="images" allowVideo value={el.backgroundImage?.id || null} onChange={id => updateElement({ backgroundImage: id ? { type: 'image', id } : null })} />
+                        <AssetSelector label={t('hc.trackArtOptional', 'Track art (optional)')} assetType="images" allowVideo value={el.backgroundImage?.id || null} onChange={id => updateElement({ backgroundImage: id ? { type: 'image', id } : null })} />
                     </>,
                 };
             }

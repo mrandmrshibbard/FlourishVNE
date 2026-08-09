@@ -1019,6 +1019,8 @@
     "fireworksLoopingShow": "Fuegos artificiales (espectáculo en bucle)",
     "resetPosition": "⤢ Restablecer posición",
     "speaksAsThePlayerCreated": "Habla como el personaje creado por el jugador; el cuadro de nombre muestra el nombre que eligió.",
-    "speaksAsThePlayerCreated2": "Habla como el personaje creado por el jugador; el cuadro de nombre usa el nombre que eligió."
+    "speaksAsThePlayerCreated2": "Habla como el personaje creado por el jugador; el cuadro de nombre usa el nombre que eligió.",
+    "overrideIndividualLayersOnTop": "Ajusta capas concretas por encima de la expresión: combina looks (p. ej. cara alegre + uniforme + rubor) sin crear una expresión dedicada.",
+    "fadeDurationS": "Duración del fundido (s)"
   }
 }

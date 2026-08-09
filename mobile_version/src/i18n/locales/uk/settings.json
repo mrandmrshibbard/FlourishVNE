@@ -289,6 +289,11 @@
     "resetToDefaults": "Скинути до стандартних",
     "confirm": "Підтвердити",
     "cancel": "Скасувати",
-    "resetToPresetPosition": "Повернути на обране місце"
+    "resetToPresetPosition": "Повернути на обране місце",
+    "backgroundColorShownBehindInstead": "Колір тла (за зображенням або замість нього)",
+    "nameboxImageFitMode": "Вписування зображення таблички імені",
+    "nameboxBackgroundColor": "Колір тла таблички імені",
+    "buttonBackgroundColor": "Колір тла кнопки",
+    "inputBoxBackgroundColor": "Колір тла поля введення"
   }
 }

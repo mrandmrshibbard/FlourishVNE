@@ -248,7 +248,10 @@
     "dialogueTextbox": "セリフ枠",
     "pickAReusableThemeAnd": "使い回せるテーマを選ぶか、独自の見た目を設定します。空欄にした項目はプロジェクト既定のセリフ UI が使われます。",
     "createAndEditThemesIn": "テーマの作成・編集はゲーム内 UI エディター → セリフ枠テーマで行えます。",
-    "everyLineThisCharacterSpeaks": "このキャラクターのセリフはすべてこの色で表示されます — 誰が話しているかがひと目で分かります。"
+    "everyLineThisCharacterSpeaks": "このキャラクターのセリフはすべてこの色で表示されます — 誰が話しているかがひと目で分かります。",
+    "textboxTheme": "セリフ枠のテーマ",
+    "speakInColor": "セリフに色をつける",
+    "dialogueTextColor": "セリフの文字色"
   },
   "textboxSummary": {
     "title": "このキャラクターが話すとき",

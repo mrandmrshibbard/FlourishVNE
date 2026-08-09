@@ -1019,6 +1019,8 @@
     "fireworksLoopingShow": "Fuochi d'artificio (spettacolo in loop)",
     "resetPosition": "⤢ Riporta alla posizione",
     "speaksAsThePlayerCreated": "Parla come il personaggio creato dal giocatore; il riquadro del nome mostra il nome che ha scelto.",
-    "speaksAsThePlayerCreated2": "Parla come il personaggio creato dal giocatore; il riquadro del nome usa il nome che ha scelto."
+    "speaksAsThePlayerCreated2": "Parla come il personaggio creato dal giocatore; il riquadro del nome usa il nome che ha scelto.",
+    "overrideIndividualLayersOnTop": "Modifica singoli livelli sopra l'espressione — componi look (ad es. viso felice + divisa + rossore) senza creare un'espressione apposta.",
+    "fadeDurationS": "Durata della dissolvenza (s)"
   }
 }

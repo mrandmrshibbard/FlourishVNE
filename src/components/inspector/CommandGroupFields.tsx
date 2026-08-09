@@ -1090,7 +1090,7 @@ const ShowCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowCharact
                         updateCommand({ layerOverrides: Object.keys(ov).length ? ov : undefined } as any);
                     };
                     return (
-                        <CollapsibleSection title={t('hc.perLayerOverrides', 'Per-layer overrides')} hint="Override individual layers on top of the expression — compose looks (e.g. happy face + school outfit + blush on) without a dedicated expression.">
+                        <CollapsibleSection title={t('hc.perLayerOverrides', 'Per-layer overrides')} hint={t('hc.overrideIndividualLayersOnTop', 'Override individual layers on top of the expression — compose looks (e.g. happy face + school outfit + blush on) without a dedicated expression.')}>
                             {Object.values(character.layers).map((layer: any) => (
                                 <FormField key={layer.id} label={layer.name}>
                                     <Select value={ovValue(layer.id)} onChange={e => setOv(layer.id, e.target.value)}>

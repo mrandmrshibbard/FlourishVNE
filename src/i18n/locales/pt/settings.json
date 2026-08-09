@@ -289,6 +289,11 @@
     "resetToDefaults": "Voltar ao padrão",
     "confirm": "Confirmar",
     "cancel": "Cancelar",
-    "resetToPresetPosition": "Voltar à posição escolhida"
+    "resetToPresetPosition": "Voltar à posição escolhida",
+    "backgroundColorShownBehindInstead": "Cor de fundo (aparece atrás da imagem ou no lugar dela)",
+    "nameboxImageFitMode": "Ajuste da imagem da caixa de nome",
+    "nameboxBackgroundColor": "Cor de fundo da caixa de nome",
+    "buttonBackgroundColor": "Cor de fundo do botão",
+    "inputBoxBackgroundColor": "Cor de fundo da caixa de digitação"
   }
 }

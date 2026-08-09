@@ -909,14 +909,14 @@ const CharacterEditorNew: React.FC<{
                         <div>
                             <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>{t('hc.dialogueTextbox', 'Dialogue Textbox')}</h3>
                             <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>{t('hc.pickAReusableThemeAnd', 'Pick a reusable theme and/or set a custom look. Anything left blank uses your project\'s default dialogue UI.')}</p>
-                            <FormField label="Textbox theme">
+                            <FormField label={t('hc.textboxTheme', 'Textbox theme')}>
                                 <Select value={character.textboxThemeId || ''} onChange={e => updateCharacter({ textboxThemeId: e.target.value || undefined })}>
                                     <option value="">{t('hc.noneUseProjectDefault', 'None (use project default)')}</option>
                                     {Object.values(project.textboxThemes || {}).map((th: any) => (<option key={th.id} value={th.id}>{th.name}</option>))}
                                 </Select>
                             </FormField>
                             <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>{t('hc.createAndEditThemesIn', 'Create and edit themes in the In-Game UI Editor → Textbox Themes.')}</p>
-                            <FormField label="Speak in color">
+                            <FormField label={t('hc.speakInColor', 'Speak in color')}>
                                 <Select value={character.dialogueTextColorMode || 'off'} onChange={e => updateCharacter({ dialogueTextColorMode: (e.target.value === 'off' ? undefined : e.target.value) as any })}>
                                     <option value="off">{t('hc.offUseTheTextboxText', 'Off — use the textbox text color')}</option>
                                     <option value="character">My name color ({character.color})</option>
@@ -924,7 +924,7 @@ const CharacterEditorNew: React.FC<{
                                 </Select>
                             </FormField>
                             {character.dialogueTextColorMode === 'custom' && (
-                                <FormField label="Dialogue text color">
+                                <FormField label={t('hc.dialogueTextColor', 'Dialogue text color')}>
                                     <ColorInput value={character.dialogueTextColor || character.color} onChange={(v: string) => updateCharacter({ dialogueTextColor: v })} />
                                 </FormField>
                             )}

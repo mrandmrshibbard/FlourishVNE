@@ -1019,6 +1019,8 @@
     "fireworksLoopingShow": "Feux d'artifice (spectacle en boucle)",
     "resetPosition": "⤢ Réinitialiser la position",
     "speaksAsThePlayerCreated": "Parle en tant que personnage créé par le joueur ; la boîte de nom affiche le nom qu'il a choisi.",
-    "speaksAsThePlayerCreated2": "Parle en tant que personnage créé par le joueur ; la boîte de nom utilise le nom qu'il a choisi."
+    "speaksAsThePlayerCreated2": "Parle en tant que personnage créé par le joueur ; la boîte de nom utilise le nom qu'il a choisi.",
+    "overrideIndividualLayersOnTop": "Ajustez des calques précis par-dessus l'expression — composez des looks (par ex. visage joyeux + uniforme + rougissement) sans créer une expression dédiée.",
+    "fadeDurationS": "Durée du fondu (s)"
   }
 }

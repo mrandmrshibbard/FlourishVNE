@@ -248,7 +248,10 @@
     "dialogueTextbox": "Caixa de diálogo",
     "pickAReusableThemeAnd": "Escolha um tema reutilizável e/ou defina um visual próprio. O que ficar em branco usa a interface de diálogo padrão do projeto.",
     "createAndEditThemesIn": "Crie e edite temas no Editor de UI do Jogo → Temas de Caixa de Diálogo.",
-    "everyLineThisCharacterSpeaks": "Toda fala deste personagem aparece nesta cor — uma pista instantânea de quem está falando."
+    "everyLineThisCharacterSpeaks": "Toda fala deste personagem aparece nesta cor — uma pista instantânea de quem está falando.",
+    "textboxTheme": "Tema da caixa de diálogo",
+    "speakInColor": "Falar em cor",
+    "dialogueTextColor": "Cor do texto do diálogo"
   },
   "textboxSummary": {
     "title": "Quando ele(a) fala",

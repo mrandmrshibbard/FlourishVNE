@@ -248,7 +248,10 @@
     "dialogueTextbox": "Boîte de dialogue",
     "pickAReusableThemeAnd": "Choisissez un thème réutilisable et/ou définissez une apparence personnalisée. Ce qui reste vide utilise l'interface de dialogue par défaut du projet.",
     "createAndEditThemesIn": "Créez et modifiez les thèmes dans l'Éditeur d'interface → Thèmes de boîte de dialogue.",
-    "everyLineThisCharacterSpeaks": "Chaque réplique de ce personnage s'affiche dans cette couleur — un repère immédiat pour savoir qui parle."
+    "everyLineThisCharacterSpeaks": "Chaque réplique de ce personnage s'affiche dans cette couleur — un repère immédiat pour savoir qui parle.",
+    "textboxTheme": "Thème de la boîte de dialogue",
+    "speakInColor": "Parler en couleur",
+    "dialogueTextColor": "Couleur du texte de dialogue"
   },
   "textboxSummary": {
     "title": "Quand ce personnage parle",

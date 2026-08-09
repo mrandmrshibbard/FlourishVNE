@@ -1019,6 +1019,8 @@
     "fireworksLoopingShow": "花火（くり返しのショー）",
     "resetPosition": "⤢ 位置を戻す",
     "speaksAsThePlayerCreated": "プレイヤーが作ったキャラクターとして話します。名前枠にはプレイヤーが決めた名前が出ます。",
-    "speaksAsThePlayerCreated2": "プレイヤーが作ったキャラクターとして話します。名前枠にはプレイヤーが決めた名前が使われます。"
+    "speaksAsThePlayerCreated2": "プレイヤーが作ったキャラクターとして話します。名前枠にはプレイヤーが決めた名前が使われます。",
+    "overrideIndividualLayersOnTop": "表情の上から個々のレイヤーを上書きできます。専用の表情を作らなくても、笑顔＋制服＋ほお染め のように組み合わせられます。",
+    "fadeDurationS": "フェードの長さ（秒）"
   }
 }

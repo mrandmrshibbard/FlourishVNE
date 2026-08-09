@@ -1019,6 +1019,8 @@
     "fireworksLoopingShow": "烟花（循环表演）",
     "resetPosition": "⤢ 重置位置",
     "speaksAsThePlayerCreated": "以玩家创建的角色身份说话；名字框会显示玩家所取的名字。",
-    "speaksAsThePlayerCreated2": "以玩家创建的角色身份说话；名字框会使用玩家所取的名字。"
+    "speaksAsThePlayerCreated2": "以玩家创建的角色身份说话；名字框会使用玩家所取的名字。",
+    "overrideIndividualLayersOnTop": "在表情之上单独调整图层——自由组合造型（例如：开心的脸＋校服＋脸红），无需为此新建表情。",
+    "fadeDurationS": "淡入淡出时长（秒）"
   }
 }

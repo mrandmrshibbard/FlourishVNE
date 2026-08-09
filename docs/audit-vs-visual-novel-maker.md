@@ -318,7 +318,7 @@
 
 | Feature | FlourishVNE | Visual Novel Maker | Notes |
 |---------|:-----------:|:------------------:|-------|
-| Localization | ✅ | ✅ | Both have localization with CSV support |
+| Localization | ⚠️ | ✅ | **Corrected 2026-08-09:** previously marked ✅ in error. Flourish's Localization panel is in-memory only — translations are discarded when it closes, and the runtime never reads them, so an exported game cannot be localized at all. VNM's works. See `GAME_LOCALIZATION_PLAN.md` |
 | Image-Based Localization | ❌ | ✅ 🏆 | VNM auto-detects localized image variants via filename suffix |
 | Credit Roll System | ✅ 🏆 | ❌ | Flourish has a built-in credit roll command with slideshow backgrounds |
 | Template Gallery | ✅ 🏆 | ❌ | 12 template categories with no-code configuration |
@@ -356,7 +356,7 @@
 |-----|--------|------------|----------------|
 | **Full particle system** (custom emitters) | Medium — current overlays cover common cases | High | Expose particle emitter parameters or add more overlay presets |
 | **Audio layering** (4+ simultaneous channels) | Medium — enables complex soundscapes | Low | Add more audio channel slots beyond Music/SFX/Ambient |
-| **Image-based localization** | Low-Medium — niche feature for CG localization | Low | Auto-detect `_lang` suffix variants when rendering localized assets |
+| **Image-based localization** | Low-Medium — niche feature for CG localization | Low | Covered by `GAME_LOCALIZATION_PLAN.md` phase 5 as explicit per-language asset overrides (both Ren'Py and VNM ship this, so it is table stakes rather than niche) |
 | **Hotspot system** | Medium — interactive exploration scenes | Medium | Dedicated Hotspot command or enhance ShowButton with invisible/shape modes |
 | **Timer command** | Medium — time pressure mechanics | Low | Add Timer command (countdown, variable binding, timeout action) |
 | **CoffeeScript support** | Low — JavaScript covers same use cases | Low | Not worth pursuing; JS is industry standard |

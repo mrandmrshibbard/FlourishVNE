@@ -289,6 +289,11 @@
     "resetToDefaults": "Ripristina i valori predefiniti",
     "confirm": "Conferma",
     "cancel": "Annulla",
-    "resetToPresetPosition": "Torna alla posizione scelta"
+    "resetToPresetPosition": "Torna alla posizione scelta",
+    "backgroundColorShownBehindInstead": "Colore di sfondo (dietro l'immagine o al suo posto)",
+    "nameboxImageFitMode": "Adattamento dell'immagine del riquadro del nome",
+    "nameboxBackgroundColor": "Colore di sfondo del riquadro del nome",
+    "buttonBackgroundColor": "Colore di sfondo del pulsante",
+    "inputBoxBackgroundColor": "Colore di sfondo del riquadro di scrittura"
   }
 }
