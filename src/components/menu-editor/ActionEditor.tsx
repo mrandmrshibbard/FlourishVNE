@@ -18,7 +18,7 @@ const MENU_ACTION_TYPES: UIActionType[] = [
     UIActionType.None, UIActionType.StartNewGame, UIActionType.ContinueGame, UIActionType.GoToScreen,
     UIActionType.LoadGame, UIActionType.SaveGame, UIActionType.DeleteSave, UIActionType.SaveSlotsNextPage, UIActionType.SaveSlotsPrevPage, UIActionType.ReturnToGame, UIActionType.ReturnToPreviousScreen,
     UIActionType.QuitToTitle, UIActionType.ExitGame, UIActionType.JumpToScene, UIActionType.JumpToLabel,
-    UIActionType.SetVariable, UIActionType.ResetVariable, UIActionType.PlaySound, UIActionType.StopSound, UIActionType.PlayMusic, UIActionType.StopMusic, UIActionType.PlayVideo, UIActionType.CycleLayerAsset, UIActionType.ToggleScreen, UIActionType.OpenURL, UIActionType.SetLanguage,
+    UIActionType.SetVariable, UIActionType.ResetVariable, UIActionType.PlaySound, UIActionType.StopSound, UIActionType.PlayMusic, UIActionType.StopMusic, UIActionType.PlayVideo, UIActionType.CycleLayerAsset, UIActionType.ToggleScreen, UIActionType.CloseScreen, UIActionType.OpenURL, UIActionType.SetLanguage, UIActionType.SetFullscreen,
     UIActionType.ChangePose, UIActionType.ChangeCharacter, UIActionType.PlayCharacterAnimation, UIActionType.PlayAnimation,
     UIActionType.ShowElement, UIActionType.HideElement,
     UIActionType.CallCommonEvent,

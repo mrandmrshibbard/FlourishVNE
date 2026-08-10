@@ -14,7 +14,11 @@ import { CanvasZoom } from '../../hooks/useCanvasZoom';
 const CanvasZoomControls: React.FC<{ zoom: CanvasZoom; className?: string }> = ({ zoom, className }) => {
     const { t } = useTranslation('staging');
     return (
-        <div className={`absolute bottom-2 right-2 flex items-center gap-1 z-[10000] bg-[var(--bg-primary)]/70 border border-[var(--border-default)]/40 rounded-lg px-1 py-0.5 ${className || ''}`}>
+        /* 🔴 z-8000, not higher. Editor canvas chrome is capped BELOW the test-play overlay
+         * (z-9000) and the tool panels (z-10000); at 10000 these buttons floated on top of test
+         * play and the Translate panel. See the same cap on the other canvas chrome in
+         * StagingArea. */
+        <div className={`absolute bottom-2 right-2 flex items-center gap-1 z-[8000] bg-[var(--bg-primary)]/70 border border-[var(--border-default)]/40 rounded-lg px-1 py-0.5 ${className || ''}`}>
             <button
                 onClick={zoom.zoomOut}
                 className="w-5 h-5 flex items-center justify-center rounded text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"

@@ -72,7 +72,9 @@
     "changePose": "Cambia posa",
     "changeCharacter": "Cambia personaggio",
     "playCharacterAnimation": "Riproduci animazione del personaggio",
-    "setLanguage": "Cambia lingua"
+    "setLanguage": "Cambia lingua",
+    "setFullscreen": "Schermo intero",
+    "closeScreen": "Chiudi schermata"
   },
   "actionsList": {
     "actions": "Azioni",
@@ -676,7 +678,8 @@
     "discardPickList": "Scegli un elenco…",
     "discardMoveHint": "Un posto da cui la storia può restituirlo più tardi — una cassa di oggetti persi, un nascondiglio, il terreno. L'elenco deve già contenere l'oggetto, altrimenti l'operazione viene rifiutata così non si perde nulla.",
     "discardNoList": "Scegli un elenco, altrimenti non succederà nulla quando il giocatore butta qualcosa.",
-    "discardDestroyHint": "L'oggetto viene rimosso per sempre — il giocatore non può annullare, quindi si adatta più alla paccottiglia che agli oggetti di missione."
+    "discardDestroyHint": "L'oggetto viene rimosso per sempre — il giocatore non può annullare, quindi si adatta più alla paccottiglia che agli oggetti di missione.",
+    "fullscreen": "Schermo intero"
   },
   "cgWizard": {
     "title": "Procedura guidata galleria CG",
@@ -1194,7 +1197,13 @@
     "language": "Lingua",
     "languageOriginal": "La lingua in cui è scritto il gioco",
     "noLanguagesYet": "Nessuna lingua ancora aggiunta: aggiungine una in Traduci il tuo gioco.",
-    "languageIsSource": "Questa è la lingua in cui è scritto il gioco."
+    "languageIsSource": "Questa è la lingua in cui è scritto il gioco.",
+    "fullscreenMode": "Cosa fa questo pulsante",
+    "fullscreenToggle": "Alterna tra schermo intero e finestra",
+    "fullscreenOn": "Passa a schermo intero",
+    "fullscreenOff": "Esci da schermo intero (finestra)",
+    "screenToClose": "Schermata da chiudere",
+    "closeThisScreen": "La schermata su cui si trova questo pulsante"
   },
   "effectStyle": {
     "label": "Stile dell'effetto",

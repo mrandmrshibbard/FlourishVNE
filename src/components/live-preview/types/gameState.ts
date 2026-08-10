@@ -757,6 +757,10 @@ export interface GameSettings {
     enableSkip: boolean;
     autoAdvance: boolean;
     autoAdvanceDelay: number; // in seconds
+    /** Play full-screen. Additive-optional in saved settings: an older saved file simply has no
+     *  entry and falls back to the default, and the engine reconciles it with the real window
+     *  state on load anyway (a player may have hit F11 since). */
+    fullscreen?: boolean;
 }
 
 export const defaultSettings: GameSettings = {
@@ -768,4 +772,5 @@ export const defaultSettings: GameSettings = {
     enableSkip: true,
     autoAdvance: false,
     autoAdvanceDelay: 3,
+    fullscreen: false,
 };

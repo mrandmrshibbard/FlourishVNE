@@ -952,7 +952,8 @@ export interface UISettingsSliderElement extends BaseUIElement {
     maxValue?: number;
     actions?: VNUIAction[]; // Multiple actions on value change
 }
-export type GameToggleSetting = 'enableSkip';
+/** Settings a SettingsToggle element can drive. */
+export type GameToggleSetting = 'enableSkip' | 'fullscreen';
 export interface UISettingsToggleElement extends BaseUIElement {
     type: UIElementType.SettingsToggle;
     setting: GameToggleSetting;

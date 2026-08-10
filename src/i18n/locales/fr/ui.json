@@ -72,7 +72,9 @@
     "changePose": "Changer de pose",
     "changeCharacter": "Changer de personnage",
     "playCharacterAnimation": "Lire l'animation du personnage",
-    "setLanguage": "Changer de langue"
+    "setLanguage": "Changer de langue",
+    "setFullscreen": "Plein écran",
+    "closeScreen": "Fermer l’écran"
   },
   "actionsList": {
     "actions": "Actions",
@@ -676,7 +678,8 @@
     "discardPickList": "Choisissez une liste…",
     "discardMoveHint": "Un endroit d'où l'histoire pourra le rendre plus tard — une caisse d'objets perdus, une cachette, le sol. La liste doit déjà contenir l'objet, sinon le rejet est refusé pour ne rien perdre.",
     "discardNoList": "Choisissez une liste, sinon rien ne se passera quand le joueur jettera un objet.",
-    "discardDestroyHint": "L'objet est supprimé définitivement — le joueur ne peut pas revenir en arrière, cela convient mieux au bric-à-brac qu'aux objets de quête."
+    "discardDestroyHint": "L'objet est supprimé définitivement — le joueur ne peut pas revenir en arrière, cela convient mieux au bric-à-brac qu'aux objets de quête.",
+    "fullscreen": "Plein écran"
   },
   "cgWizard": {
     "title": "Assistant de galerie CG",
@@ -1194,7 +1197,13 @@
     "language": "Langue",
     "languageOriginal": "La langue dans laquelle le jeu est écrit",
     "noLanguagesYet": "Aucune langue ajoutée pour l’instant — ajoutez-en une dans Traduisez votre jeu.",
-    "languageIsSource": "C’est la langue dans laquelle le jeu est écrit."
+    "languageIsSource": "C’est la langue dans laquelle le jeu est écrit.",
+    "fullscreenMode": "Ce que fait ce bouton",
+    "fullscreenToggle": "Basculer entre plein écran et fenêtre",
+    "fullscreenOn": "Passer en plein écran",
+    "fullscreenOff": "Quitter le plein écran (fenêtre)",
+    "screenToClose": "Écran à fermer",
+    "closeThisScreen": "L’écran sur lequel se trouve ce bouton"
   },
   "effectStyle": {
     "label": "Style d'effet",

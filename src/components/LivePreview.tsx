@@ -7219,6 +7219,43 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         }
         return { ...defaultSettings };
     });
+    /* ── Full screen ──────────────────────────────────────────────────────────────────────
+     * Drives the real browser/Electron full-screen state from `settings.fullscreen`, and — just
+     * as importantly — follows it BACK. A player can leave full screen with F11 or Escape without
+     * touching our UI, and a settings checkbox that then still reads "on" is worse than no
+     * checkbox: they'd untick it and nothing would happen.
+     *
+     * `requestFullscreen` needs a user gesture, so this only ever runs from a click (the toggle or
+     * the action) — never on boot. It's also allowed to fail: a browser may simply refuse, which
+     * is why the setting is reconciled from the real state rather than assumed. */
+    useEffect(() => {
+        const syncFromBrowser = () => {
+            const active = !!document.fullscreenElement;
+            setSettings(s => (!!s.fullscreen === active ? s : { ...s, fullscreen: active }));
+        };
+        document.addEventListener('fullscreenchange', syncFromBrowser);
+        return () => document.removeEventListener('fullscreenchange', syncFromBrowser);
+    }, []);
+
+    const applyFullscreen = useCallback(async (wanted: boolean) => {
+        try {
+            const active = !!document.fullscreenElement;
+            if (wanted && !active) await document.documentElement.requestFullscreen?.();
+            else if (!wanted && active) await document.exitFullscreen?.();
+        } catch (error) {
+            // Refused (no gesture, or the platform said no). Put the setting back where reality is
+            // so the checkbox keeps telling the truth.
+            runtimeDebugLog('Full screen was refused:', error);
+            setSettings(s => ({ ...s, fullscreen: !!document.fullscreenElement }));
+        }
+    }, []);
+
+    // The setting is the single source of intent; this is what carries it out.
+    useEffect(() => {
+        if (!!document.fullscreenElement === !!settings.fullscreen) return;
+        void applyFullscreen(!!settings.fullscreen);
+    }, [settings.fullscreen, applyFullscreen]);
+
     const [playerState, setPlayerState] = useState<PlayerState | null>(null);
     const playerStateRef = useRef<PlayerState | null>(null);
     // A "pausing overlay": a screen open on the HUD stack flagged `pauseSceneWhileOpen`. While one
@@ -7265,6 +7302,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
      * open. */
     const screenStackRef = useRef<VNID[]>([]);
     screenStackRef.current = screenStack;
+    /* The screen a modal Show Screen command is currently waiting on, if any. Only that screen's
+     * close may advance the story — see the Show Screen command handler. */
+    const parkedOnScreenIdRef = useRef<VNID | null>(null);
+    /* Forget it as soon as that screen is gone, however it went — Return To Previous Screen, Hide
+     * Screen, a scene jump, Quit To Title. One place rather than a clear at every close site: a
+     * missed one would leave the ref stale, and a LATER open of the same screen would then advance
+     * the story on close when it shouldn't. */
+    useEffect(() => {
+        const parked = parkedOnScreenIdRef.current;
+        if (parked && !hudStack.includes(parked)) parkedOnScreenIdRef.current = null;
+    }, [hudStack]);
     // Project ref for the plugin runtime bridge (variable name→id resolution).
     const projectRef = useRef(project);
     projectRef.current = project;
@@ -11740,6 +11788,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     // default) pause execution until they're closed.
                     if (!screenToShow?.hudNonBlocking) {
                         instantAdvance = false; // Pause execution when showing a modal screen/menu
+                        /* Remember that execution is PARKED on this command, waiting for this
+                         * screen. Closing the screen then has to step past it or the command runs
+                         * again — but only then. A screen opened by a BUTTON parks nothing, and
+                         * advancing on its close would silently eat whatever command the story was
+                         * on (reported: a Wait command being skipped). */
+                        parkedOnScreenIdRef.current = cmd.screenId;
                     }
                     // Store the current scene ID so UI actions can reference it later
                     updatePlayerState(p => p ? {
@@ -12539,6 +12593,53 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         executeUIAction(action, opts);
     };
 
+    /**
+     * Close one open screen, wherever it is, and settle up.
+     *
+     * 🔴 ONE implementation, shared by Toggle Screen's close half and Close Screen. These two had
+     * drifted apart before (Toggle used a stale stack and its own advance rule), and every bug in
+     * this area came from the two paths disagreeing about what closing means.
+     *
+     * The advance is not a policy choice — it's mechanical. If execution is PARKED on the modal
+     * Show Screen command that opened this screen, closing without stepping past it just re-runs
+     * the command and the screen reopens. If nothing is parked on it, the story is somewhere else
+     * entirely and must not be touched (that's how a Wait command got skipped).
+     */
+    const closeOpenScreen = (targetId: VNID, executeAction: (a: VNUIAction) => void): boolean => {
+        const openInHud = hudStackRef.current.includes(targetId);
+        const openInScreens = screenStackRef.current.includes(targetId);
+        if (!openInHud && !openInScreens) return false;
+
+        const cs = project.uiScreens[targetId];
+        const b = cs?.onCloseBehavior || 'default';
+        const parkedOnThisScreen = parkedOnScreenIdRef.current === targetId;
+        const advanceOnClose = b === 'advance' || (b === 'default' && parkedOnThisScreen);
+        if (parkedOnThisScreen) parkedOnScreenIdRef.current = null;
+
+        /* Commit what the player set on the closing overlay (name, appearance…) — and advance in
+         * the SAME flushSync. Splitting them lets a render happen in between, where the screen is
+         * gone but the command hasn't moved, which re-runs Show Screen and makes the screen flash
+         * back. flushSync is also required for the merge itself: a deferred merge plus the
+         * synchronous clear below committed nothing and dropped dress-up outfits. */
+        flushSync(() => {
+            updatePlayerState(p => p ? {
+                ...p,
+                variables: mergeDirtyUiVariables(p.variables),
+                ...(advanceOnClose ? {
+                    currentIndex: p.currentIndex + 1,
+                    uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false },
+                } : {}),
+            } : null);
+        });
+        uiDirtyVariableIdsRef.current.clear();
+
+        if (openInHud) setHudStack(s => s.filter(id => id !== targetId));
+        if (openInScreens) setScreenStack(s => s.filter(id => id !== targetId));
+
+        if (!advanceOnClose && b === 'runActions') (cs?.onCloseActions || []).forEach(a => executeAction(a));
+        return true;
+    };
+
     const executeUIAction = (action: VNUIAction, opts?: { resumeAtCurrent?: boolean }) => {
         if (action.type === UIActionType.StartNewGame) {
             // Always start fresh — `startNewGame` rebuilds playerState and clears every screen/HUD
@@ -12671,65 +12772,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 setScreenStack([targetId]);
                 return;
             }
-            /* 🔴 Read the stacks from REFS, and close the screen from whichever one holds it.
-             *
-             * This used to decide from the `hudStack` closure and only ever touch `hudStack` while
-             * playing. Two ways that failed: a stale closure made it "open" a screen that was
-             * already open (so the screen stayed put), and a screen sitting on the OTHER stack was
-             * invisible to it entirely. Reported as a character creator whose Finish button left
-             * the screen up while the scene advanced underneath — and it's why Return To Previous
-             * Screen worked where Toggle didn't: that one pops whatever is on top instead of
-             * matching an id against one guessed stack. */
-            const openInHud = hudStackRef.current.includes(targetId);
-            const openInScreens = screenStackRef.current.includes(targetId);
-
-            if (!openInHud && !openInScreens) {
-                // Not open anywhere — this is the "open it" half of the toggle.
+            /* Close it if it's open anywhere; otherwise this is the "open" half of the toggle.
+             * The close path is shared with Close Screen so the two can't drift. */
+            if (!closeOpenScreen(targetId, executeUIAction)) {
                 if (playerState && playerState.mode === 'playing') setHudStack(s => [...s, targetId]);
                 else setScreenStack(s => [...s, targetId]);
-            } else {
-                /* 🔴 Closing a MODAL screen must step past the Show Screen command that opened it.
-                 *
-                 * A modal Show Screen parks execution ON that command. If the screen closes while
-                 * the command is still current, the loop runs it again and the screen comes
-                 * straight back — seen as "it flashes but doesn't go away", while the player's
-                 * clicks advance the story underneath.
-                 *
-                 * 🔴 ORDER MATTERS, and this is the subtle half. The advance and the close must not
-                 * be separated by a render. The old code closed the stack FIRST and then called
-                 * `flushSync` for the variable merge — which forced a render in between, where the
-                 * screen was already gone but the command had not advanced yet. That in-between
-                 * state is precisely what re-runs Show Screen. Advancing inside the same flushSync,
-                 * BEFORE touching the stacks, means no render ever observes it.
-                 *
-                 * The advance rule itself matches Return To Previous Screen — which is why that
-                 * action worked where this one didn't. A non-blocking HUD advanced when it was
-                 * SHOWN, so closing it must not advance again. */
-                const cs = project.uiScreens[targetId];
-                const b = cs?.onCloseBehavior || 'default';
-                const advanceOnClose = b === 'advance' || (b === 'default' && !cs?.hudNonBlocking);
-
-                // Persist any values the player set on the closing overlay (name, appearance, etc.)
-                // before honoring the close behavior — same as JumpToScene / ReturnToPreviousScreen.
-                // flushSync is REQUIRED: a deferred merge + the synchronous clear() below committed
-                // NOTHING (mergeDirtyUiVariables early-returns on an empty dirty set), which dropped
-                // dress-up outfits closed via a plain ToggleScreen "Done" button.
-                flushSync(() => {
-                    updatePlayerState(p => p ? {
-                        ...p,
-                        variables: mergeDirtyUiVariables(p.variables),
-                        ...(advanceOnClose ? {
-                            currentIndex: p.currentIndex + 1,
-                            uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false },
-                        } : {}),
-                    } : null);
-                });
-                uiDirtyVariableIdsRef.current.clear();
-
-                if (openInHud) setHudStack(s => s.filter(id => id !== targetId));
-                if (openInScreens) setScreenStack(s => s.filter(id => id !== targetId));
-
-                if (!advanceOnClose && b === 'runActions') (cs?.onCloseActions || []).forEach(a => executeUIAction(a));
             }
         } else if (action.type === UIActionType.GoToScreen) {
             const targetId = (action as GoToScreenAction).targetScreenId;
@@ -13760,6 +13807,25 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     window.location.href = openUrlAction.url;
                 }
             }
+        } else if (action.type === UIActionType.CloseScreen) {
+            /* Says exactly what it means, unlike using Toggle as a close — which could also OPEN a
+             * screen if it happened to be shut. No target = the screen on top, which is the one the
+             * button lives on in every normal case. */
+            const explicit = (action as any).targetScreenId as VNID | undefined;
+            const topmost = hudStackRef.current[hudStackRef.current.length - 1]
+                ?? screenStackRef.current[screenStackRef.current.length - 1];
+            const targetId = explicit || topmost;
+            runtimeDebugLog('CloseScreen action triggered:', targetId, explicit ? '(chosen)' : '(topmost)');
+            if (targetId) closeOpenScreen(targetId, executeUIAction);
+        } else if (action.type === UIActionType.SetFullscreen) {
+            // Set the SETTING, not the browser directly — the effect above carries it out, so the
+            // settings checkbox and this action can never disagree about the current state.
+            const mode = (action as any).mode || 'toggle';
+            runtimeDebugLog('SetFullscreen action triggered:', mode);
+            setSettings(s => ({
+                ...s,
+                fullscreen: mode === 'on' ? true : mode === 'off' ? false : !s.fullscreen,
+            }));
         } else if (action.type === UIActionType.SetLanguage) {
             // Empty code = back to the language the game was written in. The swap is a re-render,
             // not a reload: the player keeps their exact place in the story.

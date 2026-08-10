@@ -72,7 +72,9 @@
     "changePose": "更改姿势",
     "changeCharacter": "更换角色",
     "playCharacterAnimation": "播放角色动画",
-    "setLanguage": "切换语言"
+    "setLanguage": "切换语言",
+    "setFullscreen": "全屏",
+    "closeScreen": "关闭界面"
   },
   "actionsList": {
     "actions": "操作",
@@ -676,7 +678,8 @@
     "discardPickList": "选择一个列表…",
     "discardMoveHint": "放到剧情之后还能取回的地方——掉落箱、藏匿点、地面。该列表必须已包含此物品，否则会拒绝丢弃，以免遗失。",
     "discardNoList": "请选择一个列表，否则玩家丢弃时不会有任何反应。",
-    "discardDestroyHint": "该物品会被彻底移除——玩家无法撤销，因此更适合杂物而非任务物品。"
+    "discardDestroyHint": "该物品会被彻底移除——玩家无法撤销，因此更适合杂物而非任务物品。",
+    "fullscreen": "全屏"
   },
   "cgWizard": {
     "title": "CG 图库向导",
@@ -1194,7 +1197,13 @@
     "language": "语言",
     "languageOriginal": "游戏原本使用的语言",
     "noLanguagesYet": "尚未添加语言 — 请先在“翻译你的游戏”中添加。",
-    "languageIsSource": "这是游戏原本使用的语言。"
+    "languageIsSource": "这是游戏原本使用的语言。",
+    "fullscreenMode": "此按钮的作用",
+    "fullscreenToggle": "在全屏和窗口之间切换",
+    "fullscreenOn": "进入全屏",
+    "fullscreenOff": "退出全屏（窗口）",
+    "screenToClose": "要关闭的界面",
+    "closeThisScreen": "此按钮所在的界面"
   },
   "effectStyle": {
     "label": "特效风格",

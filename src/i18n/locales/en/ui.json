@@ -78,7 +78,9 @@
     "changePose": "Change Pose",
     "changeCharacter": "Change Character",
     "playCharacterAnimation": "Play Character Animation",
-    "setLanguage": "Set Language"
+    "setLanguage": "Set Language",
+    "setFullscreen": "Set Full Screen",
+    "closeScreen": "Close Screen"
   },
   "actionsList": {
     "actions": "Actions",
@@ -540,7 +542,8 @@
     "transDistanceAuto": "automatic",
     "transDistanceHint": "How far away it starts, relative to its own size. 100% = one full element-width away.",
     "transOnReveal": "Play again when shown by an action",
-    "transOnRevealHint": "When a Show Element action reveals this, replay the entrance instead of just fading in."
+    "transOnRevealHint": "When a Show Element action reveals this, replay the entrance instead of just fading in.",
+    "fullscreen": "Full screen"
   },
   "cgWizard": {
     "title": "CG Gallery Wizard",
@@ -1046,6 +1049,12 @@
     "language": "Language",
     "languageOriginal": "The language the game is written in",
     "noLanguagesYet": "No languages added yet — add one in Translate your game first.",
-    "languageIsSource": "This is the language the game is written in."
+    "languageIsSource": "This is the language the game is written in.",
+    "fullscreenMode": "What this button does",
+    "fullscreenToggle": "Switch between full screen and windowed",
+    "fullscreenOn": "Go full screen",
+    "fullscreenOff": "Leave full screen (windowed)",
+    "screenToClose": "Screen to close",
+    "closeThisScreen": "The screen this button is on"
   }
 }

@@ -428,6 +428,19 @@ const ActionFields: React.FC<{
                     {t('actionEditor.openNewTab', 'Open in a new tab')}
                 </label>
             </>);
+        case UIActionType.CloseScreen:
+            return group('sky', field(t('actionEditor.screenToClose', 'Screen to close'),
+                sel(a.targetScreenId || '', v => set({ targetScreenId: v || undefined }), <>
+                    <option value="">{t('actionEditor.closeThisScreen', 'The screen this button is on')}</option>
+                    {Object.values(project.uiScreens).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </>)));
+        case UIActionType.SetFullscreen:
+            return group('sky', field(t('actionEditor.fullscreenMode', 'What this button does'),
+                sel(a.mode || 'toggle', v => set({ mode: v }), <>
+                    <option value="toggle">{t('actionEditor.fullscreenToggle', 'Switch between full screen and windowed')}</option>
+                    <option value="on">{t('actionEditor.fullscreenOn', 'Go full screen')}</option>
+                    <option value="off">{t('actionEditor.fullscreenOff', 'Leave full screen (windowed)')}</option>
+                </>)));
         case UIActionType.SetLanguage: {
             const langs = ((project as any).localization?.languages || []) as { code: string; name: string }[];
             const sourceLanguage = (project as any).localization?.sourceLanguage || 'en';

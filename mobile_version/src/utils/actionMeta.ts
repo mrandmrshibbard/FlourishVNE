@@ -76,6 +76,11 @@ export function defaultActionForType(type: UIActionType, project: VNProject): VN
             return { ...base, characterId: firstKey(project.characters), animationId: null };
         case UIActionType.OpenURL:
             return { ...base, url: 'https://', newTab: true };
+        case UIActionType.CloseScreen:
+            // Deliberately no target: the common case is "close the screen I'm on".
+            return { ...base };
+        case UIActionType.SetFullscreen:
+            return { ...base, mode: 'toggle' };
         case UIActionType.SetLanguage:
             // Defaults to the first language the author added, so the button works immediately.
             return { ...base, languageCode: (project as any).localization?.languages?.[0]?.code || '' };

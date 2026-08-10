@@ -72,7 +72,9 @@
     "changePose": "Cambiar pose",
     "changeCharacter": "Cambiar personaje",
     "playCharacterAnimation": "Reproducir animación del personaje",
-    "setLanguage": "Cambiar idioma"
+    "setLanguage": "Cambiar idioma",
+    "setFullscreen": "Pantalla completa",
+    "closeScreen": "Cerrar pantalla"
   },
   "actionsList": {
     "actions": "Acciones",
@@ -676,7 +678,8 @@
     "discardPickList": "Elige una lista…",
     "discardMoveHint": "Un sitio del que la historia puede devolverlo luego: una caja de objetos tirados, un alijo, el suelo. La lista ya debe incluir el objeto; si no, tirarlo se rechaza para que nada se pierda.",
     "discardNoList": "Elige una lista, o no pasará nada cuando el jugador tire algo.",
-    "discardDestroyHint": "El objeto se elimina definitivamente: el jugador no puede deshacerlo, así que encaja más con la chatarra que con objetos de misión."
+    "discardDestroyHint": "El objeto se elimina definitivamente: el jugador no puede deshacerlo, así que encaja más con la chatarra que con objetos de misión.",
+    "fullscreen": "Pantalla completa"
   },
   "cgWizard": {
     "title": "Asistente de galería de CG",
@@ -1194,7 +1197,13 @@
     "language": "Idioma",
     "languageOriginal": "El idioma en el que está escrito el juego",
     "noLanguagesYet": "Aún no has añadido idiomas: añade uno primero en Traduce tu juego.",
-    "languageIsSource": "Este es el idioma en el que está escrito el juego."
+    "languageIsSource": "Este es el idioma en el que está escrito el juego.",
+    "fullscreenMode": "Qué hace este botón",
+    "fullscreenToggle": "Alternar entre pantalla completa y ventana",
+    "fullscreenOn": "Poner en pantalla completa",
+    "fullscreenOff": "Salir de pantalla completa (ventana)",
+    "screenToClose": "Pantalla que se cierra",
+    "closeThisScreen": "La pantalla en la que está este botón"
   },
   "effectStyle": {
     "label": "Estilo del efecto",

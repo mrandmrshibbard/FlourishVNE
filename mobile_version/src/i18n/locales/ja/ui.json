@@ -72,7 +72,9 @@
     "changePose": "ポーズを変える",
     "changeCharacter": "キャラクターを入れ替える",
     "playCharacterAnimation": "キャラクターのアニメーションを再生",
-    "setLanguage": "言語を切り替え"
+    "setLanguage": "言語を切り替え",
+    "setFullscreen": "全画面表示",
+    "closeScreen": "画面を閉じる"
   },
   "actionsList": {
     "actions": "アクション",
@@ -676,7 +678,8 @@
     "discardPickList": "リストを選んでください…",
     "discardMoveHint": "物語で後から返せる場所へ — 落とし物入れ、隠し場所、地面など。そのリストにそのアイテムが登録されている必要があります。無い場合は、失わないように処分を中止します。",
     "discardNoList": "リストを選んでください。選ばないと、プレイヤーが手放しても何も起きません。",
-    "discardDestroyHint": "アイテムは完全に消えます。プレイヤーは元に戻せないので、大事な依頼品よりガラクタ向きです。"
+    "discardDestroyHint": "アイテムは完全に消えます。プレイヤーは元に戻せないので、大事な依頼品よりガラクタ向きです。",
+    "fullscreen": "全画面表示"
   },
   "cgWizard": {
     "title": "CGギャラリーウィザード",
@@ -1194,7 +1197,13 @@
     "language": "言語",
     "languageOriginal": "ゲームが書かれている言語",
     "noLanguagesYet": "まだ言語が追加されていません。［ゲームを翻訳する］で追加してください。",
-    "languageIsSource": "これはゲームが書かれている言語です。"
+    "languageIsSource": "これはゲームが書かれている言語です。",
+    "fullscreenMode": "このボタンの動作",
+    "fullscreenToggle": "全画面とウィンドウを切り替える",
+    "fullscreenOn": "全画面にする",
+    "fullscreenOff": "全画面を解除（ウィンドウ）",
+    "screenToClose": "閉じる画面",
+    "closeThisScreen": "このボタンがある画面"
   },
   "effectStyle": {
     "label": "効果のスタイル",

@@ -700,6 +700,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             <FormField label={t('elementInspector.settingControlled')}>
                                 <Select value={el.setting} onChange={e => updateElement({ setting: e.target.value as GameToggleSetting })}>
                                     <option value="enableSkip">{t('elementInspector.enableSkip')}</option>
+                                    <option value="fullscreen">{t('elementInspector.fullscreen', 'Full screen')}</option>
                                 </Select>
                             </FormField>
                         )}

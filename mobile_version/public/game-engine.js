@@ -69,6 +69,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["ChangeImage"] = "ChangeImage";
     UIActionType2["ShowElement"] = "ShowElement";
     UIActionType2["HideElement"] = "HideElement";
+    UIActionType2["CloseScreen"] = "CloseScreen";
+    UIActionType2["SetFullscreen"] = "SetFullscreen";
     UIActionType2["SetLanguage"] = "SetLanguage";
     UIActionType2["ContinueGame"] = "ContinueGame";
     UIActionType2["ShowLog"] = "ShowLog";
@@ -21660,6 +21662,29 @@ void main() {
       }
       return { ...defaultSettings };
     });
+    React2.useEffect(() => {
+      const syncFromBrowser = () => {
+        const active = !!document.fullscreenElement;
+        setSettings((s) => !!s.fullscreen === active ? s : { ...s, fullscreen: active });
+      };
+      document.addEventListener("fullscreenchange", syncFromBrowser);
+      return () => document.removeEventListener("fullscreenchange", syncFromBrowser);
+    }, []);
+    const applyFullscreen = React2.useCallback(async (wanted) => {
+      var _a2, _b2, _c2;
+      try {
+        const active = !!document.fullscreenElement;
+        if (wanted && !active) await ((_b2 = (_a2 = document.documentElement).requestFullscreen) == null ? void 0 : _b2.call(_a2));
+        else if (!wanted && active) await ((_c2 = document.exitFullscreen) == null ? void 0 : _c2.call(document));
+      } catch (error) {
+        runtimeDebugLog("Full screen was refused:", error);
+        setSettings((s) => ({ ...s, fullscreen: !!document.fullscreenElement }));
+      }
+    }, []);
+    React2.useEffect(() => {
+      if (!!document.fullscreenElement === !!settings.fullscreen) return;
+      void applyFullscreen(!!settings.fullscreen);
+    }, [settings.fullscreen, applyFullscreen]);
     const [playerState, setPlayerState] = React2.useState(null);
     const playerStateRef = React2.useRef(null);
     const pausingOverlayScreen = (() => {
@@ -21692,6 +21717,11 @@ void main() {
     hudStackRef.current = hudStack;
     const screenStackRef = React2.useRef([]);
     screenStackRef.current = screenStack;
+    const parkedOnScreenIdRef = React2.useRef(null);
+    React2.useEffect(() => {
+      const parked = parkedOnScreenIdRef.current;
+      if (parked && !hudStack.includes(parked)) parkedOnScreenIdRef.current = null;
+    }, [hudStack]);
     const projectRef = React2.useRef(project);
     projectRef.current = project;
     setVariableDefinitions(project.variables);
@@ -25775,6 +25805,7 @@ void main() {
                 const screenToShow = project.uiScreens[cmd.screenId];
                 if (!(screenToShow == null ? void 0 : screenToShow.hudNonBlocking)) {
                   instantAdvance = false;
+                  parkedOnScreenIdRef.current = cmd.screenId;
                 }
                 updatePlayerState((p) => p ? {
                   ...p,
@@ -26417,6 +26448,31 @@ void main() {
       }
       executeUIAction(action, opts);
     };
+    const closeOpenScreen = (targetId, executeAction) => {
+      const openInHud = hudStackRef.current.includes(targetId);
+      const openInScreens = screenStackRef.current.includes(targetId);
+      if (!openInHud && !openInScreens) return false;
+      const cs = project.uiScreens[targetId];
+      const b = (cs == null ? void 0 : cs.onCloseBehavior) || "default";
+      const parkedOnThisScreen = parkedOnScreenIdRef.current === targetId;
+      const advanceOnClose = b === "advance" || b === "default" && parkedOnThisScreen;
+      if (parkedOnThisScreen) parkedOnScreenIdRef.current = null;
+      reactDom.flushSync(() => {
+        updatePlayerState((p) => p ? {
+          ...p,
+          variables: mergeDirtyUiVariables(p.variables),
+          ...advanceOnClose ? {
+            currentIndex: p.currentIndex + 1,
+            uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false }
+          } : {}
+        } : null);
+      });
+      uiDirtyVariableIdsRef.current.clear();
+      if (openInHud) setHudStack((s) => s.filter((id) => id !== targetId));
+      if (openInScreens) setScreenStack((s) => s.filter((id) => id !== targetId));
+      if (!advanceOnClose && b === "runActions") ((cs == null ? void 0 : cs.onCloseActions) || []).forEach((a) => executeAction(a));
+      return true;
+    };
     const executeUIAction = (action, opts) => {
       var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r2, _s2, _t2, _u2, _v2, _w2, _x2, _y2, _z2, _A2;
       if (action.type === UIActionType.StartNewGame) {
@@ -26511,29 +26567,9 @@ void main() {
           setScreenStack([targetId]);
           return;
         }
-        const openInHud = hudStackRef.current.includes(targetId);
-        const openInScreens = screenStackRef.current.includes(targetId);
-        if (!openInHud && !openInScreens) {
+        if (!closeOpenScreen(targetId, executeUIAction)) {
           if (playerState && playerState.mode === "playing") setHudStack((s) => [...s, targetId]);
           else setScreenStack((s) => [...s, targetId]);
-        } else {
-          const cs = project.uiScreens[targetId];
-          const b = (cs == null ? void 0 : cs.onCloseBehavior) || "default";
-          const advanceOnClose = b === "advance" || b === "default" && !(cs == null ? void 0 : cs.hudNonBlocking);
-          reactDom.flushSync(() => {
-            updatePlayerState((p) => p ? {
-              ...p,
-              variables: mergeDirtyUiVariables(p.variables),
-              ...advanceOnClose ? {
-                currentIndex: p.currentIndex + 1,
-                uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false }
-              } : {}
-            } : null);
-          });
-          uiDirtyVariableIdsRef.current.clear();
-          if (openInHud) setHudStack((s) => s.filter((id) => id !== targetId));
-          if (openInScreens) setScreenStack((s) => s.filter((id) => id !== targetId));
-          if (!advanceOnClose && b === "runActions") ((cs == null ? void 0 : cs.onCloseActions) || []).forEach((a) => executeUIAction(a));
         }
       } else if (action.type === UIActionType.GoToScreen) {
         const targetId = action.targetScreenId;
@@ -27409,6 +27445,19 @@ void main() {
             window.location.href = openUrlAction.url;
           }
         }
+      } else if (action.type === UIActionType.CloseScreen) {
+        const explicit = action.targetScreenId;
+        const topmost = hudStackRef.current[hudStackRef.current.length - 1] ?? screenStackRef.current[screenStackRef.current.length - 1];
+        const targetId = explicit || topmost;
+        runtimeDebugLog("CloseScreen action triggered:", targetId, explicit ? "(chosen)" : "(topmost)");
+        if (targetId) closeOpenScreen(targetId, executeUIAction);
+      } else if (action.type === UIActionType.SetFullscreen) {
+        const mode = action.mode || "toggle";
+        runtimeDebugLog("SetFullscreen action triggered:", mode);
+        setSettings((s) => ({
+          ...s,
+          fullscreen: mode === "on" ? true : mode === "off" ? false : !s.fullscreen
+        }));
       } else if (action.type === UIActionType.SetLanguage) {
         const code = action.languageCode || ((_q2 = authoredProject == null ? void 0 : authoredProject.localization) == null ? void 0 : _q2.sourceLanguage) || "";
         runtimeDebugLog("SetLanguage action triggered:", code);

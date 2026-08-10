@@ -2498,7 +2498,7 @@ const StagingArea: React.FC<{
                      Anchored at the BOTTOM so it never overlaps the content-box Trim/Reset toolbar,
                      which sits at the top of the (selected) sprite's content box. */}
                  {selectedCmd?.type === CommandType.ShowCharacter && selectedCmdId && (
-                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-[var(--bg-primary)]/90 border border-[var(--border-default)]/60 rounded-lg px-1.5 py-1 z-[10000] shadow-lg">
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-[var(--bg-primary)]/90 border border-[var(--border-default)]/60 rounded-lg px-1.5 py-1 z-[8000] shadow-lg">
                         <span className="text-[10px] text-[var(--text-muted)] px-1">{t('characterSize')}</span>
                         <button onClick={() => commitCharFit(selectedCmdId, 'height', (selectedCmd as ShowCharacterCommand).contentBox)} title={t('fitHeightTip')} className="text-[10px] px-2 py-1 rounded bg-[var(--bg-secondary)] hover:bg-sky-600/70 text-[var(--text-primary)]">{t('fitHeight')}</button>
                         <button onClick={() => commitCharFit(selectedCmdId, 'width', (selectedCmd as ShowCharacterCommand).contentBox)} title={t('fitWidthTip')} className="text-[10px] px-2 py-1 rounded bg-[var(--bg-secondary)] hover:bg-sky-600/70 text-[var(--text-primary)]">{t('fitWidth')}</button>
@@ -2510,7 +2510,7 @@ const StagingArea: React.FC<{
                      reach z-index 100+, which previously covered these buttons and ate their clicks).
                      Collapsible: the stack can sit right on top of art/hot spots the author is
                      aligning, so a single chevron tucks it away (remembered per machine). */}
-                 <div className="absolute top-2 right-2 flex flex-col gap-2 z-[10000] items-end">
+                 <div className="absolute top-2 right-2 flex flex-col gap-2 z-[8000] items-end">
                     <button
                         onClick={() => setChromeCollapsed(s => !s)}
                         className="flex items-center justify-center w-6 h-6 rounded-lg text-xs border bg-[var(--bg-primary)]/70 border-[var(--border-default)]/40 text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]/90"

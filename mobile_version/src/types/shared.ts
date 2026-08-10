@@ -150,6 +150,14 @@ export enum UIActionType {
     ShowElement = 'ShowElement',
     /** Hides a target element (fades it out + makes it click-through). Counterpart to ShowElement. */
     HideElement = 'HideElement',
+    /** Close an open screen and nothing else. Authors were using Toggle Screen as a "close",
+     *  which also OPENS the screen when it happens to be shut, and made the engine guess whether
+     *  the story should move on. This says what it means. */
+    CloseScreen = 'CloseScreen',
+    /** Go full-screen, leave full-screen, or flip between the two. One action with a mode rather
+     *  than separate Fullscreen/Windowed actions: a single toggle button is the common case, and an
+     *  author who wants two explicit buttons can still have them. */
+    SetFullscreen = 'SetFullscreen',
     /** Switch the language the game is played in. The player's choice is remembered between
      *  sessions and survives Quit to Title, so it belongs to the player, not to the save file. */
     SetLanguage = 'SetLanguage',
@@ -254,6 +262,16 @@ export interface ShowMiniGameAction extends BaseUIAction { type: UIActionType.Sh
 export interface CycleLayerAssetAction extends BaseUIAction { type: UIActionType.CycleLayerAsset; characterId: VNID; layerId: VNID; variableId: VNID; direction: 'next' | 'prev'; }
 export interface ToggleScreenAction extends BaseUIAction { type: UIActionType.ToggleScreen; targetScreenId: VNID; }
 export interface OpenURLAction extends BaseUIAction { type: UIActionType.OpenURL; url: string; newTab?: boolean; }
+/** No `targetScreenId` = close whichever screen is on top (the one the button is on). */
+export interface CloseScreenAction extends BaseUIAction {
+    type: UIActionType.CloseScreen;
+    targetScreenId?: VNID;
+}
+/** `mode` defaults to 'toggle' when absent. */
+export interface SetFullscreenAction extends BaseUIAction {
+    type: UIActionType.SetFullscreen;
+    mode?: 'toggle' | 'on' | 'off';
+}
 /** Empty `languageCode` means "back to the language the game was written in". */
 export interface SetLanguageAction extends BaseUIAction {
     type: UIActionType.SetLanguage;
@@ -292,4 +310,4 @@ export interface SetTimeOfDayAction extends BaseUIAction { type: UIActionType.Se
 /** Clear the palette→UI restyle applied by a coloring mini game. */
 export interface ClearUiPaletteAction extends BaseUIAction { type: UIActionType.ClearUiPalette; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | PlayMusicAction | StopMusicAction | SaveSlotsPageAction | ShowSpotlightAction | HideSpotlightAction | ShowFlashlightAction | HideFlashlightAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ChangePoseAction | ChangeCharacterAction | PlayCharacterAnimationAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | OpenPhoneAppAction | ShowMapAction | ShowMiniGameAction | StartTimerAction | StopTimerAction | SetTimeOfDayAction | ClearUiPaletteAction | StopSoundAction | PlayVideoAction | SetLanguageAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | PlayMusicAction | StopMusicAction | SaveSlotsPageAction | ShowSpotlightAction | HideSpotlightAction | ShowFlashlightAction | HideFlashlightAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ChangePoseAction | ChangeCharacterAction | PlayCharacterAnimationAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | OpenPhoneAppAction | ShowMapAction | ShowMiniGameAction | StartTimerAction | StopTimerAction | SetTimeOfDayAction | ClearUiPaletteAction | StopSoundAction | PlayVideoAction | SetLanguageAction | SetFullscreenAction | CloseScreenAction;

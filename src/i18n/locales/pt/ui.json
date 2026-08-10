@@ -195,7 +195,9 @@
     "changePose": "Mudar pose",
     "changeCharacter": "Trocar personagem",
     "playCharacterAnimation": "Tocar animação do personagem",
-    "setLanguage": "Alterar idioma"
+    "setLanguage": "Alterar idioma",
+    "setFullscreen": "Tela cheia",
+    "closeScreen": "Fechar tela"
   },
   "actionsList": {
     "actions": "Ações",
@@ -800,7 +802,8 @@
     "discardPickList": "Escolha uma lista…",
     "discardMoveHint": "Um lugar de onde a história pode devolvê-lo depois — uma caixa de itens largados, um baú, o chão. A lista já precisa incluir o item, senão o descarte é recusado para nada se perder.",
     "discardNoList": "Escolha uma lista, ou nada acontecerá quando o jogador descartar algo.",
-    "discardDestroyHint": "O item é removido de vez — o jogador não tem como desfazer, então combina mais com bugigangas do que com itens de missão."
+    "discardDestroyHint": "O item é removido de vez — o jogador não tem como desfazer, então combina mais com bugigangas do que com itens de missão.",
+    "fullscreen": "Tela cheia"
   },
   "cgWizard": {
     "title": "Assistente de galeria de CG",
@@ -1413,7 +1416,13 @@
     "language": "Idioma",
     "languageOriginal": "O idioma em que o jogo foi escrito",
     "noLanguagesYet": "Nenhum idioma adicionado ainda — adicione um em Traduza o seu jogo.",
-    "languageIsSource": "Este é o idioma em que o jogo foi escrito."
+    "languageIsSource": "Este é o idioma em que o jogo foi escrito.",
+    "fullscreenMode": "O que este botão faz",
+    "fullscreenToggle": "Alternar entre tela cheia e janela",
+    "fullscreenOn": "Ir para tela cheia",
+    "fullscreenOff": "Sair da tela cheia (janela)",
+    "screenToClose": "Tela a fechar",
+    "closeThisScreen": "A tela em que este botão está"
   },
   "character": {
     "defaultPose": "Padrão (arte normal)",
