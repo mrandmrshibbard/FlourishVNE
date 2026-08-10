@@ -250,3 +250,32 @@ describe('whether the game opens on the language screen', () => {
         expect(shouldShowLanguageScreen(disabled, { deviceLanguages: ['fi'] })).toBe(false);
     });
 });
+
+describe('🔴 why the gate decision must be captured once', () => {
+    /* A built game broke here: `shouldShowLanguageScreen` correctly starts returning FALSE the
+     * moment a language is saved — but the engine was recomputing the gate id from it on every
+     * render, so the id went null the instant the player chose, and the gate's own Continue button
+     * stopped working. The editor never saw it, because test play ignores the saved language.
+     *
+     * The function is right; using its live value as a session fact was wrong. */
+    const gated = () => ({
+        ...project(spanish({}, { languages: [{ code: 'es', name: 'Español', enabled: true }] })),
+        ui: { languageScreenId: 'lang1' },
+    });
+
+    it('flips from true to false as soon as a language is saved', () => {
+        const p = gated();
+        expect(shouldShowLanguageScreen(p, { saved: null, deviceLanguages: ['fi'] })).toBe(true);
+        // ...the player picks one, it's remembered, and the same call now answers differently.
+        expect(shouldShowLanguageScreen(p, { saved: 'es', deviceLanguages: ['fi'] })).toBe(false);
+    });
+
+    it('is a question about STARTING the session, so callers must ask it once', () => {
+        // Documented here because the answer legitimately changes mid-session; anything that needs
+        // to know "did the gate open?" has to capture it at mount, not re-derive it.
+        const p = gated();
+        const atBoot = shouldShowLanguageScreen(p, { saved: null, deviceLanguages: ['fi'] });
+        const later = shouldShowLanguageScreen(p, { saved: 'es', deviceLanguages: ['fi'] });
+        expect(atBoot).not.toBe(later);
+    });
+});

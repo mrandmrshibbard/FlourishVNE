@@ -16102,6 +16102,11 @@ void main() {
     }
   }
   const SET_GAME_LANGUAGE_EVENT = "flourish:setGameLanguage";
+  const isTypingTarget = () => {
+    const el = document.activeElement;
+    if (!el) return false;
+    return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable;
+  };
   function getRememberedTimersKey(projectId) {
     return `vn-timers-${projectId}`;
   }
@@ -21551,7 +21556,7 @@ void main() {
     );
   };
   const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false, startAt = null, startScreenId = null }) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
     const outerProjectContext = useProject();
     const { project: authoredProject } = outerProjectContext;
     const [gameLanguage, setGameLanguage] = React2.useState(() => detectStartLanguage(authoredProject, { saved: loadGameLanguage((authoredProject == null ? void 0 : authoredProject.id) || "") }));
@@ -21602,9 +21607,12 @@ void main() {
       return Object.keys(project.uiScreens)[0] || null;
     }, [project.ui.titleScreenId, project.uiScreens]);
     const titleScreenId = getValidTitleScreenId();
-    const languageGateId = !startScreenId && !startAt && shouldShowLanguageScreen(authoredProject, {
-      saved: isStandalone ? loadGameLanguage((authoredProject == null ? void 0 : authoredProject.id) || "") : null
-    }) ? (_a = authoredProject == null ? void 0 : authoredProject.ui) == null ? void 0 : _a.languageScreenId : null;
+    const [languageGateId] = React2.useState(() => {
+      var _a2;
+      return !startScreenId && !startAt && shouldShowLanguageScreen(authoredProject, {
+        saved: isStandalone ? loadGameLanguage((authoredProject == null ? void 0 : authoredProject.id) || "") : null
+      }) ? ((_a2 = authoredProject == null ? void 0 : authoredProject.ui) == null ? void 0 : _a2.languageScreenId) ?? null : null;
+    });
     const [screenStack, setScreenStack] = React2.useState(
       startScreenId && project.uiScreens[startScreenId] ? [startScreenId] : startAt ? [] : languageGateId && project.uiScreens[languageGateId] ? [languageGateId] : titleScreenId ? [titleScreenId] : []
     );
@@ -21682,6 +21690,8 @@ void main() {
     const restockPrevWatchRef = React2.useRef({});
     const hudStackRef = React2.useRef([]);
     hudStackRef.current = hudStack;
+    const screenStackRef = React2.useRef([]);
+    screenStackRef.current = screenStack;
     const projectRef = React2.useRef(project);
     projectRef.current = project;
     setVariableDefinitions(project.variables);
@@ -21696,9 +21706,9 @@ void main() {
       return null;
     }, [hudStack, screenStack, project.uiScreens]);
     const coverageSceneId = (playerState == null ? void 0 : playerState.mode) === "playing" || (playerState == null ? void 0 : playerState.mode) === "paused" ? playerState.currentSceneId || null : null;
-    const coverageCommonEventId = ((_b = playerState == null ? void 0 : playerState.commandStack) == null ? void 0 : _b.length) ? playerState.commandStack[playerState.commandStack.length - 1].commonEventId ?? null : null;
-    const coverageMapId = ((_d = (_c = playerState == null ? void 0 : playerState.uiState) == null ? void 0 : _c.mapOverlay) == null ? void 0 : _d.mapId) ?? null;
-    const coverageMiniGameId = ((_f = (_e = playerState == null ? void 0 : playerState.uiState) == null ? void 0 : _e.miniGameOverlay) == null ? void 0 : _f.gameId) ?? null;
+    const coverageCommonEventId = ((_a = playerState == null ? void 0 : playerState.commandStack) == null ? void 0 : _a.length) ? playerState.commandStack[playerState.commandStack.length - 1].commonEventId ?? null : null;
+    const coverageMapId = ((_c = (_b = playerState == null ? void 0 : playerState.uiState) == null ? void 0 : _b.mapOverlay) == null ? void 0 : _c.mapId) ?? null;
+    const coverageMiniGameId = ((_e = (_d = playerState == null ? void 0 : playerState.uiState) == null ? void 0 : _d.miniGameOverlay) == null ? void 0 : _e.gameId) ?? null;
     React2.useEffect(() => {
       var _a2;
       (_a2 = coverageRef.current) == null ? void 0 : _a2.observe({
@@ -21836,7 +21846,7 @@ void main() {
     const playContainerSize = useStageSize(playContainerRef);
     const [carriedItemId, setCarriedItemId] = React2.useState(null);
     const [carryCursor, setCarryCursor] = React2.useState({ x: 0, y: 0 });
-    const carriedItem = carriedItemId ? (_g = project.items) == null ? void 0 : _g[carriedItemId] : null;
+    const carriedItem = carriedItemId ? (_f = project.items) == null ? void 0 : _f[carriedItemId] : null;
     const audioCtxRef = React2.useRef(null);
     const sfxBufferCacheRef = React2.useRef(/* @__PURE__ */ new Map());
     const sfxSourceNodesRef = React2.useRef([]);
@@ -22084,6 +22094,7 @@ void main() {
       const key = flashlight == null ? void 0 : flashlight.toggleKey;
       if (!key) return;
       const onKey = (e) => {
+        if (isTypingTarget()) return;
         if (e.key.toLowerCase() === key.toLowerCase()) {
           e.preventDefault();
           setFlashlight((f) => f ? { ...f, on: !f.on } : f);
@@ -22121,8 +22132,7 @@ void main() {
     React2.useEffect(() => {
       if (!Object.values(spotlights).some((s) => s.toggleKey)) return;
       const onKey = (e) => {
-        const tgt = e.target;
-        if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA" || tgt.isContentEditable)) return;
+        if (isTypingTarget()) return;
         const k = e.key.toLowerCase();
         setSpotlights((prev) => {
           let changed = false;
@@ -23361,7 +23371,7 @@ void main() {
       const screenVol = ((_a2 = activeScreen == null ? void 0 : activeScreen.music) == null ? void 0 : _a2.volume) ?? 1;
       const commandVol = !((_b2 = activeScreen == null ? void 0 : activeScreen.music) == null ? void 0 : _b2.audioId) && typeof ((_c2 = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _c2.volume) === "number" ? playerState.musicState.volume : safeVol;
       musicAudioRef.current.volume = Math.max(0, Math.min(1, screenVol * commandVol));
-    }, [settings.musicVolume, screenStack, project.uiScreens, (_h = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _h.volume, galleryEpoch]);
+    }, [settings.musicVolume, screenStack, project.uiScreens, (_g = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _g.volume, galleryEpoch]);
     const prewarmedImagesRef = React2.useRef([]);
     React2.useEffect(() => {
       var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2;
@@ -23541,7 +23551,7 @@ void main() {
       return () => {
         alive = false;
       };
-    }, [(_i = playerState == null ? void 0 : playerState.stageState) == null ? void 0 : _i.characters]);
+    }, [(_h = playerState == null ? void 0 : playerState.stageState) == null ? void 0 : _h.characters]);
     const animFrameSelectionsRef = React2.useRef(/* @__PURE__ */ new Map());
     const animIdleScheduleRef = React2.useRef(/* @__PURE__ */ new Map());
     const [, bumpAnimEpoch] = React2.useReducer((x) => x + 1, 0);
@@ -23637,7 +23647,7 @@ void main() {
         cancelAnimationFrame(raf);
         animFrameSelectionsRef.current = /* @__PURE__ */ new Map();
       };
-    }, [(_j = playerState == null ? void 0 : playerState.stageState) == null ? void 0 : _j.characters, playerState == null ? void 0 : playerState.mode, project]);
+    }, [(_i = playerState == null ? void 0 : playerState.stageState) == null ? void 0 : _i.characters, playerState == null ? void 0 : playerState.mode, project]);
     React2.useEffect(() => {
       var _a2, _b2;
       const audio = ambientNoiseAudioRef.current;
@@ -23811,7 +23821,7 @@ void main() {
           fadeAudio(audio, typeof musicState.volume === "number" ? musicState.volume : settings.musicVolume, 0.3);
         }).catch((e) => console.error("[Music Sync] Failed to play restored music:", e));
       }
-    }, [(_k = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _k.audioId, playerState == null ? void 0 : playerState.mode, isJustLoaded, assetResolver, fadeAudio, settings.musicVolume]);
+    }, [(_j = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _j.audioId, playerState == null ? void 0 : playerState.mode, isJustLoaded, assetResolver, fadeAudio, settings.musicVolume]);
     const stopSfx = React2.useCallback((audioId, fadeDuration) => {
       const fade = typeof fadeDuration === "number" && fadeDuration > 0 ? fadeDuration : 0;
       const matched = sfxPoolRef.current.filter((e) => !audioId || e.audioId === audioId);
@@ -25433,6 +25443,7 @@ void main() {
                     removeListeners();
                   };
                   const keyHandler = (e) => {
+                    if (isTypingTarget() && e.key !== "Escape") return;
                     if (e.key === " " || e.key === "Enter" || e.key === "Escape") {
                       e.preventDefault();
                       e.stopPropagation();
@@ -25472,6 +25483,7 @@ void main() {
                     removeListeners();
                   };
                   const keyHandler = (e) => {
+                    if (isTypingTarget() && e.key !== "Escape") return;
                     if (e.key === " " || e.key === "Enter" || e.key === "Escape") {
                       e.preventDefault();
                       e.stopPropagation();
@@ -26406,7 +26418,7 @@ void main() {
       executeUIAction(action, opts);
     };
     const executeUIAction = (action, opts) => {
-      var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r2, _s2, _t2, _u2, _v2, _w2, _x2, _y2, _z2;
+      var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r2, _s2, _t2, _u2, _v2, _w2, _x2, _y2, _z2, _A2;
       if (action.type === UIActionType.StartNewGame) {
         startNewGameWithFade();
       } else if (!playerState && action.type === UIActionType.ContinueGame) {
@@ -26499,21 +26511,29 @@ void main() {
           setScreenStack([targetId]);
           return;
         }
-        if (playerState && playerState.mode === "playing") {
-          const isClosing = hudStack.includes(targetId);
-          setHudStack((s) => s.includes(targetId) ? s.filter((id) => id !== targetId) : [...s, targetId]);
-          if (isClosing) {
-            reactDom.flushSync(() => {
-              updatePlayerState((p) => p ? { ...p, variables: mergeDirtyUiVariables(p.variables) } : null);
-            });
-            uiDirtyVariableIdsRef.current.clear();
-            const cs = project.uiScreens[targetId];
-            const b = (cs == null ? void 0 : cs.onCloseBehavior) || "default";
-            if (b === "advance") updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
-            else if (b === "runActions") ((cs == null ? void 0 : cs.onCloseActions) || []).forEach((a) => executeUIAction(a));
-          }
+        const openInHud = hudStackRef.current.includes(targetId);
+        const openInScreens = screenStackRef.current.includes(targetId);
+        if (!openInHud && !openInScreens) {
+          if (playerState && playerState.mode === "playing") setHudStack((s) => [...s, targetId]);
+          else setScreenStack((s) => [...s, targetId]);
         } else {
-          setScreenStack((s) => s.includes(targetId) ? s.filter((id) => id !== targetId) : [...s, targetId]);
+          const cs = project.uiScreens[targetId];
+          const b = (cs == null ? void 0 : cs.onCloseBehavior) || "default";
+          const advanceOnClose = b === "advance" || b === "default" && !(cs == null ? void 0 : cs.hudNonBlocking);
+          reactDom.flushSync(() => {
+            updatePlayerState((p) => p ? {
+              ...p,
+              variables: mergeDirtyUiVariables(p.variables),
+              ...advanceOnClose ? {
+                currentIndex: p.currentIndex + 1,
+                uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false }
+              } : {}
+            } : null);
+          });
+          uiDirtyVariableIdsRef.current.clear();
+          if (openInHud) setHudStack((s) => s.filter((id) => id !== targetId));
+          if (openInScreens) setScreenStack((s) => s.filter((id) => id !== targetId));
+          if (!advanceOnClose && b === "runActions") ((cs == null ? void 0 : cs.onCloseActions) || []).forEach((a) => executeUIAction(a));
         }
       } else if (action.type === UIActionType.GoToScreen) {
         const targetId = action.targetScreenId;
@@ -26656,6 +26676,9 @@ void main() {
               }
             }
           }
+        } else if (screenStack.length === 1 && screenStack[0] === ((_a2 = authoredProject == null ? void 0 : authoredProject.ui) == null ? void 0 : _a2.languageScreenId) && titleScreenId && screenStack[0] !== titleScreenId) {
+          runtimeDebugLog("ReturnToPreviousScreen on the language screen with nothing beneath → title");
+          setScreenStack([titleScreenId]);
         } else {
           if (screenStack.length > 1) {
             const closingScreenId = screenStack[screenStack.length - 1];
@@ -26681,7 +26704,7 @@ void main() {
             const closingScreen = project.uiScreens[closingScreenId];
             const transitionDuration = (closingScreen == null ? void 0 : closingScreen.transitionOutDuration) ?? (closingScreen == null ? void 0 : closingScreen.transitionDuration) ?? 300;
             const hasTransition = ((closingScreen == null ? void 0 : closingScreen.transitionOut) || "fade") !== "none";
-            const wasPlaying = !!((_a2 = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _a2.isPlaying);
+            const wasPlaying = !!((_b2 = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _b2.isPlaying);
             const finishResume = () => {
               updatePlayerState((p) => p ? { ...p, mode: "playing" } : null);
               setScreenStack([]);
@@ -26800,7 +26823,7 @@ void main() {
       } else if (action.type === UIActionType.DeleteSave) {
         deleteGameSaveSlot(action.slotNumber);
       } else if (action.type === UIActionType.ShowPhone) {
-        if (project.ui.phoneOpenSoundId && !((_b2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _b2.open)) playSound(project.ui.phoneOpenSoundId, void 0, false);
+        if (project.ui.phoneOpenSoundId && !((_c2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _c2.open)) playSound(project.ui.phoneOpenSoundId, void 0, false);
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "home", notification: null, unread: false } } } : null);
       } else if (action.type === UIActionType.ShowPhoneText) {
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "chat", notification: null, unread: false } } } : null);
@@ -26813,21 +26836,21 @@ void main() {
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "contacts", activeContactId: null, notification: null, unread: false } } } : null);
       } else if (action.type === UIActionType.OpenPhoneApp) {
         const appId = action.appId || "home";
-        if (project.ui.phoneOpenSoundId && !((_c2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _c2.open)) playSound(project.ui.phoneOpenSoundId, void 0, false);
+        if (project.ui.phoneOpenSoundId && !((_d2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _d2.open)) playSound(project.ui.phoneOpenSoundId, void 0, false);
         updatePlayerState((p) => {
           var _a3;
           return p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: appId, ...appId === "contacts" ? { activeContactId: null } : {}, ...appId === "history" ? { notifications: (((_a3 = p.uiState.phone) == null ? void 0 : _a3.notifications) || []).map((e) => e.read ? e : { ...e, read: true }) } : {}, notification: null, unread: false } } } : null;
         });
       } else if (action.type === UIActionType.ShowMap) {
         const mapId = action.mapId;
-        if ((_d2 = project.maps) == null ? void 0 : _d2[mapId]) {
+        if ((_e2 = project.maps) == null ? void 0 : _e2[mapId]) {
           updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, mapOverlay: { mapId, allowCancel: true, fromCommand: false } } } : null);
         } else {
           runtimeDebugWarn(`[ShowMap action] Map ${mapId} not found`);
         }
       } else if (action.type === UIActionType.ShowMiniGame) {
         const gameId = action.gameId;
-        if ((_g2 = (_f2 = (_e2 = project.miniGames) == null ? void 0 : _e2[gameId]) == null ? void 0 : _f2.stages) == null ? void 0 : _g2.length) {
+        if ((_h2 = (_g2 = (_f2 = project.miniGames) == null ? void 0 : _f2[gameId]) == null ? void 0 : _g2.stages) == null ? void 0 : _h2.length) {
           updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, miniGameOverlay: { gameId, fromCommand: false } } } : null);
         } else {
           runtimeDebugWarn(`[ShowMiniGame action] Mini game ${gameId} not found or has no stages`);
@@ -26835,10 +26858,10 @@ void main() {
       } else if (action.type === UIActionType.ClearUiPalette) {
         updatePlayerState((p) => p ? { ...p, uiPaletteOverride: null } : null);
       } else if (action.type === UIActionType.HidePhone) {
-        if (project.ui.phoneCloseSoundId && ((_h2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _h2.open)) playSound(project.ui.phoneCloseSoundId, void 0, false);
+        if (project.ui.phoneCloseSoundId && ((_i2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _i2.open)) playSound(project.ui.phoneCloseSoundId, void 0, false);
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: false, waiting: false, pendingChoices: void 0, notification: null } } } : null);
         if (project.ui.phoneOnCloseBehavior === "advance" && (playerState == null ? void 0 : playerState.mode) === "playing") {
-          const d0 = (_i2 = playerStateRef.current) == null ? void 0 : _i2.uiState.dialogue;
+          const d0 = (_j2 = playerStateRef.current) == null ? void 0 : _j2.uiState.dialogue;
           if (!((d0 == null ? void 0 : d0.timeLimitLocked) && (d0.timeLimit ?? 0) > 0)) {
             updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
           }
@@ -27154,13 +27177,13 @@ void main() {
         if (a.audioId) {
           const cmd = { type: CommandType.PlayMusic, audioId: a.audioId, loop: a.loop ?? true, fadeDuration: a.fadeDuration ?? 1, volume: a.volume, audioAdjust: a.audioAdjust };
           const r = handlePlayMusic(cmd, { project, playerState: playerStateRef.current, assetResolver, musicAudioRef, fadeAudio, settings, setPlayerState: updatePlayerState });
-          if ((_j2 = r.updates) == null ? void 0 : _j2.musicState) updatePlayerState((p) => p ? { ...p, musicState: { ...p.musicState, ...r.updates.musicState } } : p);
+          if ((_k2 = r.updates) == null ? void 0 : _k2.musicState) updatePlayerState((p) => p ? { ...p, musicState: { ...p.musicState, ...r.updates.musicState } } : p);
         }
       } else if (action.type === UIActionType.StopMusic) {
         const a = action;
         const cmd = { type: CommandType.StopMusic, fadeDuration: a.fadeDuration ?? 1 };
         const r = handleStopMusic(cmd, { musicAudioRef, fadeAudio, playerState: playerStateRef.current });
-        if ((_k2 = r.updates) == null ? void 0 : _k2.musicState) updatePlayerState((p) => p ? { ...p, musicState: { ...p.musicState, ...r.updates.musicState } } : p);
+        if ((_l2 = r.updates) == null ? void 0 : _l2.musicState) updatePlayerState((p) => p ? { ...p, musicState: { ...p.musicState, ...r.updates.musicState } } : p);
       } else if (action.type === UIActionType.StopSound) {
         const a = action;
         stopSfx(a.audioId || null, a.fadeDuration);
@@ -27168,7 +27191,7 @@ void main() {
         const a = action;
         const url = a.videoId ? assetResolver(a.videoId, "video") : null;
         if (url) {
-          const asset = a.videoId ? project.videos[a.videoId] || project.backgrounds[a.videoId] || ((_l2 = project.images) == null ? void 0 : _l2[a.videoId]) : null;
+          const asset = a.videoId ? project.videos[a.videoId] || project.backgrounds[a.videoId] || ((_m2 = project.images) == null ? void 0 : _m2[a.videoId]) : null;
           const trim = resolveVideoTrim({}, asset);
           setActionMovie({ url, loop: !!a.loop, blockInput: !!a.blockInput && !a.loop, onEndActions: a.onEndActions, trimStart: trim.start, trimEnd: trim.end });
         }
@@ -27198,7 +27221,7 @@ void main() {
           return;
         }
         if (!targetId || !playerState.stageState.characters[targetId]) {
-          const who = ((_m2 = project.characters[targetId]) == null ? void 0 : _m2.name) || targetId || "that character";
+          const who = ((_n2 = project.characters[targetId]) == null ? void 0 : _n2.name) || targetId || "that character";
           devNotify(`Nothing happened: ${who} is not on stage right now.`, "warning");
           return;
         }
@@ -27273,10 +27296,10 @@ void main() {
         runtimeDebugLog("JumpToLabel handler triggered:", {
           targetLabel,
           currentSceneId: playerState.currentSceneId,
-          currentSceneName: (_n2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _n2.name,
+          currentSceneName: (_o2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _o2.name,
           screenSceneId: playerState.uiState.screenSceneId,
           targetSceneId,
-          targetSceneName: (_o2 = project.scenes[targetSceneId]) == null ? void 0 : _o2.name
+          targetSceneName: (_p2 = project.scenes[targetSceneId]) == null ? void 0 : _p2.name
         });
         const found = findLabelAcrossScenes(project, targetLabel, targetSceneId);
         if (!found) {
@@ -27387,10 +27410,9 @@ void main() {
           }
         }
       } else if (action.type === UIActionType.SetLanguage) {
-        const code = action.languageCode || ((_p2 = authoredProject == null ? void 0 : authoredProject.localization) == null ? void 0 : _p2.sourceLanguage) || "";
+        const code = action.languageCode || ((_q2 = authoredProject == null ? void 0 : authoredProject.localization) == null ? void 0 : _q2.sourceLanguage) || "";
         runtimeDebugLog("SetLanguage action triggered:", code);
         changeGameLanguage(code);
-        setScreenStack((stack) => languageGateId && stack.length === 1 && stack[0] === languageGateId && titleScreenId ? [titleScreenId] : stack);
       } else if (action.type === UIActionType.CallCommonEvent) {
         const ccAction = action;
         const ce = (project.commonEvents || {})[ccAction.commonEventId];
@@ -27411,7 +27433,7 @@ void main() {
         const savedVariables = {};
         const clearedVariables = [];
         for (const param of ce.parameters || []) {
-          const raw = (_q2 = ccAction.arguments) == null ? void 0 : _q2[param.id];
+          const raw = (_r2 = ccAction.arguments) == null ? void 0 : _r2[param.id];
           overrides[param.id] = raw !== void 0 ? coerceParam(raw, param.type) : param.defaultValue;
           if (Object.prototype.hasOwnProperty.call(playerState.variables, param.id)) savedVariables[param.id] = playerState.variables[param.id];
           else clearedVariables.push(param.id);
@@ -27442,22 +27464,22 @@ void main() {
         });
       } else if (action.type === UIActionType.GiveItem) {
         const a = action;
-        const item = (_r2 = project.items) == null ? void 0 : _r2[a.itemId];
+        const item = (_s2 = project.items) == null ? void 0 : _s2[a.itemId];
         if (item) executeUIAction(item.unique ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 1 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "add", value: a.quantity ?? 1 });
       } else if (action.type === UIActionType.UseItem) {
         const a = action;
-        const item = (_s2 = project.items) == null ? void 0 : _s2[a.itemId];
+        const item = (_t2 = project.items) == null ? void 0 : _t2[a.itemId];
         if (item) {
           if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
           (item.useEffect || []).forEach((eff) => executeUIAction(eff));
         }
       } else if (action.type === UIActionType.DestroyItem) {
         const a = action;
-        const item = (_t2 = project.items) == null ? void 0 : _t2[a.itemId];
+        const item = (_u2 = project.items) == null ? void 0 : _u2[a.itemId];
         if (item) executeUIAction(a.all ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 0 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: a.quantity ?? 1 });
       } else if (action.type === UIActionType.UseSelectedItem) {
-        const selId = (_u2 = playerStateRef.current) == null ? void 0 : _u2.selectedItemId;
-        const item = selId ? (_v2 = project.items) == null ? void 0 : _v2[selId] : void 0;
+        const selId = (_v2 = playerStateRef.current) == null ? void 0 : _v2.selectedItemId;
+        const item = selId ? (_w2 = project.items) == null ? void 0 : _w2[selId] : void 0;
         if (item && item.usable) {
           if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
           (item.useEffect || []).forEach((eff) => executeUIAction(eff));
@@ -27466,7 +27488,7 @@ void main() {
         startCarry(action.itemId);
       } else if (action.type === UIActionType.RestockCollection) {
         const a = action;
-        const collection = (_w2 = project.itemCollections) == null ? void 0 : _w2[a.collectionId];
+        const collection = (_x2 = project.itemCollections) == null ? void 0 : _x2[a.collectionId];
         if (collection) {
           const restocked = computeCollectionRestock(collection, project.variables);
           Object.entries(restocked).forEach(([varId, val]) => {
@@ -27475,12 +27497,12 @@ void main() {
         }
       } else if (action.type === UIActionType.BuyItem || action.type === UIActionType.SellItem || action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem) {
         const a = action;
-        const collection = (_x2 = project.itemCollections) == null ? void 0 : _x2[a.collectionId];
+        const collection = (_y2 = project.itemCollections) == null ? void 0 : _y2[a.collectionId];
         const isBuy = action.type === UIActionType.BuyItem || action.type === UIActionType.BuySelectedItem;
         const isSelected = action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem;
-        const itemId = isSelected ? (_y2 = playerStateRef.current) == null ? void 0 : _y2.selectedItemId : a.itemId;
+        const itemId = isSelected ? (_z2 = playerStateRef.current) == null ? void 0 : _z2.selectedItemId : a.itemId;
         if (collection && itemId) {
-          const curVars = ((_z2 = playerStateRef.current) == null ? void 0 : _z2.variables) || {};
+          const curVars = ((_A2 = playerStateRef.current) == null ? void 0 : _A2.variables) || {};
           const res = isBuy ? computeBuy(itemId, collection, project, curVars) : computeSell(itemId, collection, project, curVars);
           if (!("blocked" in res)) {
             Object.entries(res.updates).forEach(([varId, val]) => {
@@ -27882,7 +27904,7 @@ void main() {
       if (!active) return;
       const id = window.setInterval(() => patchActiveCall((ac) => ac.phase === "active" ? { elapsedMs: ac.elapsedMs + 1e3 } : {}), 1e3);
       return () => window.clearInterval(id);
-    }, [(_m = (_l = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _l.activeCall) == null ? void 0 : _m.phase, playerState == null ? void 0 : playerState.mode]);
+    }, [(_l = (_k = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _k.activeCall) == null ? void 0 : _l.phase, playerState == null ? void 0 : playerState.mode]);
     const notifEntry = (ph, e) => {
       const list = ph.notifications || [];
       return [...list, { ...e, id: `nt-${Date.now()}-${list.length}`, order: list.length }];
@@ -28053,7 +28075,7 @@ void main() {
           callTimeoutRef.current = window.setTimeout(() => resolveIncomingCall("missed"), callRingRemainingRef.current);
         }
       }
-    }, [playerState == null ? void 0 : playerState.mode, (_o = (_n = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _n.incomingCall) == null ? void 0 : _o.phase]);
+    }, [playerState == null ? void 0 : playerState.mode, (_n = (_m = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _m.incomingCall) == null ? void 0 : _n.phase]);
     const handleVariableChange = (variableId, value) => {
       runtimeDebugLog("[handleVariableChange] Called with:", { variableId, value, hasPlayerState: !!playerState });
       if (playerState) {
@@ -28301,6 +28323,7 @@ void main() {
       const handleKeyDown = (e) => {
         var _a2, _b2, _c2, _d2;
         if (!playerState) return;
+        if (isTypingTarget() && e.key !== "Escape") return;
         if ((e.key === " " || e.key === "Enter") && playerState.mode === "playing" && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput) {
           e.preventDefault();
           const d = playerState.uiState.dialogue;
@@ -30402,7 +30425,7 @@ void main() {
                     100% { background-position: 0% 0%; }
                 }
             ` }),
-      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, "data-vn-play-root": true, className: "relative overflow-hidden", style: { cursor: "var(--vn-cursor-normal, default)", width: `min(100vw, calc(100vh * ${((_p = project.gameResolution) == null ? void 0 : _p.width) || 1920} / ${((_q = project.gameResolution) == null ? void 0 : _q.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_r = project.gameResolution) == null ? void 0 : _r.height) || 1080} / ${((_s = project.gameResolution) == null ? void 0 : _s.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_t = project.gameResolution) == null ? void 0 : _t.width) || 1920) : 1, ...screenGlitch ? { filter: "url(#vnfx-stage-glitch)" } : {} }, children: [
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, "data-vn-play-root": true, className: "relative overflow-hidden", style: { cursor: "var(--vn-cursor-normal, default)", width: `min(100vw, calc(100vh * ${((_o = project.gameResolution) == null ? void 0 : _o.width) || 1920} / ${((_p = project.gameResolution) == null ? void 0 : _p.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_q = project.gameResolution) == null ? void 0 : _q.height) || 1080} / ${((_r = project.gameResolution) == null ? void 0 : _r.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_s = project.gameResolution) == null ? void 0 : _s.width) || 1920) : 1, ...screenGlitch ? { filter: "url(#vnfx-stage-glitch)" } : {} }, children: [
         /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `[data-vn-play-root] .cursor-pointer { cursor: var(--vn-cursor-hand, pointer) !important; }` }),
         screenGlitch && /* @__PURE__ */ jsxRuntime2.jsx(StageGlitchFilterDef, { effect: screenGlitch }),
         (playerState == null ? void 0 : playerState.mode) === "playing" ? renderStage() : null,
@@ -30602,7 +30625,7 @@ void main() {
           );
         })()
       ] }),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_u = playerState.uiState.phone) == null ? void 0 : _u.open) && /* @__PURE__ */ jsxRuntime2.jsx(
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_t = playerState.uiState.phone) == null ? void 0 : _t.open) && /* @__PURE__ */ jsxRuntime2.jsx(
         PhonePanel,
         {
           ui: project.ui,
@@ -30721,7 +30744,7 @@ void main() {
           }
         ) });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_w = (_v = playerState.uiState.phone) == null ? void 0 : _v.notification) == null ? void 0 : _w.visible) && !playerState.uiState.phone.open && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_v = (_u = playerState.uiState.phone) == null ? void 0 : _u.notification) == null ? void 0 : _v.visible) && !playerState.uiState.phone.open && (() => {
         const n = playerState.uiState.phone.notification;
         const nchar = !n.senderId || n.senderId === "player" ? null : project.characters[n.senderId];
         const nurls = resolvePhonePortrait(n.portrait, nchar, assetResolver);
@@ -30749,7 +30772,7 @@ void main() {
           }
         );
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_y = (_x = playerState.uiState.phone) == null ? void 0 : _x.incomingCall) == null ? void 0 : _y.phase) === "ringing" && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_x = (_w = playerState.uiState.phone) == null ? void 0 : _w.incomingCall) == null ? void 0 : _x.phase) === "ringing" && (() => {
         const call = playerState.uiState.phone.incomingCall;
         const cchar = call.callerId === "player" ? null : project.characters[call.callerId];
         const curls = resolvePhonePortrait(call.portrait, cchar, assetResolver);
@@ -30795,7 +30818,7 @@ void main() {
           ] })
         ] });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_z = playerState.uiState.phone) == null ? void 0 : _z.outgoingCall) && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_y = playerState.uiState.phone) == null ? void 0 : _y.outgoingCall) && (() => {
         const oc = playerState.uiState.phone.outgoingCall;
         const contact = (project.ui.phoneContacts || []).find((c) => c.characterId === oc.contactId);
         const ochar = project.characters[oc.contactId];
@@ -30813,7 +30836,7 @@ void main() {
           ] })
         ] });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_A = playerState.uiState.phone) == null ? void 0 : _A.unread) && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_z = playerState.uiState.phone) == null ? void 0 : _z.unread) && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
         const bx = project.ui.phoneBadgeX ?? 95;
         const by = project.ui.phoneBadgeY ?? 4;
         const unreadCount = (playerState.uiState.phone.notifications || []).filter((e) => !e.read).length;
@@ -30970,7 +30993,7 @@ void main() {
         /* @__PURE__ */ jsxRuntime2.jsx(
           "img",
           {
-            src: assetResolver(((_B = carriedItem.icon) == null ? void 0 : _B.id) || null, "image") || "",
+            src: assetResolver(((_A = carriedItem.icon) == null ? void 0 : _A.id) || null, "image") || "",
             alt: "",
             draggable: false,
             className: "fixed z-[10052] pointer-events-none select-none",

@@ -349,6 +349,24 @@ function saveGameLanguage(projectId: string, language: string): void {
 /** Fired by the language screen (and by `SetLanguage`) to switch languages mid-play. */
 export const SET_GAME_LANGUAGE_EVENT = 'flourish:setGameLanguage';
 
+/**
+ * Is the player typing right now?
+ *
+ * 🔴 EVERY keyboard shortcut in the engine must check this. A game can put a text field anywhere —
+ * a character creator's name box on a UI screen, a puzzle answer, a phone message — and a shortcut
+ * that fires while someone is typing eats their keystroke. This was reported by a player who
+ * literally could not type the letter "h" into their character's name, because "h" opens the
+ * dialogue history.
+ *
+ * Author-chosen keys are the sharpest edge: a flashlight bound to "f" silently breaks every word
+ * containing an f, and nothing in the editor would warn about it.
+ */
+const isTypingTarget = (): boolean => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el) return false;
+    return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
+};
+
 // ── Remembered timers ("Remember between play sessions") ───────────────────────────────
 // A remembered timer's PROGRESS is stored here so it picks up where it was on the next
 // boot. NOT wall-clock: it only advances while the game is open. Same storage pair as
@@ -7119,12 +7137,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
      * be seen again without clearing browser storage. A test play is the author looking at their
      * game fresh, so they get the new-player experience. Built games keep the once-only rule.
      * (The saved choice still decides which LANGUAGE starts — this only affects the gate.) */
-    const languageGateId = (!startScreenId && !startAt
-        && shouldShowLanguageScreen(authoredProject, {
-            saved: isStandalone ? loadGameLanguage(authoredProject?.id || '') : null,
-        }))
-        ? (authoredProject as any)?.ui?.languageScreenId
-        : null;
+    /* 🔴 Decided ONCE, at mount. It used to be a plain const recomputed every render, and that
+     * caused a bug that only showed up in BUILT games: choosing a language saves it, which makes
+     * `shouldShowLanguageScreen` false, which turned this back to null mid-session — so the gate's
+     * own Continue button stopped matching and did nothing. The editor never saw it because test
+     * play deliberately ignores the saved language. Whether the gate opened is a fact about how
+     * this session started; it must not change underneath us. */
+    const [languageGateId] = useState<VNID | null>(() => (
+        (!startScreenId && !startAt
+            && shouldShowLanguageScreen(authoredProject, {
+                saved: isStandalone ? loadGameLanguage(authoredProject?.id || '') : null,
+            }))
+            ? (authoredProject as any)?.ui?.languageScreenId ?? null
+            : null
+    ));
 
     const [screenStack, setScreenStack] = useState<VNID[]>(
         (startScreenId && project.uiScreens[startScreenId]) ? [startScreenId]
@@ -7233,6 +7259,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // Mirror hudStack into a ref so the parallel scheduler interval can read it without restarting.
     const hudStackRef = useRef<VNID[]>([]);
     hudStackRef.current = hudStack;
+    /* ...and screenStack, for the same reason. A button's action can run against a closure captured
+     * before the stacks last changed, so any action that DECIDES something from a stack (rather
+     * than just updating it) has to read the ref. ToggleScreen got this wrong and left screens
+     * open. */
+    const screenStackRef = useRef<VNID[]>([]);
+    screenStackRef.current = screenStack;
     // Project ref for the plugin runtime bridge (variable name→id resolution).
     const projectRef = useRef(project);
     projectRef.current = project;
@@ -7733,6 +7765,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const key = flashlight?.toggleKey;
         if (!key) return;
         const onKey = (e: KeyboardEvent) => {
+            // A flashlight bound to "f" must not eat the f in a name the player is typing.
+            if (isTypingTarget()) return;
             if (e.key.toLowerCase() === key.toLowerCase()) {
                 e.preventDefault();
                 setFlashlight(f => f ? { ...f, on: !f.on } : f);
@@ -7784,8 +7818,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     useEffect(() => {
         if (!(Object.values(spotlights) as SpotlightState[]).some(s => s.toggleKey)) return;
         const onKey = (e: KeyboardEvent) => {
-            const tgt = e.target as HTMLElement | null;
-            if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return;
+            if (isTypingTarget()) return;
             const k = e.key.toLowerCase();
             setSpotlights(prev => {
                 let changed = false; const next: Record<string, SpotlightState> = {};
@@ -11333,6 +11366,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         };
 
                         const keyHandler = (e: KeyboardEvent) => {
+                            // Typing a space into a name box must not advance the story. Escape
+                            // still works, so a focused field can never strand the player (and
+                            // clicking the stage advances too).
+                            if (isTypingTarget() && e.key !== 'Escape') return;
                             if (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape') {
                                 e.preventDefault();
                                 e.stopPropagation();
@@ -11381,6 +11418,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         };
 
                         const keyHandler = (e: KeyboardEvent) => {
+                            // Typing a space into a name box must not advance the story. Escape
+                            // still works, so a focused field can never strand the player (and
+                            // clicking the stage advances too).
+                            if (isTypingTarget() && e.key !== 'Escape') return;
                             if (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape') {
                                 e.preventDefault();
                                 e.stopPropagation();
@@ -12630,27 +12671,65 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 setScreenStack([targetId]);
                 return;
             }
-            if (playerState && playerState.mode === 'playing') {
-                const isClosing = hudStack.includes(targetId);
-                setHudStack(s => s.includes(targetId) ? s.filter(id => id !== targetId) : [...s, targetId]);
-                if (isClosing) {
-                    // Persist any values the player set on the closing overlay (name, appearance, etc.)
-                    // before honoring the close behavior — same as JumpToScene / ReturnToPreviousScreen.
-                    // flushSync is REQUIRED: a deferred merge + the synchronous clear() below committed
-                    // NOTHING (mergeDirtyUiVariables early-returns on an empty dirty set), which dropped
-                    // dress-up outfits closed via a plain ToggleScreen "Done" button.
-                    flushSync(() => {
-                        updatePlayerState(p => p ? { ...p, variables: mergeDirtyUiVariables(p.variables) } : null);
-                    });
-                    uiDirtyVariableIdsRef.current.clear();
-                    // Closing an overlay via toggle: honor its on-close behavior (default = nothing).
-                    const cs = project.uiScreens[targetId];
-                    const b = cs?.onCloseBehavior || 'default';
-                    if (b === 'advance') updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
-                    else if (b === 'runActions') (cs?.onCloseActions || []).forEach(a => executeUIAction(a));
-                }
+            /* 🔴 Read the stacks from REFS, and close the screen from whichever one holds it.
+             *
+             * This used to decide from the `hudStack` closure and only ever touch `hudStack` while
+             * playing. Two ways that failed: a stale closure made it "open" a screen that was
+             * already open (so the screen stayed put), and a screen sitting on the OTHER stack was
+             * invisible to it entirely. Reported as a character creator whose Finish button left
+             * the screen up while the scene advanced underneath — and it's why Return To Previous
+             * Screen worked where Toggle didn't: that one pops whatever is on top instead of
+             * matching an id against one guessed stack. */
+            const openInHud = hudStackRef.current.includes(targetId);
+            const openInScreens = screenStackRef.current.includes(targetId);
+
+            if (!openInHud && !openInScreens) {
+                // Not open anywhere — this is the "open it" half of the toggle.
+                if (playerState && playerState.mode === 'playing') setHudStack(s => [...s, targetId]);
+                else setScreenStack(s => [...s, targetId]);
             } else {
-                setScreenStack(s => s.includes(targetId) ? s.filter(id => id !== targetId) : [...s, targetId]);
+                /* 🔴 Closing a MODAL screen must step past the Show Screen command that opened it.
+                 *
+                 * A modal Show Screen parks execution ON that command. If the screen closes while
+                 * the command is still current, the loop runs it again and the screen comes
+                 * straight back — seen as "it flashes but doesn't go away", while the player's
+                 * clicks advance the story underneath.
+                 *
+                 * 🔴 ORDER MATTERS, and this is the subtle half. The advance and the close must not
+                 * be separated by a render. The old code closed the stack FIRST and then called
+                 * `flushSync` for the variable merge — which forced a render in between, where the
+                 * screen was already gone but the command had not advanced yet. That in-between
+                 * state is precisely what re-runs Show Screen. Advancing inside the same flushSync,
+                 * BEFORE touching the stacks, means no render ever observes it.
+                 *
+                 * The advance rule itself matches Return To Previous Screen — which is why that
+                 * action worked where this one didn't. A non-blocking HUD advanced when it was
+                 * SHOWN, so closing it must not advance again. */
+                const cs = project.uiScreens[targetId];
+                const b = cs?.onCloseBehavior || 'default';
+                const advanceOnClose = b === 'advance' || (b === 'default' && !cs?.hudNonBlocking);
+
+                // Persist any values the player set on the closing overlay (name, appearance, etc.)
+                // before honoring the close behavior — same as JumpToScene / ReturnToPreviousScreen.
+                // flushSync is REQUIRED: a deferred merge + the synchronous clear() below committed
+                // NOTHING (mergeDirtyUiVariables early-returns on an empty dirty set), which dropped
+                // dress-up outfits closed via a plain ToggleScreen "Done" button.
+                flushSync(() => {
+                    updatePlayerState(p => p ? {
+                        ...p,
+                        variables: mergeDirtyUiVariables(p.variables),
+                        ...(advanceOnClose ? {
+                            currentIndex: p.currentIndex + 1,
+                            uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false },
+                        } : {}),
+                    } : null);
+                });
+                uiDirtyVariableIdsRef.current.clear();
+
+                if (openInHud) setHudStack(s => s.filter(id => id !== targetId));
+                if (openInScreens) setScreenStack(s => s.filter(id => id !== targetId));
+
+                if (!advanceOnClose && b === 'runActions') (cs?.onCloseActions || []).forEach(a => executeUIAction(a));
             }
         } else if (action.type === UIActionType.GoToScreen) {
             const targetId = (action as GoToScreenAction).targetScreenId;
@@ -12819,6 +12898,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         }
                     }
                 }
+            } else if (screenStack.length === 1
+                && screenStack[0] === (authoredProject as any)?.ui?.languageScreenId
+                && titleScreenId && screenStack[0] !== titleScreenId) {
+                /* The language screen is the ONLY thing on the stack, so there is nothing to return
+                 * to and this button would otherwise do nothing. Going on to the title is what
+                 * "Continue" means here — and it's the only way off the gate, since choosing a
+                 * language deliberately doesn't leave.
+                 *
+                 * Deliberately keyed on the SITUATION (what's on the stack) rather than on whether
+                 * the boot gate fired. Keying it on the gate flag is exactly what broke this in
+                 * built games: the flag went stale the moment a language was saved. */
+                runtimeDebugLog('ReturnToPreviousScreen on the language screen with nothing beneath → title');
+                setScreenStack([titleScreenId]);
             } else {
                 if (screenStack.length > 1) {
                     const closingScreenId = screenStack[screenStack.length - 1];
@@ -13674,14 +13766,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const code = (action as any).languageCode || authoredProject?.localization?.sourceLanguage || '';
             runtimeDebugLog('SetLanguage action triggered:', code);
             changeGameLanguage(code);
-            // If this IS the boot gate, choosing a language is the answer to the question — carry
-            // on to the title. The same screen is also reachable mid-game from a button the author
-            // placed, and there the player must stay put, which is why this isn't on the button.
-            setScreenStack(stack => (
-                languageGateId && stack.length === 1 && stack[0] === languageGateId && titleScreenId
-                    ? [titleScreenId]
-                    : stack
-            ));
+            /* 🔴 Choosing a language does NOT leave the screen. It used to advance straight to the
+             * title, which made the screen a one-shot: with a dropdown you could never pick the
+             * language already showing (selecting it fires no change event) and picking any other
+             * exited immediately, so there was no way back. Leaving is the exit button's job —
+             * that also lets a player try a language, see the screen in it, and change their mind. */
         } else if (action.type === UIActionType.CallCommonEvent) {
             // Invoke a Common Event from a button/choice — pushes the current position onto
             // the command stack and switches to the CE's commands; returns to the next command
@@ -14691,7 +14780,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (!playerState) return;
-            
+
+            /* 🔴 While the player is TYPING, no shortcut fires.
+             *
+             * Reported from a real game: a player naming their character couldn't type "h" — it
+             * opened the dialogue history instead. The built-in shortcuts below only checked the
+             * engine's own text-input overlay (`uiState.textInput`), so a Text Input element on a
+             * UI screen — a character creator's name field, reached by Show Screen — wasn't
+             * covered at all. The per-screen hotkeys further down already guarded this properly;
+             * the built-ins never did.
+             *
+             * Escape is the one exception: it types nothing, and it's the universal way out. */
+            if (isTypingTarget() && e.key !== 'Escape') return;
+
             // Spacebar or Enter to advance dialogue (inert on locked timed lines — only the
             // per-line timer advances those).
             if ((e.key === ' ' || e.key === 'Enter') && playerState.mode === 'playing' && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput) {

@@ -99,10 +99,19 @@ describe('the generated screen', () => {
         expect(buttons(createLanguageScreen(withTwo())).map(b => b.text)).toEqual(['English', 'Español', '日本語']);
     });
 
-    it('has a way back out', () => {
-        const back = Object.values(createLanguageScreen(withTwo()).elements)
+    it('🔴 has a Continue button — the only way off the boot gate', () => {
+        // Choosing a language deliberately does NOT leave the screen (otherwise a dropdown could
+        // never re-select the language already showing), so this button carries the whole exit.
+        const exit: any = Object.values(createLanguageScreen(withTwo()).elements)
             .find((el: any) => el.action?.type === UIActionType.ReturnToPreviousScreen);
-        expect(back).toBeTruthy();
+        expect(exit).toBeTruthy();
+        expect(exit.text).toBe('Continue');
+    });
+
+    it('gives the dropdown screen the same way out', () => {
+        const exit = Object.values(createLanguageScreen(withTwo(), 'Language', 'dropdown', 'v1').elements)
+            .find((el: any) => el.action?.type === UIActionType.ReturnToPreviousScreen);
+        expect(exit).toBeTruthy();
     });
 
     it('gives every element a distinct id', () => {

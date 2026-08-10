@@ -146,9 +146,13 @@ export function createLanguageScreen(
         });
     }
 
+    /* "Continue", not "Back": this screen can open BEFORE the title, where there is nothing to go
+     * back to, and it's the only way off that gate — choosing a language deliberately doesn't
+     * leave, so a player can switch, look, and switch again. Mid-game it still returns where they
+     * came from. Like everything here, the author can rename it. */
     const backId = generateId('el');
     elements[backId] = {
-        id: backId, name: 'Back Button', type: UIElementType.Button, text: 'Back',
+        id: backId, name: 'Continue Button', type: UIElementType.Button, text: 'Continue',
         x: 50, y: 88, width: 20, height: 8,
         anchorX: 0.5, anchorY: 0.5, font: BUTTON_FONT,
         action: { type: UIActionType.ReturnToPreviousScreen },
