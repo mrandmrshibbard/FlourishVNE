@@ -20,7 +20,12 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
 
     return (
         <div 
-            className="fixed inset-0 z-[60] flex items-center justify-center"
+            /* 🔴 Above EVERYTHING. This is a blocking "please wait" shown during export, packaging
+             * and sprite import — if anything paints over it, the app looks interactive while it
+             * isn't. At z-60 it sat under the editor's canvas chrome (z-8000), so the zoom buttons
+             * floated on top of the export progress. It also has to clear the Game Builder modal
+             * (z-10001), which is what puts it up here rather than at 9999. */
+            className="fixed inset-0 z-[10050] flex items-center justify-center"
             style={{ 
                 background: 'radial-gradient(ellipse at center, rgba(15, 10, 25, 0.9) 0%, rgba(0, 0, 0, 0.95) 100%)',
                 backdropFilter: 'blur(12px)',

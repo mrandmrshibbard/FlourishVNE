@@ -1038,5 +1038,8 @@
     "speaksAsThePlayerCreated2": "Fala como o personagem criado pelo jogador; a caixa de nome usa o nome que ele escolheu.",
     "overrideIndividualLayersOnTop": "Ajuste camadas individuais por cima da expressão — combine visuais (ex.: rosto feliz + uniforme + blush) sem criar uma expressão só para isso.",
     "fadeDurationS": "Duração do fade (s)"
+  },
+  "screenFx": {
+    "density": "Densidade"
   }
 }

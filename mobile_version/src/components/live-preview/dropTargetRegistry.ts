@@ -18,6 +18,11 @@ export interface RegistryDropTarget {
     id: string;
     /** Hit area in canvas percentages (0-100). */
     rectPct: { x: number; y: number; width: number; height: number };
+    /** The target's visual rotation in degrees. The hit-test inverse-rotates the drop point
+     *  around the rect centre, so a tilted drop zone accepts drops where it is DRAWN, not where
+     *  its unrotated rect would be. Flips need no handling — mirroring a rect doesn't change the
+     *  area it covers. Absent/0 = plain rect test. */
+    rotation?: number;
     /** If set, only these dragged element ids are accepted. */
     acceptedElementIds?: string[];
     /** If set, only a dragged element carrying this tag is accepted. */
@@ -56,7 +61,16 @@ export function hitTestDropTarget(
         if (t.acceptedElementIds && t.acceptedElementIds.length > 0 && !t.acceptedElementIds.includes(draggedId)) continue;
         if (t.acceptTag && t.acceptTag !== draggedTag) continue;
         const { x, y, width, height } = t.rectPct;
-        if (point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + height) {
+        let px = point.x, py = point.y;
+        if (t.rotation) {
+            // Rotating the RECT by θ is testing the point rotated by -θ around the rect centre.
+            const cx = x + width / 2, cy = y + height / 2;
+            const rad = (-t.rotation * Math.PI) / 180;
+            const dx = point.x - cx, dy = point.y - cy;
+            px = cx + dx * Math.cos(rad) - dy * Math.sin(rad);
+            py = cy + dx * Math.sin(rad) + dy * Math.cos(rad);
+        }
+        if (px >= x && px <= x + width && py >= y && py <= y + height) {
             if (!best || t.order > best.order) best = t;
         }
     }

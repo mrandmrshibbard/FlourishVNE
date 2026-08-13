@@ -160,6 +160,10 @@ export interface ButtonOverlay {
 
 /** An interactive hot spot placed on the scene stage (from a ShowHotSpot command). */
 export interface HotSpotOverlay {
+    /** Orientation, carried from the ShowHotSpot command. Additive-optional. */
+    rotation?: number;
+    flipX?: boolean;
+    flipY?: boolean;
     id: VNID;
     /** The ShowHotSpot command id that placed it (for HideHotSpot targeting). */
     commandId: VNID;

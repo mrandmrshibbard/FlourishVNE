@@ -498,11 +498,13 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
     if (!c || intensity <= 0 || safeWidth <= 0 || safeHeight <= 0) return;
     const color = parseColor(fog?.color, { r: 205, g: 210, b: 216 });
     const speed = 0.3 + ep(fog?.params, 'speed') * 1.4;
+    // Density scales the blob count around today's default (unset = 0.5 = ×1.0, byte-identical).
+    const densityFog = 0.5 + ep(fog?.params, 'particleDensity');
     return runCloudSim(c, safeWidth, safeHeight, {
-      intensity, color, blobCount: 16, sizeMin: minDim * 0.28, sizeMax: minDim * 0.55,
+      intensity, color, blobCount: Math.round(16 * densityFog), sizeMin: minDim * 0.28, sizeMax: minDim * 0.55,
       vx: 16, vy: 0, vRand: 10, baseOpacity: 0.5, swirl: 6, speedMul: speed,
     });
-  }, [fog?.intensity, fog?.color, fog?.params?.speed, safeWidth, safeHeight, minDim]);
+  }, [fog?.intensity, fog?.color, fog?.params?.speed, fog?.params?.particleDensity, safeWidth, safeHeight, minDim]);
 
   // Haze — a faint, slow, near-uniform veil (warm/neutral tint).
   useEffect(() => {
@@ -511,11 +513,13 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
     if (!c || intensity <= 0 || safeWidth <= 0 || safeHeight <= 0) return;
     const color = parseColor(haze?.color, { r: 225, g: 222, b: 210 });
     const speed = 0.3 + ep(haze?.params, 'speed') * 1.4;
+    // Density scales the blob count around today's default (unset = 0.5 = ×1.0, byte-identical).
+    const densityHaze = 0.5 + ep(haze?.params, 'particleDensity');
     return runCloudSim(c, safeWidth, safeHeight, {
-      intensity, color, blobCount: 10, sizeMin: minDim * 0.45, sizeMax: minDim * 0.8,
+      intensity, color, blobCount: Math.round(10 * densityHaze), sizeMin: minDim * 0.45, sizeMax: minDim * 0.8,
       vx: 7, vy: 0, vRand: 4, baseOpacity: 0.22, swirl: 3, speedMul: speed,
     });
-  }, [haze?.intensity, haze?.color, haze?.params?.speed, safeWidth, safeHeight, minDim]);
+  }, [haze?.intensity, haze?.color, haze?.params?.speed, haze?.params?.particleDensity, safeWidth, safeHeight, minDim]);
 
   // Smoke — darker, rising, swirling wisps.
   useEffect(() => {
@@ -524,11 +528,13 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
     if (!c || intensity <= 0 || safeWidth <= 0 || safeHeight <= 0) return;
     const color = parseColor(smoke?.color, { r: 70, g: 72, b: 76 });
     const speed = 0.3 + ep(smoke?.params, 'speed') * 1.4;
+    // Density scales the blob count around today's default (unset = 0.5 = ×1.0, byte-identical).
+    const densitySmoke = 0.5 + ep(smoke?.params, 'particleDensity');
     return runCloudSim(c, safeWidth, safeHeight, {
-      intensity, color, blobCount: 14, sizeMin: minDim * 0.18, sizeMax: minDim * 0.42,
+      intensity, color, blobCount: Math.round(14 * densitySmoke), sizeMin: minDim * 0.18, sizeMax: minDim * 0.42,
       vx: 6, vy: -26, vRand: 14, baseOpacity: 0.42, swirl: 16, speedMul: speed,
     });
-  }, [smoke?.intensity, smoke?.color, smoke?.params?.speed, safeWidth, safeHeight, minDim]);
+  }, [smoke?.intensity, smoke?.color, smoke?.params?.speed, smoke?.params?.particleDensity, safeWidth, safeHeight, minDim]);
 
   // Rain effect
   useEffect(() => {
@@ -1125,7 +1131,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
         (isEnhanced(haze.effectStyle) && webglLikelyAvailable()) ? (
           <GlFxCanvas kind="atmosphere" width={safeWidth} height={safeHeight}
             style={haze.params?.blendMode && haze.params.blendMode !== 'normal' ? { mixBlendMode: haze.params.blendMode } : undefined}
-            getParams={() => ({ kind: 'atmosphere', type: 'haze', intensity: clamp01(haze.intensity), color: haze.color, speed: ep(haze.params, 'speed', 1), wind: ep(haze.params, 'windStrength') })} />
+            getParams={() => ({ kind: 'atmosphere', type: 'haze', intensity: clamp01(haze.intensity), color: haze.color, speed: ep(haze.params, 'speed', 1), wind: ep(haze.params, 'windStrength'), density: ep(haze.params, 'particleDensity') })} />
         ) : (
           <canvas ref={hazeCanvasRef} className="vnfx-canvas" aria-hidden />
         )
@@ -1136,7 +1142,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
         (isEnhanced(fog.effectStyle) && webglLikelyAvailable()) ? (
           <GlFxCanvas kind="atmosphere" width={safeWidth} height={safeHeight}
             style={fog.params?.blendMode && fog.params.blendMode !== 'normal' ? { mixBlendMode: fog.params.blendMode } : undefined}
-            getParams={() => ({ kind: 'atmosphere', type: 'fog', intensity: clamp01(fog.intensity), color: fog.color, speed: ep(fog.params, 'speed', 1), wind: ep(fog.params, 'windStrength') })} />
+            getParams={() => ({ kind: 'atmosphere', type: 'fog', intensity: clamp01(fog.intensity), color: fog.color, speed: ep(fog.params, 'speed', 1), wind: ep(fog.params, 'windStrength'), density: ep(fog.params, 'particleDensity') })} />
         ) : (
           <canvas ref={fogCanvasRef} className="vnfx-canvas" aria-hidden />
         )
@@ -1147,7 +1153,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
         (isEnhanced(smoke.effectStyle) && webglLikelyAvailable()) ? (
           <GlFxCanvas kind="atmosphere" width={safeWidth} height={safeHeight}
             style={smoke.params?.blendMode && smoke.params.blendMode !== 'normal' ? { mixBlendMode: smoke.params.blendMode } : undefined}
-            getParams={() => ({ kind: 'atmosphere', type: 'smoke', intensity: clamp01(smoke.intensity), color: smoke.color, speed: ep(smoke.params, 'speed', 1), wind: ep(smoke.params, 'windStrength') })} />
+            getParams={() => ({ kind: 'atmosphere', type: 'smoke', intensity: clamp01(smoke.intensity), color: smoke.color, speed: ep(smoke.params, 'speed', 1), wind: ep(smoke.params, 'windStrength'), density: ep(smoke.params, 'particleDensity') })} />
         ) : (
           <canvas ref={smokeCanvasRef} className="vnfx-canvas" aria-hidden />
         )

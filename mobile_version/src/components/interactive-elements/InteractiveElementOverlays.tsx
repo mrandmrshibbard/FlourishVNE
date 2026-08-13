@@ -25,6 +25,7 @@ import {
 } from '../../features/ui/types';
 import { draggableImageElementRegion } from '../../features/scene/types';
 import ResizableDraggable from '../menu-editor/ResizableDraggable';
+import { buildOrientationTransform } from '../../utils/styleUtils';
 
 /** Renders a Hot Spot overlay on the canvas. Takes a unified `UIHotSpotElement`
  *  directly — its field layout matches the legacy `VNHotSpot` so no conversion
@@ -57,6 +58,9 @@ export const HotSpotOverlay: React.FC<{
             height={spot.height}
             anchorX={0}
             anchorY={0}
+            // Rotation on the BOX (outline + handles follow); flips on the content.
+            rotationDeg={(spot as any).rotation || undefined}
+            contentTransform={buildOrientationTransform({ flipX: (spot as any).flipX, flipY: (spot as any).flipY }) || undefined}
             parentSize={parentSize}
             isSelected={isSelected}
             onSelect={onSelect}
@@ -364,6 +368,10 @@ export const InteractiveElementOverlay: React.FC<{
             height={element.height}
             anchorX={0}
             anchorY={0}
+            // 🔴 From typedElement, NOT `element`: toLegacyHotZoneElement is a typed field list
+            // that strips rotation/flip — reading the converted object made this a silent no-op.
+            rotationDeg={(typedElement as any).rotation || undefined}
+            contentTransform={buildOrientationTransform({ flipX: (typedElement as any).flipX, flipY: (typedElement as any).flipY }) || undefined}
             parentSize={parentSize}
             isSelected={isSelected}
             onSelect={onSelect}

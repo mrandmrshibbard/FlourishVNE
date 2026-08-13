@@ -1022,5 +1022,8 @@
     "speaksAsThePlayerCreated2": "Parle en tant que personnage créé par le joueur ; la boîte de nom utilise le nom qu'il a choisi.",
     "overrideIndividualLayersOnTop": "Ajustez des calques précis par-dessus l'expression — composez des looks (par ex. visage joyeux + uniforme + rougissement) sans créer une expression dédiée.",
     "fadeDurationS": "Durée du fondu (s)"
+  },
+  "screenFx": {
+    "density": "Densité"
   }
 }

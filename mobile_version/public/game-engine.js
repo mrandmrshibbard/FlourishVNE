@@ -4995,7 +4995,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   function isHotSpotElement(el) {
     return el.type === UIElementType.HotSpot;
   }
-  function hotSpotElementToLegacy(el) {
+  function hotSpotElementToLegacyInner(el) {
     return {
       id: el.id,
       name: el.name,
@@ -5016,7 +5016,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       hoverCursorImage: el.hoverCursorImage
     };
   }
-  function elementToLegacyHotZoneElement(el, items) {
+  function elementToLegacyHotZoneElementInner(el, items) {
     var _a, _b, _c, _d, _e, _f, _g;
     const anyEl = el;
     switch (el.type) {
@@ -5201,6 +5201,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       default:
         return null;
     }
+  }
+  const CARRIED_THROUGH = ["rotation", "flipX", "flipY", "layer"];
+  const withSharedElementProps = (converted, source) => {
+    if (!converted) return converted;
+    const extra = {};
+    for (const key of CARRIED_THROUGH) {
+      if ((source == null ? void 0 : source[key]) !== void 0) extra[key] = source[key];
+    }
+    return Object.keys(extra).length ? { ...converted, ...extra } : converted;
+  };
+  function hotSpotElementToLegacy(el) {
+    return withSharedElementProps(hotSpotElementToLegacyInner(el), el);
+  }
+  function elementToLegacyHotZoneElement(el, items) {
+    return withSharedElementProps(elementToLegacyHotZoneElementInner(el, items), el);
   }
   function deriveHotSpotsFromScreen(screen) {
     const out = {};
@@ -5792,6 +5807,94 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (source.split("-")[0].toLowerCase() === base) return source;
     }
     return source;
+  }
+  function computeScreenRenderList(input) {
+    const { stack, impliedBaseId = null, screens, closingScreens } = input;
+    const maxDepth = Math.max(1, input.maxDepth ?? 4);
+    const showsBeneath = (id) => {
+      var _a;
+      return !!(id && ((_a = screens[id]) == null ? void 0 : _a.showScreensBeneath));
+    };
+    const chainEndingAt = (top2, topIndexInStack) => {
+      const collected = [top2];
+      let current = top2;
+      let index = topIndexInStack;
+      while (showsBeneath(current) && collected.length < maxDepth) {
+        let next = null;
+        for (let i = index - 1; i >= 0; i--) {
+          const candidate = stack[i];
+          if (!screens[candidate]) continue;
+          if (collected.includes(candidate)) continue;
+          next = candidate;
+          index = i;
+          break;
+        }
+        if (next === null) {
+          if (impliedBaseId && screens[impliedBaseId] && !collected.includes(impliedBaseId)) {
+            collected.push(impliedBaseId);
+          }
+          break;
+        }
+        collected.push(next);
+        current = next;
+      }
+      return collected.reverse();
+    };
+    const top = stack.length > 0 ? stack[stack.length - 1] : impliedBaseId ?? null;
+    if (!top) return [];
+    const topClosing = closingScreens.has(top);
+    if (topClosing && stack.length >= 2) {
+      if (showsBeneath(top)) {
+        const beneathChain = chainEndingAt(stack[stack.length - 2], stack.length - 2);
+        const entries2 = beneathChain.map((id, i) => ({
+          id,
+          isClosing: false,
+          inert: i < beneathChain.length - 1
+        }));
+        entries2.push({ id: top, isClosing: true, inert: true });
+        return entries2;
+      }
+      const revealedChain = chainEndingAt(stack[stack.length - 2], stack.length - 2);
+      return [
+        { id: top, isClosing: true, inert: false },
+        ...revealedChain.map((id, i) => ({
+          id,
+          isClosing: false,
+          inert: i < revealedChain.length - 1
+        }))
+      ];
+    }
+    const entries = [];
+    for (const id of stack) {
+      if (id !== top && closingScreens.has(id)) {
+        entries.push({ id, isClosing: true, inert: false });
+      }
+    }
+    const chain2 = chainEndingAt(top, stack.length - 1);
+    for (let i = 0; i < chain2.length; i++) {
+      const id = chain2[i];
+      const isTop = i === chain2.length - 1;
+      entries.push({
+        id,
+        isClosing: isTop ? closingScreens.has(id) : false,
+        inert: !isTop
+      });
+    }
+    return entries;
+  }
+  function conditionVisibilityOf(conditionsMet, element) {
+    if (element.conditionTransition !== "fade") {
+      return { mount: conditionsMet, style: {} };
+    }
+    const seconds = element.conditionTransitionDuration ?? 0.3;
+    return {
+      mount: true,
+      style: {
+        opacity: conditionsMet ? void 0 : 0,
+        ...conditionsMet ? {} : { pointerEvents: "none" },
+        transition: `opacity ${seconds}s ease`
+      }
+    };
   }
   function isSongUnlocked(entry, variables) {
     if (!entry.unlockable) return true;
@@ -7114,11 +7217,13 @@ void main() {
     gl_FragColor = vec4(uColor * a, a);
 }
 `;
-  function atmosphereConfig(type, speed = 1, wind = 0.5) {
+  function atmosphereConfig(type, speed = 1, wind = 0.5, density = 0.5) {
+    const dAlpha = 0.5 + density;
+    const dContrast = 1.25 - density * 0.5;
     const drift = 0.012 * speed * (0.5 + wind);
-    if (type === "fog") return { drift: [drift, 2e-3 * speed], scale: 3.2, contrast: 1.35, bandY: 0.16, bandSoft: 0.55, baseAlpha: 0.8, defaultColor: "#cdd6e0" };
-    if (type === "haze") return { drift: [drift * 0.6, 0], scale: 2.2, contrast: 1, bandY: 0.5, bandSoft: 1, baseAlpha: 0.55, defaultColor: "#c9cfd8" };
-    return { drift: [drift * 0.8, -0.01 * speed], scale: 4, contrast: 1.7, bandY: 0.3, bandSoft: 0.8, baseAlpha: 0.85, defaultColor: "#4a4a52" };
+    if (type === "fog") return { drift: [drift, 2e-3 * speed], scale: 3.2, contrast: 1.35 * dContrast, bandY: 0.16, bandSoft: 0.55, baseAlpha: Math.min(1, 0.8 * dAlpha), defaultColor: "#cdd6e0" };
+    if (type === "haze") return { drift: [drift * 0.6, 0], scale: 2.2, contrast: 1 * dContrast, bandY: 0.5, bandSoft: 1, baseAlpha: Math.min(1, 0.55 * dAlpha), defaultColor: "#c9cfd8" };
+    return { drift: [drift * 0.8, -0.01 * speed], scale: 4, contrast: 1.7 * dContrast, bandY: 0.3, bandSoft: 0.8, baseAlpha: Math.min(1, 0.85 * dAlpha), defaultColor: "#4a4a52" };
   }
   const FS_BY_KIND = {
     lights: LIGHTS_FS,
@@ -7211,7 +7316,7 @@ void main() {
           gl.drawArrays(gl.TRIANGLES, 0, 3);
         } else {
           gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-          const cfg = atmosphereConfig(p.type, p.speed ?? 1, p.wind ?? 0.5);
+          const cfg = atmosphereConfig(p.type, p.speed ?? 1, p.wind ?? 0.5, p.density ?? 0.5);
           const col = hexToRgb01(p.color || cfg.defaultColor, [0.8, 0.84, 0.88]);
           gl.uniform2f(loc("uResolution"), w, h);
           gl.uniform1f(loc("uTime"), t);
@@ -9850,7 +9955,7 @@ void main() {
     height,
     className
   }) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
     const normalized = React2.useMemo(() => normalizeOverlayEffects(effects), [effects]);
     const safeWidth = Math.max(0, Math.min(width, 4096));
     const safeHeight = Math.max(0, Math.min(height, 4096));
@@ -9888,10 +9993,11 @@ void main() {
       if (!c || intensity <= 0 || safeWidth <= 0 || safeHeight <= 0) return;
       const color = parseColor(fog == null ? void 0 : fog.color, { r: 205, g: 210, b: 216 });
       const speed = 0.3 + ep(fog == null ? void 0 : fog.params, "speed") * 1.4;
+      const densityFog = 0.5 + ep(fog == null ? void 0 : fog.params, "particleDensity");
       return runCloudSim(c, safeWidth, safeHeight, {
         intensity,
         color,
-        blobCount: 16,
+        blobCount: Math.round(16 * densityFog),
         sizeMin: minDim * 0.28,
         sizeMax: minDim * 0.55,
         vx: 16,
@@ -9901,17 +10007,18 @@ void main() {
         swirl: 6,
         speedMul: speed
       });
-    }, [fog == null ? void 0 : fog.intensity, fog == null ? void 0 : fog.color, (_a = fog == null ? void 0 : fog.params) == null ? void 0 : _a.speed, safeWidth, safeHeight, minDim]);
+    }, [fog == null ? void 0 : fog.intensity, fog == null ? void 0 : fog.color, (_a = fog == null ? void 0 : fog.params) == null ? void 0 : _a.speed, (_b = fog == null ? void 0 : fog.params) == null ? void 0 : _b.particleDensity, safeWidth, safeHeight, minDim]);
     React2.useEffect(() => {
       const intensity = clamp01((haze == null ? void 0 : haze.intensity) ?? 0);
       const c = hazeCanvasRef.current;
       if (!c || intensity <= 0 || safeWidth <= 0 || safeHeight <= 0) return;
       const color = parseColor(haze == null ? void 0 : haze.color, { r: 225, g: 222, b: 210 });
       const speed = 0.3 + ep(haze == null ? void 0 : haze.params, "speed") * 1.4;
+      const densityHaze = 0.5 + ep(haze == null ? void 0 : haze.params, "particleDensity");
       return runCloudSim(c, safeWidth, safeHeight, {
         intensity,
         color,
-        blobCount: 10,
+        blobCount: Math.round(10 * densityHaze),
         sizeMin: minDim * 0.45,
         sizeMax: minDim * 0.8,
         vx: 7,
@@ -9921,17 +10028,18 @@ void main() {
         swirl: 3,
         speedMul: speed
       });
-    }, [haze == null ? void 0 : haze.intensity, haze == null ? void 0 : haze.color, (_b = haze == null ? void 0 : haze.params) == null ? void 0 : _b.speed, safeWidth, safeHeight, minDim]);
+    }, [haze == null ? void 0 : haze.intensity, haze == null ? void 0 : haze.color, (_c = haze == null ? void 0 : haze.params) == null ? void 0 : _c.speed, (_d = haze == null ? void 0 : haze.params) == null ? void 0 : _d.particleDensity, safeWidth, safeHeight, minDim]);
     React2.useEffect(() => {
       const intensity = clamp01((smoke == null ? void 0 : smoke.intensity) ?? 0);
       const c = smokeCanvasRef.current;
       if (!c || intensity <= 0 || safeWidth <= 0 || safeHeight <= 0) return;
       const color = parseColor(smoke == null ? void 0 : smoke.color, { r: 70, g: 72, b: 76 });
       const speed = 0.3 + ep(smoke == null ? void 0 : smoke.params, "speed") * 1.4;
+      const densitySmoke = 0.5 + ep(smoke == null ? void 0 : smoke.params, "particleDensity");
       return runCloudSim(c, safeWidth, safeHeight, {
         intensity,
         color,
-        blobCount: 14,
+        blobCount: Math.round(14 * densitySmoke),
         sizeMin: minDim * 0.18,
         sizeMax: minDim * 0.42,
         vx: 6,
@@ -9941,7 +10049,7 @@ void main() {
         swirl: 16,
         speedMul: speed
       });
-    }, [smoke == null ? void 0 : smoke.intensity, smoke == null ? void 0 : smoke.color, (_c = smoke == null ? void 0 : smoke.params) == null ? void 0 : _c.speed, safeWidth, safeHeight, minDim]);
+    }, [smoke == null ? void 0 : smoke.intensity, smoke == null ? void 0 : smoke.color, (_e = smoke == null ? void 0 : smoke.params) == null ? void 0 : _e.speed, (_f = smoke == null ? void 0 : smoke.params) == null ? void 0 : _f.particleDensity, safeWidth, safeHeight, minDim]);
     React2.useEffect(() => {
       const intensity = clamp01((rain == null ? void 0 : rain.intensity) ?? 0);
       const canvas = rainCanvasRef.current;
@@ -10012,7 +10120,7 @@ void main() {
       };
       raf = requestAnimationFrame(draw);
       return () => cancelAnimationFrame(raf);
-    }, [rain == null ? void 0 : rain.intensity, rain == null ? void 0 : rain.color, (_d = rain == null ? void 0 : rain.params) == null ? void 0 : _d.windStrength, (_e = rain == null ? void 0 : rain.params) == null ? void 0 : _e.dropLength, (_f = rain == null ? void 0 : rain.params) == null ? void 0 : _f.speed, safeWidth, safeHeight]);
+    }, [rain == null ? void 0 : rain.intensity, rain == null ? void 0 : rain.color, (_g = rain == null ? void 0 : rain.params) == null ? void 0 : _g.windStrength, (_h = rain == null ? void 0 : rain.params) == null ? void 0 : _h.dropLength, (_i = rain == null ? void 0 : rain.params) == null ? void 0 : _i.speed, safeWidth, safeHeight]);
     React2.useEffect(() => {
       const intensity = clamp01((snowAsh == null ? void 0 : snowAsh.intensity) ?? 0);
       const canvas = snowCanvasRef.current;
@@ -10087,7 +10195,7 @@ void main() {
       };
       raf = requestAnimationFrame(draw);
       return () => cancelAnimationFrame(raf);
-    }, [snowAsh == null ? void 0 : snowAsh.intensity, snowAsh == null ? void 0 : snowAsh.variant, snowAsh == null ? void 0 : snowAsh.color, (_g = snowAsh == null ? void 0 : snowAsh.params) == null ? void 0 : _g.particleSize, (_h = snowAsh == null ? void 0 : snowAsh.params) == null ? void 0 : _h.windStrength, (_i = snowAsh == null ? void 0 : snowAsh.params) == null ? void 0 : _i.speed, safeWidth, safeHeight]);
+    }, [snowAsh == null ? void 0 : snowAsh.intensity, snowAsh == null ? void 0 : snowAsh.variant, snowAsh == null ? void 0 : snowAsh.color, (_j = snowAsh == null ? void 0 : snowAsh.params) == null ? void 0 : _j.particleSize, (_k = snowAsh == null ? void 0 : snowAsh.params) == null ? void 0 : _k.windStrength, (_l = snowAsh == null ? void 0 : snowAsh.params) == null ? void 0 : _l.speed, safeWidth, safeHeight]);
     React2.useEffect(() => {
       const intensity = clamp01((sunbeams == null ? void 0 : sunbeams.intensity) ?? 0);
       const canvas = sunbeamsCanvasRef.current;
@@ -10160,7 +10268,7 @@ void main() {
       };
       raf = requestAnimationFrame(draw);
       return () => cancelAnimationFrame(raf);
-    }, [sunbeams == null ? void 0 : sunbeams.intensity, sunbeams == null ? void 0 : sunbeams.color, (_j = sunbeams == null ? void 0 : sunbeams.params) == null ? void 0 : _j.speed, (_k = sunbeams == null ? void 0 : sunbeams.params) == null ? void 0 : _k.spread, safeWidth, safeHeight]);
+    }, [sunbeams == null ? void 0 : sunbeams.intensity, sunbeams == null ? void 0 : sunbeams.color, (_m = sunbeams == null ? void 0 : sunbeams.params) == null ? void 0 : _m.speed, (_n = sunbeams == null ? void 0 : sunbeams.params) == null ? void 0 : _n.spread, safeWidth, safeHeight]);
     React2.useEffect(() => {
       const intensity = clamp01((shimmer == null ? void 0 : shimmer.intensity) ?? 0);
       const canvas = shimmerCanvasRef.current;
@@ -10260,7 +10368,7 @@ void main() {
       };
       raf = requestAnimationFrame(draw);
       return () => cancelAnimationFrame(raf);
-    }, [shimmer == null ? void 0 : shimmer.intensity, shimmer == null ? void 0 : shimmer.color, (_l = shimmer == null ? void 0 : shimmer.params) == null ? void 0 : _l.speed, (_m = shimmer == null ? void 0 : shimmer.params) == null ? void 0 : _m.particleDensity, (_n = shimmer == null ? void 0 : shimmer.params) == null ? void 0 : _n.shimmerSide, (_o = shimmer == null ? void 0 : shimmer.params) == null ? void 0 : _o.shimmerDirection, (_p = shimmer == null ? void 0 : shimmer.params) == null ? void 0 : _p.shimmerParticlesOnly, safeWidth, safeHeight]);
+    }, [shimmer == null ? void 0 : shimmer.intensity, shimmer == null ? void 0 : shimmer.color, (_o = shimmer == null ? void 0 : shimmer.params) == null ? void 0 : _o.speed, (_p = shimmer == null ? void 0 : shimmer.params) == null ? void 0 : _p.particleDensity, (_q = shimmer == null ? void 0 : shimmer.params) == null ? void 0 : _q.shimmerSide, (_r = shimmer == null ? void 0 : shimmer.params) == null ? void 0 : _r.shimmerDirection, (_s = shimmer == null ? void 0 : shimmer.params) == null ? void 0 : _s.shimmerParticlesOnly, safeWidth, safeHeight]);
     React2.useEffect(() => {
       const canvas = fireworksCanvasRef.current;
       if (!canvas || !fireworks || clamp01(fireworks.intensity) <= 0 || safeWidth <= 0 || safeHeight <= 0) return;
@@ -10270,7 +10378,7 @@ void main() {
         speedMul: 0.5 + ep(fireworks.params, "speed", 0.5) * 1.6,
         continuous: true
       });
-    }, [fireworks == null ? void 0 : fireworks.intensity, fireworks == null ? void 0 : fireworks.color, (_q = fireworks == null ? void 0 : fireworks.params) == null ? void 0 : _q.speed, safeWidth, safeHeight]);
+    }, [fireworks == null ? void 0 : fireworks.intensity, fireworks == null ? void 0 : fireworks.color, (_t = fireworks == null ? void 0 : fireworks.params) == null ? void 0 : _t.speed, safeWidth, safeHeight]);
     const scanlinesOpacity = clamp01((scanlines == null ? void 0 : scanlines.intensity) ?? 0) * 0.65;
     const chromaOpacity = clamp01((chroma == null ? void 0 : chroma.intensity) ?? 0);
     const slLineSpacing = 2 + ep(scanlines == null ? void 0 : scanlines.params, "lineSpacing") * 6;
@@ -10282,8 +10390,8 @@ void main() {
     const glBlockiness = ep(glitch == null ? void 0 : glitch.params, "blockiness");
     1 + ep(glitch == null ? void 0 : glitch.params, "chromaticSpread") * 10;
     const glDur = Math.max(0.4, 2.2 - ep(glitch == null ? void 0 : glitch.params, "speed") * 1.8);
-    const sunbeamsBlend = ((_r = sunbeams == null ? void 0 : sunbeams.params) == null ? void 0 : _r.blendMode) || "screen";
-    const shimmerBlend = ((_s = shimmer == null ? void 0 : shimmer.params) == null ? void 0 : _s.blendMode) || "overlay";
+    const sunbeamsBlend = ((_u = sunbeams == null ? void 0 : sunbeams.params) == null ? void 0 : _u.blendMode) || "screen";
+    const shimmerBlend = ((_v = shimmer == null ? void 0 : shimmer.params) == null ? void 0 : _v.blendMode) || "overlay";
     return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className, children: [
       scanlinesOpacity > 0 && /* @__PURE__ */ jsxRuntime2.jsx(
         "div",
@@ -10308,7 +10416,7 @@ void main() {
         }
       ),
       glitchOpacity > 0 && /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
-        (((_u = (_t = glitch == null ? void 0 : glitch.params) == null ? void 0 : _t.colors) == null ? void 0 : _u.length) ? glitch.params.colors : [glColor]).map((c, ci, all) => /* @__PURE__ */ jsxRuntime2.jsx(
+        (((_x = (_w = glitch == null ? void 0 : glitch.params) == null ? void 0 : _w.colors) == null ? void 0 : _x.length) ? glitch.params.colors : [glColor]).map((c, ci, all) => /* @__PURE__ */ jsxRuntime2.jsx(
           "div",
           {
             className: "vnfx-glitch-bands",
@@ -10399,8 +10507,8 @@ void main() {
           kind: "atmosphere",
           width: safeWidth,
           height: safeHeight,
-          style: ((_v = haze.params) == null ? void 0 : _v.blendMode) && haze.params.blendMode !== "normal" ? { mixBlendMode: haze.params.blendMode } : void 0,
-          getParams: () => ({ kind: "atmosphere", type: "haze", intensity: clamp01(haze.intensity), color: haze.color, speed: ep(haze.params, "speed", 1), wind: ep(haze.params, "windStrength") })
+          style: ((_y = haze.params) == null ? void 0 : _y.blendMode) && haze.params.blendMode !== "normal" ? { mixBlendMode: haze.params.blendMode } : void 0,
+          getParams: () => ({ kind: "atmosphere", type: "haze", intensity: clamp01(haze.intensity), color: haze.color, speed: ep(haze.params, "speed", 1), wind: ep(haze.params, "windStrength"), density: ep(haze.params, "particleDensity") })
         }
       ) : /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: hazeCanvasRef, className: "vnfx-canvas", "aria-hidden": true })),
       fog && clamp01(fog.intensity) > 0 && (isEnhanced(fog.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(
@@ -10409,8 +10517,8 @@ void main() {
           kind: "atmosphere",
           width: safeWidth,
           height: safeHeight,
-          style: ((_w = fog.params) == null ? void 0 : _w.blendMode) && fog.params.blendMode !== "normal" ? { mixBlendMode: fog.params.blendMode } : void 0,
-          getParams: () => ({ kind: "atmosphere", type: "fog", intensity: clamp01(fog.intensity), color: fog.color, speed: ep(fog.params, "speed", 1), wind: ep(fog.params, "windStrength") })
+          style: ((_z = fog.params) == null ? void 0 : _z.blendMode) && fog.params.blendMode !== "normal" ? { mixBlendMode: fog.params.blendMode } : void 0,
+          getParams: () => ({ kind: "atmosphere", type: "fog", intensity: clamp01(fog.intensity), color: fog.color, speed: ep(fog.params, "speed", 1), wind: ep(fog.params, "windStrength"), density: ep(fog.params, "particleDensity") })
         }
       ) : /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: fogCanvasRef, className: "vnfx-canvas", "aria-hidden": true })),
       smoke && clamp01(smoke.intensity) > 0 && (isEnhanced(smoke.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(
@@ -10419,8 +10527,8 @@ void main() {
           kind: "atmosphere",
           width: safeWidth,
           height: safeHeight,
-          style: ((_x = smoke.params) == null ? void 0 : _x.blendMode) && smoke.params.blendMode !== "normal" ? { mixBlendMode: smoke.params.blendMode } : void 0,
-          getParams: () => ({ kind: "atmosphere", type: "smoke", intensity: clamp01(smoke.intensity), color: smoke.color, speed: ep(smoke.params, "speed", 1), wind: ep(smoke.params, "windStrength") })
+          style: ((_A = smoke.params) == null ? void 0 : _A.blendMode) && smoke.params.blendMode !== "normal" ? { mixBlendMode: smoke.params.blendMode } : void 0,
+          getParams: () => ({ kind: "atmosphere", type: "smoke", intensity: clamp01(smoke.intensity), color: smoke.color, speed: ep(smoke.params, "speed", 1), wind: ep(smoke.params, "windStrength"), density: ep(smoke.params, "particleDensity") })
         }
       ) : /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: smokeCanvasRef, className: "vnfx-canvas", "aria-hidden": true })),
       fireworks && clamp01(fireworks.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: fireworksCanvasRef, className: "vnfx-canvas", style: { mixBlendMode: "screen" }, "aria-hidden": true }),
@@ -11003,7 +11111,15 @@ void main() {
       if (t.acceptedElementIds && t.acceptedElementIds.length > 0 && !t.acceptedElementIds.includes(draggedId)) continue;
       if (t.acceptTag && t.acceptTag !== draggedTag) continue;
       const { x, y, width, height } = t.rectPct;
-      if (point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + height) {
+      let px = point.x, py = point.y;
+      if (t.rotation) {
+        const cx = x + width / 2, cy = y + height / 2;
+        const rad = -t.rotation * Math.PI / 180;
+        const dx = point.x - cx, dy = point.y - cy;
+        px = cx + dx * Math.cos(rad) - dy * Math.sin(rad);
+        py = cy + dx * Math.sin(rad) + dy * Math.cos(rad);
+      }
+      if (px >= x && px <= x + width && py >= y && py <= y + height) {
         if (!best || t.order > best.order) best = t;
       }
     }
@@ -16699,6 +16815,7 @@ void main() {
       return registerDropTarget({
         id: `scene-${overlay.commandId}`,
         rectPct: { x: overlay.x, y: overlay.y, width: overlay.width, height: overlay.height },
+        rotation: overlay.rotation,
         acceptTag: overlay.acceptedTag || void 0,
         onDrop: () => {
           (overlay.actions || []).forEach((a) => onAction(a));
@@ -16721,6 +16838,9 @@ void main() {
       // Honor a per-spot layer so items/images can sit above a hot spot (1 + layer*100, the shared
       // overlay band). Without a layer set, keep the legacy fixed z (above characters z-5, below dialogue z-20).
       zIndex: overlay.layer != null ? 1 + overlay.layer * 100 : 8,
+      // Rotation/flip — rotates the click/hover hit area for free (handlers on this div);
+      // drag-drop coordinate hit-tests handle rotation in dropTargetRegistry.
+      transform: buildOrientationTransform(overlay) || void 0,
       // drag-drop spots are pure drop zones (coordinate hit-test) — don't capture clicks,
       // so empty/drag clicks still reach the stage. click/hover spots capture.
       pointerEvents: overlay.trigger === "drag-drop" ? "none" : "auto",
@@ -19352,6 +19472,7 @@ void main() {
         unregs.push(registerDropTarget({
           id: `screen-${screen.id}-${spot.id}`,
           rectPct: { x: spot.x, y: spot.y, width: spot.width, height: spot.height },
+          rotation: spot.rotation,
           acceptedElementIds: spot.acceptedElementIds,
           acceptTag: spot.acceptTag || void 0,
           onDrop: () => {
@@ -19476,6 +19597,11 @@ void main() {
                 border: spot.visible ? `2px dashed ${spot.highlightColor || "rgba(59, 130, 246, 0.5)"}` : "none",
                 opacity: spot.visible ? spot.visibleOpacity ?? 1 : void 0,
                 pointerEvents: spot.trigger === "drag-drop" ? "none" : "auto",
+                /* Rotation/flip. For click/hover spots this also rotates the HIT AREA
+                 * for free — the handlers sit on this transformed div. Drag-drop spots
+                 * hit-test by coordinates instead; that path handles rotation itself
+                 * (see dropTargetRegistry). */
+                transform: buildOrientationTransform(spot) || void 0,
                 cursor: vnCursorFor(spot.hoverCursor, (_a = spot.hoverCursorImage) == null ? void 0 : _a.id, (spot.trigger || "click") === "click" ? "var(--vn-cursor-hand, pointer)" : void 0)
               },
               onClick: () => handleSpotClick(spot),
@@ -19518,9 +19644,22 @@ void main() {
                 width: `${el.width}%`,
                 height: `${el.height}%`,
                 cursor: el.draggable ? isDragging ? "var(--vn-cursor-grabbing, grabbing)" : vnCursorFor(el.hoverCursor, (_a = el.hoverCursorImage) == null ? void 0 : _a.id, "var(--vn-cursor-drag, grab)") : elType === "textInput" ? "text" : vnCursorFor(el.hoverCursor, (_b = el.hoverCursorImage) == null ? void 0 : _b.id, "var(--vn-cursor-hand, pointer)"),
-                zIndex: isDragging ? 50 : 10,
+                /* 🔴 Respect the element's LAYER — but only when the author SET one.
+                 * With no layer, keep the legacy fixed z (10): these elements always
+                 * rendered above ordinary screen elements' defaults, and computing
+                 * `1 + 0*100 = 1` here silently dropped every existing hot spot from
+                 * 10 to 1, behind things it used to beat. Same unset-preserving rule
+                 * as the scene hot spots at their `: 8` fallback.
+                 * A dragged item lifts above everything, including high layers. */
+                zIndex: isDragging ? 1e5 : el.layer != null ? 1 + el.layer * 100 : 10,
                 pointerEvents: isFadedOut ? "none" : "auto",
                 opacity: isFadedOut ? 0 : void 0,
+                /* 🔴 Interactive elements (hot spots, draggables, Interactive Images)
+                 * are laid out by this renderer rather than the ordinary screen-element
+                 * one, and it never applied the element's orientation — so Rotate /
+                 * flip commands did nothing to anything a player could drag. Same
+                 * helper the other paths use, so they can't drift apart again. */
+                transform: buildOrientationTransform(el) || void 0,
                 transition: isDragging ? "none" : "left 0.2s, top 0.2s",
                 animation: anim ? `${animationKeyframes[anim.animation] || "hz-shake"} ${anim.duration}ms ease` : void 0
               },
@@ -19591,7 +19730,7 @@ void main() {
       ] })
     );
   };
-  const UIScreenRenderer = React2.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions: evaluateConditions2, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, elementVisibility, saveStorageBroken, pickedItemElementIds, onItemPickup }) => {
+  const UIScreenRenderer = React2.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, inertBeneath = false, evaluateConditions: evaluateConditions2, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, elementVisibility, saveStorageBroken, pickedItemElementIds, onItemPickup }) => {
     var _a, _b;
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
@@ -19777,12 +19916,15 @@ void main() {
     const renderElement = (element, variables2, project2, onCommitVariables2) => {
       var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F;
       runtimeDebugLog("🎯 renderElement called:", element.type, element.name, element.id);
+      let conditionStyle = {};
       if (element.conditions && element.conditions.length > 0) {
         const conditionsMet = evaluateConditions2(element.conditions, variables2);
-        if (!conditionsMet) {
+        const visibility = conditionVisibilityOf(conditionsMet, element);
+        if (!visibility.mount) {
           runtimeDebugLog("🚫 Element conditions not met, skipping render:", element.name);
           return null;
         }
+        conditionStyle = visibility.style;
       }
       const activeState = pickActiveAppearanceState(element, variables2, evaluateConditions2);
       if (activeState) element = mergeAppearanceStatePrimary(element, activeState);
@@ -19834,8 +19976,15 @@ void main() {
         ...isDisabled ? { pointerEvents: "none", cursor: "not-allowed" } : {},
         ...combinedFilter ? { filter: combinedFilter } : {},
         ...stateTransition ? { transition: stateTransition } : {},
-        ...transitionStyle
+        ...transitionStyle,
+        /* Condition-driven fade LAST, so its opacity-0 wins over entrance animations while
+         * hidden. Empty object (the default) touches nothing. Its transition would clobber
+         * one set above; merge instead when both exist. */
+        ...conditionStyle
       };
+      if (conditionStyle.transition && transitionStyle.transition) {
+        style.transition = `${transitionStyle.transition}, ${conditionStyle.transition}`;
+      }
       {
         const visOverride = elementVisibility == null ? void 0 : elementVisibility[element.id];
         if (element.startHidden || visOverride !== void 0) {
@@ -20943,11 +21092,15 @@ void main() {
       "div",
       {
         ref: screenRootRef,
+        inert: inertBeneath || void 0,
         className: "absolute inset-0 w-full h-full",
         style: {
           isolation: "isolate",
           ...screenTransitionStyle,
           ...isPassThrough ? { pointerEvents: "none" } : {},
+          // Belt and braces with the `inert` attribute above: inert kills focus/interaction,
+          // pointerEvents:none stops the subtree being a hit-test target at all.
+          ...inertBeneath ? { pointerEvents: "none" } : {},
           // Pass-through HUDs normally sit below the dialogue box (z20) + choices (z30). When
           // `hudAboveDialogue` is set, lift this overlay above them (but below flash/history z50)
           // so its buttons are visible + clickable while dialogue/choices are on screen. Empty
@@ -21558,7 +21711,7 @@ void main() {
     );
   };
   const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false, startAt = null, startScreenId = null }) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C;
     const outerProjectContext = useProject();
     const { project: authoredProject } = outerProjectContext;
     const [gameLanguage, setGameLanguage] = React2.useState(() => detectStartLanguage(authoredProject, { saved: loadGameLanguage((authoredProject == null ? void 0 : authoredProject.id) || "") }));
@@ -21668,8 +21821,15 @@ void main() {
         setSettings((s) => !!s.fullscreen === active ? s : { ...s, fullscreen: active });
       };
       document.addEventListener("fullscreenchange", syncFromBrowser);
-      return () => document.removeEventListener("fullscreenchange", syncFromBrowser);
-    }, []);
+      return () => {
+        var _a2;
+        document.removeEventListener("fullscreenchange", syncFromBrowser);
+        if (!isStandalone && document.fullscreenElement) {
+          (_a2 = document.exitFullscreen) == null ? void 0 : _a2.call(document).catch(() => {
+          });
+        }
+      };
+    }, [isStandalone]);
     const applyFullscreen = React2.useCallback(async (wanted) => {
       var _a2, _b2, _c2;
       try {
@@ -24948,6 +25108,9 @@ void main() {
                     visibleOpacity: cmd.visibleOpacity,
                     advanceOnTrigger: cmd.advanceOnTrigger,
                     layer: cmd.layer,
+                    rotation: cmd.rotation,
+                    flipX: cmd.flipX,
+                    flipY: cmd.flipY,
                     hoverCursor: cmd.hoverCursor,
                     hoverCursorImage: cmd.hoverCursorImage
                   }
@@ -25907,6 +26070,9 @@ void main() {
                         visibleOpacity: cmd.visibleOpacity,
                         advanceOnTrigger: cmd.advanceOnTrigger,
                         layer: cmd.layer,
+                        rotation: cmd.rotation,
+                        flipX: cmd.flipX,
+                        flipY: cmd.flipY,
                         hoverCursor: cmd.hoverCursor,
                         hoverCursorImage: cmd.hoverCursorImage
                       }
@@ -26586,7 +26752,7 @@ void main() {
         }
         if (playerState && playerState.mode === "playing") {
           setHudStack((s) => {
-            const departingId = s.length > 0 ? s[s.length - 1] : null;
+            const departingId = !targetScreen.showScreensBeneath && s.length > 0 ? s[s.length - 1] : null;
             if (departingId) {
               const departingScreen = project.uiScreens[departingId];
               const depTransOut = (departingScreen == null ? void 0 : departingScreen.transitionOut) || "fade";
@@ -26606,7 +26772,7 @@ void main() {
           });
         } else {
           setScreenStack((stack) => {
-            const departingId = stack.length > 0 ? stack[stack.length - 1] : null;
+            const departingId = !targetScreen.showScreensBeneath && stack.length > 0 ? stack[stack.length - 1] : null;
             if (departingId) {
               const departingScreen = project.uiScreens[departingId];
               const depTransOut = (departingScreen == null ? void 0 : departingScreen.transitionOut) || "fade";
@@ -29935,6 +30101,10 @@ void main() {
     };
     const belowCharEffects = activeOverlayEffects.filter(rendersBelowCharacters);
     const aboveCharEffects = activeOverlayEffects.filter((e) => !rendersBelowCharacters(e));
+    const fxOwnerScreen = activeMenuScreen ?? activeHudScreen;
+    const stageFxActive = (playerState == null ? void 0 : playerState.mode) === "playing" && (((_o = playerState == null ? void 0 : playerState.stageState.screen.overlayEffects) == null ? void 0 : _o.length) ?? 0) > 0;
+    const fxOwnerClosing = !!(fxOwnerScreen && (((_p = fxOwnerScreen.effects) == null ? void 0 : _p.length) ?? 0) > 0 && closingScreens.has(fxOwnerScreen.id) && !stageFxActive);
+    const fxFadeStyle = fxOwnerClosing ? { opacity: 0, transition: `opacity ${fxOwnerScreen.transitionOutDuration ?? fxOwnerScreen.transitionDuration ?? 300}ms ease` } : void 0;
     const overlayWidth = (stageSize == null ? void 0 : stageSize.width) && stageSize.width > 0 ? stageSize.width : 1280;
     const overlayHeight = (stageSize == null ? void 0 : stageSize.height) && stageSize.height > 0 ? stageSize.height : 720;
     const handleClose = () => {
@@ -30474,27 +30644,18 @@ void main() {
                     100% { background-position: 0% 0%; }
                 }
             ` }),
-      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, "data-vn-play-root": true, className: "relative overflow-hidden", style: { cursor: "var(--vn-cursor-normal, default)", width: `min(100vw, calc(100vh * ${((_o = project.gameResolution) == null ? void 0 : _o.width) || 1920} / ${((_p = project.gameResolution) == null ? void 0 : _p.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_q = project.gameResolution) == null ? void 0 : _q.height) || 1080} / ${((_r = project.gameResolution) == null ? void 0 : _r.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_s = project.gameResolution) == null ? void 0 : _s.width) || 1920) : 1, ...screenGlitch ? { filter: "url(#vnfx-stage-glitch)" } : {} }, children: [
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, "data-vn-play-root": true, className: "relative overflow-hidden", style: { cursor: "var(--vn-cursor-normal, default)", width: `min(100vw, calc(100vh * ${((_q = project.gameResolution) == null ? void 0 : _q.width) || 1920} / ${((_r = project.gameResolution) == null ? void 0 : _r.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_s = project.gameResolution) == null ? void 0 : _s.height) || 1080} / ${((_t = project.gameResolution) == null ? void 0 : _t.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_u = project.gameResolution) == null ? void 0 : _u.width) || 1920) : 1, ...screenGlitch ? { filter: "url(#vnfx-stage-glitch)" } : {} }, children: [
         /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `[data-vn-play-root] .cursor-pointer { cursor: var(--vn-cursor-hand, pointer) !important; }` }),
         screenGlitch && /* @__PURE__ */ jsxRuntime2.jsx(StageGlitchFilterDef, { effect: screenGlitch }),
         (playerState == null ? void 0 : playerState.mode) === "playing" ? renderStage() : null,
         (!playerState || playerState.mode === "paused") && (() => {
-          const ordered = [];
-          const topClosingMenu = !!currentScreenId && closingScreens.has(currentScreenId);
-          if (topClosingMenu && screenStack.length >= 2) {
-            ordered.push({ id: currentScreenId, isClosing: true });
-            ordered.push({ id: screenStack[screenStack.length - 2], isClosing: false });
-          } else {
-            for (const id of screenStack) {
-              if (id !== currentScreenId && closingScreens.has(id)) {
-                ordered.push({ id, isClosing: true });
-              }
-            }
-            if (currentScreenId) {
-              ordered.push({ id: currentScreenId, isClosing: closingScreens.has(currentScreenId) });
-            }
-          }
-          return ordered.map(({ id, isClosing }) => /* @__PURE__ */ jsxRuntime2.jsx(
+          const ordered = computeScreenRenderList({
+            stack: screenStack,
+            impliedBaseId: null,
+            screens: project.uiScreens,
+            closingScreens
+          });
+          return ordered.map(({ id, isClosing, inert }) => /* @__PURE__ */ jsxRuntime2.jsx(
             UIScreenRenderer,
             {
               screenId: id,
@@ -30509,6 +30670,7 @@ void main() {
               variables: screenVariables,
               onVariableChange: handleVariableChange,
               isClosing,
+              inertBeneath: inert,
               evaluateConditions: evaluateConditions2,
               onCommitVariables: commitUiVariablesToPlayerState,
               inventorySlots: playerState == null ? void 0 : playerState.inventorySlots,
@@ -30523,24 +30685,13 @@ void main() {
           ));
         })(),
         (playerState == null ? void 0 : playerState.mode) === "playing" && (() => {
-          const topHud = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
-          const activeHudId = topHud ?? project.ui.gameHudScreenId ?? null;
-          const ordered = [];
-          const topClosingHud = !!activeHudId && closingScreens.has(activeHudId);
-          if (topClosingHud && hudStack.length >= 2) {
-            ordered.push({ id: activeHudId, isClosing: true });
-            ordered.push({ id: hudStack[hudStack.length - 2], isClosing: false });
-          } else {
-            for (const id of hudStack) {
-              if (id !== topHud && closingScreens.has(id)) {
-                ordered.push({ id, isClosing: true });
-              }
-            }
-            if (activeHudId) {
-              ordered.push({ id: activeHudId, isClosing: closingScreens.has(activeHudId) });
-            }
-          }
-          return ordered.map(({ id, isClosing }) => /* @__PURE__ */ jsxRuntime2.jsx(
+          const ordered = computeScreenRenderList({
+            stack: hudStack,
+            impliedBaseId: project.ui.gameHudScreenId ?? null,
+            screens: project.uiScreens,
+            closingScreens
+          });
+          return ordered.map(({ id, isClosing, inert }) => /* @__PURE__ */ jsxRuntime2.jsx(
             UIScreenRenderer,
             {
               screenId: id,
@@ -30555,6 +30706,7 @@ void main() {
               variables: screenVariables,
               onVariableChange: handleVariableChange,
               isClosing,
+              inertBeneath: inert,
               evaluateConditions: evaluateConditions2,
               onCommitVariables: commitUiVariablesToPlayerState,
               inventorySlots: playerState == null ? void 0 : playerState.inventorySlots,
@@ -30581,24 +30733,24 @@ void main() {
             onClick: (e) => e.stopPropagation()
           }
         ),
-        belowCharEffects.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx(
+        belowCharEffects.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none z-[4]", style: fxFadeStyle, children: /* @__PURE__ */ jsxRuntime2.jsx(
           ScreenOverlayEffects,
           {
             effects: belowCharEffects,
             width: overlayWidth,
             height: overlayHeight,
-            className: "absolute inset-0 pointer-events-none z-[4]"
+            className: "absolute inset-0 pointer-events-none"
           }
-        ),
-        aboveCharEffects.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx(
+        ) }),
+        aboveCharEffects.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none z-40", style: fxFadeStyle, children: /* @__PURE__ */ jsxRuntime2.jsx(
           ScreenOverlayEffects,
           {
             effects: aboveCharEffects,
             width: overlayWidth,
             height: overlayHeight,
-            className: "absolute inset-0 pointer-events-none z-40"
+            className: "absolute inset-0 pointer-events-none"
           }
-        ),
+        ) }),
         renderPlayerUI(),
         gameStartFade !== "none" && /* @__PURE__ */ jsxRuntime2.jsx(
           "div",
@@ -30674,7 +30826,7 @@ void main() {
           );
         })()
       ] }),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_t = playerState.uiState.phone) == null ? void 0 : _t.open) && /* @__PURE__ */ jsxRuntime2.jsx(
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_v = playerState.uiState.phone) == null ? void 0 : _v.open) && /* @__PURE__ */ jsxRuntime2.jsx(
         PhonePanel,
         {
           ui: project.ui,
@@ -30793,7 +30945,7 @@ void main() {
           }
         ) });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_v = (_u = playerState.uiState.phone) == null ? void 0 : _u.notification) == null ? void 0 : _v.visible) && !playerState.uiState.phone.open && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_x = (_w = playerState.uiState.phone) == null ? void 0 : _w.notification) == null ? void 0 : _x.visible) && !playerState.uiState.phone.open && (() => {
         const n = playerState.uiState.phone.notification;
         const nchar = !n.senderId || n.senderId === "player" ? null : project.characters[n.senderId];
         const nurls = resolvePhonePortrait(n.portrait, nchar, assetResolver);
@@ -30821,7 +30973,7 @@ void main() {
           }
         );
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_x = (_w = playerState.uiState.phone) == null ? void 0 : _w.incomingCall) == null ? void 0 : _x.phase) === "ringing" && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_z = (_y = playerState.uiState.phone) == null ? void 0 : _y.incomingCall) == null ? void 0 : _z.phase) === "ringing" && (() => {
         const call = playerState.uiState.phone.incomingCall;
         const cchar = call.callerId === "player" ? null : project.characters[call.callerId];
         const curls = resolvePhonePortrait(call.portrait, cchar, assetResolver);
@@ -30867,7 +31019,7 @@ void main() {
           ] })
         ] });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_y = playerState.uiState.phone) == null ? void 0 : _y.outgoingCall) && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_A = playerState.uiState.phone) == null ? void 0 : _A.outgoingCall) && (() => {
         const oc = playerState.uiState.phone.outgoingCall;
         const contact = (project.ui.phoneContacts || []).find((c) => c.characterId === oc.contactId);
         const ochar = project.characters[oc.contactId];
@@ -30885,7 +31037,7 @@ void main() {
           ] })
         ] });
       })(),
-      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_z = playerState.uiState.phone) == null ? void 0 : _z.unread) && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_B = playerState.uiState.phone) == null ? void 0 : _B.unread) && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
         const bx = project.ui.phoneBadgeX ?? 95;
         const by = project.ui.phoneBadgeY ?? 4;
         const unreadCount = (playerState.uiState.phone.notifications || []).filter((e) => !e.read).length;
@@ -31042,7 +31194,7 @@ void main() {
         /* @__PURE__ */ jsxRuntime2.jsx(
           "img",
           {
-            src: assetResolver(((_A = carriedItem.icon) == null ? void 0 : _A.id) || null, "image") || "",
+            src: assetResolver(((_C = carriedItem.icon) == null ? void 0 : _C.id) || null, "image") || "",
             alt: "",
             draggable: false,
             className: "fixed z-[10052] pointer-events-none select-none",

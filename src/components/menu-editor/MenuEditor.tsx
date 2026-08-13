@@ -1614,7 +1614,8 @@ const MenuEditor: React.FC<{
                                 siblings={siblingsFor(element.id)}
                                 onGuides={setMenuSnapGuides}
                                 contentBox={(element as any).contentBox}
-                                contentTransform={buildOrientationTransform(element as any) || undefined}
+                                rotationDeg={(element as any).rotation || undefined}
+                            contentTransform={buildOrientationTransform({ flipX: (element as any).flipX, flipY: (element as any).flipY }) || undefined}
                                 overlay={selectedElementIds.includes(element.id) && (element.type === UIElementType.Button || element.type === UIElementType.Image) ? (
                                     <ContentBoxEditor
                                         box={(element as any).contentBox}
@@ -1694,6 +1695,11 @@ const MenuEditor: React.FC<{
                     <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text</button>
                     <button onClick={() => handleAddElement(UIElementType.Image)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Image</button>
                     <button onClick={handleAddVideoElement} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Video</button>
+                    {/* Hot Spot lives here too, not only in the screen inspector's Interactivity
+                        section — it's one of the most-added elements and hunting for it was a
+                        repeated complaint. Requires the HotSpot case in uiElementFactory: without
+                        it this button would silently do nothing (the factory returns undefined). */}
+                    <button onClick={() => handleAddElement(UIElementType.HotSpot)} title={t('hc.hotSpotTitle', 'An invisible clickable/hoverable area — attach actions to it')} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> {t('hc.hotSpot', 'Hot Spot')}</button>
                     <button onClick={() => handleAddElement(UIElementType.Customizer)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> {t('hc.customizer', 'Customizer')}</button>
                     <button onClick={() => handleAddElement(UIElementType.CharacterPreview)} title={t('hc.showACharacterOrThe', 'Show a character (or the player\'s created character) on this screen')} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> {t('hc.character', 'Character')}</button>
                     <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> {t('hc.textInput', 'Text Input')}</button>

@@ -44,12 +44,17 @@ export interface ResizableDraggableProps {
     /** CSS transform applied to the CONTENT only (element rotation/flip preview). The drag box,
      *  outline, and resize handles stay axis-aligned so the element remains easy to grab. */
     contentTransform?: string;
+    /** Rotate the WHOLE box — outline, handles and content together — in degrees, about the box
+     *  centre (matching the runtime's transform origin). Rotation lives out here rather than in
+     *  contentTransform so the selection chrome follows the element; flips stay on the content,
+     *  because mirroring the box would mirror the resize-handle semantics too. */
+    rotationDeg?: number;
 }
 
 const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
     x, y, width, height, anchorX, anchorY, parentSize, isSelected, onSelect, onUpdate, children,
     snapGrid = 1, showSnapGuides, label, locked, allowChildInteraction, onContextMenu, zIndex,
-    siblings, snapEnabled = true, onGuides, contentBox, overlay, contentTransform,
+    siblings, snapEnabled = true, onGuides, contentBox, overlay, contentTransform, rotationDeg,
 }) => {
 
     const ref = useRef<HTMLDivElement>(null);
@@ -99,8 +104,16 @@ const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
         
         const isSnapping = e.shiftKey;
         const grid = snapGrid;
-        const dx = (e.clientX - startPos.current.mouseX) / parentSize.width * 100;
-        const dy = (e.clientY - startPos.current.mouseY) / parentSize.height * 100;
+        let dx = (e.clientX - startPos.current.mouseX) / parentSize.width * 100;
+        let dy = (e.clientY - startPos.current.mouseY) / parentSize.height * 100;
+        if (isResizing && rotationDeg) {
+            // Map the pointer delta into the box's local (rotated) axes, so each handle keeps
+            // meaning "this edge" however the box is turned.
+            const rad = (-rotationDeg * Math.PI) / 180;
+            const rx = dx * Math.cos(rad) - dy * Math.sin(rad);
+            const ry = dx * Math.sin(rad) + dy * Math.cos(rad);
+            dx = rx; dy = ry;
+        }
         
         let newX = startPos.current.x;
         let newY = startPos.current.y;
@@ -205,7 +218,7 @@ const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
         position: 'absolute',
         left: `${safeX}%`, top: `${safeY}%`,
         width: `${safeWidth}%`, height: `${safeHeight}%`,
-        transform: `translate(-${safeAnchorX * 100}%, -${safeAnchorY * 100}%)`,
+        transform: `translate(-${safeAnchorX * 100}%, -${safeAnchorY * 100}%)${rotationDeg ? ` rotate(${rotationDeg}deg)` : ''}`,
         cursor: locked ? 'default' : isDragging ? 'grabbing' : 'grab',
         zIndex,
     };

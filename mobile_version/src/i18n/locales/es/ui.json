@@ -6,7 +6,8 @@
     "fireworks": "Fuegos artificiales (espectáculo continuo)",
     "driftSpeed": "Velocidad de deriva",
     "riseSpeed": "Velocidad de ascenso",
-    "launchSpeed": "Velocidad de lanzamiento"
+    "launchSpeed": "Velocidad de lanzamiento",
+    "density": "Densidad"
   },
   "actions": {
     "none": "(Ninguna acción)",
@@ -1072,7 +1073,9 @@
     "allowGalleryMusic": "Dejar que la música de la galería siga sonando aquí",
     "allowGalleryMusicHint": "Si suena una canción de la Galería con \"seguir sonando\", continúa por encima de esta pantalla en lugar de la música propia de la pantalla.",
     "resetElementVisibility": "Restablecer los elementos ocultos al abrir",
-    "resetElementVisibilityHint": "Activado: los cambios de Mostrar/Ocultar elemento se restablecen cada vez que se abre la pantalla (un documento vuelve a abrirse por la página 1). Desactivado: lo revelado sigue revelado (p. ej. un mapa que vas descubriendo)."
+    "resetElementVisibilityHint": "Activado: los cambios de Mostrar/Ocultar elemento se restablecen cada vez que se abre la pantalla (un documento vuelve a abrirse por la página 1). Desactivado: lo revelado sigue revelado (p. ej. un mapa que vas descubriendo).",
+    "showBeneath": "Mantener visibles las pantallas de debajo",
+    "showBeneathHint": "Cuando esta pantalla se abre sobre otra (o sobre el HUD del juego), la de debajo sigue visible — como una ventana emergente. Ideal para un inventario o mapa abierto con un botón. Consejo: dale a esta pantalla un fondo transparente para que se vea la de debajo. Desactivado = esta pantalla reemplaza a la anterior."
   },
   "actionEditor": {
     "actionType": "Tipo de acción",
@@ -1203,7 +1206,10 @@
     "fullscreenOn": "Poner en pantalla completa",
     "fullscreenOff": "Salir de pantalla completa (ventana)",
     "screenToClose": "Pantalla que se cierra",
-    "closeThisScreen": "La pantalla en la que está este botón"
+    "closeThisScreen": "La pantalla en la que está este botón",
+    "groupVideos": "Vídeos",
+    "groupBackgrounds": "Fondos",
+    "groupImages": "Imágenes"
   },
   "effectStyle": {
     "label": "Estilo del efecto",
@@ -2319,7 +2325,9 @@
     "fillArtOptional": "Arte del relleno (opcional)",
     "trackArtOptional": "Arte de la pista (opcional)",
     "hotSpotIsOnlyActive": "El punto interactivo solo funciona cuando se cumplen todas las condiciones.",
-    "elementIsOnlyShownWhen": "El elemento solo se muestra cuando se cumplen todas las condiciones."
+    "elementIsOnlyShownWhen": "El elemento solo se muestra cuando se cumplen todas las condiciones.",
+    "hotSpot": "Zona activa",
+    "hotSpotTitle": "Un área invisible en la que se puede hacer clic o pasar el cursor — asígnale acciones"
   },
   "fx": {
     "placeSpotlight": "Colocar el foco",

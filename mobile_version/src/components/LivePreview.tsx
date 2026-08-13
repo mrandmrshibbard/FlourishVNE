@@ -16,6 +16,8 @@ import { resolveVideoTrim } from '../utils/videoTrim';
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject, CGGalleryEntry } from '../types/project';
 import { applyGameLanguage, detectStartLanguage, shouldShowLanguageScreen } from '../features/localization/applyGameLanguage';
+import { computeScreenRenderList } from './live-preview/runtime/screenRenderList';
+import { conditionVisibilityOf } from './live-preview/runtime/conditionVisibility';
 import { visibleSongs, VisibleSong, formatTimeLabel, buildPlayOrder, stepIndex, GALLERY_PLAYER_EVENT, MUSIC_CONTROL_GLYPHS } from '../utils/musicGallery';
 import {
     VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, SaveGameAction, LoadGameAction, DeleteSaveAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, CallCommonEventAction, OpenPhoneAppAction, ShowMapAction, ShowMiniGameAction, SaveSlotsPageAction, RESET_ALL_VARIABLES
@@ -1239,6 +1241,7 @@ const HotSpotOverlayElement: React.FC<{
         return registerDropTarget({
             id: `scene-${overlay.commandId}`,
             rectPct: { x: overlay.x, y: overlay.y, width: overlay.width, height: overlay.height },
+            rotation: (overlay as any).rotation,
             acceptTag: overlay.acceptedTag || undefined,
             onDrop: () => { (overlay.actions || []).forEach(a => onAction(a)); },
         });
@@ -1260,6 +1263,9 @@ const HotSpotOverlayElement: React.FC<{
         // Honor a per-spot layer so items/images can sit above a hot spot (1 + layer*100, the shared
         // overlay band). Without a layer set, keep the legacy fixed z (above characters z-5, below dialogue z-20).
         zIndex: overlay.layer != null ? (1 + overlay.layer * 100) : 8,
+        // Rotation/flip — rotates the click/hover hit area for free (handlers on this div);
+        // drag-drop coordinate hit-tests handle rotation in dropTargetRegistry.
+        transform: buildOrientationTransform(overlay as any) || undefined,
         // drag-drop spots are pure drop zones (coordinate hit-test) — don't capture clicks,
         // so empty/drag clicks still reach the stage. click/hover spots capture.
         pointerEvents: overlay.trigger === 'drag-drop' ? 'none' : 'auto',
@@ -4466,6 +4472,7 @@ const InteractiveRuntime: React.FC<{
             unregs.push(registerDropTarget({
                 id: `screen-${screen.id}-${spot.id}`,
                 rectPct: { x: spot.x, y: spot.y, width: spot.width, height: spot.height },
+                rotation: (spot as any).rotation,
                 acceptedElementIds: spot.acceptedElementIds,
                 acceptTag: spot.acceptTag || undefined,
                 onDrop: () => { spot.actions.forEach(a => handleLocalAction(a)); },
@@ -4595,6 +4602,11 @@ const InteractiveRuntime: React.FC<{
                             border: spot.visible ? `2px dashed ${spot.highlightColor || 'rgba(59, 130, 246, 0.5)'}` : 'none',
                             opacity: spot.visible ? (spot.visibleOpacity ?? 1) : undefined,
                             pointerEvents: spot.trigger === 'drag-drop' ? 'none' : 'auto',
+                            /* Rotation/flip. For click/hover spots this also rotates the HIT AREA
+                             * for free — the handlers sit on this transformed div. Drag-drop spots
+                             * hit-test by coordinates instead; that path handles rotation itself
+                             * (see dropTargetRegistry). */
+                            transform: buildOrientationTransform(spot as any) || undefined,
                             cursor: vnCursorFor((spot as any).hoverCursor, (spot as any).hoverCursorImage?.id, (spot.trigger || 'click') === 'click' ? 'var(--vn-cursor-hand, pointer)' : undefined),
                         }}
                         onClick={() => handleSpotClick(spot)}
@@ -4634,9 +4646,23 @@ const InteractiveRuntime: React.FC<{
                             left: `${pos.x}%`, top: `${pos.y}%`,
                             width: `${el.width}%`, height: `${el.height}%`,
                             cursor: el.draggable ? (isDragging ? 'var(--vn-cursor-grabbing, grabbing)' : vnCursorFor((el as any).hoverCursor, (el as any).hoverCursorImage?.id, 'var(--vn-cursor-drag, grab)')) : (elType === 'textInput' ? 'text' : vnCursorFor((el as any).hoverCursor, (el as any).hoverCursorImage?.id, 'var(--vn-cursor-hand, pointer)')),
-                            zIndex: isDragging ? 50 : 10,
+                            /* 🔴 Respect the element's LAYER — but only when the author SET one.
+                             * With no layer, keep the legacy fixed z (10): these elements always
+                             * rendered above ordinary screen elements' defaults, and computing
+                             * `1 + 0*100 = 1` here silently dropped every existing hot spot from
+                             * 10 to 1, behind things it used to beat. Same unset-preserving rule
+                             * as the scene hot spots at their `: 8` fallback.
+                             * A dragged item lifts above everything, including high layers. */
+                            zIndex: isDragging ? 100000
+                                : ((el as any).layer != null ? (1 + (el as any).layer * 100) : 10),
                             pointerEvents: isFadedOut ? 'none' : 'auto',
                             opacity: isFadedOut ? 0 : undefined,
+                            /* 🔴 Interactive elements (hot spots, draggables, Interactive Images)
+                             * are laid out by this renderer rather than the ordinary screen-element
+                             * one, and it never applied the element's orientation — so Rotate /
+                             * flip commands did nothing to anything a player could drag. Same
+                             * helper the other paths use, so they can't drift apart again. */
+                            transform: buildOrientationTransform(el as any) || undefined,
                             transition: isDragging ? 'none' : 'left 0.2s, top 0.2s',
                             animation: anim ? `${animationKeyframes[anim.animation] || 'hz-shake'} ${anim.duration}ms ease` : undefined,
                         }}
@@ -4717,6 +4743,11 @@ const UIScreenRenderer: React.FC<{
     variables?: Record<VNID, string | number | boolean>;
     onVariableChange?: (variableId: VNID, value: string | number | boolean) => void;
     isClosing?: boolean;
+    /** Rendered beneath a "Keep screens beneath visible" popup (or fading out above one): visible
+     *  but must take NO input. Applied as the `inert` attribute — pointer-events alone is not
+     *  enough, because descendants set `pointerEvents: 'auto'` explicitly, which re-enables
+     *  hit-testing under a none parent. `inert` also removes the subtree from keyboard focus. */
+    inertBeneath?: boolean;
     evaluateConditions: (conditions: VNCondition[] | undefined, variables: Record<VNID, string | number | boolean>) => boolean;
     onCommitVariables?: () => void;
     inventorySlots?: (VNID | null)[];
@@ -4732,7 +4763,7 @@ const UIScreenRenderer: React.FC<{
     pickedItemElementIds?: ReadonlySet<VNID>;
     /** Pickup-mode Item element clicked: give the item + record the take (when `once`). */
     onItemPickup?: (elementId: VNID, itemId: VNID, quantity: number, once: boolean) => void;
-}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, elementVisibility, saveStorageBroken, pickedItemElementIds, onItemPickup }) => {
+}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, inertBeneath = false, evaluateConditions, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, elementVisibility, saveStorageBroken, pickedItemElementIds, onItemPickup }) => {
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
     const backgroundVideoRef = React.useRef<HTMLVideoElement>(null);
@@ -4931,13 +4962,18 @@ const UIScreenRenderer: React.FC<{
     const renderElement = (element: VNUIElement, variables: Record<VNID, string | number | boolean>, project: VNProject, onCommitVariables?: () => void) => {
         runtimeDebugLog('🎯 renderElement called:', element.type, element.name, element.id);
         
-        // Check visibility conditions - if conditions exist and are not met, don't render
+        // Visibility conditions. Default = hard unmount (the legacy pop); the 'fade' opt-in keeps
+        // the element mounted and fades opacity instead — CSS can only transition something that
+        // exists on both sides of the change. See conditionVisibilityOf for the trade-offs.
+        let conditionStyle: React.CSSProperties = {};
         if (element.conditions && element.conditions.length > 0) {
             const conditionsMet = evaluateConditions(element.conditions, variables);
-            if (!conditionsMet) {
+            const visibility = conditionVisibilityOf(conditionsMet, element as any);
+            if (!visibility.mount) {
                 runtimeDebugLog('🚫 Element conditions not met, skipping render:', element.name);
                 return null;
             }
+            conditionStyle = visibility.style as React.CSSProperties;
         }
 
         // Variable-reactive appearance state: the active state merges its "main" colour/image into
@@ -5003,7 +5039,14 @@ const UIScreenRenderer: React.FC<{
             ...(combinedFilter ? { filter: combinedFilter } : {}),
             ...(stateTransition ? { transition: stateTransition } : {}),
             ...transitionStyle,
+            /* Condition-driven fade LAST, so its opacity-0 wins over entrance animations while
+             * hidden. Empty object (the default) touches nothing. Its transition would clobber
+             * one set above; merge instead when both exist. */
+            ...conditionStyle,
         };
+        if (conditionStyle.transition && transitionStyle.transition) {
+            style.transition = `${transitionStyle.transition}, ${conditionStyle.transition}`;
+        }
 
         // Runtime Show/Hide-Element + startHidden. Only touch elements that PARTICIPATE (have a
         // startHidden default or a live override) so non-feature elements render byte-identically.
@@ -6323,6 +6366,8 @@ const UIScreenRenderer: React.FC<{
             // Key is just the screenId — switching isClosing on the SAME screen must
             // not unmount/remount this div, or the crossfade will visibly flicker.
             key={screenId}
+            // A screen showing beneath a popup is visible but dead to input (see inertBeneath).
+            inert={inertBeneath || undefined}
             className="absolute inset-0 w-full h-full"
             // Pass-through screens don't intercept clicks on empty areas — the scene
             // beneath stays interactive (dialogue advance, scene hot spots).
@@ -6332,6 +6377,9 @@ const UIScreenRenderer: React.FC<{
                 isolation: 'isolate',
                 ...screenTransitionStyle,
                 ...(isPassThrough ? { pointerEvents: 'none' } : {}),
+                // Belt and braces with the `inert` attribute above: inert kills focus/interaction,
+                // pointerEvents:none stops the subtree being a hit-test target at all.
+                ...(inertBeneath ? { pointerEvents: 'none' } : {}),
                 // Pass-through HUDs normally sit below the dialogue box (z20) + choices (z30). When
                 // `hudAboveDialogue` is set, lift this overlay above them (but below flash/history z50)
                 // so its buttons are visible + clickable while dialogue/choices are on screen. Empty
@@ -7234,8 +7282,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             setSettings(s => (!!s.fullscreen === active ? s : { ...s, fullscreen: active }));
         };
         document.addEventListener('fullscreenchange', syncFromBrowser);
-        return () => document.removeEventListener('fullscreenchange', syncFromBrowser);
-    }, []);
+        return () => {
+            document.removeEventListener('fullscreenchange', syncFromBrowser);
+            /* Editor only: closing test play must not leave the whole EDITOR fullscreen — the
+             * game's setting fullscreens `documentElement`, and unmount is the only close signal.
+             * A built game never unmounts this component, so players are unaffected. */
+            if (!isStandalone && document.fullscreenElement) {
+                document.exitFullscreen?.().catch(() => {});
+            }
+        };
+    }, [isStandalone]);
 
     const applyFullscreen = useCallback(async (wanted: boolean) => {
         try {
@@ -10850,7 +10906,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             ...(p.stageState.hotSpotOverlays || []).filter(h => h.commandId !== cmd.id),
                             { id: cmd.id, commandId: cmd.id, name: cmd.name, x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height,
                               shape: cmd.shape, trigger: cmd.trigger, actions: cmd.actions, conditions: cmd.conditions, acceptedTag: cmd.acceptedTag,
-                              highlightColor: cmd.highlightColor, visible: cmd.visible, visibleOpacity: cmd.visibleOpacity, advanceOnTrigger: cmd.advanceOnTrigger, layer: cmd.layer, hoverCursor: (cmd as any).hoverCursor, hoverCursorImage: (cmd as any).hoverCursorImage },
+                              highlightColor: cmd.highlightColor, visible: cmd.visible, visibleOpacity: cmd.visibleOpacity, advanceOnTrigger: cmd.advanceOnTrigger, layer: cmd.layer, rotation: (cmd as any).rotation, flipX: (cmd as any).flipX, flipY: (cmd as any).flipY, hoverCursor: (cmd as any).hoverCursor, hoverCursorImage: (cmd as any).hoverCursorImage },
                         ] } } : p);
                         return;
                     }
@@ -11889,6 +11945,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     visibleOpacity: cmd.visibleOpacity,
                                     advanceOnTrigger: cmd.advanceOnTrigger,
                                     layer: cmd.layer,
+                                    rotation: (cmd as any).rotation, flipX: (cmd as any).flipX, flipY: (cmd as any).flipY,
                                     hoverCursor: (cmd as any).hoverCursor,
                                     hoverCursorImage: (cmd as any).hoverCursorImage,
                                 },
@@ -12808,7 +12865,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     // Skip only when transitionOut is explicitly 'none'. The departing screen STAYS in
                     // the stack so ReturnToPreviousScreen can pop back to it — only `closingScreens` is
                     // cleared once the visual transition has finished.
-                    const departingId = s.length > 0 ? s[s.length - 1] : null;
+                    // 🔴 Not when the TARGET keeps screens beneath visible: the departing screen
+                    // is about to stay ON SCREEN under the popup — marking it closing would play a
+                    // fade-out and then pop it back, a visible flicker for a screen that never left.
+                    const departingId = (!targetScreen.showScreensBeneath && s.length > 0) ? s[s.length - 1] : null;
                     if (departingId) {
                         const departingScreen = project.uiScreens[departingId];
                         const depTransOut = departingScreen?.transitionOut || 'fade';
@@ -12831,7 +12891,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     // Same rule as the hudStack branch: keep the departing screen in the stack so
                     // ReturnToPreviousScreen can pop back to it. Only `closingScreens` is cleared
                     // once the visual transition has finished.
-                    const departingId = stack.length > 0 ? stack[stack.length - 1] : null;
+                    // 🔴 Not when the TARGET keeps screens beneath visible: the departing screen
+                    // is about to stay ON SCREEN under the popup — marking it closing would play a
+                    // fade-out and then pop it back, a visible flicker for a screen that never left.
+                    const departingId = (!targetScreen.showScreensBeneath && stack.length > 0) ? stack[stack.length - 1] : null;
                     if (departingId) {
                         const departingScreen = project.uiScreens[departingId];
                         const depTransOut = departingScreen?.transitionOut || 'fade';
@@ -16730,6 +16793,22 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const belowCharEffects = activeOverlayEffects.filter(rendersBelowCharacters);
     const aboveCharEffects = activeOverlayEffects.filter(e => !rendersBelowCharacters(e));
 
+    /* 🔴 A closing screen's FX must fade WITH it. The FX render in this separate overlay layer,
+     * outside the screen's fading div — so a foggy menu faded out while its fog sat at full
+     * strength, then snapped off when the close landed. When the screen that owns the on-screen
+     * effects is closing, fade this layer over the screen's own out-duration.
+     * Guarded to "all rendered FX belong to that screen": if scene-level FX are active too (a
+     * closing HUD screen over a foggy scene), fading the shared layer would dim the scene's fog
+     * and pop it back — so that rarer mixed case keeps today's behavior. */
+    const fxOwnerScreen = activeMenuScreen ?? activeHudScreen;
+    const stageFxActive = playerState?.mode === 'playing'
+        && ((playerState?.stageState.screen.overlayEffects?.length ?? 0) > 0);
+    const fxOwnerClosing = !!(fxOwnerScreen && (fxOwnerScreen.effects?.length ?? 0) > 0
+        && closingScreens.has((fxOwnerScreen as any).id) && !stageFxActive);
+    const fxFadeStyle: React.CSSProperties | undefined = fxOwnerClosing
+        ? { opacity: 0, transition: `opacity ${(fxOwnerScreen as any).transitionOutDuration ?? (fxOwnerScreen as any).transitionDuration ?? 300}ms ease` }
+        : undefined;
+
     // Use fallback dimensions if stageSize hasn't been measured yet (width/height are 0)
     const overlayWidth = (stageSize?.width && stageSize.width > 0) ? stageSize.width : 1280;
     const overlayHeight = (stageSize?.height && stageSize.height > 0) ? stageSize.height : 720;
@@ -17321,28 +17400,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     clears; navigating away and back reveals the scene". This makes the title vanish
                     the instant the game starts, independent of when `setScreenStack([])` settles. */}
                 {(!playerState || playerState.mode === 'paused') && (() => {
-                    const ordered: { id: VNID; isClosing: boolean }[] = [];
-                    const topClosingMenu = !!currentScreenId && closingScreens.has(currentScreenId);
-                    if (topClosingMenu && screenStack.length >= 2) {
-                        // Pop close (e.g. Return To Previous Screen): render the LEAVING screen below
-                        // and the revealed previous screen ON TOP, entering. This mirrors a forward
-                        // GoToScreen, so crossfade (incoming fades in over the static outgoing) works
-                        // the same in both directions instead of fading to black / not animating.
-                        ordered.push({ id: currentScreenId as VNID, isClosing: true });
-                        ordered.push({ id: screenStack[screenStack.length - 2], isClosing: false });
-                    } else {
-                        // Closing screens first (rendered below — earlier in DOM = lower stacking)
-                        for (const id of screenStack) {
-                            if (id !== currentScreenId && closingScreens.has(id)) {
-                                ordered.push({ id, isClosing: true });
-                            }
-                        }
-                        // Current screen last (rendered above)
-                        if (currentScreenId) {
-                            ordered.push({ id: currentScreenId, isClosing: closingScreens.has(currentScreenId) });
-                        }
-                    }
-                    return ordered.map(({ id, isClosing }) => (
+                    /* Which screens render (top only; popup chains beneath a "Keep screens beneath
+                     * visible" screen; pop-close ordering) — one pure, tested helper shared with
+                     * the HUD block below, replacing two hand-maintained copies of this logic. */
+                    const ordered = computeScreenRenderList({
+                        stack: screenStack,
+                        impliedBaseId: null,
+                        screens: project.uiScreens,
+                        closingScreens,
+                    });
+                    return ordered.map(({ id, isClosing, inert }) => (
                         <UIScreenRenderer
                             // Key on isClosing so a screen remounts when it starts closing — a fresh
                             // mount reliably plays the transitionOut animation (changing the CSS
@@ -17361,6 +17428,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             variables={screenVariables}
                             onVariableChange={handleVariableChange}
                             isClosing={isClosing}
+                            inertBeneath={inert}
                             evaluateConditions={evaluateConditions}
                             onCommitVariables={commitUiVariablesToPlayerState}
                             inventorySlots={playerState?.inventorySlots}
@@ -17376,26 +17444,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 {/* Render closing + current HUD screens together. Same unmount/remount fix as
                     the menu-screen block above. */}
                 {playerState?.mode === 'playing' && (() => {
-                    const topHud = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
-                    const activeHudId = topHud ?? project.ui.gameHudScreenId ?? null;
-                    const ordered: { id: VNID; isClosing: boolean }[] = [];
-                    const topClosingHud = !!activeHudId && closingScreens.has(activeHudId);
-                    if (topClosingHud && hudStack.length >= 2) {
-                        // Pop close: leaving HUD screen below, revealed screen on top entering
-                        // (mirrors a forward GoToScreen so crossfade works in both directions).
-                        ordered.push({ id: activeHudId as VNID, isClosing: true });
-                        ordered.push({ id: hudStack[hudStack.length - 2], isClosing: false });
-                    } else {
-                        for (const id of hudStack) {
-                            if (id !== topHud && closingScreens.has(id)) {
-                                ordered.push({ id, isClosing: true });
-                            }
-                        }
-                        if (activeHudId) {
-                            ordered.push({ id: activeHudId, isClosing: closingScreens.has(activeHudId) });
-                        }
-                    }
-                    return ordered.map(({ id, isClosing }) => (
+                    /* Same helper as the menu block; the default Game HUD is the implied floor —
+                     * it renders when the stack is empty, and beneath a popup chain that reaches
+                     * the bottom of the stack (a HUD button's inventory opens OVER the HUD). */
+                    const ordered = computeScreenRenderList({
+                        stack: hudStack,
+                        impliedBaseId: project.ui.gameHudScreenId ?? null,
+                        screens: project.uiScreens,
+                        closingScreens,
+                    });
+                    return ordered.map(({ id, isClosing, inert }) => (
                         <UIScreenRenderer
                             // Key on isClosing so a screen remounts when it starts closing — a fresh
                             // mount reliably plays the transitionOut animation (changing the CSS
@@ -17414,6 +17472,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             variables={screenVariables}
                             onVariableChange={handleVariableChange}
                             isClosing={isClosing}
+                            inertBeneath={inert}
                             evaluateConditions={evaluateConditions}
                             onCommitVariables={commitUiVariablesToPlayerState}
                             inventorySlots={playerState?.inventorySlots}
@@ -17444,20 +17503,24 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 )}
 
                 {belowCharEffects.length > 0 && (
-                    <ScreenOverlayEffects
-                        effects={belowCharEffects}
-                        width={overlayWidth}
-                        height={overlayHeight}
-                        className="absolute inset-0 pointer-events-none z-[4]"
-                    />
+                    <div className="absolute inset-0 pointer-events-none z-[4]" style={fxFadeStyle}>
+                        <ScreenOverlayEffects
+                            effects={belowCharEffects}
+                            width={overlayWidth}
+                            height={overlayHeight}
+                            className="absolute inset-0 pointer-events-none"
+                        />
+                    </div>
                 )}
                 {aboveCharEffects.length > 0 && (
-                    <ScreenOverlayEffects
-                        effects={aboveCharEffects}
-                        width={overlayWidth}
-                        height={overlayHeight}
-                        className="absolute inset-0 pointer-events-none z-40"
-                    />
+                    <div className="absolute inset-0 pointer-events-none z-40" style={fxFadeStyle}>
+                        <ScreenOverlayEffects
+                            effects={aboveCharEffects}
+                            width={overlayWidth}
+                            height={overlayHeight}
+                            className="absolute inset-0 pointer-events-none"
+                        />
+                    </div>
                 )}
                 {renderPlayerUI()}
                 

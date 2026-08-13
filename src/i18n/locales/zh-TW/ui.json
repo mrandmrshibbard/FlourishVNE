@@ -6,7 +6,8 @@
     "fireworks": "煙火（循環表演）",
     "driftSpeed": "飄移速度",
     "riseSpeed": "上升速度",
-    "launchSpeed": "發射速度"
+    "launchSpeed": "發射速度",
+    "density": "濃度"
   },
   "actions": {
     "none": "（無動作）",
@@ -1072,7 +1073,9 @@
     "allowGalleryMusic": "允許鑑賞音樂在此繼續播放",
     "allowGalleryMusicHint": "若正在播放設定為「繼續播放」的鑑賞曲目，它會蓋過該介面自帶的音樂繼續播放。",
     "resetElementVisibility": "開啟時重設隱藏的元素",
-    "resetElementVisibilityHint": "開啟：每次開啟介面時，「顯示／隱藏元素」的改動都會重設（文件重新從第 1 頁開始）。關閉：已揭示的內容會保留（例如逐步揭開的地圖）。"
+    "resetElementVisibilityHint": "開啟：每次開啟介面時，「顯示／隱藏元素」的改動都會重設（文件重新從第 1 頁開始）。關閉：已揭示的內容會保留（例如逐步揭開的地圖）。",
+    "showBeneath": "保持下層畫面可見",
+    "showBeneathHint": "當此畫面開啟在另一畫面（或遊戲HUD）之上時，下層畫面保持可見 — 像彈窗一樣。適合用按鈕開啟的物品欄或地圖。提示：給此畫面設定透明背景，下層才能透出來。關閉 = 此畫面取代上一個畫面。"
   },
   "actionEditor": {
     "actionType": "動作類型",
@@ -1203,7 +1206,10 @@
     "fullscreenOn": "進入全螢幕",
     "fullscreenOff": "退出全螢幕（視窗）",
     "screenToClose": "要關閉的畫面",
-    "closeThisScreen": "此按鈕所在的畫面"
+    "closeThisScreen": "此按鈕所在的畫面",
+    "groupVideos": "影片",
+    "groupBackgrounds": "背景",
+    "groupImages": "圖片"
   },
   "effectStyle": {
     "label": "特效風格",
@@ -2319,7 +2325,9 @@
     "fillArtOptional": "填充圖片（可選）",
     "trackArtOptional": "軌道圖片（可選）",
     "hotSpotIsOnlyActive": "只有全部條件都滿足時，熱區才會生效。",
-    "elementIsOnlyShownWhen": "只有全部條件都滿足時，該元素才會顯示。"
+    "elementIsOnlyShownWhen": "只有全部條件都滿足時，該元素才會顯示。",
+    "hotSpot": "熱區",
+    "hotSpotTitle": "一個不可見的可點擊/懸停區域 — 可為其繫結動作"
   },
   "fx": {
     "placeSpotlight": "放置聚光燈",

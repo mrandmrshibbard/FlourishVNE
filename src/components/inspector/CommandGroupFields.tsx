@@ -1826,7 +1826,16 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                     </FormField>
                 )}
                 {['fog', 'haze', 'smoke'].includes(effectType) && (
-                    <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={!!cmd.params?.aboveCharacters} onChange={e => updateCommand({ params: { ...cmd.params, aboveCharacters: e.target.checked } } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.renderInFront')}</span></label>
+                    <>
+                        <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={!!cmd.params?.aboveCharacters} onChange={e => updateCommand({ params: { ...cmd.params, aboveCharacters: e.target.checked } } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.renderInFront')}</span></label>
+                        {/* Density mirrors the per-screen Effects editor (the two lists are
+                            duplicated by design — keep them in step). Unset = 0.5 = today's look. */}
+                        <FormField label={t('screenFx.density', 'Density')}>
+                            <RangeInput min={0} max={1} step={0.01}
+                                value={cmd.params?.particleDensity ?? 0.5}
+                                onChange={e => updateCommand({ params: { ...cmd.params, particleDensity: parseFloat(e.target.value) } } as any)} />
+                        </FormField>
+                    </>
                 )}
                 {effectType === 'glitch' && (
                     <>
@@ -2397,6 +2406,9 @@ const ShowHotSpotGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
                     </FormField>
                 </div>
                 <CursorSelect value={{ hoverCursor: (cmd as any).hoverCursor, hoverCursorImage: (cmd as any).hoverCursorImage }} onChange={patch => updateCommand(patch as any)} />
+                {/* Same rotation/flip controls as image/character overlays — scene/screen parity. */}
+                <OrientationFields rotation={cmd.rotation} flipX={cmd.flipX} flipY={cmd.flipY}
+                    onChange={patch => updateCommand(patch as any)} />
                 {cmd.trigger === 'drag-drop' && (
                     <FormField label={t('hotspot.acceptTag')}>
                         <TextInput list="flourish-hotspot-cmd-tags" value={cmd.acceptedTag || ''} onChange={e => updateCommand({ acceptedTag: e.target.value } as any)} placeholder={t('hotspot.acceptTagPlaceholder')} />

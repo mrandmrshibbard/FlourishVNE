@@ -18,6 +18,7 @@ import { upsertOverlayEffect, type VNScreenOverlayEffectType, type VNEffectParam
 import CollapsibleSection from '../ui/CollapsibleSection';
 import EffectStyleSwitch from '../inspector/EffectStyleSwitch';
 import { ENHANCED_OVERLAY_TYPES } from '../live-preview/fx/glFx';
+import { createUIElement } from '../../utils/uiElementFactory';
 
 const newInteractiveId = (prefix: string): VNID =>
     `${prefix}-${Math.random().toString(36).substring(2, 9)}` as VNID;
@@ -452,6 +453,16 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         />
                     </FormField>
                     <p className="text-[10px] text-slate-500 -mt-1">{t('screenInspector.hudNonBlockingHint')}</p>
+                    <FormField label={t('screenInspector.showBeneath', 'Keep screens beneath visible')}>
+                        <input
+                            type="checkbox"
+                            checked={!!screen.showScreensBeneath}
+                            onChange={e => updateScreen({ showScreensBeneath: e.target.checked || undefined })}
+                            className="w-5 h-5"
+                        />
+                    </FormField>
+                    <p className="text-[10px] text-slate-500 -mt-1">{t('screenInspector.showBeneathHint',
+                        'When this screen opens on top of another (or the game HUD), the one beneath stays visible under it — like a popup. Great for an inventory or map opened from a button. Tip: give this screen a see-through background so the screen underneath shows. Off = this screen replaces the previous one.')}</p>
                     <hr className="border-[var(--border-subtle)] my-2" />
                     <FormField label={t('screenInspector.passThrough')}>
                         <input
@@ -563,14 +574,14 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                       extraParams: ['particleSize', 'windStrength', 'speed'] as const,
                       paramLabels: { particleSize: 'Particle Size', windStrength: 'Wind Strength', speed: 'Fall Speed' } },
                     { type: 'fog' as const, label: t('screenFx.fog'), supportsColor: true, defaultColor: '#CDD2D8',
-                      extraParams: ['speed'] as const,
-                      paramLabels: { speed: t('screenFx.driftSpeed') } },
+                      extraParams: ['speed', 'particleDensity'] as const,
+                      paramLabels: { speed: t('screenFx.driftSpeed'), particleDensity: t('screenFx.density', 'Density') } },
                     { type: 'haze' as const, label: t('screenFx.haze'), supportsColor: true, defaultColor: '#E1DED2',
-                      extraParams: ['speed'] as const,
-                      paramLabels: { speed: t('screenFx.driftSpeed') } },
+                      extraParams: ['speed', 'particleDensity'] as const,
+                      paramLabels: { speed: t('screenFx.driftSpeed'), particleDensity: t('screenFx.density', 'Density') } },
                     { type: 'smoke' as const, label: t('screenFx.smoke'), supportsColor: true, defaultColor: '#46484C',
-                      extraParams: ['speed'] as const,
-                      paramLabels: { speed: t('screenFx.riseSpeed') } },
+                      extraParams: ['speed', 'particleDensity'] as const,
+                      paramLabels: { speed: t('screenFx.riseSpeed'), particleDensity: t('screenFx.density', 'Density') } },
                     { type: 'fireworks' as const, label: t('screenFx.fireworks'), supportsColor: true, defaultColor: '#FFD23B',
                       extraParams: ['speed'] as const,
                       paramLabels: { speed: t('screenFx.launchSpeed') } },
@@ -802,20 +813,18 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                 <div className="space-y-1">
                     <button
                         onClick={() => {
-                            const id = newInteractiveId('hs');
+                            /* The element SHAPE comes from the shared factory (also behind the
+                             * palette's Hot Spot button) so the two add paths can't drift; only
+                             * the numbered name is this button's own flourish. */
+                            const made = createUIElement(UIElementType.HotSpot, project);
+                            if (!made) return;
                             const existingCount = Object.values(screen.elements).filter(
                                 (e: any) => e.type === UIElementType.HotSpot
                             ).length;
                             const newSpot: UIHotSpotElement = {
-                                id,
+                                ...(made as UIHotSpotElement),
+                                id: newInteractiveId('hs'),
                                 name: t('screenInspector.hotSpotName', { n: existingCount + 1 }),
-                                type: UIElementType.HotSpot,
-                                shape: 'rect',
-                                trigger: 'click',
-                                x: 40, y: 40, width: 20, height: 20,
-                                anchorX: 0, anchorY: 0,
-                                interactive: true,
-                                actions: [],
                             };
                             dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId, element: newSpot } });
                         }}

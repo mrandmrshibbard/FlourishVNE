@@ -750,5 +750,8 @@
     "shopListBuy": "Shop list to buy from",
     "shopListSell": "Shop list to sell to",
     "buySellHint": "Uses the list's currency + the item's price. No-op if the player can't afford it / it's out of stock / they don't own it."
+  },
+  "screenFx": {
+    "density": "Density"
   }
 }

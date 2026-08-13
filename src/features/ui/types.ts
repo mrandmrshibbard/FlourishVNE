@@ -736,6 +736,14 @@ interface BaseUIElement {
      *  media/art-bearing elements (Image, or Button with a background image). */
     fitToContent?: boolean;
     conditions?: VNCondition[];
+    /** How the element reacts when its visibility conditions flip (they re-evaluate live as
+     *  variables change). Absent/'instant' = pop in/out immediately — today's behavior, and the
+     *  default must stay instant (authors' systems depend on the immediate pop, same rule as the
+     *  scene commands' liveTransition). 'fade' = fade in/out over conditionTransitionDuration.
+     *  Additive-optional. */
+    conditionTransition?: 'fade';
+    /** Fade time in seconds (default 0.3). Only read when conditionTransition is 'fade'. */
+    conditionTransitionDuration?: number;
     disabledConditions?: VNCondition[];
     /** Variable-reactive appearance overrides; first state whose conditions match wins. */
     appearanceStates?: UIAppearanceState[];
@@ -1585,6 +1593,13 @@ export interface VNUIScreen {
      *  scene on this command until the screen is closed (today's behavior, so old projects are
      *  unchanged). Use for HP bars / status overlays that update as the game runs. Additive-optional. */
     hudNonBlocking?: boolean;
+    /** When true, opening this screen over another does NOT visually replace it — the screens
+     *  beneath it in the stack keep rendering, so it reads as a popup/overlay (an inventory opened
+     *  from a HUD button, a map over a menu). During play, if nothing else sits beneath it on the
+     *  HUD stack, the default Game HUD renders as the floor. Screens beneath are shown but not
+     *  clickable — only the top screen takes input. Default (unset) = today's replace behavior.
+     *  Additive-optional. */
+    showScreensBeneath?: boolean;
     /** When true (default for new screens), opening this screen clears any runtime Show/Hide-Element
      *  overrides for its elements, so `startHidden` pages reset to their defaults each time it opens
      *  (a re-opened document starts on page 1). Set false to make reveals cumulative/persistent
@@ -1623,6 +1638,10 @@ export type HotSpotShape = 'rect' | 'circle';
 export type HotSpotTrigger = 'click' | 'hover' | 'drag-drop';
 
 export interface VNHotSpot {
+    /** Orientation, carried across from the screen element (see VNHotZoneElement). */
+    rotation?: number;
+    flipX?: boolean;
+    flipY?: boolean;
     id: VNID;
     name: string;
     shape: HotSpotShape;
@@ -1649,6 +1668,11 @@ export interface VNHotSpot {
 export type HotZoneElementType = 'image' | 'text' | 'button' | 'video' | 'textInput' | 'draggableImageElement';
 
 export interface VNHotZoneElement {
+    /** Orientation, carried across from the screen element. Interactive elements are laid out by
+     *  their own renderer, which has to apply these itself — see `buildOrientationTransform`. */
+    rotation?: number;
+    flipX?: boolean;
+    flipY?: boolean;
     id: VNID;
     name: string;
     elementType?: HotZoneElementType; // default 'image'

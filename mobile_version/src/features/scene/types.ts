@@ -1286,6 +1286,10 @@ export interface ShowHotSpotCommand extends BaseCommand {
     /** Actions fired when triggered (clicked, hovered, or dropped onto). */
     actions: VNUIAction[];
     /** Mouse pointer while hovering: auto (normal) / hand / arrow (hide the hand) / custom image. */
+    /** Orientation (degrees / mirrors). Additive-optional. */
+    rotation?: number;
+    flipX?: boolean;
+    flipY?: boolean;
     hoverCursor?: 'auto' | 'hand' | 'arrow' | 'custom';
     hoverCursorImage?: { type: 'image' | 'video'; id: VNID } | null;
     /** Only active when these conditions are met. */

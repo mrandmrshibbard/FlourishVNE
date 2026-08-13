@@ -6,7 +6,8 @@
     "fireworks": "花火（ループ演出）",
     "driftSpeed": "漂う速度",
     "riseSpeed": "上昇速度",
-    "launchSpeed": "打ち上げ速度"
+    "launchSpeed": "打ち上げ速度",
+    "density": "濃さ"
   },
   "actions": {
     "none": "（アクションなし）",
@@ -1072,7 +1073,9 @@
     "allowGalleryMusic": "ギャラリーの曲をこの画面でも流し続ける",
     "allowGalleryMusicHint": "「流し続ける」に設定したギャラリーの曲が再生中なら、この画面自身の音楽ではなくその曲が続きます。",
     "resetElementVisibility": "開くたびに非表示の要素をリセット",
-    "resetElementVisibilityHint": "オン：画面を開くたびに「要素を表示／隠す」の変更がリセットされます（書類は 1 ページ目から開き直します）。オフ：一度見せたものは見せたままになります（少しずつ開けていく地図など）。"
+    "resetElementVisibilityHint": "オン：画面を開くたびに「要素を表示／隠す」の変更がリセットされます（書類は 1 ページ目から開き直します）。オフ：一度見せたものは見せたままになります（少しずつ開けていく地図など）。",
+    "showBeneath": "下の画面を表示したままにする",
+    "showBeneathHint": "この画面が別の画面（またはゲームHUD）の上に開いたとき、下の画面が見えたままになります — ポップアップのように。ボタンで開くインベントリやマップに最適です。ヒント: この画面の背景を透明にすると下が見えます。オフ = この画面は前の画面を置き換えます。"
   },
   "actionEditor": {
     "actionType": "アクションの種類",
@@ -1203,7 +1206,10 @@
     "fullscreenOn": "全画面にする",
     "fullscreenOff": "全画面を解除（ウィンドウ）",
     "screenToClose": "閉じる画面",
-    "closeThisScreen": "このボタンがある画面"
+    "closeThisScreen": "このボタンがある画面",
+    "groupVideos": "動画",
+    "groupBackgrounds": "背景",
+    "groupImages": "画像"
   },
   "effectStyle": {
     "label": "効果のスタイル",
@@ -2319,7 +2325,9 @@
     "fillArtOptional": "満ちる部分の画像（任意）",
     "trackArtOptional": "土台の画像（任意）",
     "hotSpotIsOnlyActive": "すべての条件を満たしているときだけ、ホットスポットが働きます。",
-    "elementIsOnlyShownWhen": "すべての条件を満たしているときだけ、この要素が表示されます。"
+    "elementIsOnlyShownWhen": "すべての条件を満たしているときだけ、この要素が表示されます。",
+    "hotSpot": "ホットスポット",
+    "hotSpotTitle": "クリック/ホバーできる透明な領域 — アクションを設定できます"
   },
   "fx": {
     "placeSpotlight": "スポットライトを置く",

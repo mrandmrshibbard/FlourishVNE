@@ -39,6 +39,8 @@ export interface AtmosphereParams {
     color?: string;
     speed?: number;
     wind?: number;
+    /** 0..1, default 0.5 = the pre-density look exactly (maps to `particleDensity`). */
+    density?: number;
 }
 export type GlFxParams = LightsParams | BeamsParams | FlashlightParams | AtmosphereParams;
 
@@ -145,7 +147,7 @@ const GlFxCanvas: React.FC<{
             } else {
                 // atmosphere
                 gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-                const cfg = atmosphereConfig(p.type, p.speed ?? 1, p.wind ?? 0.5);
+                const cfg = atmosphereConfig(p.type, p.speed ?? 1, p.wind ?? 0.5, p.density ?? 0.5);
                 const col = hexToRgb01(p.color || cfg.defaultColor, [0.8, 0.84, 0.88]);
                 gl.uniform2f(loc('uResolution'), w, h);
                 gl.uniform1f(loc('uTime'), t);

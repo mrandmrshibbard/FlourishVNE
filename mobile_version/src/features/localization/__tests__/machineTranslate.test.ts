@@ -243,3 +243,41 @@ describe('🔴 retrying a line whose placeholder the model mangled', () => {
         expect(report.recovered).toBe(0);
     });
 });
+
+describe('🔴 marker styles must not collide with the line\'s own prose', () => {
+    /* The engine deliberately renders literal bracketed digits ("press [3]") as text, and the
+     * bracket marker style writes markers that look exactly like them. On such a line a
+     * mis-restore could slip past the guard — a token substituted into the prose position.
+     * The rule: a style whose markers can't round-trip on the UNSENT text is skipped for that
+     * line, so the outcome is a clean draft via another style, or a rejection. Never corruption. */
+    const trickyLine = 'Press [3] to wave at {Name}';
+    const tricky = (): any => {
+        const p = project();
+        p.scenes.s1.commands = [{ id: 'c1', type: 'Dialogue', characterId: null, text: trickyLine }];
+        p.characters = {};
+        return p;
+    };
+
+    it('drafts the line through a non-colliding style when the model allows one', async () => {
+        // Mangles %%n%% so the batch fails, but carries {n} through — the first retry style.
+        const fussy: Translator = async texts => texts.map(t =>
+            /%%\d+%%/.test(t) ? t.replace(/%%(\d+)%%/g, '%% $1 %%') : `ES:${t}`);
+        const { project: next, report } = await run(fussy, tricky());
+        expect(report.rejected).toEqual([]);
+        const text = (next as any).localization.strings['cmd:c1:text'].es.text;
+        expect(text).toContain('{Name}');
+        expect(text).toContain('[3]');                     // the prose survived untouched
+    });
+
+    it('🔴 rejects rather than corrupts when only the colliding style would "work"', async () => {
+        // Mangles %%, {}, and <> markers; would echo [n] markers back fine — but that style
+        // collides with the literal [3] in the prose, so it must be skipped, not trusted.
+        const bracketOnly: Translator = async texts => texts.map(t => t
+            .replace(/%%(\d+)%%/g, '%% $1 %%')
+            .replace(/\{(\d+)\}/g, '{ $1 }')
+            .replace(/<(\d+)>/g, '< $1 >'));
+        const { project: next, report } = await run(bracketOnly, tricky());
+        expect((next as any).localization.strings['cmd:c1:text']).toBeUndefined();
+        expect(report.rejected).toHaveLength(1);
+    });
+});

@@ -6,7 +6,8 @@
     "fireworks": "Feux d'artifice (spectacle en boucle)",
     "driftSpeed": "Vitesse de dérive",
     "riseSpeed": "Vitesse de montée",
-    "launchSpeed": "Vitesse de lancement"
+    "launchSpeed": "Vitesse de lancement",
+    "density": "Densité"
   },
   "actions": {
     "none": "(Aucune action)",
@@ -1072,7 +1073,9 @@
     "allowGalleryMusic": "Laisser la musique de la galerie continuer ici",
     "allowGalleryMusicHint": "Si un morceau de la Galerie réglé sur « continuer la lecture » est en cours, il se poursuit par-dessus cet écran au lieu de la musique propre à celui-ci.",
     "resetElementVisibility": "Réinitialiser les éléments masqués à l'ouverture",
-    "resetElementVisibilityHint": "Activé : les changements Afficher/Masquer l'élément sont réinitialisés à chaque ouverture (un document se rouvre à la page 1). Désactivé : ce qui a été révélé le reste (par ex. une carte que l'on dévoile)."
+    "resetElementVisibilityHint": "Activé : les changements Afficher/Masquer l'élément sont réinitialisés à chaque ouverture (un document se rouvre à la page 1). Désactivé : ce qui a été révélé le reste (par ex. une carte que l'on dévoile).",
+    "showBeneath": "Garder visibles les écrans en dessous",
+    "showBeneathHint": "Quand cet écran s’ouvre par-dessus un autre (ou le HUD du jeu), celui du dessous reste visible — comme une fenêtre. Idéal pour un inventaire ou une carte ouverte par un bouton. Astuce : donnez à cet écran un fond transparent pour voir celui du dessous. Désactivé = cet écran remplace le précédent."
   },
   "actionEditor": {
     "actionType": "Type d'action",
@@ -1203,7 +1206,10 @@
     "fullscreenOn": "Passer en plein écran",
     "fullscreenOff": "Quitter le plein écran (fenêtre)",
     "screenToClose": "Écran à fermer",
-    "closeThisScreen": "L’écran sur lequel se trouve ce bouton"
+    "closeThisScreen": "L’écran sur lequel se trouve ce bouton",
+    "groupVideos": "Vidéos",
+    "groupBackgrounds": "Arrière-plans",
+    "groupImages": "Images"
   },
   "effectStyle": {
     "label": "Style d'effet",
@@ -2319,7 +2325,9 @@
     "fillArtOptional": "Visuel de remplissage (facultatif)",
     "trackArtOptional": "Visuel de la piste (facultatif)",
     "hotSpotIsOnlyActive": "Le point interactif n'est actif que si toutes les conditions sont remplies.",
-    "elementIsOnlyShownWhen": "L'élément ne s'affiche que si toutes les conditions sont remplies."
+    "elementIsOnlyShownWhen": "L'élément ne s'affiche que si toutes les conditions sont remplies.",
+    "hotSpot": "Zone active",
+    "hotSpotTitle": "Une zone invisible cliquable/survolable — attachez-lui des actions"
   },
   "fx": {
     "placeSpotlight": "Placer le projecteur",

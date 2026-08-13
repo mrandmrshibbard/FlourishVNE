@@ -249,7 +249,7 @@ interface StageState {
     textOverlays: TextOverlay[];
     imageOverlays: ImageOverlay[];
     buttonOverlays: ButtonOverlay[];
-    hotSpotOverlays: { id: string; name: string; x: number; y: number; width: number; height: number; shape: 'rect' | 'circle'; trigger: string; visible?: boolean; highlightColor?: string }[];
+    hotSpotOverlays: { id: string; name: string; x: number; y: number; width: number; height: number; shape: 'rect' | 'circle'; trigger: string; visible?: boolean; highlightColor?: string; rotation?: number; flipX?: boolean; flipY?: boolean }[];
     screen: {
         shake: { active: boolean; intensity: number };
         tint: string;
@@ -767,6 +767,7 @@ const StagingArea: React.FC<{
                             id: command.id, name: command.name, x: command.x, y: command.y,
                             width: command.width, height: command.height, shape: command.shape,
                             trigger: command.trigger, visible: command.visible, highlightColor: command.highlightColor,
+                            rotation: (command as any).rotation, flipX: (command as any).flipX, flipY: (command as any).flipY,
                         });
                     }
                     break;
@@ -2382,6 +2383,8 @@ const StagingArea: React.FC<{
                                     left: `${displayX}%`, top: `${displayY}%`,
                                     width: `${displayW}%`, height: `${displayH}%`,
                                     borderRadius: hs.shape === 'circle' ? '50%' : 6,
+                                    // Editor preview of the spot's rotation/flip, matching the runtime.
+                                    transform: buildOrientationTransform(hs) || undefined,
                                     border: `2px dashed ${outline}`,
                                     background: hs.visible ? (hs.highlightColor || 'rgba(99,102,241,0.25)') : 'rgba(99,102,241,0.08)',
                                     cursor: isDragging ? 'grabbing' : 'grab',

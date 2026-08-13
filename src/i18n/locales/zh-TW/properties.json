@@ -1022,5 +1022,8 @@
     "speaksAsThePlayerCreated2": "以玩家建立的角色身分說話；名字框會使用玩家所取的名字。",
     "overrideIndividualLayersOnTop": "在表情之上單獨調整圖層——自由組合造型（例如：開心的臉＋校服＋臉紅），無需為此新建表情。",
     "fadeDurationS": "淡入淡出時長（秒）"
+  },
+  "screenFx": {
+    "density": "濃度"
   }
 }

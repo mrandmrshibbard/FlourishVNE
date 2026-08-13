@@ -20,6 +20,7 @@ import ConditionsEditor from './ConditionsEditor';
 import { PlusIcon, TrashIcon } from '../icons';
 import ActionFields from './actionFields';
 import { actionLabel, actionSummaryDetail, defaultActionForType } from '../../utils/actionMeta';
+import SearchableSelect from './SearchableSelect';
 
 export interface ActionTargetableElement {
     id: VNID;
@@ -83,15 +84,16 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                                 </button>
                             }
                         >
-                            <select
+                            {/* Searchable (~60 types). Deliberately still Object.values — this list
+                                editor has always offered every action type, unlike ActionEditor's
+                                curated MENU_ACTION_TYPES; changing which types are offered is a
+                                separate decision from making them findable. */}
+                            <SearchableSelect
                                 value={action.type}
-                                onChange={e => changeActionType(i, e.target.value as UIActionType)}
-                                className="w-full bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px] mb-1"
-                            >
-                                {Object.values(UIActionType).map(at => (
-                                    <option key={at} value={at}>{actionLabel(at, t)}</option>
-                                ))}
-                            </select>
+                                onChange={v => changeActionType(i, v as UIActionType)}
+                                options={Object.values(UIActionType).map(at => ({ value: at, label: actionLabel(at, t) }))}
+                                className="mb-1 text-[10px]"
+                            />
                             <ActionFields
                                 action={action}
                                 project={project}

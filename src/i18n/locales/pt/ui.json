@@ -129,7 +129,8 @@
     "fireworks": "Fogos de artifício (show contínuo)",
     "driftSpeed": "Velocidade da deriva",
     "riseSpeed": "Velocidade de subida",
-    "launchSpeed": "Velocidade de lançamento"
+    "launchSpeed": "Velocidade de lançamento",
+    "density": "Densidade"
   },
   "actions": {
     "none": "(Nenhuma ação)",
@@ -1196,7 +1197,9 @@
     "hudNonBlocking": "Não impede a cena de avançar",
     "hudNonBlockingHint": "Quando esta tela é aberta com o comando Mostrar Tela, a história continua rodando atrás dela em vez de congelar — para uma barra de vida ou um painel de status que se atualiza durante o jogo. Deixe DESLIGADO para menus que devem pausar a cena até fechar.",
     "resetElementVisibility": "Restaurar elementos ocultos ao abrir",
-    "resetElementVisibilityHint": "Ligado: as mudanças de Mostrar/Esconder Elemento voltam ao normal toda vez que a tela abre (um documento reabre na página 1). Desligado: o que foi revelado continua revelado (ex.: um mapa que você vai descobrindo)."
+    "resetElementVisibilityHint": "Ligado: as mudanças de Mostrar/Esconder Elemento voltam ao normal toda vez que a tela abre (um documento reabre na página 1). Desligado: o que foi revelado continua revelado (ex.: um mapa que você vai descobrindo).",
+    "showBeneath": "Manter visíveis as telas de baixo",
+    "showBeneathHint": "Quando esta tela abre sobre outra (ou sobre o HUD do jogo), a de baixo continua visível — como um popup. Ótimo para um inventário ou mapa aberto por um botão. Dica: dê a esta tela um fundo transparente para a de baixo aparecer. Desligado = esta tela substitui a anterior."
   },
   "screenFxEditors": {
     "noBeams": "Nenhum feixe ainda — adicione um e posicione no palco.",
@@ -1422,7 +1425,10 @@
     "fullscreenOn": "Ir para tela cheia",
     "fullscreenOff": "Sair da tela cheia (janela)",
     "screenToClose": "Tela a fechar",
-    "closeThisScreen": "A tela em que este botão está"
+    "closeThisScreen": "A tela em que este botão está",
+    "groupVideos": "Vídeos",
+    "groupBackgrounds": "Planos de fundo",
+    "groupImages": "Imagens"
   },
   "character": {
     "defaultPose": "Padrão (arte normal)",
@@ -2346,6 +2352,8 @@
     "fillArtOptional": "Arte do preenchimento (opcional)",
     "trackArtOptional": "Arte da trilha (opcional)",
     "hotSpotIsOnlyActive": "O ponto interativo só funciona quando todas as condições forem atendidas.",
-    "elementIsOnlyShownWhen": "O elemento só aparece quando todas as condições forem atendidas."
+    "elementIsOnlyShownWhen": "O elemento só aparece quando todas as condições forem atendidas.",
+    "hotSpot": "Ponto de interação",
+    "hotSpotTitle": "Uma área invisível clicável — atribua ações a ela"
   }
 }

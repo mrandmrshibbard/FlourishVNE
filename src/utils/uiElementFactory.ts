@@ -1,7 +1,7 @@
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 // FIX: UIActionType is exported from shared types.
-import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIMusicGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UITimerElement, UIItemElement, UICustomElement, DropdownOption } from '../features/ui/types';
+import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIMusicGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UITimerElement, UIItemElement, UICustomElement, DropdownOption , UIHotSpotElement } from '../features/ui/types';
 import { UIActionType } from '../types/shared';
 import { defaultMusicPlayerParts } from './musicGallery';
 
@@ -319,6 +319,24 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
                 valueFormat: 'valueMax',
                 labelFont: project.ui.dialogueTextFont,
                 valueFont: project.ui.dialogueTextFont,
+            };
+            return el;
+        }
+        case UIElementType.HotSpot: {
+            /* 🔴 Anchors 0/0, overriding the factory's center default: hot spots have always been
+             * top-left anchored (see the original quick-add in ScreenInspector's Interactivity
+             * section, which this case replaces as the single definition). A center anchor here
+             * would shift every quick-added spot by half its size in existing muscle memory.
+             * `interactive: true` is the permanence tag — the runtime treats the element as
+             * interactive even if `draggable` is later toggled off. */
+            const el: UIHotSpotElement = {
+                ...base, name: 'Hot Spot', type,
+                shape: 'rect',
+                trigger: 'click',
+                x: 40, y: 40, width: 20, height: 20,
+                anchorX: 0, anchorY: 0,
+                interactive: true,
+                actions: [],
             };
             return el;
         }

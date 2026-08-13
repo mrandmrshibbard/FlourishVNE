@@ -486,9 +486,14 @@ export interface AtmosConfig {
 /** PURE: per-type presets mirroring runCloudSim's three characters — fog = low slow banks,
  *  haze = faint full-screen veil, smoke = darker rising wisps. `speed`/`windStrength` come
  *  from the effect's existing params (no new authoring fields). */
-export function atmosphereConfig(type: 'fog' | 'haze' | 'smoke', speed = 1, wind = 0.5): AtmosConfig {
+export function atmosphereConfig(type: 'fog' | 'haze' | 'smoke', speed = 1, wind = 0.5, density = 0.5): AtmosConfig {
+    /* Density (authorable, 0..1, default 0.5 = today's look exactly): thickens or thins the
+     * cover. Alpha carries most of it; contrast moves the opposite way slightly so thin smoke
+     * breaks into wisps rather than becoming a uniform grey film. */
+    const dAlpha = 0.5 + density;               // ×0.5 .. ×1.5
+    const dContrast = 1.25 - density * 0.5;     // ×1.0 at default; thin → crisper wisps
     const drift = 0.012 * speed * (0.5 + wind);
-    if (type === 'fog') return { drift: [drift, 0.002 * speed], scale: 3.2, contrast: 1.35, bandY: 0.16, bandSoft: 0.55, baseAlpha: 0.8, defaultColor: '#cdd6e0' };
-    if (type === 'haze') return { drift: [drift * 0.6, 0.0], scale: 2.2, contrast: 1.0, bandY: 0.5, bandSoft: 1.0, baseAlpha: 0.55, defaultColor: '#c9cfd8' };
-    return { drift: [drift * 0.8, -0.01 * speed], scale: 4.0, contrast: 1.7, bandY: 0.3, bandSoft: 0.8, baseAlpha: 0.85, defaultColor: '#4a4a52' };
+    if (type === 'fog') return { drift: [drift, 0.002 * speed], scale: 3.2, contrast: 1.35 * dContrast, bandY: 0.16, bandSoft: 0.55, baseAlpha: Math.min(1, 0.8 * dAlpha), defaultColor: '#cdd6e0' };
+    if (type === 'haze') return { drift: [drift * 0.6, 0.0], scale: 2.2, contrast: 1.0 * dContrast, bandY: 0.5, bandSoft: 1.0, baseAlpha: Math.min(1, 0.55 * dAlpha), defaultColor: '#c9cfd8' };
+    return { drift: [drift * 0.8, -0.01 * speed], scale: 4.0, contrast: 1.7 * dContrast, bandY: 0.3, bandSoft: 0.8, baseAlpha: Math.min(1, 0.85 * dAlpha), defaultColor: '#4a4a52' };
 }

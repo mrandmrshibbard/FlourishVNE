@@ -6,7 +6,8 @@
     "fireworks": "Fuochi d'artificio (spettacolo continuo)",
     "driftSpeed": "Velocità di deriva",
     "riseSpeed": "Velocità di salita",
-    "launchSpeed": "Velocità di lancio"
+    "launchSpeed": "Velocità di lancio",
+    "density": "Densità"
   },
   "actions": {
     "none": "(Nessuna azione)",
@@ -1072,7 +1073,9 @@
     "allowGalleryMusic": "Lascia che la musica della galleria continui qui",
     "allowGalleryMusicHint": "Se è in riproduzione un brano della Galleria impostato su \"continua a suonare\", prosegue su questa schermata al posto della sua musica.",
     "resetElementVisibility": "Ripristina gli elementi nascosti all'apertura",
-    "resetElementVisibilityHint": "Attivo: le modifiche di Mostra/Nascondi elemento si azzerano a ogni apertura della schermata (un documento si riapre a pagina 1). Disattivo: ciò che è stato svelato resta svelato (ad es. una mappa che scopri poco a poco)."
+    "resetElementVisibilityHint": "Attivo: le modifiche di Mostra/Nascondi elemento si azzerano a ogni apertura della schermata (un documento si riapre a pagina 1). Disattivo: ciò che è stato svelato resta svelato (ad es. una mappa che scopri poco a poco).",
+    "showBeneath": "Mantieni visibili le schermate sottostanti",
+    "showBeneathHint": "Quando questa schermata si apre sopra un’altra (o sopra l’HUD), quella sotto resta visibile — come un popup. Perfetto per un inventario o una mappa aperti da un pulsante. Suggerimento: dai a questa schermata uno sfondo trasparente così si vede quella sotto. Disattivato = questa schermata sostituisce la precedente."
   },
   "actionEditor": {
     "actionType": "Tipo di azione",
@@ -1203,7 +1206,10 @@
     "fullscreenOn": "Passa a schermo intero",
     "fullscreenOff": "Esci da schermo intero (finestra)",
     "screenToClose": "Schermata da chiudere",
-    "closeThisScreen": "La schermata su cui si trova questo pulsante"
+    "closeThisScreen": "La schermata su cui si trova questo pulsante",
+    "groupVideos": "Video",
+    "groupBackgrounds": "Sfondi",
+    "groupImages": "Immagini"
   },
   "effectStyle": {
     "label": "Stile dell'effetto",
@@ -2319,7 +2325,9 @@
     "fillArtOptional": "Immagine del riempimento (facoltativa)",
     "trackArtOptional": "Immagine della traccia (facoltativa)",
     "hotSpotIsOnlyActive": "Il punto interattivo funziona solo quando tutte le condizioni sono soddisfatte.",
-    "elementIsOnlyShownWhen": "L'elemento compare solo quando tutte le condizioni sono soddisfatte."
+    "elementIsOnlyShownWhen": "L'elemento compare solo quando tutte le condizioni sono soddisfatte.",
+    "hotSpot": "Area attiva",
+    "hotSpotTitle": "Un’area invisibile cliccabile/attivabile al passaggio — assegnale delle azioni"
   },
   "fx": {
     "placeSpotlight": "Posiziona il faretto",

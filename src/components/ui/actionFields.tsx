@@ -13,6 +13,7 @@ import { FormField, Select, TextInput, RangeInput } from './Form';
 import type { ActionTargetableElement } from './UIActionsListEditor';
 import { collectTimerIds } from '../../utils/actionMeta';
 import AudioAdjustFields from './AudioAdjustFields';
+import SearchableSelect from './SearchableSelect';
 
 /**
  * THE single per-action parameter-field renderer, shared by ActionEditor (single action) and
@@ -61,6 +62,16 @@ const ActionFields: React.FC<{
     const sel = (value: string, onCh: (v: string) => void, children: React.ReactNode) => variant === 'form'
         ? <Select value={value} onChange={e => onCh(e.target.value)}>{children}</Select>
         : <select value={value} onChange={e => onCh(e.target.value)} className={inputCls}>{children}</select>;
+
+    /* Searchable variant for the LONG lists (audio, video): type-to-filter instead of scrolling a
+     * hundred assets. Separate from `sel` because SearchableSelect takes an options ARRAY, not
+     * <option> children. The search box only appears past 5 options, so small projects see a
+     * normal dropdown. Same control both variants — the compact list editor gets it too. */
+    const searchSel = (value: string, onCh: (v: string) => void,
+        options: { value: string; label: string; group?: string }[], placeholder: string) => (
+        <SearchableSelect value={value} onChange={onCh} options={options} placeholder={placeholder}
+            className={variant === 'compact' ? 'text-[10px]' : undefined} />
+    );
 
     const txt = (value: string, onCh: (v: string) => void, opts?: { type?: string; min?: number; placeholder?: string; list?: string }) => variant === 'form'
         ? <TextInput type={opts?.type} value={value} onChange={e => onCh(e.target.value)} placeholder={opts?.placeholder} list={opts?.list} />
@@ -252,10 +263,11 @@ const ActionFields: React.FC<{
             </>)));
         case UIActionType.PlaySound:
             return group('purple', <>
-                {field(t('actionEditor.audio', 'Audio'), sel(a.audioId || '', v => set({ audioId: v }), <>
-                    <option value="">{t('actionsList.selectAudio', 'Select audio…')}</option>
-                    {Object.values(project.audio).map((au: any) => <option key={au.id} value={au.id}>{au.name}</option>)}
-                </>))}
+                {field(t('actionEditor.audio', 'Audio'),
+                    searchSel(a.audioId || '', v => set({ audioId: v }),
+                        [{ value: '', label: t('actionsList.selectAudio', 'Select audio…') },
+                         ...Object.values(project.audio).map((au: any) => ({ value: au.id, label: au.name }))],
+                        t('actionsList.selectAudio', 'Select audio…')))}
                 <div className="flex items-center gap-1">
                     <span className="text-[10px] text-[var(--text-secondary)]">{t('actionsList.volume', 'Volume')}</span>
                     <RangeInput min={0} max={1} step={0.01} value={a.volume ?? 1} onChange={e => set({ volume: parseFloat(e.target.value) })} className="flex-1 accent-[var(--accent-lavender)]" />
@@ -268,25 +280,26 @@ const ActionFields: React.FC<{
             </>);
         case UIActionType.StopSound:
             return group('purple', <>
-                {field(t('actionEditor.soundToStop', 'Sound to stop'), sel(a.audioId || '', v => set({ audioId: v || null }), <>
-                    <option value="">{t('actionEditor.allSounds', 'All playing sounds')}</option>
-                    {Object.values(project.audio).map((au: any) => <option key={au.id} value={au.id}>{au.name}</option>)}
-                </>))}
+                {field(t('actionEditor.soundToStop', 'Sound to stop'),
+                    searchSel(a.audioId || '', v => set({ audioId: v || null }),
+                        [{ value: '', label: t('actionEditor.allSounds', 'All playing sounds') },
+                         ...Object.values(project.audio).map((au: any) => ({ value: au.id, label: au.name }))],
+                        t('actionEditor.allSounds', 'All playing sounds')))}
                 {field(t('actionsList.fadeSeconds', 'Fade (seconds)'), txt(String(a.fadeDuration ?? 0), v => set({ fadeDuration: Math.max(0, parseFloat(v) || 0) }), { type: 'number', min: 0 }))}
                 <p className="text-[10px] text-[var(--text-muted)]">{t('actionEditor.stopSoundHint', 'Stops sound effects — background music has its own Stop Music action.')}</p>
             </>);
         case UIActionType.PlayVideo: {
-            // A video can live in videos OR backgrounds/images (upload-tab siloing) — list them all.
+            // A video can live in videos OR backgrounds/images (upload-tab siloing) — list them all,
+            // GROUPED by pool: three merged lists made same-named videos indistinguishable.
             const videoOptions = [
-                ...Object.values(project.videos || {}),
-                ...Object.values(project.backgrounds || {}).filter((v: any) => v.isVideo || v.videoUrl),
-                ...Object.values(project.images || {}).filter((v: any) => v.isVideo || v.videoUrl),
-            ] as any[];
+                ...Object.values(project.videos || {}).map((v: any) => ({ value: v.id, label: v.name, group: t('actionEditor.groupVideos', 'Videos') })),
+                ...Object.values(project.backgrounds || {}).filter((v: any) => v.isVideo || v.videoUrl).map((v: any) => ({ value: v.id, label: v.name, group: t('actionEditor.groupBackgrounds', 'Backgrounds') })),
+                ...Object.values(project.images || {}).filter((v: any) => v.isVideo || v.videoUrl).map((v: any) => ({ value: v.id, label: v.name, group: t('actionEditor.groupImages', 'Images') })),
+            ];
             return group('purple', <>
-                {field(t('actionEditor.video', 'Video'), sel(a.videoId || '', v => set({ videoId: v || null }), <>
-                    <option value="">{t('actionEditor.selectVideo', 'Select a video…')}</option>
-                    {videoOptions.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                </>))}
+                {field(t('actionEditor.video', 'Video'),
+                    searchSel(a.videoId || '', v => set({ videoId: v || null }), videoOptions,
+                        t('actionEditor.selectVideo', 'Select a video…')))}
                 <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
                     <input type="checkbox" checked={a.loop ?? false} onChange={e => set({ loop: e.target.checked })} />
                     {t('actionsList.loop', 'Loop')}
@@ -303,10 +316,11 @@ const ActionFields: React.FC<{
         }
         case UIActionType.PlayMusic:
             return group('purple', <>
-                {field(t('actionEditor.music', 'Music'), sel(a.audioId || '', v => set({ audioId: v }), <>
-                    <option value="">{t('actionsList.selectAudio', 'Select audio…')}</option>
-                    {Object.values(project.audio).map((au: any) => <option key={au.id} value={au.id}>{au.name}</option>)}
-                </>))}
+                {field(t('actionEditor.music', 'Music'),
+                    searchSel(a.audioId || '', v => set({ audioId: v }),
+                        [{ value: '', label: t('actionsList.selectAudio', 'Select audio…') },
+                         ...Object.values(project.audio).map((au: any) => ({ value: au.id, label: au.name }))],
+                        t('actionsList.selectAudio', 'Select audio…')))}
                 <div className="flex items-center gap-1">
                     <span className="text-[10px] text-[var(--text-secondary)]">{t('actionsList.volume', 'Volume')}</span>
                     <RangeInput min={0} max={1} step={0.01} value={a.volume ?? 1} onChange={e => set({ volume: parseFloat(e.target.value) })} className="flex-1 accent-[var(--accent-lavender)]" />

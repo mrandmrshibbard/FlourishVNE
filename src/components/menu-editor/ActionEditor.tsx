@@ -5,6 +5,7 @@ import { VNScene, CommandType, LabelCommand } from '../../features/scene/types';
 import { VNVariable } from '../../features/variables/types';
 import { useProject } from '../../contexts/ProjectContext';
 import { FormField, Select } from '../ui/Form';
+import SearchableSelect from '../ui/SearchableSelect';
 import ConditionsEditor from '../ui/ConditionsEditor';
 import ActionFields from '../ui/actionFields';
 import UIActionsListEditor from '../ui/UIActionsListEditor';
@@ -60,9 +61,12 @@ const ActionEditor: React.FC<{
         return (
             <div>
                 <FormField label={t('actionEditor.actionType')}>
-                    <Select value={UIActionType.None} onChange={e => onActionChange({ type: e.target.value as UIActionType })}>
-                        {MENU_ACTION_TYPES.map(at => <option key={at} value={at}>{actionLabel(at, t)}</option>)}
-                    </Select>
+                    <SearchableSelect
+                        value={UIActionType.None}
+                        onChange={v => onActionChange({ type: v as UIActionType })}
+                        options={MENU_ACTION_TYPES.map(at => ({ value: at, label: actionLabel(at, t) }))}
+                        placeholder={t('actionEditor.actionType')}
+                    />
                 </FormField>
             </div>
         );
@@ -136,9 +140,14 @@ const ActionEditor: React.FC<{
     return (
         <div>
             <FormField label={t('actionEditor.actionType')}>
-                <Select value={action.type} onChange={e => onActionChange(defaultActionForType(e.target.value as UIActionType, project))}>
-                    {MENU_ACTION_TYPES.map(at => <option key={at} value={at}>{actionLabel(at, t)}</option>)}
-                </Select>
+                {/* Searchable: the action list is ~60 entries now, and hunting for one by
+                    scrolling was a repeated complaint. Same order as before, just filterable. */}
+                <SearchableSelect
+                    value={action.type}
+                    onChange={v => onActionChange(defaultActionForType(v as UIActionType, project))}
+                    options={MENU_ACTION_TYPES.map(at => ({ value: at, label: actionLabel(at, t) }))}
+                    placeholder={t('actionEditor.actionType')}
+                />
             </FormField>
             <ActionFields action={action} project={project} onChange={onActionChange} options={{ variant: 'form', renderActionList: (acts, onCh, lbl) => (
                 <UIActionsListEditor actions={acts} project={project} onChange={onCh} label={lbl} />

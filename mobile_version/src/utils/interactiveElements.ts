@@ -55,7 +55,7 @@ export function isInteractiveElement(el: VNUIElement): boolean {
 
 /** Translate a `UIHotSpotElement` into the legacy `VNHotSpot` runtime shape — used
  *  internally by `deriveHotSpotsFromScreen`. Field names already match. */
-function hotSpotElementToLegacy(el: UIHotSpotElement): VNHotSpot {
+function hotSpotElementToLegacyInner(el: UIHotSpotElement): VNHotSpot {
     return {
         id: el.id, name: el.name, shape: el.shape, trigger: el.trigger || 'click',
         x: el.x, y: el.y, width: el.width, height: el.height,
@@ -74,7 +74,7 @@ function hotSpotElementToLegacy(el: UIHotSpotElement): VNHotSpot {
 /** Translate a unified element back into the legacy `VNHotZoneElement` runtime
  *  shape consumed by the interactive runtime. Used internally by
  *  `deriveInteractiveElementsFromScreen`. */
-function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { icon?: { type: string; id: VNID } | null; dragTag?: string; countVariableId?: VNID } | undefined>): VNHotZoneElement | null {
+function elementToLegacyHotZoneElementInner(el: VNUIElement, items?: Record<VNID, { icon?: { type: string; id: VNID } | null; dragTag?: string; countVariableId?: VNID } | undefined>): VNHotZoneElement | null {
     const anyEl = el as any;
     switch (el.type) {
         case UIElementType.Item: {
@@ -201,6 +201,46 @@ function elementToLegacyHotZoneElement(el: VNUIElement, items?: Record<VNID, { i
 
 /** Derive the legacy `hotSpots` runtime map from a screen by scanning
  *  `screen.elements` for `UIHotSpotElement` entries. */
+
+/**
+ * 🔴 Carry the element's ORIENTATION and LAYER across the runtime shim.
+ *
+ * The converters below are hand-written field lists, and they predate rotation/flip — so anything a
+ * player could drag or click silently lost its rotation on the way to the runtime. Reported as
+ * "items with 'Players can drag it onto hot spots' don't obey rotation".
+ *
+ * `layer` was lost the same way, with a worse symptom: interactive elements rendered at a FIXED
+ * z-index, so a hot spot sat under any image the author had put on a higher layer and simply could
+ * not be clicked. Scenes had layered hot spots; screens didn't.
+ *
+ * Merged HERE, once, rather than added to each of the converters' many `return` statements: that's
+ * exactly the kind of list where the next new field gets added to five of six branches. Same reason
+ * the poses feature lost art to a typed field list.
+ */
+const CARRIED_THROUGH = ['rotation', 'flipX', 'flipY', 'layer'] as const;
+
+const withSharedElementProps = <T,>(converted: T, source: any): T => {
+    if (!converted) return converted;
+    const extra: Record<string, unknown> = {};
+    for (const key of CARRIED_THROUGH) {
+        // Only copy what's actually set: stamping `rotation: undefined` on everything would make
+        // every element look modified to code that tests for the property.
+        if (source?.[key] !== undefined) extra[key] = source[key];
+    }
+    return Object.keys(extra).length ? { ...converted, ...extra } as T : converted;
+};
+
+function hotSpotElementToLegacy(el: UIHotSpotElement): VNHotSpot {
+    return withSharedElementProps(hotSpotElementToLegacyInner(el), el);
+}
+
+function elementToLegacyHotZoneElement(
+    el: VNUIElement,
+    items?: Record<VNID, { icon?: { type: string; id: VNID } | null; dragTag?: string; countVariableId?: VNID } | undefined>,
+): VNHotZoneElement | null {
+    return withSharedElementProps(elementToLegacyHotZoneElementInner(el, items), el);
+}
+
 export function deriveHotSpotsFromScreen(screen: VNUIScreen): Record<VNID, VNHotSpot> {
     const out: Record<VNID, VNHotSpot> = {};
     for (const el of Object.values(screen.elements || {}) as VNUIElement[]) {

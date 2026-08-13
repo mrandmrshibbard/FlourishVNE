@@ -12,7 +12,8 @@
     "fireworks": "Fireworks (looping show)",
     "driftSpeed": "Drift Speed",
     "riseSpeed": "Rise Speed",
-    "launchSpeed": "Launch Speed"
+    "launchSpeed": "Launch Speed",
+    "density": "Density"
   },
   "actions": {
     "none": "(No Action)",
@@ -924,7 +925,9 @@
     "spotlightIntensityHint": "The strength slider sets how dark the rest of the screen goes behind the beams.",
     "lightsIntensityHint": "The strength slider is a master brightness for all the lights — bind it to a variable to dim them in play.",
     "glitchColors": "Glitch colours",
-    "addColor": "+ Colour"
+    "addColor": "+ Colour",
+    "showBeneath": "Keep screens beneath visible",
+    "showBeneathHint": "When this screen opens on top of another (or the game HUD), the one beneath stays visible under it — like a popup. Great for an inventory or map opened from a button. Tip: give this screen a see-through background so the screen underneath shows. Off = this screen replaces the previous one."
   },
   "screenFxEditors": {
     "noBeams": "No beams yet — add one and place it on the canvas.",
@@ -1055,6 +1058,13 @@
     "fullscreenOn": "Go full screen",
     "fullscreenOff": "Leave full screen (windowed)",
     "screenToClose": "Screen to close",
-    "closeThisScreen": "The screen this button is on"
+    "closeThisScreen": "The screen this button is on",
+    "groupVideos": "Videos",
+    "groupBackgrounds": "Backgrounds",
+    "groupImages": "Images"
+  },
+  "hc": {
+    "hotSpot": "Hot Spot",
+    "hotSpotTitle": "An invisible clickable/hoverable area — attach actions to it"
   }
 }

@@ -15,6 +15,7 @@ import CursorSelect from '../ui/CursorSelect';
 import { useTranslation } from 'react-i18next';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
+import { OrientationFields } from '../inspector/fields';
 import {
     VNHotSpot,
     VNHotZoneElement,
@@ -282,6 +283,11 @@ export const HotSpotProperties: React.FC<{
                 </label>
             </div>
             <CursorSelect value={{ hoverCursor: (spot as any).hoverCursor, hoverCursorImage: (spot as any).hoverCursorImage }} onChange={patch => onUpdate(patch as any)} />
+
+            {/* Rotation/flip — previously only reachable via the right-click radial's transform
+                wedge, because hot spots route to THIS panel and never reach ElementGroupFields. */}
+            <OrientationFields rotation={(spot as any).rotation} flipX={(spot as any).flipX} flipY={(spot as any).flipY}
+                onChange={patch => typedOnUpdate(patch as any)} />
 
             {spot.trigger === 'drag-drop' && (
                 <div className="space-y-2 rounded-md border border-[var(--border-subtle)] p-2 bg-[var(--bg-primary)]/40">
@@ -931,6 +937,10 @@ export const InteractiveElementProperties: React.FC<{
                 )}
                 {/* Shown for EVERY interactive element (clickable or draggable) — not just draggables. */}
                 <CursorSelect value={{ hoverCursor: (element as any).hoverCursor, hoverCursorImage: (element as any).hoverCursorImage }} onChange={patch => onUpdate(patch as any)} />
+                {/* Rotation/flip — this panel replaces ElementGroupFields for interactive
+                    elements, so without these the docked inspector had no way to rotate one. */}
+                <OrientationFields rotation={(typedElement as any).rotation} flipX={(typedElement as any).flipX} flipY={(typedElement as any).flipY}
+                    onChange={patch => typedOnUpdate(patch as any)} />
             </div>
 
             <div>

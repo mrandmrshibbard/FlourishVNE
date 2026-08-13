@@ -288,6 +288,26 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
         <div className="space-y-2">
             <ConditionsEditor collapsible title={t('elementInspector.visibilityConditions')} hint={t('elementInspector.visibilityNote')}
                 conditions={element.conditions} project={project} onChange={(cs) => updateElement({ conditions: cs })} />
+            {/* Same option (and the same already-translated strings, via the properties namespace)
+                as the scene commands' "When the condition changes" — screen elements could only
+                pop. Default stays instant; fade is the opt-in. */}
+            {(element.conditions?.length ?? 0) > 0 && (
+                <div className="pl-1 space-y-1">
+                    <FormField label={t('properties:footer.liveTransition', 'When the condition changes')}>
+                        <Select value={(element as any).conditionTransition || 'instant'}
+                            onChange={e => updateElement({ conditionTransition: e.target.value === 'fade' ? 'fade' : undefined } as any)}>
+                            <option value="instant">{t('properties:footer.liveTransitionInstant', 'Appear / disappear instantly (default)')}</option>
+                            <option value="fade">{t('properties:footer.liveTransitionFade', 'Fade in and out')}</option>
+                        </Select>
+                    </FormField>
+                    {(element as any).conditionTransition === 'fade' && (
+                        <FormField label={t('properties:footer.liveTransitionDuration', 'Fade time (seconds)')}>
+                            <TextInput type="number" step="0.1" value={String((element as any).conditionTransitionDuration ?? 0.3)}
+                                onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) updateElement({ conditionTransitionDuration: v } as any); }} />
+                        </FormField>
+                    )}
+                </div>
+            )}
             <ConditionsEditor collapsible title={t('elementInspector.disabledConditions')} hint={t('elementInspector.disabledNote')}
                 conditions={element.disabledConditions} project={project} onChange={(cs) => updateElement({ disabledConditions: cs })} />
             {renderAppearanceStates()}

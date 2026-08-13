@@ -6,7 +6,8 @@
     "fireworks": "烟花（循环表演）",
     "driftSpeed": "飘移速度",
     "riseSpeed": "上升速度",
-    "launchSpeed": "发射速度"
+    "launchSpeed": "发射速度",
+    "density": "浓度"
   },
   "actions": {
     "none": "（无操作）",
@@ -1072,7 +1073,9 @@
     "allowGalleryMusic": "允许鉴赏音乐在此继续播放",
     "allowGalleryMusicHint": "若正在播放设置为“继续播放”的鉴赏曲目，它会盖过该界面自带的音乐继续播放。",
     "resetElementVisibility": "打开时重置隐藏的元素",
-    "resetElementVisibilityHint": "开启：每次打开界面时，“显示／隐藏元素”的改动都会重置（文档重新从第 1 页开始）。关闭：已揭示的内容会保留（例如逐步揭开的地图）。"
+    "resetElementVisibilityHint": "开启：每次打开界面时，“显示／隐藏元素”的改动都会重置（文档重新从第 1 页开始）。关闭：已揭示的内容会保留（例如逐步揭开的地图）。",
+    "showBeneath": "保持下层界面可见",
+    "showBeneathHint": "当此界面打开在另一界面（或游戏HUD）之上时，下层界面保持可见 — 像弹窗一样。适合用按钮打开的物品栏或地图。提示：给此界面设置透明背景，下层才能透出来。关闭 = 此界面替换上一个界面。"
   },
   "actionEditor": {
     "actionType": "操作类型",
@@ -1203,7 +1206,10 @@
     "fullscreenOn": "进入全屏",
     "fullscreenOff": "退出全屏（窗口）",
     "screenToClose": "要关闭的界面",
-    "closeThisScreen": "此按钮所在的界面"
+    "closeThisScreen": "此按钮所在的界面",
+    "groupVideos": "视频",
+    "groupBackgrounds": "背景",
+    "groupImages": "图片"
   },
   "effectStyle": {
     "label": "特效风格",
@@ -2319,7 +2325,9 @@
     "fillArtOptional": "填充图片（可选）",
     "trackArtOptional": "轨道图片（可选）",
     "hotSpotIsOnlyActive": "只有全部条件都满足时，热区才会生效。",
-    "elementIsOnlyShownWhen": "只有全部条件都满足时，该元素才会显示。"
+    "elementIsOnlyShownWhen": "只有全部条件都满足时，该元素才会显示。",
+    "hotSpot": "热区",
+    "hotSpotTitle": "一个不可见的可点击/悬停区域 — 可为其绑定动作"
   },
   "fx": {
     "placeSpotlight": "放置聚光灯",

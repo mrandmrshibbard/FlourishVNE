@@ -93,6 +93,20 @@ export async function machineTranslateProject(
      * affection" — the model reformatted the placeholder, so a perfectly good translation was
      * thrown away. Marker shapes fail for different reasons, so a retry recovers most of them.
      */
+    /**
+     * 🔴 A marker style is only safe for a line if the PROTECTED text round-trips through restore
+     * before the model ever sees it. The engine deliberately passes literal bracketed digits
+     * ("press [3]") through as prose — so on such a line the `[n]` marker style can't tell prose
+     * from marker, and in a narrow case a mis-restored line would slip past the guard. Restoring
+     * the unsent text is a complete self-check: markers must be exactly {0…n-1}, once each, and
+     * give back the original. A style that fails is simply skipped for that line.
+     */
+    const styleIsSafeFor = (guarded: { text: string; tokens: string[] }, source: string, style: number): boolean => {
+        if (!guarded.tokens.length) return true;
+        const check = restoreTokens(guarded.text, guarded.tokens, style);
+        return check.ok && check.text === source;
+    };
+
     const retryLine = async (site: TextSite, primaryReason: string): Promise<{ text: string } | { reason: string }> => {
         /* If every retry also fails, report the FIRST failure. That's the diagnostic one — the
          * retries are an internal recovery attempt, and telling the author about the last of them
@@ -101,6 +115,8 @@ export async function machineTranslateProject(
         for (let style = 1; style < MARKER_STYLE_COUNT; style++) {
             if (options.signal?.aborted) break;
             const guarded = protectTokens(site.value, style);
+            // Skip a style whose markers collide with this line's own prose — see styleIsSafeFor.
+            if (!styleIsSafeFor(guarded, site.value, style)) continue;
             let out: string[];
             try {
                 out = await translator([guarded.text], sourceLanguage, options.language);
@@ -156,7 +172,8 @@ export async function machineTranslateProject(
 
             const raw = (results?.[i] ?? '').trim();
             const restored = raw ? restoreTokens(raw, protectedTexts[i].tokens) : null;
-            const usable = !!restored?.ok
+            const usable = styleIsSafeFor(protectedTexts[i], site.value, 0)
+                && !!restored?.ok
                 && compareTokens(site.value, restored.text).ok
                 && restored.text !== site.value;
 
