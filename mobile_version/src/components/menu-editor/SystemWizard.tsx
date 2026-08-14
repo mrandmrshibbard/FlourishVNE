@@ -189,7 +189,7 @@ const SystemWizard: React.FC<Props> = ({ isOpen, kind, project, onClose, onGener
     );
 
     return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={backdrop}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onMouseDown={backdrop}>
             <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-xl shadow-2xl w-full max-w-2xl m-4 border border-slate-700">
                 <div className="flex items-center justify-between p-4 border-b border-slate-700">
                     <div className="flex items-center gap-3">

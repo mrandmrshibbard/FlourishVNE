@@ -121,6 +121,16 @@ describe('🔴 layer survives too — a hot spot under an image was unclickable'
         expect((Object.values(els)[0] as any).layer).toBe(0);
     });
 
+    it('carries the "Drawn shape" points on a poly hot spot', () => {
+        // points joined CARRIED_THROUGH with the freehand feature — same typed-field-list trap.
+        const points = [50, 0, 100, 50, 50, 100, 0, 50];
+        const spots = deriveHotSpotsFromScreen(screen({
+            h2: { id: 'h2', name: 'Blob', type: UIElementType.HotSpot, shape: 'poly', points, ...base },
+        }) as any);
+        expect((Object.values(spots)[0] as any).shape).toBe('poly');
+        expect((Object.values(spots)[0] as any).points).toEqual(points);
+    });
+
     it('puts a higher-layer hot spot above a lower-layer image, using the shared formula', () => {
         // The renderer's rule: honor the band ONLY when a layer is set; an unset layer keeps the
         // legacy fixed z (10). 🔴 The first version computed `1 + (layer ?? 0) * 100`, which

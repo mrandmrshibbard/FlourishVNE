@@ -217,7 +217,7 @@ function elementToLegacyHotZoneElementInner(el: VNUIElement, items?: Record<VNID
  * exactly the kind of list where the next new field gets added to five of six branches. Same reason
  * the poses feature lost art to a typed field list.
  */
-const CARRIED_THROUGH = ['rotation', 'flipX', 'flipY', 'layer'] as const;
+const CARRIED_THROUGH = ['rotation', 'flipX', 'flipY', 'layer', 'points'] as const;
 
 const withSharedElementProps = <T,>(converted: T, source: any): T => {
     if (!converted) return converted;

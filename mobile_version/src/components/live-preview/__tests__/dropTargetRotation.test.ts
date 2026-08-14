@@ -62,3 +62,30 @@ describe('rotation-aware drop hit-test', () => {
         expect(hitTestDropTarget({ x: 65, y: 50 }, 'd')).toBeNull();
     });
 });
+
+describe('polygon ("Drawn shape") drop hit-test', () => {
+    // A 20×20 box at (40,40)-(60,60) whose drawn shape is the upper-left triangle
+    // (box-relative %: full top edge, down the left edge, closed on the diagonal).
+    const triZone = (rotation?: number) =>
+        reg({ id: 'p', rectPct: { x: 40, y: 40, width: 20, height: 20 }, rotation, polygonPct: [0, 0, 100, 0, 0, 100], onDrop: () => {} });
+
+    it('accepts inside the drawn polygon, rejects the empty half of the box', () => {
+        triZone();
+        expect(hitTestDropTarget({ x: 45, y: 45 }, 'd')?.id).toBe('p');   // in the triangle
+        expect(hitTestDropTarget({ x: 58, y: 58 }, 'd')).toBeNull();      // in the box, outside the shape
+        expect(hitTestDropTarget({ x: 30, y: 30 }, 'd')).toBeNull();      // outside the box entirely
+    });
+
+    it('composes with rotation: polygon is tested in the target’s local space', () => {
+        triZone(180);
+        // Rotated a half turn about the box centre (50,50), the triangle now occupies
+        // the LOWER-RIGHT half of the drawn box.
+        expect(hitTestDropTarget({ x: 58, y: 58 }, 'd')?.id).toBe('p');
+        expect(hitTestDropTarget({ x: 45, y: 45 }, 'd')).toBeNull();
+    });
+
+    it('degenerate points (fewer than 3) fall back to the plain rect test', () => {
+        reg({ id: 'p2', rectPct: { x: 40, y: 40, width: 20, height: 20 }, polygonPct: [0, 0, 100, 100], onDrop: () => {} });
+        expect(hitTestDropTarget({ x: 58, y: 58 }, 'd')?.id).toBe('p2');
+    });
+});

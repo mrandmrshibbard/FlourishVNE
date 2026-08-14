@@ -62,7 +62,7 @@ export const SpotlightCanvasPicker: React.FC<{ cmd: any; onApply: (p: any) => vo
     const onUp = () => { draggingRef.current = false; };
 
     return createPortal(
-        <div className="fixed inset-0 z-[100000] bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-[100000] bg-black/70 flex items-center justify-center p-4" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-4 w-full max-w-2xl" onClick={e => e.stopPropagation()}>
                 <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">{t('ui:fx.placeSpotlight', 'Place the spotlight')}</h3>
                 <p className="text-xs text-[var(--text-secondary)] mb-2">{t('ui:fx.placeSpotlightHint', 'Click or drag to place the light source (it snaps to the screen edges). Use the Aim slider below to point the beam.')}</p>

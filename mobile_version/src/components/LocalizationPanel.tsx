@@ -365,7 +365,7 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose }
 
     return (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-4"
-            onClick={onClose}>
+            onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className={`relative flex h-[85vh] w-full max-w-6xl flex-col rounded-xl bg-slate-900 shadow-2xl ${dragging ? 'ring-2 ring-emerald-500' : ''}`}
                 onClick={e => e.stopPropagation()}
                 /* Dropping the returned spreadsheet onto the panel is the natural gesture, so it

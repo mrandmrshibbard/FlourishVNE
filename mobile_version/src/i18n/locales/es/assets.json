@@ -89,5 +89,11 @@
   "defaultTrim": "Recorte predeterminado (segundos)",
   "defaultTrimHint": "Se aplica a todos los usos de este vídeo, salvo que un comando o elemento indique otra cosa.",
   "defaultShaping": "Ajuste de sonido predeterminado",
-  "defaultShapingHint": "Se aplica dondequiera que se use este sonido, salvo que un comando o botón indique otra cosa. \"Reproducir al revés\" solo afecta a efectos de sonido y voces — la música siempre suena hacia delante."
+  "defaultShapingHint": "Se aplica dondequiera que se use este sonido, salvo que un comando o botón indique otra cosa. \"Reproducir al revés\" solo afecta a efectos de sonido y voces — la música siempre suena hacia delante.",
+  "reverseCopy": "⏪ Guardar una copia invertida",
+  "reverseCopyHint": "Crea un nuevo sonido en tus recursos que se reproduce al revés. La copia funciona en todas partes, incluso como música.",
+  "reversing": "Invirtiendo…",
+  "reverseSaved": "\"{{name}}\" guardado en tus sonidos ({{size}}). Se reproduce al revés en todas partes, incluso como música.",
+  "reverseNeedsWav": "El formato de este sonido no se puede invertir aquí. Conviértelo a WAV, súbelo y luego guarda una copia invertida.",
+  "reverseFailed": "No se pudo invertir este sonido."
 }

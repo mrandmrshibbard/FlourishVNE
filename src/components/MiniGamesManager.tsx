@@ -151,7 +151,7 @@ const CoverMaskPainter: React.FC<{
 
     // z-[10000]: editor canvas layers reach z-100+, which punches through a z-50 overlay.
     return createPortal(
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="w-[min(1040px,94vw)] max-h-[92vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
                 <div className="flex items-center justify-between mb-2">
                     <h3 className="text-white font-bold">{t('miniGames.maskTitle', '✏️ Draw where the cover goes')}</h3>
@@ -391,7 +391,7 @@ const HiddenSpotsPlacer: React.FC<{
 
     // z-[10000]: editor canvas layers reach z-100+, which punches through a z-50 overlay.
     return createPortal(
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="w-[min(1180px,96vw)] h-[min(760px,92vh)] rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
                     <h3 className="text-white font-bold">🎯 {t('miniGames.placerTitle', 'Place the hidden objects')}</h3>
@@ -482,7 +482,7 @@ const AssembleTargetsPlacer: React.FC<{
 
     // z-[10000]: editor canvas layers reach z-100+, which punches through a z-50 overlay.
     return createPortal(
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="w-[min(1180px,96vw)] h-[min(760px,92vh)] rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
                     <h3 className="text-white font-bold">🧩 {t('miniGames.targetsTitle', 'Place where each piece lands')}</h3>
@@ -646,7 +646,7 @@ const PaintRegionsPlacer: React.FC<{
 
     // z-[10000]: editor canvas layers reach z-100+, which punches through a z-50 overlay.
     return createPortal(
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="w-[min(1180px,96vw)] h-[min(760px,92vh)] rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
                     <h3 className="text-white font-bold">🎨 {t('miniGames.paintPlacerTitle', 'Place the paintable areas')}</h3>
@@ -829,7 +829,7 @@ const MiniGamesManager: React.FC<{ project?: VNProject }> = () => {
 
     // ── type picker (new game / add stage) ──
     const typePicker = picker && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setPicker(null); }}>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm" onMouseDown={e => { if (e.target === e.currentTarget) setPicker(null); }}>
             <div className="w-[min(680px,92vw)] max-h-[80vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
                 <div className="flex items-center justify-between mb-3">
                     <h3 className="text-white font-bold text-lg">{picker === 'new' ? t('miniGames.pickType', 'What kind of mini game?') : t('miniGames.pickStageType', 'Add a stage — what kind?')}</h3>

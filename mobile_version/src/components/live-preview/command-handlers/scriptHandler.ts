@@ -9,7 +9,8 @@ import { executeScript, ScriptRuntimeContext } from '../../../features/scripting
 import { MAX_CALL_DEPTH } from './commonEventHandler';
 import { VNScript, ScriptParam } from '../../../types/scripting';
 import { resolveCharacterDisplayName, findCharacterBySpokenName } from '../../../utils/variableInterpolation';
-import { applyAudioAdjust } from '../../../utils/audioAdjust';
+import { applyAudioAdjust, resolveAudioAdjust } from '../../../utils/audioAdjust';
+import { musicChannelAdjust } from './audioHandler';
 import { VNProject } from '../../../types/project';
 import { VNID } from '../../../types';
 
@@ -133,7 +134,11 @@ export const handleRunScript = async (
         if (isNewTrack) {
             audio.src = url;
             audio.load();
-            applyAudioAdjust(audio, null);   // reset: never inherit a previous track's speed
+            // Reset to the ASSET'S OWN default shaping (speed/keep-pitch only — the music channel
+            // never reverses). Scripts have no per-use adjust, so this both honors what the author
+            // set on the asset AND still never inherits a previous track's speed. Plain null here
+            // used to ignore the asset default, unlike the PlayMusic command path.
+            applyAudioAdjust(audio, musicChannelAdjust(resolveAudioAdjust(undefined, (project.audio as any)?.[audioId]?.audioAdjust)));
             audio.addEventListener('canplaythrough', startPlayback, { once: true });
         } else if (audio.paused) {
             startPlayback();

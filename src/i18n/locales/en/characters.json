@@ -99,5 +99,28 @@
     "splitOut": "Own layer",
     "toggleHint": "Include or skip this image",
     "variantsNote": "The character shows ONE of these at a time. If they are really pieces that stack together (like the whites, iris and pupil of an eye), switch to \"Stack all\" — or give a single image its own layer with \"Own layer\"."
+  },
+  "anim": {
+    "rotLane": "Spin / Tilt",
+    "rotLaneTip": "The thin strip is the Spin/Tilt lane — click it to add a rotation key. The piece turns smoothly between keys, around the middle of its box, and never moves its real position.",
+    "rotChange": "Change the turn at {{ms}} ms",
+    "rotAdd": "Add a turn at {{ms}} ms",
+    "rotHint": "The piece turns smoothly to this angle, spinning around the middle of its box. 360 = one full spin. Its real position never changes.",
+    "rotDegrees": "Angle (degrees)",
+    "rotRemove": "Remove this turn",
+    "rotSave": "Save",
+    "adjustOpen": "Move & pivot — move this piece while the animation plays, and choose the point it spins around",
+    "adjustTitle": "Move & pivot",
+    "adjustHint": "Only while this animation plays — the layer’s real position never changes. Press ▶ to watch it live while you adjust.",
+    "adjustMove": "Move the piece while it plays",
+    "adjustX": "Sideways (%)",
+    "adjustY": "Up / down (%)",
+    "adjustMoveHint": "Negative sideways = left, negative up/down = up.",
+    "adjustPivot": "Spins around this point",
+    "adjustPivotHint": "If the drawing sits off-centre in its box, move the pivot onto the drawing so a spin doesn’t swing it sideways.",
+    "adjustPivotX": "Across (%)",
+    "adjustPivotY": "Down (%)",
+    "adjustReset": "Reset",
+    "adjustDone": "Done"
   }
 }

@@ -16,7 +16,8 @@ export function isEnhanced(style?: string | null): boolean {
     return style === 'enhanced';
 }
 
-/** Which commands can offer the Enhanced style (round 1: lighting trio + atmosphere). */
+/** Which commands can offer the Enhanced style (round 1: lighting trio + atmosphere;
+ *  round 2 adds every weather/light overlay type the Set Screen Effect command can set). */
 export function commandHasEnhancedStyle(command: VNCommand): boolean {
     switch (command.type) {
         case CommandType.PlaceLights:
@@ -25,16 +26,21 @@ export function commandHasEnhancedStyle(command: VNCommand): boolean {
             return true;
         case CommandType.SetScreenOverlayEffect: {
             const t = (command as any).effectType;
-            return t === 'fog' || t === 'haze' || t === 'smoke';
+            return typeof t === 'string' && ENHANCED_OVERLAY_TYPES.has(t);
         }
         default:
             return false;
     }
 }
 
-/** Screen-attached effect rows that can offer the Enhanced style (round 1). */
+/** Screen-attached effect rows that can offer the Enhanced style.
+ *  Round 1: the lighting trio + atmosphere. Round 2: rain, snow/ash, sunbeams, shimmer,
+ *  fireworks, lightning, CRT scanlines. Deliberately NOT here: 'glitch' and
+ *  'chromaticGlitch' — their real pixel tear is a displacement filter applied to the game
+ *  container itself, which an overlay canvas cannot reproduce or improve on. */
 export const ENHANCED_OVERLAY_TYPES: ReadonlySet<string> = new Set([
     'fog', 'haze', 'smoke', 'lights', 'spotlight', 'flashlight',
+    'rain', 'snowAsh', 'sunbeams', 'shimmer', 'fireworks', 'lightning', 'crtScanlines',
 ]);
 
 // ── Context / program plumbing ──────────────────────────────────────────────────────────
@@ -496,4 +502,460 @@ export function atmosphereConfig(type: 'fog' | 'haze' | 'smoke', speed = 1, wind
     if (type === 'fog') return { drift: [drift, 0.002 * speed], scale: 3.2, contrast: 1.35 * dContrast, bandY: 0.16, bandSoft: 0.55, baseAlpha: Math.min(1, 0.8 * dAlpha), defaultColor: '#cdd6e0' };
     if (type === 'haze') return { drift: [drift * 0.6, 0.0], scale: 2.2, contrast: 1.0 * dContrast, bandY: 0.5, bandSoft: 1.0, baseAlpha: Math.min(1, 0.55 * dAlpha), defaultColor: '#c9cfd8' };
     return { drift: [drift * 0.8, -0.01 * speed], scale: 4.0, contrast: 1.7 * dContrast, bandY: 0.3, bandSoft: 0.8, baseAlpha: Math.min(1, 0.85 * dAlpha), defaultColor: '#4a4a52' };
+}
+
+// ── Round 2 shaders — weather, light shows, and the CRT mask ────────────────────────────
+// Same rules as round 1: WebGL1 mediump fullscreen quads, hash-dither everywhere, the
+// pixel-space y-flip (`vec2(vUv.x, 1.0 - vUv.y)`), premultiplied output, PURE mappers.
+
+/** Shared value-noise chunk (same as ATMOS_FS's — each shader carries its own copy because
+ *  WebGL1 has no includes). */
+const NOISE = `
+float vnNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    float a = vnHash(i);
+    float b = vnHash(i + vec2(1.0, 0.0));
+    float c = vnHash(i + vec2(0.0, 1.0));
+    float d = vnHash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+float fbm(vec2 p) {
+    float v = 0.0;
+    float amp = 0.55;
+    for (int i = 0; i < 3; i++) {
+        v += amp * vnNoise(p);
+        p = p * 2.03 + vec2(17.7, 9.2);
+        amp *= 0.5;
+    }
+    return v;
+}
+`;
+
+// ── Rain — three parallax layers of real streaks with per-drop stagger ──────────────────
+
+export const RAIN_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;  // 0..1 — density AND opacity
+uniform vec3 uColor;
+uniform float uFall;       // fall speed (cells/sec)
+uniform float uSlant;      // sideways drift (uv per unit height)
+uniform float uLen;        // streak length multiplier ~0.4..1.6
+${DITHER}
+float rainLayer(vec2 uv, float scale, float speed, float w, float seed) {
+    // Slanted, tall cells: one potential drop per cell, staggered per column.
+    uv.x += uv.y * uSlant;
+    vec2 p = vec2(uv.x * scale, uv.y * scale / (10.0 * uLen));
+    p.y += uTime * speed + seed * 37.7;
+    vec2 id = floor(p);
+    float h = vnHash(id + seed);
+    vec2 f = fract(p);
+    // Only a portion of cells carry a drop — density rides intensity.
+    if (h > 0.25 + uIntensity * 0.65) return 0.0;
+    float x = f.x - 0.5 + (h - 0.5) * 0.55;
+    // Streak: bright head fading up its tail.
+    float streak = smoothstep(w, w * 0.25, abs(x))
+                 * smoothstep(0.0, 0.25, f.y) * smoothstep(1.0, 0.55, f.y);
+    return streak;
+}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y);
+    float aspect = uResolution.x / max(uResolution.y, 1.0);
+    vec2 uv = vec2(frag.x * aspect, frag.y);
+    // Three depths: near (fast, bold), mid, far (slow, faint) — parallax Classic can't do.
+    float a = 0.0;
+    a += rainLayer(uv, 22.0, uFall * 1.25, 0.085, 1.0) * 0.5;
+    a += rainLayer(uv, 34.0, uFall,        0.075, 2.0) * 0.34;
+    a += rainLayer(uv, 52.0, uFall * 0.8,  0.065, 3.0) * 0.2;
+    a *= uIntensity * 0.9;
+    float dith = (vnHash(vUv * uResolution + uTime) - 0.5) / 255.0;
+    a = clamp(a + dith, 0.0, 1.0);
+    gl_FragColor = vec4(uColor * a, a);
+}
+`;
+
+export interface RainConfig { fall: number; slant: number; len: number; defaultColor: string; }
+/** PURE: rain params → shader knobs. Semantics mirror the Classic sim: speed scales fall
+ *  rate, windStrength slants the streaks, dropLength stretches them. */
+export function rainConfig(speed = 0.5, wind = 0.5, dropLength = 0.5): RainConfig {
+    return {
+        fall: 2.6 * (0.3 + speed * 1.4),
+        slant: (wind - 0.5) * 0.9,          // centred: 0.5 = straight down, matches calm default
+        len: 0.4 + dropLength * 1.2,        // the Classic lenMul range exactly
+        defaultColor: '#b4d2ff',
+    };
+}
+
+// ── Snow / Ash — soft drifting flakes with wobble, three parallax depths ────────────────
+
+export const SNOW_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;
+uniform vec3 uColor;
+uniform float uFall;       // fall speed
+uniform float uDrift;      // sideways wind
+uniform float uSize;       // flake size multiplier
+uniform float uWobble;     // sway amplitude
+uniform float uAsh;        // 0 = snow (bright, soft), 1 = ash (small, dimmer, tumbling)
+${DITHER}
+float flakeLayer(vec2 uv, float scale, float speed, float seed) {
+    vec2 p = uv * scale;
+    p.y += uTime * speed + seed * 19.1;
+    p.x += uTime * uDrift * speed * 0.45;
+    vec2 id = floor(p);
+    float h = vnHash(id + seed);
+    if (h > 0.20 + uIntensity * 0.5) return 0.0;
+    vec2 f = fract(p);
+    // Per-flake wobble: each sways on its own phase; ash tumbles faster and smaller.
+    float sway = sin(uTime * (0.8 + h * 1.6) * (1.0 + uAsh * 0.8) + h * 40.0) * uWobble;
+    vec2 center = vec2(0.25 + h * 0.5 + sway, 0.25 + fract(h * 7.3) * 0.5);
+    float r = (0.05 + fract(h * 13.7) * 0.06) * uSize * (1.0 - uAsh * 0.35);
+    float d = distance(f, center);
+    // Soft-edged disc with a faint halo (snow) or a harder small mote (ash).
+    float body = smoothstep(r, r * mix(0.35, 0.75, uAsh), d);
+    float halo = (1.0 - uAsh) * 0.25 * smoothstep(r * 2.4, r, d);
+    // Gentle per-flake twinkle so the field feels alive.
+    float tw = 0.8 + 0.2 * sin(uTime * (1.0 + h * 2.0) + h * 90.0);
+    return (body + halo) * tw;
+}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y);
+    float aspect = uResolution.x / max(uResolution.y, 1.0);
+    vec2 uv = vec2(frag.x * aspect, frag.y);
+    float a = 0.0;
+    a += flakeLayer(uv, 7.0,  uFall,        1.0) * 0.55;
+    a += flakeLayer(uv, 11.0, uFall * 0.75, 2.0) * 0.35;
+    a += flakeLayer(uv, 17.0, uFall * 0.55, 3.0) * 0.22;
+    a *= uIntensity * mix(0.85, 0.6, uAsh);
+    float dith = (vnHash(vUv * uResolution + uTime) - 0.5) / 255.0;
+    a = clamp(a + dith, 0.0, 1.0);
+    gl_FragColor = vec4(uColor * a, a);
+}
+`;
+
+export interface SnowConfig { fall: number; drift: number; size: number; wobble: number; ash: number; defaultColor: string; }
+/** PURE: snow/ash params → shader knobs, mirroring the Classic particle ranges (ash falls
+ *  faster, smaller, dimmer, and swings less than snow). */
+export function snowConfig(variant: 'snow' | 'ash', speed = 0.5, wind = 0.5, particleSize = 0.5): SnowConfig {
+    const ash = variant === 'ash' ? 1 : 0;
+    return {
+        fall: (variant === 'ash' ? 0.34 : 0.22) * (0.4 + speed * 1.4),
+        drift: (wind - 0.5) * 2.2,
+        size: 0.55 + particleSize * 1.1,
+        wobble: (variant === 'ash' ? 0.06 : 0.11) * (0.5 + wind),
+        ash,
+        defaultColor: variant === 'ash' ? '#b0a89e' : '#ffffff',
+    };
+}
+
+// ── Sunbeams — volumetric god rays with slow fbm shafts ─────────────────────────────────
+
+export const SUNBEAMS_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;
+uniform vec3 uColor;
+uniform float uRayFreq;    // shafts around the arc (spread: wide rays = low freq)
+uniform float uSway;       // shaft drift speed
+${DITHER}
+${NOISE}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y);
+    float aspect = uResolution.x / max(uResolution.y, 1.0);
+    // Light source just above the top centre — rays fan down across the scene.
+    vec2 src = vec2(0.5 * aspect, -0.15);
+    vec2 p = vec2(frag.x * aspect, frag.y);
+    vec2 rel = p - src;
+    float ang = atan(rel.x, rel.y);           // 0 = straight down
+    float dist = length(rel);
+    // Shafts: two drifting noise bands over the angle — broad structure + fine detail.
+    float shaft = fbm(vec2(ang * uRayFreq, uTime * uSway))
+                * (0.6 + 0.4 * vnNoise(vec2(ang * uRayFreq * 2.7 + 13.1, uTime * uSway * 0.6)));
+    shaft = pow(clamp(shaft * 1.5, 0.0, 1.0), 2.2);
+    // Fade with distance from the source and toward the bottom (light dies in the depth).
+    float reach = smoothstep(1.65, 0.15, dist);
+    float depthFade = smoothstep(1.05, 0.25, frag.y);
+    // A soft ambient glow near the source so the fan has a bright origin.
+    float glow = 0.35 * smoothstep(0.9, 0.0, dist);
+    float a = (shaft * reach * depthFade + glow) * uIntensity * 0.55;
+    float dith = (vnHash(vUv * uResolution) - 0.5) / 255.0;
+    a = clamp(a + dith, 0.0, 0.85);
+    gl_FragColor = vec4(uColor * a, a);
+}
+`;
+
+export interface SunbeamsConfig { rayFreq: number; sway: number; defaultColor: string; }
+/** PURE: sunbeams params → shader knobs. `spread` widens the shafts (fewer, fatter rays);
+ *  `speed` drifts them. */
+export function sunbeamsConfig(spread = 0.5, speed = 0.5): SunbeamsConfig {
+    return {
+        rayFreq: 9.0 - spread * 6.0,       // wide spread = broad soft rays
+        sway: 0.05 + speed * 0.22,
+        defaultColor: '#ffe9b8',
+    };
+}
+
+// ── Shimmer — rising light curtains + twinkling motes ───────────────────────────────────
+
+export const SHIMMER_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;
+uniform vec3 uColor;
+uniform float uDriftDir;   // -1 = up (default), 1 = down
+uniform float uDensity;    // particle density 0..1
+uniform float uSpeed;
+uniform float uSideMin;    // horizontal window (uv) the waves live in
+uniform float uSideMax;
+uniform float uWavesOn;    // 0 = particles only
+${DITHER}
+${NOISE}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y);
+    float aspect = uResolution.x / max(uResolution.y, 1.0);
+    float a = 0.0;
+    // Light curtains: slow vertical waves warped by fbm, masked to the chosen side.
+    if (uWavesOn > 0.5) {
+        float sideMask = smoothstep(uSideMin - 0.12, uSideMin + 0.08, frag.x)
+                       * smoothstep(uSideMax + 0.12, uSideMax - 0.08, frag.x);
+        vec2 wp = vec2(frag.x * aspect * 2.2, frag.y * 1.1 + uDriftDir * uTime * uSpeed * 0.4);
+        float w1 = fbm(wp + vec2(0.0, uTime * uSpeed * 0.13));
+        float w2 = fbm(wp * 1.9 + vec2(7.7, uTime * uSpeed * 0.21));
+        float waves = pow(clamp(w1 * 0.7 + w2 * 0.5, 0.0, 1.0), 2.6);
+        a += waves * sideMask * 0.5;
+    }
+    // Motes: three drifting cell layers of soft twinkling particles.
+    for (int i = 0; i < 3; i++) {
+        float fi = float(i);
+        float scale = 9.0 + fi * 7.0;
+        vec2 p = vec2(frag.x * aspect, frag.y + uDriftDir * uTime * uSpeed * (0.05 + fi * 0.03)) * scale;
+        p.x += sin(uTime * (0.3 + fi * 0.2) + fi * 5.0) * 0.35;
+        vec2 id = floor(p);
+        float h = vnHash(id + fi * 31.0);
+        if (h > uDensity * 0.55) continue;
+        vec2 f = fract(p);
+        vec2 c = vec2(0.3 + h * 0.4, 0.3 + fract(h * 9.7) * 0.4);
+        float d = distance(f, c);
+        float tw = 0.5 + 0.5 * sin(uTime * (1.5 + h * 3.0) + h * 80.0);
+        a += smoothstep(0.09, 0.01, d) * tw * (0.5 - fi * 0.12);
+    }
+    a *= uIntensity;
+    float dith = (vnHash(vUv * uResolution) - 0.5) / 255.0;
+    a = clamp(a + dith, 0.0, 0.9);
+    gl_FragColor = vec4(uColor * a, a);
+}
+`;
+
+export interface ShimmerConfig { sideMin: number; sideMax: number; driftDir: number; speed: number; density: number; wavesOn: number; defaultColor: string; }
+/** PURE: shimmer params → shader knobs (side window, drift direction, waves on/off). */
+export function shimmerConfig(
+    side: 'left' | 'right' | 'full' = 'full',
+    direction: 'up' | 'down' = 'up',
+    particlesOnly = false,
+    density = 0.5,
+    speed = 0.5,
+): ShimmerConfig {
+    return {
+        sideMin: side === 'right' ? 0.55 : 0.0,
+        sideMax: side === 'left' ? 0.45 : 1.0,
+        driftDir: direction === 'down' ? 1 : -1,
+        speed: 0.4 + speed * 1.6,
+        density: Math.max(0.05, density),
+        wavesOn: particlesOnly ? 0 : 1,
+        defaultColor: '#ffe9c9',
+    };
+}
+
+// ── Fireworks — procedural bursts with gravity, trails, and twinkle ─────────────────────
+
+export const FIREWORKS_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;
+uniform float uRate;       // bursts per second (per slot)
+uniform vec3 uTint;        // author colour; uTintOn 0 = per-burst hues
+uniform float uTintOn;
+${DITHER}
+vec2 vnHash2(float n) {
+    return fract(sin(vec2(n, n * 1.61)) * vec2(43758.5453, 22578.1459));
+}
+vec3 burstColor(float seed) {
+    // Cheerful saturated hues via a cosine palette.
+    return 0.55 + 0.45 * cos(6.2831 * (seed + vec3(0.0, 0.33, 0.67)));
+}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y);
+    float aspect = uResolution.x / max(uResolution.y, 1.0);
+    vec2 p = vec2(frag.x * aspect, frag.y);
+    vec3 acc = vec3(0.0);
+    // Three staggered burst slots, each on its own clock.
+    for (int b = 0; b < 3; b++) {
+        float fb = float(b);
+        float t = uTime * uRate + fb * 0.37;
+        float cyc = floor(t);
+        float tc = fract(t);                     // 0..1 through this burst's life
+        float seed = cyc * 7.13 + fb * 131.7;
+        vec2 center = vec2((0.15 + vnHash2(seed).x * 0.7) * aspect, 0.12 + vnHash2(seed).y * 0.38);
+        vec3 col = uTintOn > 0.5 ? uTint : burstColor(vnHash2(seed + 3.0).x);
+        // Expansion eases out; sparks droop under gravity as they age.
+        float r = 0.28 * (1.0 - pow(1.0 - min(tc * 1.25, 1.0), 2.2));
+        float fade = smoothstep(1.0, 0.35, tc);
+        float grav = tc * tc * 0.14;
+        for (int s = 0; s < 24; s++) {
+            float fs = float(s);
+            float ha = vnHash(vec2(seed, fs));
+            float ang = (fs + ha * 0.9) * (6.2831 / 24.0);
+            float rr = r * (0.75 + ha * 0.35);
+            vec2 sp = center + vec2(cos(ang), sin(ang)) * rr + vec2(0.0, grav);
+            float d = distance(p, sp);
+            // Spark point + a short trail back along its path.
+            float pt = exp(-d * d * 5200.0) * 1.1;
+            vec2 tp = center + vec2(cos(ang), sin(ang)) * rr * 0.82 + vec2(0.0, grav * 0.8);
+            float trail = exp(-distance(p, tp) * distance(p, tp) * 2600.0) * 0.35;
+            float tw = 0.7 + 0.3 * sin(uTime * 24.0 + ha * 50.0);   // sparkle
+            acc += col * (pt + trail) * fade * tw;
+        }
+        // Rocket streak rising before the burst (first 20% of the cycle shows the tail end).
+        if (tc < 0.18) {
+            float rise = tc / 0.18;
+            vec2 rp = vec2(center.x, mix(1.05, center.y, rise));
+            float d = distance(p, rp);
+            acc += vec3(1.0, 0.9, 0.7) * exp(-d * d * 4200.0) * 0.8 * (1.0 - rise * 0.5);
+        }
+    }
+    acc *= uIntensity;
+    float dith = (vnHash(vUv * uResolution + uTime) - 0.5) / 255.0;
+    acc = clamp(acc + dith, 0.0, 1.0);
+    float a = clamp(max(acc.r, max(acc.g, acc.b)), 0.0, 1.0);
+    gl_FragColor = vec4(acc * a, a);
+}
+`;
+
+export interface FireworksConfig { rate: number; }
+/** PURE: fireworks speed → burst rate (matches the Classic sim's launch cadence feel). */
+export function fireworksConfig(speed = 0.5): FireworksConfig {
+    return { rate: 0.25 + speed * 0.55 };
+}
+
+// ── Lightning — storm cycle with a real procedural bolt ─────────────────────────────────
+
+export const LIGHTNING_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;
+uniform vec3 uColor;
+uniform float uCycle;      // seconds per strike cycle (Classic: 3..14)
+${DITHER}
+${NOISE}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y);
+    float t = uTime / uCycle;
+    float cyc = floor(t);
+    float tc = fract(t);
+    float seed = vnHash(vec2(cyc, 7.0));
+    // Flash envelope — the Classic double-flash timing (quick hit, dip, second hit),
+    // plus the faint mid-cycle echo at ~55%.
+    float f1 = smoothstep(0.0, 0.012, tc) * smoothstep(0.024, 0.012, tc);
+    float f2 = smoothstep(0.024, 0.036, tc) * smoothstep(0.065, 0.040, tc) * 0.85;
+    float f3 = smoothstep(0.54, 0.55, tc) * smoothstep(0.565, 0.555, tc) * 0.55;
+    float flash = max(max(f1, f2), f3);
+    // The bolt: a jagged noise-displaced path from the top, alive only during the strike.
+    float boltLife = smoothstep(0.0, 0.004, tc) * smoothstep(0.05, 0.02, tc);
+    float a = flash * 0.55;
+    if (boltLife > 0.001) {
+        float bx = 0.18 + seed * 0.64;                       // strike position per cycle
+        float wob = (fbm(vec2(frag.y * 3.5 + cyc * 17.0, cyc * 3.1)) - 0.5) * 0.34
+                  + (vnNoise(vec2(frag.y * 14.0, cyc * 9.0)) - 0.5) * 0.08;
+        float path = bx + wob * (0.25 + frag.y);             // wanders more as it descends
+        float d = abs(frag.x - path);
+        float core = smoothstep(0.004, 0.0005, d) * 1.4;
+        float glow = exp(-d * 26.0) * 0.5;
+        // A fainter branch splitting off partway down.
+        float branch = 0.0;
+        if (frag.y > 0.25 + seed * 0.3) {
+            float bpath = path + (frag.y - (0.25 + seed * 0.3)) * (seed > 0.5 ? 0.35 : -0.35);
+            float bd = abs(frag.x - bpath);
+            branch = (smoothstep(0.002, 0.0004, bd) * 0.8 + exp(-bd * 34.0) * 0.3)
+                   * smoothstep(0.85, 0.4, frag.y);
+        }
+        float ground = smoothstep(1.0, 0.85, frag.y);        // bolt fades before the floor
+        a += (core + glow + branch) * boltLife * ground;
+    }
+    a *= uIntensity;
+    float dith = (vnHash(vUv * uResolution + uTime) - 0.5) / 255.0;
+    a = clamp(a + dith, 0.0, 1.0);
+    gl_FragColor = vec4(uColor * a, a);
+}
+`;
+
+/** PURE: lightning speed → cycle seconds. EXACTLY the Classic keyframe formula. */
+export function lightningCycleSeconds(speed = 0.5): number {
+    return 14 - speed * 11;
+}
+
+// ── CRT scanlines — mask, aperture grille, rolling refresh bar, vignette, flicker ───────
+
+export const CRT_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;
+uniform float uSpacing;    // scanline period, CSS px
+uniform float uRoll;       // rolling-bar cycle seconds
+uniform float uDpr;
+${DITHER}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y) * uResolution;
+    vec2 css = frag / uDpr;
+    // Scanline mask — soft sine stripes at the authored spacing (Classic's hard 2px lines).
+    float scan = 0.5 + 0.5 * cos(css.y * 6.2831 / max(uSpacing, 2.0));
+    float dark = scan * scan * 0.5;
+    // Aperture grille: faint RGB triads across x — the colour fringe of a real tube.
+    float triad = mod(floor(css.x / max(uDpr, 1.0)), 3.0);
+    vec3 grille = vec3(0.0);
+    if (triad < 0.5) grille = vec3(0.05, 0.0, 0.0);
+    else if (triad < 1.5) grille = vec3(0.0, 0.05, 0.0);
+    else grille = vec3(0.0, 0.0, 0.05);
+    // Rolling refresh bar: a soft bright band sweeping down.
+    float rollY = fract(uTime / max(uRoll, 0.5));
+    float bar = smoothstep(0.09, 0.0, abs(1.0 - vUv.y - rollY)) * 0.055;
+    // Vignette + a whisper of mains flicker.
+    vec2 v = vUv - 0.5;
+    float vig = smoothstep(0.85, 0.25, length(v) * 1.35);
+    float flick = 0.97 + 0.03 * sin(uTime * 11.0);
+    float darkA = clamp((dark + (1.0 - vig) * 0.35) * uIntensity * flick, 0.0, 0.85);
+    vec3 add = (grille + vec3(bar)) * uIntensity * flick;
+    float dith = (vnHash(vUv * uResolution) - 0.5) / 255.0;
+    darkA = clamp(darkA + dith, 0.0, 1.0);
+    // Darkness (premultiplied black) with a small additive tint on top.
+    vec3 col = add * (1.0 - darkA);
+    float a = clamp(darkA + max(add.r, max(add.g, add.b)), 0.0, 1.0);
+    gl_FragColor = vec4(col, a);
+}
+`;
+
+export interface CrtConfig { spacing: number; roll: number; }
+/** PURE: CRT params → shader knobs. lineSpacing maps to the Classic px range (gap 2..10px
+ *  plus its 2px dark line); speed drives the rolling refresh bar (fast = quick sweep). */
+export function crtConfig(lineSpacing = 0.5, speed = 0.5): CrtConfig {
+    return {
+        spacing: 2 + Math.round(lineSpacing * 8) + 2,
+        roll: 9 - speed * 7.5,
+    };
 }

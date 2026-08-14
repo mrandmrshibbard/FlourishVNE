@@ -58,6 +58,97 @@ export function applyAnimationFrame(
 }
 
 /**
+ * Animated layer rotation at time t — the Spin/Tilt lane. Per track with `rotationKeys`,
+ * linearly interpolates between the surrounding keys. Rules:
+ *  - before the first key: hold the first key's angle; after the last (non-loop): hold the last.
+ *  - LOOPING animations also interpolate across the wrap (last key → first key at t=duration),
+ *    so 0ms:0° → 1000ms:360° + loop is a continuous spin with no snap.
+ *  - a track with no rotationKeys contributes nothing (undefined = the authored transform alone).
+ * Returns a map layerId → degrees. The value COMPOSES with (appends to) the authored Pose
+ * Studio rotation at the render site — it never replaces or writes it.
+ */
+export function rotationAt(anim: VNCharacterAnimation, tMs: number): Record<VNID, number> {
+    const out: Record<VNID, number> = {};
+    const dur = Math.max(1, anim.durationMs || 1);
+    const t = anim.loop ? ((tMs % dur) + dur) % dur : Math.min(Math.max(0, tMs), dur);
+    for (const track of anim.tracks || []) {
+        if (!track?.layerId || !track.rotationKeys?.length) continue;
+        const keys = [...track.rotationKeys].sort((a, b) => a.atMs - b.atMs);
+        let deg: number;
+        if (t <= keys[0].atMs) {
+            if (anim.loop && keys.length > 1) {
+                // Before the first key in a loop: we're inside the wrap segment (last → first).
+                const last = keys[keys.length - 1];
+                const span = (dur - last.atMs) + keys[0].atMs;
+                deg = span <= 0 ? keys[0].deg
+                    : last.deg + ((last.deg === keys[0].deg) ? 0 : (keys[0].deg - last.deg) * (((t - last.atMs) + dur) % dur) / span);
+            } else {
+                deg = keys[0].deg;
+            }
+        } else if (t >= keys[keys.length - 1].atMs) {
+            const last = keys[keys.length - 1];
+            if (anim.loop && keys.length > 1) {
+                const span = (dur - last.atMs) + keys[0].atMs;
+                deg = span <= 0 ? keys[0].deg : last.deg + (keys[0].deg - last.deg) * ((t - last.atMs) / span);
+            } else {
+                deg = last.deg;
+            }
+        } else {
+            let deg2 = keys[0].deg;
+            for (let i = 0; i + 1 < keys.length; i++) {
+                const a = keys[i], b = keys[i + 1];
+                if (t >= a.atMs && t <= b.atMs) {
+                    const span = b.atMs - a.atMs;
+                    deg2 = span <= 0 ? b.deg : a.deg + (b.deg - a.deg) * ((t - a.atMs) / span);
+                    break;
+                }
+            }
+            deg = deg2;
+        }
+        out[track.layerId] = deg;
+    }
+    return out;
+}
+
+/** The full per-layer animated adjustment at a moment: interpolated rotation plus the
+ *  track's static move-offset (character-frame %) and rotation pivot (box %). Ephemeral —
+ *  render-time only, never written to layers/poses/stage state. */
+export interface LayerAnimAdjust {
+    /** Interpolated Spin/Tilt angle (degrees), absent when the track has no rotation keys. */
+    deg?: number;
+    /** Move-while-animating offset, percent of the character frame. */
+    dx: number;
+    dy: number;
+    /** Rotation pivot, percent of the layer's own box (50/50 = centre). */
+    pivotX: number;
+    pivotY: number;
+}
+
+/**
+ * Per-layer animated adjustments at time t — rotation (via rotationAt) plus each track's
+ * move offset and pivot. A layer gets an entry only when its track actually adjusts
+ * something (rotation keys or a non-zero offset), so untouched tracks cost nothing.
+ */
+export function layerAdjustAt(anim: VNCharacterAnimation, tMs: number): Record<VNID, LayerAnimAdjust> {
+    const rot = rotationAt(anim, tMs);
+    const out: Record<VNID, LayerAnimAdjust> = {};
+    for (const track of anim.tracks || []) {
+        if (!track?.layerId) continue;
+        const deg = rot[track.layerId];
+        const dx = track.offsetX ?? 0;
+        const dy = track.offsetY ?? 0;
+        if (deg === undefined && dx === 0 && dy === 0) continue;
+        out[track.layerId] = {
+            ...(deg !== undefined ? { deg } : {}),
+            dx, dy,
+            pivotX: track.pivotX ?? 50,
+            pivotY: track.pivotY ?? 50,
+        };
+    }
+    return out;
+}
+
+/**
  * Every art URL any frame of the given animations can show (for the given pose) — the prewarm
  * set. An unwarmed frame URL would make the WHOLE sprite hide for a frame (atomic paint), so
  * the stage warms all of these before an animation may tick.

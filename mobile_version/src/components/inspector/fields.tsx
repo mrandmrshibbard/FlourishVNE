@@ -214,6 +214,7 @@ export const CharacterVisualEffectsEditor: React.FC<{
                         <option value="breathing">{t('character.effects.breathing')}</option>
                         <option value="flicker">{t('character.effects.flicker')}</option>
                         <option value="glitch">{t('character.effects.glitch', 'Glitch (corruption)')}</option>
+                        <option value="wobble">{t('character.effects.wobble', 'Wobble (jelly)')}</option>
                     </Select>
                     <button onClick={() => removeEffect(idx)} className="p-1 rounded hover:bg-[var(--bg-tertiary)]" title={t('character.removeEffect')}>
                         <svg className="w-3.5 h-3.5" style={{ color: 'var(--accent-coral)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -233,6 +234,13 @@ export const CharacterVisualEffectsEditor: React.FC<{
                     <div className="flex items-center gap-2">
                         <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>{t('character.color')}</span>
                         <ColorInput value={eff.color || '#FFFFFF'} onChange={v => updateEffect(idx, { color: v })} />
+                    </div>
+                )}
+                {eff.type === 'wobble' && (
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>{t('character.wobbleSize', 'Wave size')}</span>
+                        <RangeInput min="0.3" max="3" step="0.1" value={eff.wobbleSize ?? 1} onChange={e => updateEffect(idx, { wobbleSize: parseFloat(e.target.value) })} className="flex-1" />
+                        <span className="text-xs w-8 text-right" style={{ color: 'var(--text-secondary)' }}>{(eff.wobbleSize ?? 1).toFixed(1)}x</span>
                     </div>
                 )}
                 {eff.type === 'glitch' && (

@@ -272,7 +272,7 @@ export interface SetBackgroundCommand extends BaseCommand {
 /**
  * Per-character visual effect types
  */
-export type VNCharacterVisualEffectType = 'none' | 'shake' | 'bounce' | 'float' | 'pulse' | 'glow' | 'tint' | 'silhouette' | 'breathing' | 'flicker' | 'glitch';
+export type VNCharacterVisualEffectType = 'none' | 'shake' | 'bounce' | 'float' | 'pulse' | 'glow' | 'tint' | 'silhouette' | 'breathing' | 'flicker' | 'glitch' | 'wobble';
 
 export interface VNCharacterVisualEffect {
     /** The visual effect to apply to the character on stage */
@@ -289,6 +289,9 @@ export interface VNCharacterVisualEffect {
      *  Deliberately independent of `intensity` — how VIOLENT the tearing is and how THICK the
      *  outline is are different creative decisions. */
     rimSize?: number;
+    /** wobble only: how BIG the jelly waves are (0.3–3, default 1). Bigger = broad, slow-looking
+     *  undulations; smaller = fine ripples. Independent of `intensity` (how FAR pixels move). */
+    wobbleSize?: number;
 }
 
 export interface ShowCharacterCommand extends BaseCommand {
@@ -1281,7 +1284,10 @@ export interface ShowHotSpotCommand extends BaseCommand {
     y: number; // percentage
     width: number; // percentage
     height: number; // percentage
-    shape: 'rect' | 'circle';
+    shape: 'rect' | 'circle' | 'poly';
+    /** For shape 'poly' ("Drawn shape"): flat [x1,y1,x2,y2,…] vertex pairs, percent of the
+     *  spot's own box. Resizing the box scales the drawn shape. Absent/short = rect. */
+    points?: number[];
     trigger: 'click' | 'hover' | 'drag-drop';
     /** Actions fired when triggered (clicked, hovered, or dropped onto). */
     actions: VNUIAction[];

@@ -490,7 +490,8 @@
       "silhouette": "Silueta",
       "breathing": "Respiración",
       "flicker": "Parpadear",
-      "glitch": "Glitch (corrupción)"
+      "glitch": "Glitch (corrupción)",
+      "wobble": "Ondulación (gelatina)"
     },
     "colors": "Colores",
     "addColor": "+ Color",
@@ -504,7 +505,8 @@
     "noAnimations": "Este personaje aún no tiene animaciones: crea una en la pestaña Personajes (🎞️ Animaciones).",
     "animation": "Animación",
     "stopAnimation": "Ninguna (detener la actual)",
-    "playAnimationHint": "El personaje ya debe estar en escena. Una animación en bucle sigue hasta que la detengas o la sustituyas; las animaciones configuradas para reproducirse solas no necesitan este comando."
+    "playAnimationHint": "El personaje ya debe estar en escena. Una animación en bucle sigue hasta que la detengas o la sustituyas; las animaciones configuradas para reproducirse solas no necesitan este comando.",
+    "wobbleSize": "Tamaño de onda"
   },
   "button": {
     "buttonText": "Texto del botón",
@@ -788,7 +790,15 @@
     "targetToHide": "Punto interactivo objetivo a ocultar",
     "selectToHide": "Seleccionar punto interactivo...",
     "acceptTagHelp": "Acepta un objeto que se lleve encima o se arrastre cuya etiqueta coincida con esta. Etiqueta un objeto clave como “llave” y acepta “llave” aquí. Déjalo vacío para aceptar cualquier cosa que se suelte aquí.",
-    "visibleOpacity": "Transparencia"
+    "visibleOpacity": "Transparencia",
+    "shapeDrawn": "Forma dibujada",
+    "drawButton": "✏ Dibujarla",
+    "drawAgain": "✏ Dibujar de nuevo",
+    "drawnShapeHint": "Arrastra los puntos redondos en el lienzo para ajustar. Doble clic en un borde para añadir un punto.",
+    "polySizeHint": "El ancho y el alto redimensionan toda la forma dibujada.",
+    "fineTunePoints": "Ajustar puntos",
+    "removePoint": "Quitar punto",
+    "addPoint": "+ Añadir punto"
   },
   "bg": {
     "stack": "Apilar (no reemplazar)",

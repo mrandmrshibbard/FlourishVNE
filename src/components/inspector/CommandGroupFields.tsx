@@ -28,7 +28,7 @@ import { TrashIcon, XMarkIcon, PlusIcon, ChevronUpIcon, ChevronDownIcon } from '
 import AssetSelector from '../ui/AssetSelector';
 import CursorSelect from '../ui/CursorSelect';
 import EffectStyleSwitch from './EffectStyleSwitch';
-import { commandHasEnhancedStyle, isEnhanced } from '../live-preview/fx/glFx';
+import { commandHasEnhancedStyle, isEnhanced, ENHANCED_OVERLAY_TYPES } from '../live-preview/fx/glFx';
 import ActionEditor from '../menu-editor/ActionEditor';
 import ActionCard from '../menu-editor/ActionCard';
 import ConditionsEditor from '../ui/ConditionsEditor';
@@ -42,6 +42,8 @@ import CollapsibleSection from '../ui/CollapsibleSection';
 import SceneTransitionSelect from '../ui/SceneTransitionSelect';
 import { InspectorGroupId, INSPECTOR_GROUPS, getCommandGroups } from './inspectorGroups';
 import { LayerControl, ParallaxDepthControl } from './LayerControl';
+import { DEFAULT_POLY_POINTS } from '../interactive-elements/HotSpotDrawTools';
+import { requestTrace } from '../interactive-elements/hotspotTraceBus';
 import SpotlightPlacementField from './SpotlightPlacementField';
 import { pluginManager } from '../../features/plugins/PluginManagerService';
 import { ChoiceLayoutSelect, ChoiceOptionAppearance } from './ChoiceAppearanceFields';
@@ -1783,7 +1785,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                 <FormField label={t('screen.effect')}>
                     <Select value={effectType} onChange={e => {
                         const next = e.target.value;
-                        const keepsEnhanced = next === 'fog' || next === 'haze' || next === 'smoke';
+                        const keepsEnhanced = ENHANCED_OVERLAY_TYPES.has(next);
                         // Changing to a type without an Enhanced look removes the style field
                         // (absence is data — no orphan effectStyle lingers on the command).
                         updateCommand({ effectType: next, color: undefined, ...(keepsEnhanced ? {} : { effectStyle: undefined }) } as any);
@@ -2392,9 +2394,19 @@ const ShowHotSpotGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
                 <FormField label={t('hotspot.name')}><TextInput value={cmd.name} onChange={e => updateCommand({ name: e.target.value } as any)} /></FormField>
                 <div className="grid grid-cols-2 gap-1">
                     <FormField label={t('hotspot.shape')}>
-                        <Select value={cmd.shape} onChange={e => updateCommand({ shape: e.target.value } as any)}>
+                        <Select value={cmd.shape} onChange={e => {
+                            const shape = e.target.value;
+                            // Switching TO "Drawn shape" seeds a safe default diamond; existing
+                            // points are kept so toggling shapes is lossless.
+                            if (shape === 'poly' && !(cmd.points && cmd.points.length >= 6)) {
+                                updateCommand({ shape, points: [...DEFAULT_POLY_POINTS] } as any);
+                            } else {
+                                updateCommand({ shape } as any);
+                            }
+                        }}>
                             <option value="rect">{t('hotspot.rect')}</option>
                             <option value="circle">{t('hotspot.circle')}</option>
+                            <option value="poly">{t('hotspot.shapeDrawn', 'Drawn shape')}</option>
                         </Select>
                     </FormField>
                     <FormField label={t('hotspot.trigger')}>
@@ -2405,6 +2417,40 @@ const ShowHotSpotGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
                         </Select>
                     </FormField>
                 </div>
+                {cmd.shape === 'poly' && (
+                    <div className="space-y-1">
+                        <button
+                            type="button"
+                            onClick={() => requestTrace({ kind: 'scene-command', commandId: cmd.id })}
+                            className="w-full bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold px-2 py-1.5 rounded transition-colors"
+                        >
+                            {(cmd.points && cmd.points.length >= 6) ? t('hotspot.drawAgain', '✏ Draw again') : t('hotspot.drawButton', '✏ Draw it')}
+                        </button>
+                        <p className="text-[10px] text-[var(--text-muted)]">{t('hotspot.drawnShapeHint', 'Drag the round dots on the canvas to fine-tune. Double-click an edge to add a dot.')}</p>
+                        <p className="text-[10px] text-[var(--text-muted)]">{t('hotspot.polySizeHint', 'Width and height resize the whole drawn shape.')}</p>
+                        <details className="rounded border border-[var(--border-subtle)] bg-[var(--bg-primary)]/40 p-1.5">
+                            <summary className="text-[var(--text-secondary)] text-[10px] cursor-pointer select-none">{t('hotspot.fineTunePoints', 'Fine-tune points')}</summary>
+                            <div className="space-y-1 mt-1">
+                                {Array.from({ length: Math.floor((cmd.points?.length ?? 0) / 2) }).map((_, pi: number) => (
+                                    <div key={pi} className="grid grid-cols-3 gap-1 items-end">
+                                        <input type="number" value={cmd.points?.[pi * 2] ?? 0}
+                                            onChange={e => { const c = [...(cmd.points || [])]; c[pi * 2] = parseFloat(e.target.value) || 0; updateCommand({ points: c } as any); }}
+                                            className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" title={`P${pi + 1} X`} />
+                                        <input type="number" value={cmd.points?.[pi * 2 + 1] ?? 0}
+                                            onChange={e => { const c = [...(cmd.points || [])]; c[pi * 2 + 1] = parseFloat(e.target.value) || 0; updateCommand({ points: c } as any); }}
+                                            className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" title={`P${pi + 1} Y`} />
+                                        <button
+                                            onClick={() => { const c = [...(cmd.points || [])]; if (c.length <= 6) return; c.splice(pi * 2, 2); updateCommand({ points: c } as any); }}
+                                            disabled={(cmd.points?.length ?? 0) <= 6}
+                                            className="text-red-400 hover:text-red-300 disabled:opacity-30 text-[10px] p-0.5" title={t('hotspot.removePoint', 'Remove point')}>✕</button>
+                                    </div>
+                                ))}
+                                <button onClick={() => updateCommand({ points: [...(cmd.points || []), 50, 50] } as any)}
+                                    className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white px-1.5 py-0.5 rounded transition-colors">{t('hotspot.addPoint', '+ Add Point')}</button>
+                            </div>
+                        </details>
+                    </div>
+                )}
                 <CursorSelect value={{ hoverCursor: (cmd as any).hoverCursor, hoverCursorImage: (cmd as any).hoverCursorImage }} onChange={patch => updateCommand(patch as any)} />
                 {/* Same rotation/flip controls as image/character overlays — scene/screen parity. */}
                 <OrientationFields rotation={cmd.rotation} flipX={cmd.flipX} flipY={cmd.flipY}

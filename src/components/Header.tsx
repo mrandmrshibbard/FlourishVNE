@@ -20,6 +20,34 @@ import PluginManagerUI from './PluginManagerUI';
 import { ExtensionPanelsHost, useExtensionPanels, useExtensionMenuItems, runExtensionMenuItem, useExtensionDatabaseCategories } from './ExtensionPanelsHost';
 import ExtensionDatabaseManager from './ExtensionDatabaseManager';
 import CompareMergeModal from './collab/CompareMergeModal';
+import { MusicPlayer } from './MusicPlayer';
+import { isBgmPlaying, getCurrentSongName } from '../utils/hubAudio';
+
+
+/** Editor chill music, back in the header where it can't cover anything. The button lives
+ *  in normal header flow (no floating FAB over canvases/panels), and the test-play overlay
+ *  (z-9000) covers both it and the popped-out player (z-8500). State is local, synced from
+ *  the live hubAudio module — test play stops the music underneath us, so a cheap 1s poll
+ *  keeps the button honest. */
+const HeaderMusicPlayer: React.FC = () => {
+    const [playing, setPlaying] = useState(isBgmPlaying());
+    const [song, setSong] = useState(isBgmPlaying() ? getCurrentSongName() : '');
+    useEffect(() => {
+        const id = window.setInterval(() => {
+            setPlaying(prev => (prev === isBgmPlaying() ? prev : isBgmPlaying()));
+        }, 1000);
+        return () => window.clearInterval(id);
+    }, []);
+    return (
+        <MusicPlayer
+            inline
+            isPlaying={playing}
+            onPlayingChange={(p) => { setPlaying(p); if (p) setSong(getCurrentSongName()); }}
+            currentSong={song}
+            onSongChange={setSong}
+        />
+    );
+};
 
 
 function isEditorDebugEnabled(): boolean {
@@ -443,6 +471,7 @@ const Header: React.FC<{
                                 </>
                             )}
                         </div>
+                        <HeaderMusicPlayer />
                         <ThemeSelector />
                         <div className="relative">
                             <button
@@ -456,7 +485,7 @@ const Header: React.FC<{
                             </button>
                             {showToolsMenu && (
                                 <>
-                                    <div className="fixed inset-0 z-40" onClick={() => setShowToolsMenu(false)} />
+                                    <div className="fixed inset-0 z-40" onMouseDown={e => { if (e.target === e.currentTarget) setShowToolsMenu(false); }} />
                                     <div
                                         className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border overflow-hidden"
                                         style={{
@@ -616,7 +645,7 @@ const Header: React.FC<{
         {showExitModal && ReactDOM.createPortal(
             <div
                 className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm"
-                onClick={(e) => { if (e.target === e.currentTarget) handleCancelReturn(); }}
+                onMouseDown={(e) => { if (e.target === e.currentTarget) handleCancelReturn(); }}
                 style={{ animation: 'fade-in 0.2s ease-out' }}
             >
                 <div
@@ -673,7 +702,7 @@ const Header: React.FC<{
         {/* Large-project export warning */}
         {sizeWarn && ReactDOM.createPortal(
             <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm"
-                onClick={(e) => { if (e.target === e.currentTarget) resolveSizeWarn(false); }}
+                onMouseDown={(e) => { if (e.target === e.currentTarget) resolveSizeWarn(false); }}
                 style={{ animation: 'fade-in 0.2s ease-out' }}>
                 <div className="bg-gradient-to-b from-[var(--bg-tertiary)] to-[var(--bg-secondary)] text-[var(--text-primary)] rounded-xl shadow-2xl w-full max-w-md p-6 m-4 border border-[var(--border-default)]"
                     style={{ animation: 'modal-enter 0.3s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: '0 12px 40px rgba(0,0,0,0.4)' }}>

@@ -490,7 +490,8 @@
       "silhouette": "剪影",
       "breathing": "呼吸",
       "flicker": "闪烁",
-      "glitch": "故障（画面损坏）"
+      "glitch": "故障（画面损坏）",
+      "wobble": "晃动（果冻）"
     },
     "colors": "颜色",
     "addColor": "+ 颜色",
@@ -504,7 +505,8 @@
     "noAnimations": "该角色还没有动画——请在“角色”标签（🎞️ 动画）中制作。",
     "animation": "动画",
     "stopAnimation": "无（停止当前动画）",
-    "playAnimationHint": "角色必须已经在场上。循环动画会一直播放，直到你停止或替换它——设置为自动播放的动画无需此指令。"
+    "playAnimationHint": "角色必须已经在场上。循环动画会一直播放，直到你停止或替换它——设置为自动播放的动画无需此指令。",
+    "wobbleSize": "波纹大小"
   },
   "button": {
     "buttonText": "按钮文本",
@@ -788,7 +790,15 @@
     "targetToHide": "要隐藏的目标热点",
     "selectToHide": "选择热点……",
     "acceptTagHelp": "接受携带或拖入的、标签与此相符的物品。给钥匙类物品打上“key”标签，这里就填“key”。留空则接受任何拖放到此处的东西。",
-    "visibleOpacity": "透明度"
+    "visibleOpacity": "透明度",
+    "shapeDrawn": "手绘形状",
+    "drawButton": "✏ 开始绘制",
+    "drawAgain": "✏ 重新绘制",
+    "drawnShapeHint": "拖动画布上的圆点微调形状。双击边线可添加一个点。",
+    "polySizeHint": "宽度和高度会缩放整个手绘形状。",
+    "fineTunePoints": "微调顶点",
+    "removePoint": "删除顶点",
+    "addPoint": "+ 添加顶点"
   },
   "bg": {
     "stack": "堆叠（不替换）",

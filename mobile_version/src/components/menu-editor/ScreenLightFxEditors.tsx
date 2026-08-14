@@ -119,7 +119,7 @@ const LightsCanvasPicker: React.FC<{
     const onUp = () => { dragIdRef.current = null; };
 
     return createPortal(
-        <div className="fixed inset-0 z-[100000] bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-[100000] bg-black/70 flex items-center justify-center p-4" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-4 w-full max-w-2xl" onClick={e => e.stopPropagation()}>
                 <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">{t('screenFxEditors.placeLights', 'Place the lights')}</h3>
                 <p className="text-xs text-[var(--text-secondary)] mb-2">{t('screenFxEditors.placeLightsHint', 'Drag a light to move it. Click an empty spot to add a new one. Style each light in the list after closing.')}</p>

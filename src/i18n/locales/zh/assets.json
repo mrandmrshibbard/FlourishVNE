@@ -89,5 +89,11 @@
   "defaultTrim": "默认裁剪（秒）",
   "defaultTrimHint": "适用于该视频的每一次使用，除非某个指令或元素另行设置。",
   "defaultShaping": "默认音效调整",
-  "defaultShapingHint": "适用于该音频被使用的所有位置，除非某个指令或按钮另行设置。“倒放”只对音效和语音有效——音乐始终正向播放。"
+  "defaultShapingHint": "适用于该音频被使用的所有位置，除非某个指令或按钮另行设置。“倒放”只对音效和语音有效——音乐始终正向播放。",
+  "reverseCopy": "⏪ 保存倒放副本",
+  "reverseCopyHint": "在素材中生成一个倒放的新声音。副本在任何地方都可用——包括作为音乐。",
+  "reversing": "正在倒放处理…",
+  "reverseSaved": "“{{name}}”已保存到声音素材（{{size}}）。在任何地方都会倒放——包括作为音乐。",
+  "reverseNeedsWav": "此声音的格式无法在这里倒放。请先转换为 WAV 并上传，然后保存倒放副本。",
+  "reverseFailed": "无法倒放此声音。"
 }

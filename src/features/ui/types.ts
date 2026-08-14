@@ -1297,6 +1297,10 @@ export interface UIInventoryGridElement extends BaseUIElement {
 export interface UIHotSpotElement extends BaseUIElement {
     type: UIElementType.HotSpot;
     shape: HotSpotShape;
+    /** For shape 'poly' ("Drawn shape"): flat [x1,y1,x2,y2,…] vertex pairs, percent of the
+     *  element's OWN box (same convention as draggableImageElementRegion.coords). Resizing the
+     *  box scales the drawn shape. Absent/short = falls back to rect. */
+    points?: number[];
     trigger: HotSpotTrigger;
     /** For drag-drop hot spots: which draggable element ids are accepted here */
     acceptedElementIds?: VNID[];
@@ -1633,7 +1637,7 @@ export interface VNUIScreen {
 
 // --- Hot Zone Types ---
 
-export type HotSpotShape = 'rect' | 'circle';
+export type HotSpotShape = 'rect' | 'circle' | 'poly';
 
 export type HotSpotTrigger = 'click' | 'hover' | 'drag-drop';
 
@@ -1645,6 +1649,8 @@ export interface VNHotSpot {
     id: VNID;
     name: string;
     shape: HotSpotShape;
+    /** For shape 'poly': flat vertex pairs, percent of the spot's own box (see UIHotSpotElement.points). */
+    points?: number[];
     x: number; // percentage
     y: number; // percentage
     width: number; // percentage

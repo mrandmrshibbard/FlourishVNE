@@ -172,7 +172,9 @@ export interface HotSpotOverlay {
     y: number;
     width: number;
     height: number;
-    shape: 'rect' | 'circle';
+    shape: 'rect' | 'circle' | 'poly';
+    /** For shape 'poly': flat vertex pairs, percent of the spot's own box. Additive-optional. */
+    points?: number[];
     trigger: 'click' | 'hover' | 'drag-drop';
     actions: import('../../../types/shared').VNUIAction[];
     conditions?: import('../../../types/shared').VNCondition[];

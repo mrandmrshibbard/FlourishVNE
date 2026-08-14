@@ -8,6 +8,7 @@ import { render, screen } from '@testing-library/react';
 import {
     isEnhanced, commandHasEnhancedStyle, ENHANCED_OVERLAY_TYPES,
     lightsToUniforms, lightBatches, beamsToUniforms, flashlightToUniforms, atmosphereConfig,
+    rainConfig, snowConfig, sunbeamsConfig, shimmerConfig, fireworksConfig, lightningCycleSeconds, crtConfig,
     MAX_LIGHTS_PER_PASS,
 } from '../glFx';
 import GlFxCanvas from '../GlFxCanvas';
@@ -41,16 +42,26 @@ describe('absence is data', () => {
         expect((updated[0] as any).effectStyle).toBe('enhanced');
         expect(updated[0].intensity).toBe(0.8);
     });
-    it('commandHasEnhancedStyle gates by command + atmosphere effectType', () => {
+    it('commandHasEnhancedStyle gates by command + overlay effectType (round 2 widened)', () => {
         expect(commandHasEnhancedStyle({ type: CommandType.PlaceLights } as any)).toBe(true);
         expect(commandHasEnhancedStyle({ type: CommandType.Flashlight } as any)).toBe(true);
         expect(commandHasEnhancedStyle({ type: CommandType.Spotlight } as any)).toBe(true);
         expect(commandHasEnhancedStyle({ type: CommandType.SetScreenOverlayEffect, effectType: 'fog' } as any)).toBe(true);
-        expect(commandHasEnhancedStyle({ type: CommandType.SetScreenOverlayEffect, effectType: 'rain' } as any)).toBe(false);
+        // Round 2: the weather/light-show overlays qualify too.
+        for (const t of ['rain', 'snowAsh', 'sunbeams', 'shimmer', 'fireworks', 'crtScanlines']) {
+            expect(commandHasEnhancedStyle({ type: CommandType.SetScreenOverlayEffect, effectType: t } as any)).toBe(true);
+        }
+        // The glitch pair stays Classic-only: its real tear is a displacement filter on the
+        // game container, which an overlay canvas cannot reproduce.
+        expect(commandHasEnhancedStyle({ type: CommandType.SetScreenOverlayEffect, effectType: 'glitch' } as any)).toBe(false);
+        expect(commandHasEnhancedStyle({ type: CommandType.SetScreenOverlayEffect, effectType: 'chromaticGlitch' } as any)).toBe(false);
         expect(commandHasEnhancedStyle({ type: CommandType.Lightning } as any)).toBe(false);
         expect(commandHasEnhancedStyle({ type: CommandType.Fireworks } as any)).toBe(false);
         expect(ENHANCED_OVERLAY_TYPES.has('lights')).toBe(true);
-        expect(ENHANCED_OVERLAY_TYPES.has('rain')).toBe(false);
+        expect(ENHANCED_OVERLAY_TYPES.has('rain')).toBe(true);
+        expect(ENHANCED_OVERLAY_TYPES.has('lightning')).toBe(true);
+        expect(ENHANCED_OVERLAY_TYPES.has('glitch')).toBe(false);
+        expect(ENHANCED_OVERLAY_TYPES.has('chromaticGlitch')).toBe(false);
     });
 });
 
@@ -103,6 +114,40 @@ describe('pure mappers', () => {
         expect(u.darkness).toBe(0.8);
         expect(u.hole).toBe(1);
         expect(flashlightToUniforms({ mouseX: 0, mouseY: 0, radius: 20, softness: 0.5, darkness: 0.8, on: false }, 1000, 500).hole).toBe(0);
+    });
+    it('round-2 mappers: semantics track the Classic sims', () => {
+        // Rain: wind slants around the calm 0.5 centre; dropLength = the classic lenMul range.
+        expect(rainConfig(0.5, 0.5, 0.5).slant).toBeCloseTo(0);
+        expect(rainConfig(0.5, 1, 0.5).slant).toBeGreaterThan(0);
+        expect(rainConfig(0.5, 0, 0.5).slant).toBeLessThan(0);
+        expect(rainConfig(0.5, 0.5, 0).len).toBeCloseTo(0.4);
+        expect(rainConfig(0.5, 0.5, 1).len).toBeCloseTo(1.6);
+        expect(rainConfig(1, 0.5, 0.5).fall).toBeGreaterThan(rainConfig(0, 0.5, 0.5).fall);
+        // Snow vs ash: ash falls faster, smaller flakes, dimmer handled in-shader via ash flag.
+        expect(snowConfig('ash', 0.5, 0.5, 0.5).fall).toBeGreaterThan(snowConfig('snow', 0.5, 0.5, 0.5).fall);
+        expect(snowConfig('ash', 0.5, 0.5, 0.5).ash).toBe(1);
+        expect(snowConfig('snow', 0.5, 0.5, 0.5).ash).toBe(0);
+        expect(snowConfig('snow', 0.5, 0.5, 1).size).toBeGreaterThan(snowConfig('snow', 0.5, 0.5, 0).size);
+        // Sunbeams: wider spread = fewer/fatter shafts (lower ray frequency).
+        expect(sunbeamsConfig(1, 0.5).rayFreq).toBeLessThan(sunbeamsConfig(0, 0.5).rayFreq);
+        // Shimmer: side masks the wave window; particlesOnly kills the waves.
+        expect(shimmerConfig('left').sideMax).toBeLessThan(0.5);
+        expect(shimmerConfig('right').sideMin).toBeGreaterThan(0.5);
+        expect(shimmerConfig('full').sideMin).toBe(0);
+        expect(shimmerConfig('full').sideMax).toBe(1);
+        expect(shimmerConfig('full', 'down').driftDir).toBe(1);
+        expect(shimmerConfig('full', 'up').driftDir).toBe(-1);
+        expect(shimmerConfig('full', 'up', true).wavesOn).toBe(0);
+        // Fireworks: faster = more bursts.
+        expect(fireworksConfig(1).rate).toBeGreaterThan(fireworksConfig(0).rate);
+        // Lightning: EXACTLY the Classic keyframe cycle formula (14 - speed*11).
+        expect(lightningCycleSeconds(0)).toBe(14);
+        expect(lightningCycleSeconds(1)).toBe(3);
+        expect(lightningCycleSeconds(0.5)).toBeCloseTo(8.5);
+        // CRT: spacing covers the Classic px range (gap + its 2px line); fast = quick roll.
+        expect(crtConfig(0, 0.5).spacing).toBe(4);
+        expect(crtConfig(1, 0.5).spacing).toBe(12);
+        expect(crtConfig(0.5, 1).roll).toBeLessThan(crtConfig(0.5, 0).roll);
     });
     it('atmosphereConfig: three distinct characters (fog low, haze veil, smoke rises)', () => {
         const fog = atmosphereConfig('fog');

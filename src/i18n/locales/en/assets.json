@@ -84,5 +84,11 @@
   "toastAcross": " across {{cats}}",
   "toastReplaced": "Asset replaced — all references preserved",
   "toastReplaceFailed": "Failed to replace asset",
-  "toastFolderExists": "A folder named \"{{name}}\" already exists here"
+  "toastFolderExists": "A folder named \"{{name}}\" already exists here",
+  "reverseCopy": "⏪ Save a reversed copy",
+  "reverseCopyHint": "Makes a new sound in your assets that plays backwards. The copy works everywhere — including as music. This only works for WAV files.",
+  "reversing": "Reversing…",
+  "reverseSaved": "\"{{name}}\" saved to your sounds ({{size}}). It plays backwards everywhere — including as music.",
+  "reverseNeedsWav": "This sound's format can't be reversed here. Convert it to a WAV file, upload that, then save a reversed copy.",
+  "reverseFailed": "Couldn't reverse this sound."
 }

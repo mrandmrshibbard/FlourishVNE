@@ -89,5 +89,11 @@
   "defaultTrim": "Découpe par défaut (secondes)",
   "defaultTrimHint": "S'applique à chaque utilisation de cette vidéo, sauf si une commande ou un élément en décide autrement.",
   "defaultShaping": "Réglage sonore par défaut",
-  "defaultShapingHint": "S'applique partout où ce son est utilisé, sauf si une commande ou un bouton en décide autrement. « Lire à l'envers » ne concerne que les effets sonores et les voix — la musique est toujours lue à l'endroit."
+  "defaultShapingHint": "S'applique partout où ce son est utilisé, sauf si une commande ou un bouton en décide autrement. « Lire à l'envers » ne concerne que les effets sonores et les voix — la musique est toujours lue à l'endroit.",
+  "reverseCopy": "⏪ Enregistrer une copie inversée",
+  "reverseCopyHint": "Crée un nouveau son dans vos ressources qui se joue à l’envers. La copie fonctionne partout — même comme musique.",
+  "reversing": "Inversion…",
+  "reverseSaved": "« {{name}} » enregistré dans vos sons ({{size}}). Il se joue à l’envers partout — même comme musique.",
+  "reverseNeedsWav": "Le format de ce son ne peut pas être inversé ici. Convertissez-le en WAV, téléversez-le, puis enregistrez une copie inversée.",
+  "reverseFailed": "Impossible d’inverser ce son."
 }

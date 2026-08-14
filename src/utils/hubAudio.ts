@@ -51,10 +51,39 @@ const SONG_LIBRARY: SongConfig[] = [
     bpm: 95,
     mix: { chordWave: "sawtooth", arpWave: "sawtooth", kickVol: 0.55, rimVol: 0.12, shakerVol: 0.03, chordVol: 0.035 },
     filter: { chordCutoff: 800, arpBaseFreq: 1000 }
+  },
+  // ── 2026-08 additions — same chill Lo-Fi vibe, four new flavours ──
+  {
+    name: "Midnight Study", // Classic head-nod Lo-Fi: FM e-piano, lazy kick
+    bpm: 72,
+    mix: { chordWave: "sine", arpWave: "sine", kickVol: 0.45, rimVol: 0.08, shakerVol: 0.028, chordVol: 0.06 },
+    filter: { chordCutoff: 0, arpBaseFreq: 900 }
+  },
+  {
+    name: "Rainy Window", // Mellow muffled pad, like music through glass
+    bpm: 68,
+    mix: { chordWave: "triangle", arpWave: "triangle", kickVol: 0.35, rimVol: 0.06, shakerVol: 0.024, chordVol: 0.055 },
+    filter: { chordCutoff: 650, arpBaseFreq: 700 }
+  },
+  {
+    name: "Paper Lanterns", // Warm floating bells, a touch brighter
+    bpm: 76,
+    mix: { chordWave: "sine", arpWave: "sine", kickVol: 0.4, rimVol: 0.1, shakerVol: 0.03, chordVol: 0.055 },
+    filter: { chordCutoff: 0, arpBaseFreq: 1050 }
+  },
+  {
+    name: "Slow Tides", // Deep, drumless-feeling drift — the sleepiest of the set
+    bpm: 62,
+    mix: { chordWave: "sawtooth", arpWave: "sine", kickVol: 0.3, rimVol: 0, shakerVol: 0.018, chordVol: 0.04 },
+    filter: { chordCutoff: 450, arpBaseFreq: 600 }
   }
 ];
 
 let currentSong = SONG_LIBRARY[0];
+// Once the user PICKS a song (player dropdown / skip), stop shuffling on play — before this
+// fix, toggleBackgroundMusic(true) re-randomised currentSong, so selecting a specific song
+// from the list actually played a random one.
+let songExplicitlyChosen = false;
 
 const LOOKAHEAD = 25.0; // ms
 const SCHEDULE_AHEAD_TIME = 0.1; // s
@@ -244,10 +273,12 @@ export const toggleBackgroundMusic = (enable: boolean) => {
   const ctx = getCtx();
   if (enable) {
     if (isMusicPlaying) return;
-    
-    // Pick a random song from the library
-    currentSong = SONG_LIBRARY[Math.floor(Math.random() * SONG_LIBRARY.length)];
-    
+
+    // Shuffle only until the user picks a song themselves — an explicit pick sticks.
+    if (!songExplicitlyChosen) {
+        currentSong = SONG_LIBRARY[Math.floor(Math.random() * SONG_LIBRARY.length)];
+    }
+
     isMusicPlaying = true;
     chordCount = 0; // Reset progress
     currentSequenceStep = 0;
@@ -677,7 +708,8 @@ export const skipToNextSong = (songName?: string): string => {
         toggleBackgroundMusic(false);
     }
 
-    // Pick the next song
+    // Pick the next song — and pin it, so restarting playback doesn't reshuffle it away.
+    songExplicitlyChosen = true;
     if (songName) {
         const found = SONG_LIBRARY.find(s => s.name === songName);
         if (found) currentSong = found;

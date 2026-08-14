@@ -443,12 +443,14 @@
       "silhouette": "Silhouette",
       "breathing": "Breathing",
       "flicker": "Flicker",
-      "glitch": "Glitch (corruption)"
+      "glitch": "Glitch (corruption)",
+      "wobble": "Wobble (jelly)"
     },
     "colors": "Colours",
     "addColor": "+ Colour",
     "removeColor": "Remove colour",
-    "rimSize": "Line size"
+    "rimSize": "Line size",
+    "wobbleSize": "Wave size"
   },
   "button": {
     "buttonText": "Button Text",
@@ -729,7 +731,15 @@
     "visibleOutline": "Visible outline",
     "actions": "Actions",
     "targetToHide": "Target Hot Spot to Hide",
-    "selectToHide": "Select Hot Spot..."
+    "selectToHide": "Select Hot Spot...",
+    "shapeDrawn": "Drawn shape",
+    "drawButton": "✏ Draw it",
+    "drawAgain": "✏ Draw again",
+    "drawnShapeHint": "Drag the round dots on the canvas to fine-tune. Double-click an edge to add a dot.",
+    "polySizeHint": "Width and height resize the whole drawn shape.",
+    "fineTunePoints": "Fine-tune points",
+    "removePoint": "Remove point",
+    "addPoint": "+ Add Point"
   },
   "bg": {
     "stack": "Stack (don't replace)",

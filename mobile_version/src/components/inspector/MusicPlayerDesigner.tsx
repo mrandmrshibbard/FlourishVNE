@@ -143,7 +143,7 @@ const MusicPlayerDesigner: React.FC<{
     const defaultFont = { family: 'Arial, sans-serif', size: 13, color: '#e2e8f0', weight: 'normal', italic: false } as any;
 
     return createPortal(
-        <div className="fixed inset-0 z-[100000] bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-[100000] bg-black/70 flex items-center justify-center p-4" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-4 w-full max-w-5xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">🎵 {t('musicDesigner.title', 'Design the music player')}</h3>
                 <p className="text-xs text-[var(--text-secondary)] mb-3">{t('musicDesigner.hint', 'Drag the pieces to place them; drag the corner square to resize. Sizes are in percent of the player, so the design stretches with the element. Use the eye to hide a piece without losing its spot.')}</p>

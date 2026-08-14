@@ -36,6 +36,8 @@ import SystemWizard from './SystemWizard';
 import { applySystemWizardResult } from '../../features/systems/applySystem';
 import { applyCharacterCreator, applyDressUp } from '../../features/systems/applyCharacterCreator';
 import { HotSpotOverlay, InteractiveElementOverlay } from '../interactive-elements/InteractiveElementOverlays';
+import { PolygonTraceOverlay } from '../interactive-elements/HotSpotDrawTools';
+import { subscribeTrace, TraceTarget } from '../interactive-elements/hotspotTraceBus';
 import { isHotSpotElement, isInteractiveElement } from '../../utils/interactiveElements';
 import { useElementRadial } from './ElementRadialContext';
 
@@ -1232,12 +1234,22 @@ const MenuEditor: React.FC<{
     /** Hot spots / draggable elements / Interactive Images are all `VNUIElement` entries
      *  in `screen.elements`. The overlay components emit geometric patches
      *  (`{x, y, width, height}`) which apply identically to all element types. */
-    const handleUpdateInteractive = useCallback((elementId: VNID, updates: { x?: number; y?: number; width?: number; height?: number }) => {
+    const handleUpdateInteractive = useCallback((elementId: VNID, updates: { x?: number; y?: number; width?: number; height?: number; points?: number[]; shape?: string }) => {
         dispatch({
             type: 'UPDATE_UI_ELEMENT',
             payload: { screenId: activeScreenId, elementId, updates: updates as Partial<VNUIElement> },
         });
     }, [dispatch, activeScreenId]);
+
+    // "✏ Draw it" (drawn-shape hot spots): inspectors request trace mode via the bus; this
+    // canvas hosts the overlay when the target element lives on the ACTIVE screen. Commit
+    // auto-fits the spot's box to the trace and stores box-relative points, in ONE update.
+    const [traceElementId, setTraceElementId] = useState<VNID | null>(null);
+    useEffect(() => subscribeTrace((target: TraceTarget) => {
+        if (target.kind === 'screen-element' && target.screenId === activeScreenId && screen?.elements?.[target.elementId]) {
+            setTraceElementId(target.elementId as VNID);
+        }
+    }), [activeScreenId, screen]);
     
     const extensionUIElementTypes = useExtensionUIElementTypes();
 
@@ -1647,6 +1659,7 @@ const MenuEditor: React.FC<{
                                     }}
                                     onUpdate={updates => handleUpdateInteractive(el.id, updates)}
                                     onContextMenu={(e) => handleElementContextMenu(el.id, e)}
+                                    onRequestDraw={() => setTraceElementId(el.id)}
                                     zIndex={(el as any).layer ?? 0}
                                 />
                             );
@@ -1671,6 +1684,18 @@ const MenuEditor: React.FC<{
                         }
                         return null;
                     })}
+
+                    {/* Freehand trace mode ("✏ Draw it") — whole-canvas surface, above everything. */}
+                    {traceElementId && (
+                        <PolygonTraceOverlay
+                            getStageRect={() => stageRef.current?.getBoundingClientRect() ?? null}
+                            onCommit={res => {
+                                handleUpdateInteractive(traceElementId, { x: res.x, y: res.y, width: res.width, height: res.height, shape: 'poly', points: res.points });
+                                setTraceElementId(null);
+                            }}
+                            onCancel={() => setTraceElementId(null)}
+                        />
+                    )}
                 </div>
                 </div>
                 <CanvasZoomControls zoom={zoomCtl} />

@@ -691,7 +691,16 @@
     "snapCenter": "Snap to hot spot center",
     "hideOnDrop": "Hide on drop",
     "clickActions": "Click Actions",
-    "clickActionsNonDrag": "Click Actions (non-drag)"
+    "clickActionsNonDrag": "Click Actions (non-drag)",
+    "shapeDrawn": "Drawn shape",
+    "drawButton": "✏ Draw it",
+    "drawAgain": "✏ Draw again",
+    "drawInstruction": "Draw around the area you want. Let go to finish.",
+    "drawCancelHint": "Esc to cancel",
+    "drawTooSmall": "Keep the button held down and draw around the area.",
+    "drawnShapeHint": "Drag the round dots on the canvas to fine-tune. Double-click an edge to add a dot.",
+    "polySizeHint": "Width and height resize the whole drawn shape.",
+    "fineTunePoints": "Fine-tune points"
   },
   "menuEditor": {
     "noElement": "No element",
@@ -1066,5 +1075,9 @@
   "hc": {
     "hotSpot": "Hot Spot",
     "hotSpotTitle": "An invisible clickable/hoverable area — attach actions to it"
+  },
+  "audioAdjust": {
+    "previewCapNote": "This file is over 4 MB, so in the game it will play FORWARD. Tip: use \"Save a reversed copy\" in Assets — the copy plays backwards everywhere.",
+    "previewNoReverse": "This sound can't be reversed here — playing it forward. Convert it to a WAV file to reverse it."
   }
 }

@@ -830,7 +830,16 @@
     "visibleOpacity": "透明度",
     "boundItem": "該物件是一件物品（選填）",
     "boundItemNone": "— 無 —",
-    "boundItemHelp": "設定後，把它放到熱區會消耗該物品（除非物品可重複使用），並執行其使用效果。若「拖曳標籤」為空，則使用物品自身的標籤比對熱區。"
+    "boundItemHelp": "設定後，把它放到熱區會消耗該物品（除非物品可重複使用），並執行其使用效果。若「拖曳標籤」為空，則使用物品自身的標籤比對熱區。",
+    "shapeDrawn": "手繪形狀",
+    "drawButton": "✏ 開始繪製",
+    "drawAgain": "✏ 重新繪製",
+    "drawInstruction": "沿著想要的區域畫一圈，放開即可完成。",
+    "drawCancelHint": "按 Esc 取消",
+    "drawTooSmall": "請按住按鈕，沿區域畫一圈。",
+    "drawnShapeHint": "拖曳畫布上的圓點微調形狀。雙擊邊線可新增一個點。",
+    "polySizeHint": "寬度和高度會縮放整個手繪形狀。",
+    "fineTunePoints": "微調頂點"
   },
   "menuEditor": {
     "noElement": "無物件",
@@ -1262,12 +1271,14 @@
   "character": {
     "defaultPose": "預設（常規素材）",
     "effects": {
-      "glitch": "故障（畫面損壞）"
+      "glitch": "故障（畫面損壞）",
+      "wobble": "晃動（果凍）"
     },
     "rimSize": "描邊粗細",
     "colors": "顏色",
     "removeColor": "移除顏色",
-    "addColor": "+ 顏色"
+    "addColor": "+ 顏色",
+    "wobbleSize": "波紋大小"
   },
   "varFollow": {
     "tip": "讓一個數字變數來控制該值",
@@ -1291,7 +1302,9 @@
     "hint": "一個檔案，多種聲音——放慢、加快或倒放。",
     "hintMusic": "音樂可以變速；倒放僅適用於音效和語音。",
     "previewTitle": "用目前設定試聽幾秒",
-    "preview": "試聽"
+    "preview": "試聽",
+    "previewCapNote": "該檔案超過 4 MB，在遊戲中將正向播放。提示：在素材中使用「儲存倒放副本」——副本在任何地方都會倒放。",
+    "previewNoReverse": "此聲音無法在這裡倒放——將正向播放。請轉換為 WAV 以便倒放。"
   },
   "bands": {
     "andUpShort": "及以上"

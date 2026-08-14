@@ -830,7 +830,16 @@
     "visibleOpacity": "Trasparenza",
     "boundItem": "Questo oggetto è un oggetto d'inventario (facoltativo)",
     "boundItemNone": "— nessuno —",
-    "boundItemHelp": "Se impostato, rilasciarlo su un punto interattivo consuma l'oggetto (a meno che non sia riutilizzabile) ed esegue il suo effetto d'uso. Se l'Etichetta di trascinamento è vuota, viene usata l'etichetta dell'oggetto stesso."
+    "boundItemHelp": "Se impostato, rilasciarlo su un punto interattivo consuma l'oggetto (a meno che non sia riutilizzabile) ed esegue il suo effetto d'uso. Se l'Etichetta di trascinamento è vuota, viene usata l'etichetta dell'oggetto stesso.",
+    "shapeDrawn": "Forma disegnata",
+    "drawButton": "✏ Disegnala",
+    "drawAgain": "✏ Disegna di nuovo",
+    "drawInstruction": "Disegna attorno all'area desiderata. Rilascia per finire.",
+    "drawCancelHint": "Esc per annullare",
+    "drawTooSmall": "Tieni premuto il pulsante e disegna attorno all'area.",
+    "drawnShapeHint": "Trascina i punti rotondi sul canvas per rifinire. Doppio clic su un bordo per aggiungere un punto.",
+    "polySizeHint": "Larghezza e altezza ridimensionano l'intera forma disegnata.",
+    "fineTunePoints": "Regola i punti"
   },
   "menuEditor": {
     "noElement": "Nessun elemento",
@@ -1262,12 +1271,14 @@
   "character": {
     "defaultPose": "Predefinita (immagini normali)",
     "effects": {
-      "glitch": "Glitch (corruzione)"
+      "glitch": "Glitch (corruzione)",
+      "wobble": "Ondeggiamento (gelatina)"
     },
     "rimSize": "Spessore della linea",
     "colors": "Colori",
     "removeColor": "Rimuovi colore",
-    "addColor": "+ Colore"
+    "addColor": "+ Colore",
+    "wobbleSize": "Dimensione onda"
   },
   "varFollow": {
     "tip": "Lascia che una variabile numerica controlli questo valore",
@@ -1291,7 +1302,9 @@
     "hint": "Un file, tanti suoni: rallentalo, acceleralo o invertilo.",
     "hintMusic": "La musica può cambiare velocità; la riproduzione al contrario vale per effetti sonori e voci.",
     "previewTitle": "Ascolta qualche secondo con queste impostazioni",
-    "preview": "Anteprima"
+    "preview": "Anteprima",
+    "previewCapNote": "Questo file supera i 4 MB, quindi nel gioco verrà riprodotto IN AVANTI. Consiglio: usa \"Salva una copia invertita\" negli Asset — la copia si riproduce al contrario ovunque.",
+    "previewNoReverse": "Questo suono non può essere invertito qui — riproduzione in avanti. Convertilo in WAV per invertirlo."
   },
   "bands": {
     "andUpShort": "o più"

@@ -11,8 +11,10 @@ import { useTranslation } from 'react-i18next';
 import { VNAudioAdjust } from '../../features/scene/types';
 import { VNProject } from '../../types/project';
 import { applyAudioAdjust, clampSpeed } from '../../utils/audioAdjust';
-import { getReversedUrl } from '../live-preview/reversedAudio';
+import { MAX_REVERSE_BYTES } from '../live-preview/reversedAudio';
+import { bakeReversedWav } from '../../utils/reverseAudioAsset';
 import { resolveFieldUrl } from '../../utils/assetStore';
+import { useToast } from '../../contexts/ToastContext';
 
 /** Write helper shared by every mount: strips empty objects so untouched data stays byte-identical. */
 export const writeAudioAdjust = (next: VNAudioAdjust): VNAudioAdjust | undefined => {
@@ -35,6 +37,7 @@ export const AudioAdjustFields: React.FC<{
     audioId?: string | null;
 }> = ({ value, onChange, allowReverse = true, allowKeepPitch = true, project, audioId }) => {
     const { t } = useTranslation('ui');
+    const toast = useToast();
     const speed = value?.speed ?? 1;
 
     const commit = (patch: Partial<VNAudioAdjust>) => onChange(writeAudioAdjust({ ...value, ...patch }));
@@ -48,12 +51,37 @@ export const AudioAdjustFields: React.FC<{
         const url = asset ? resolveFieldUrl(project.id, asset.audioUrl) || asset.audioUrl : null;
         if (!url) return;
         let playUrl = url;
-        if (allowReverse && value?.reverse) playUrl = (await getReversedUrl(url)) || url;
+        let revokeUrl: string | null = null;
+        if (allowReverse && value?.reverse) {
+            // Bake, don't stream: the runtime path (getReversedUrl) enforces a 4 MB cap to
+            // protect PLAY-time memory, and uncompressed WAVs blow past 4 MB in seconds —
+            // so the preview silently played FORWARD on most WAV files. The author pressed
+            // the button to hear it reversed; the editor can afford one explicit decode.
+            try {
+                const res = await fetch(url);
+                const buf = await res.arrayBuffer();
+                const baked = await bakeReversedWav(buf);
+                if (baked.ok) {
+                    revokeUrl = URL.createObjectURL(new Blob([baked.wav], { type: 'audio/wav' }));
+                    playUrl = revokeUrl;
+                    // Honesty note: the GAME's live reverse still refuses files over 4 MB
+                    // (they play forward in play). The baked-copy tool is the fix.
+                    if (buf.byteLength > MAX_REVERSE_BYTES) {
+                        toast.warning(t('audioAdjust.previewCapNote', 'This file is over 4 MB, so in the game it will play FORWARD. Tip: use "Save a reversed copy" in Assets — the copy plays backwards everywhere.'), { duration: 8000 });
+                    }
+                } else {
+                    toast.warning(t('audioAdjust.previewNoReverse', "This sound can't be reversed here — playing it forward. Convert it to a WAV file to reverse it."), { duration: 6000 });
+                }
+            } catch { /* fall through to forward playback */ }
+        }
         const a = new Audio(playUrl);
         applyAudioAdjust(a, value ?? null);
         a.volume = 0.9;
         a.play().catch(() => { /* preview is best-effort */ });
-        window.setTimeout(() => { try { a.pause(); } catch { /* noop */ } }, 4000);
+        window.setTimeout(() => {
+            try { a.pause(); } catch { /* noop */ }
+            if (revokeUrl) { try { URL.revokeObjectURL(revokeUrl); } catch { /* noop */ } }
+        }, 4000);
     };
 
     return (
@@ -76,7 +104,7 @@ export const AudioAdjustFields: React.FC<{
             {allowReverse && (
                 <label className="flex items-center gap-1.5 text-[10px] text-[var(--text-secondary)]">
                     <input type="checkbox" checked={!!value?.reverse} onChange={e => commit({ reverse: e.target.checked })} className="w-3.5 h-3.5" />
-                    {t('audioAdjust.reverse', 'Play backwards')}
+                    {t('audioAdjust.reverse', 'Play backwards - .wav format only')}
                 </label>
             )}
             <div className="flex items-center justify-between">

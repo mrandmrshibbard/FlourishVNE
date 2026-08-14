@@ -93,6 +93,7 @@ const InspectorPanel: React.FC<InspectorPanelProps> = ({
                         <HotSpotProperties
                             spot={selectedElement}
                             project={project}
+                            screenId={activeMenuScreenId}
                             targetableElements={targetable}
                             dragTagOptions={dragTagOptions}
                             onUpdate={(patch) => dispatch({

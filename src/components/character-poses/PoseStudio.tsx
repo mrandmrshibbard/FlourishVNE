@@ -439,7 +439,7 @@ const PoseStudio: React.FC<{
 
     return createPortal(
         <div ref={rootRef} tabIndex={-1} onKeyDown={onKeyDown} onKeyUp={onKeyUp}
-            className="fixed inset-0 z-[100000] bg-black/75 flex items-center justify-center p-3 outline-none" onClick={onClose}>
+            className="fixed inset-0 z-[100000] bg-black/75 flex items-center justify-center p-3 outline-none" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl w-full h-[92vh] max-w-[96vw] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
                 {/* ── Top bar ── */}
                 <div className="flex items-center gap-3 px-4 py-2 border-b border-[var(--border-subtle)] flex-wrap">

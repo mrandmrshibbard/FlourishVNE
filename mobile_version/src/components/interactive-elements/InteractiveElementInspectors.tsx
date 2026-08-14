@@ -31,6 +31,8 @@ import { draggableImageElementRegion } from '../../features/scene/types';
 import { UIActionType } from '../../types/shared';
 import { PlusIcon, TrashIcon } from '../icons';
 import Panel from '../ui/Panel';
+import { DEFAULT_POLY_POINTS } from './HotSpotDrawTools';
+import { requestTrace } from './hotspotTraceBus';
 import ConditionsEditor from '../ui/ConditionsEditor';
 import VideoTrimFields from '../ui/VideoTrimFields';
 import UIActionsListEditor from '../ui/UIActionsListEditor';
@@ -215,6 +217,8 @@ function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
 export const HotSpotProperties: React.FC<{
     spot: UIHotSpotElement;
     project: VNProject;
+    /** The screen this spot lives on — lets "✏ Draw it" ask the canvas to enter trace mode. */
+    screenId?: VNID;
     /** Names of draggable elements on the screen — used as the "Accepted Elements" picker. */
     targetableElements: { id: VNID; name: string }[];
     /** Drag tags already used by draggable objects on this screen — for the Accept-tag autocomplete. */
@@ -222,7 +226,7 @@ export const HotSpotProperties: React.FC<{
     onUpdate: (patch: Partial<UIHotSpotElement>) => void;
     /** Removes this hot spot from the screen. */
     onDelete?: () => void;
-}> = ({ spot, project, targetableElements, dragTagOptions = [], onUpdate: typedOnUpdate, onDelete }) => {
+}> = ({ spot, project, screenId, targetableElements, dragTagOptions = [], onUpdate: typedOnUpdate, onDelete }) => {
     const { t } = useTranslation('ui');
     // Inside the body we still operate on the legacy VNHotSpot shape (field
     // names match), so existing JSX builds Partial<VNHotSpot> patches; convert
@@ -262,11 +266,21 @@ export const HotSpotProperties: React.FC<{
                     <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.shape')}</span>
                     <select
                         value={spot.shape}
-                        onChange={e => onUpdate({ shape: e.target.value as HotSpotShape })}
+                        onChange={e => {
+                            const shape = e.target.value as HotSpotShape;
+                            // Switching TO "Drawn shape" seeds a safe default diamond so the spot
+                            // never enters a broken state; existing points are kept (lossless toggle).
+                            if (shape === 'poly' && !(spot.points && spot.points.length >= 6)) {
+                                onUpdate({ shape, points: [...DEFAULT_POLY_POINTS] });
+                            } else {
+                                onUpdate({ shape });
+                            }
+                        }}
                         className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
                     >
                         <option value="rect">{t('hotZone.shapeRect')}</option>
                         <option value="circle">{t('hotZone.shapeCircle')}</option>
+                        <option value="poly">{t('hotZone.shapeDrawn', 'Drawn shape')}</option>
                     </select>
                 </label>
                 <label className="block">
@@ -282,6 +296,42 @@ export const HotSpotProperties: React.FC<{
                     </select>
                 </label>
             </div>
+            {spot.shape === 'poly' && (
+                <div className="space-y-1">
+                    {screenId && (
+                        <button
+                            type="button"
+                            onClick={() => requestTrace({ kind: 'screen-element', screenId, elementId: spot.id })}
+                            className="w-full bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold px-2 py-1.5 rounded transition-colors"
+                        >
+                            {(spot.points && spot.points.length >= 6) ? t('hotZone.drawAgain', '✏ Draw again') : t('hotZone.drawButton', '✏ Draw it')}
+                        </button>
+                    )}
+                    <p className="text-[10px] text-[var(--text-muted)]">{t('hotZone.drawnShapeHint', 'Drag the round dots on the canvas to fine-tune. Double-click an edge to add a dot.')}</p>
+                    <p className="text-[10px] text-[var(--text-muted)]">{t('hotZone.polySizeHint', 'Width and height resize the whole drawn shape.')}</p>
+                    <details className="rounded border border-[var(--border-subtle)] bg-[var(--bg-primary)]/40 p-1.5">
+                        <summary className="text-[var(--text-secondary)] text-[10px] cursor-pointer select-none">{t('hotZone.fineTunePoints', 'Fine-tune points')}</summary>
+                        <div className="space-y-1 mt-1">
+                            {Array.from({ length: Math.floor((spot.points?.length ?? 0) / 2) }).map((_, pi) => (
+                                <div key={pi} className="grid grid-cols-3 gap-1 items-end">
+                                    <input type="number" value={spot.points?.[pi * 2] ?? 0}
+                                        onChange={e => { const c = [...(spot.points || [])]; c[pi * 2] = parseFloat(e.target.value) || 0; onUpdate({ points: c }); }}
+                                        className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" title={`P${pi + 1} X`} />
+                                    <input type="number" value={spot.points?.[pi * 2 + 1] ?? 0}
+                                        onChange={e => { const c = [...(spot.points || [])]; c[pi * 2 + 1] = parseFloat(e.target.value) || 0; onUpdate({ points: c }); }}
+                                        className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" title={`P${pi + 1} Y`} />
+                                    <button
+                                        onClick={() => { const c = [...(spot.points || [])]; if (c.length <= 6) return; c.splice(pi * 2, 2); onUpdate({ points: c }); }}
+                                        disabled={(spot.points?.length ?? 0) <= 6}
+                                        className="text-red-400 hover:text-red-300 disabled:opacity-30 text-[10px] p-0.5" title={t('hotZone.removePoint')}>✕</button>
+                                </div>
+                            ))}
+                            <button onClick={() => onUpdate({ points: [...(spot.points || []), 50, 50] })}
+                                className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white px-1.5 py-0.5 rounded transition-colors">{t('hotZone.addPoint')}</button>
+                        </div>
+                    </details>
+                </div>
+            )}
             <CursorSelect value={{ hoverCursor: (spot as any).hoverCursor, hoverCursorImage: (spot as any).hoverCursorImage }} onChange={patch => onUpdate(patch as any)} />
 
             {/* Rotation/flip — previously only reachable via the right-click radial's transform

@@ -284,7 +284,7 @@ function validateCommand(
             if (approxBytes > 4 * 1024 * 1024) {
                 warnings.push({
                     severity: 'warning',
-                    message: `"${asset.name}" is set to play backwards but is larger than 4 MB — it will play forward instead. Use a shorter clip to reverse it.`,
+                    message: `"${asset.name}" is set to play backwards but is larger than 4 MB — it will play forward instead. Tip: open it in Assets and use "Save a reversed copy" — the baked copy plays backwards everywhere, at any size.`,
                     location: loc
                 });
             }
@@ -297,7 +297,7 @@ function validateCommand(
             if (!looksWav) {
                 warnings.push({
                     severity: 'warning',
-                    message: `"${asset.name}" is set to play backwards, but on desktop only WAV files can reverse — it will play forward there. Convert it to a WAV to reverse it everywhere.`,
+                    message: `"${asset.name}" is set to play backwards, but on desktop only WAV files can reverse — it will play forward there. Convert it to a WAV, or use "Save a reversed copy" in Assets — the baked copy plays backwards everywhere, even as music.`,
                     location: loc
                 });
             }

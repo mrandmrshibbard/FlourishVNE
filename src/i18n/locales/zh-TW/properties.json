@@ -490,7 +490,8 @@
       "silhouette": "剪影",
       "breathing": "呼吸",
       "flicker": "閃爍",
-      "glitch": "故障（畫面損壞）"
+      "glitch": "故障（畫面損壞）",
+      "wobble": "晃動（果凍）"
     },
     "colors": "顏色",
     "addColor": "+ 顏色",
@@ -504,7 +505,8 @@
     "noAnimations": "該角色還沒有動畫——請在「角色」標籤（🎞️ 動畫）中製作。",
     "animation": "動畫",
     "stopAnimation": "無（停止目前動畫）",
-    "playAnimationHint": "角色必須已經在場上。循環動畫會一直播放，直到你停止或替換它——設定為自動播放的動畫無需此指令。"
+    "playAnimationHint": "角色必須已經在場上。循環動畫會一直播放，直到你停止或替換它——設定為自動播放的動畫無需此指令。",
+    "wobbleSize": "波紋大小"
   },
   "button": {
     "buttonText": "按鈕文字",
@@ -788,7 +790,15 @@
     "targetToHide": "要隱藏的目標熱點",
     "selectToHide": "選擇熱點……",
     "acceptTagHelp": "接受攜帶或拖入的、標籤與此相符的物品。給鑰匙類物品打上「key」標籤，這裡就填「key」。留空則接受任何拖放到此處的東西。",
-    "visibleOpacity": "透明度"
+    "visibleOpacity": "透明度",
+    "shapeDrawn": "手繪形狀",
+    "drawButton": "✏ 開始繪製",
+    "drawAgain": "✏ 重新繪製",
+    "drawnShapeHint": "拖曳畫布上的圓點微調形狀。雙擊邊線可新增一個點。",
+    "polySizeHint": "寬度和高度會縮放整個手繪形狀。",
+    "fineTunePoints": "微調頂點",
+    "removePoint": "刪除頂點",
+    "addPoint": "+ 新增頂點"
   },
   "bg": {
     "stack": "堆疊（不取代）",

@@ -379,8 +379,13 @@ export const characterReducer = (state: VNProject, action: CharacterAction): VNP
         const anim = character?.animations?.[animationId];
         if (!character || !anim) return state;
         const next: VNCharacterAnimation = { ...anim, ...updates };
-        // Normalize: keys sorted by time so every consumer can rely on order.
-        next.tracks = (next.tracks || []).map(tr => ({ ...tr, keys: [...(tr.keys || [])].sort((a, b) => a.atMs - b.atMs) }));
+        // Normalize: keys sorted by time so every consumer can rely on order. Spin/Tilt
+        // rotation keys get the same treatment; an absent lane stays absent (minimal JSON).
+        next.tracks = (next.tracks || []).map(tr => ({
+            ...tr,
+            keys: [...(tr.keys || [])].sort((a, b) => a.atMs - b.atMs),
+            ...(tr.rotationKeys ? { rotationKeys: [...tr.rotationKeys].sort((a, b) => a.atMs - b.atMs) } : {}),
+        }));
         return { ...state, characters: { ...state.characters, [characterId]: { ...character, animations: { ...character.animations, [animationId]: next } } } };
     }
 

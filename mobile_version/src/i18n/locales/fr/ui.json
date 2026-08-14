@@ -830,7 +830,16 @@
     "visibleOpacity": "Transparence",
     "boundItem": "Cet objet est un objet d'inventaire (facultatif)",
     "boundItemNone": "— aucun —",
-    "boundItemHelp": "Si défini, déposer ceci sur un point interactif consomme l'objet (sauf s'il est réutilisable) et exécute son effet d'utilisation. Si l'Étiquette de glisser-déposer est vide, celle de l'objet est utilisée."
+    "boundItemHelp": "Si défini, déposer ceci sur un point interactif consomme l'objet (sauf s'il est réutilisable) et exécute son effet d'utilisation. Si l'Étiquette de glisser-déposer est vide, celle de l'objet est utilisée.",
+    "shapeDrawn": "Forme dessinée",
+    "drawButton": "✏ La dessiner",
+    "drawAgain": "✏ Redessiner",
+    "drawInstruction": "Dessinez autour de la zone voulue. Relâchez pour terminer.",
+    "drawCancelHint": "Échap pour annuler",
+    "drawTooSmall": "Maintenez le bouton enfoncé et dessinez autour de la zone.",
+    "drawnShapeHint": "Faites glisser les points ronds sur le canevas pour ajuster. Double-cliquez sur un bord pour ajouter un point.",
+    "polySizeHint": "La largeur et la hauteur redimensionnent toute la forme dessinée.",
+    "fineTunePoints": "Ajuster les points"
   },
   "menuEditor": {
     "noElement": "Aucun élément",
@@ -1262,12 +1271,14 @@
   "character": {
     "defaultPose": "Par défaut (image normale)",
     "effects": {
-      "glitch": "Glitch (corruption)"
+      "glitch": "Glitch (corruption)",
+      "wobble": "Ondulation (gelée)"
     },
     "rimSize": "Épaisseur du trait",
     "colors": "Couleurs",
     "removeColor": "Retirer la couleur",
-    "addColor": "+ Couleur"
+    "addColor": "+ Couleur",
+    "wobbleSize": "Taille des vagues"
   },
   "varFollow": {
     "tip": "Laissez une variable numérique piloter cette valeur",
@@ -1291,7 +1302,9 @@
     "hint": "Un fichier, plusieurs sons — ralentissez-le, accélérez-le ou inversez-le.",
     "hintMusic": "La musique peut changer de vitesse ; la lecture à l'envers est réservée aux effets sonores et aux voix.",
     "previewTitle": "Écouter quelques secondes avec ces réglages",
-    "preview": "Aperçu"
+    "preview": "Aperçu",
+    "previewCapNote": "Ce fichier dépasse 4 Mo : dans le jeu il sera lu À L’ENDROIT. Astuce : utilisez « Enregistrer une copie inversée » dans les Ressources — la copie se joue à l’envers partout.",
+    "previewNoReverse": "Ce son ne peut pas être inversé ici — lecture à l’endroit. Convertissez-le en WAV pour l’inverser."
   },
   "bands": {
     "andUpShort": "et plus"

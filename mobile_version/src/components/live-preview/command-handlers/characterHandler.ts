@@ -25,6 +25,9 @@ export function buildCharacterMedia(
    *  All-null when the character has no layout — callers then OMIT the fields entirely so
    *  box-less stage state and saves stay byte-identical. */
   imageBoxes: Array<VNLayerBox | null>; videoBoxes: Array<VNLayerBox | null>;
+  /** WHICH layer each url came from, parallel to the url arrays (base entry = null). Used by
+   *  the render path to target per-layer animated rotation; never stored on stage state. */
+  imageLayerIds: Array<VNID | null>; videoLayerIds: Array<VNID | null>;
 } {
   const imageUrls: string[] = [];
   const videoUrls: string[] = [];
@@ -34,11 +37,13 @@ export function buildCharacterMedia(
   // Pose Studio: where each piece sits (parallel to the url arrays; null = whole box).
   const imageBoxes: Array<VNLayerBox | null> = [];
   const videoBoxes: Array<VNLayerBox | null> = [];
+  const imageLayerIds: Array<VNID | null> = [];
+  const videoLayerIds: Array<VNID | null> = [];
   let hasVideo = false;
   let videoLoop = false;
   const base = characterBaseArtForPose(charData, poseId);
-  if (base.videoUrl) { videoUrls.push(wrap(base.videoUrl)); videoTrims.push({ start: base.trimStart, end: base.trimEnd }); videoBoxes.push(null); hasVideo = true; videoLoop = !!base.loop; }
-  else if (base.imageUrl) { imageUrls.push(wrap(base.imageUrl)); imageBoxes.push(null); }
+  if (base.videoUrl) { videoUrls.push(wrap(base.videoUrl)); videoTrims.push({ start: base.trimStart, end: base.trimEnd }); videoBoxes.push(null); videoLayerIds.push(null); hasVideo = true; videoLoop = !!base.loop; }
+  else if (base.imageUrl) { imageUrls.push(wrap(base.imageUrl)); imageBoxes.push(null); imageLayerIds.push(null); }
   // Pose Studio order (per-pose front/back) + per-pose hidden pieces; box-less/order-less
   // characters take exactly the legacy path (base Record order, nothing skipped).
   const hidden = poseHiddenLayerIds(charData, poseId);
@@ -48,10 +53,10 @@ export function buildCharacterMedia(
     const asset = assetId ? layer.assets[assetId] : null;
     const art = asset ? assetArtForPose(asset, poseId) : null;
     const box = asset ? (normalizeLayerBox(resolveLayerBox(layer, asset, poseId)) ?? null) : null;
-    if (art?.videoUrl) { videoUrls.push(wrap(art.videoUrl)); videoTrims.push({}); videoBoxes.push(box); hasVideo = true; videoLoop = videoLoop || !!art.loop; }
-    else if (art?.imageUrl) { imageUrls.push(wrap(art.imageUrl)); imageBoxes.push(box); }
+    if (art?.videoUrl) { videoUrls.push(wrap(art.videoUrl)); videoTrims.push({}); videoBoxes.push(box); videoLayerIds.push(layer.id); hasVideo = true; videoLoop = videoLoop || !!art.loop; }
+    else if (art?.imageUrl) { imageUrls.push(wrap(art.imageUrl)); imageBoxes.push(box); imageLayerIds.push(layer.id); }
   });
-  return { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes };
+  return { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes, imageLayerIds, videoLayerIds };
 }
 
 /** Attach the box arrays to a stage entry ONLY when something actually has a box — box-less

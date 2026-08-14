@@ -490,7 +490,8 @@
       "silhouette": "Silhouette",
       "breathing": "Respiration",
       "flicker": "Vacillement",
-      "glitch": "Glitch (corruption)"
+      "glitch": "Glitch (corruption)",
+      "wobble": "Ondulation (gelée)"
     },
     "colors": "Couleurs",
     "addColor": "+ Couleur",
@@ -504,7 +505,8 @@
     "noAnimations": "Ce personnage n'a pas encore d'animations — créez-en une dans l'onglet Personnages (🎞️ Animations).",
     "animation": "Animation",
     "stopAnimation": "Aucune (arrêter celle en cours)",
-    "playAnimationHint": "Le personnage doit déjà être en scène. Une animation en boucle continue jusqu'à ce que vous l'arrêtiez ou la remplaciez — les animations réglées pour se jouer d'elles-mêmes n'ont pas besoin de cette commande."
+    "playAnimationHint": "Le personnage doit déjà être en scène. Une animation en boucle continue jusqu'à ce que vous l'arrêtiez ou la remplaciez — les animations réglées pour se jouer d'elles-mêmes n'ont pas besoin de cette commande.",
+    "wobbleSize": "Taille des vagues"
   },
   "button": {
     "buttonText": "Texte du bouton",
@@ -788,7 +790,15 @@
     "targetToHide": "Zone interactive cible à masquer",
     "selectToHide": "Sélectionner une zone interactive...",
     "acceptTagHelp": "Accepte un objet porté ou glissé dont l'étiquette correspond à celle-ci. Étiquetez un objet clé « clé », puis acceptez « clé » ici. Laissez vide pour accepter tout ce qui est déposé ici.",
-    "visibleOpacity": "Transparence"
+    "visibleOpacity": "Transparence",
+    "shapeDrawn": "Forme dessinée",
+    "drawButton": "✏ La dessiner",
+    "drawAgain": "✏ Redessiner",
+    "drawnShapeHint": "Faites glisser les points ronds sur le canevas pour ajuster. Double-cliquez sur un bord pour ajouter un point.",
+    "polySizeHint": "La largeur et la hauteur redimensionnent toute la forme dessinée.",
+    "fineTunePoints": "Ajuster les points",
+    "removePoint": "Retirer le point",
+    "addPoint": "+ Ajouter un point"
   },
   "bg": {
     "stack": "Empiler (ne pas remplacer)",

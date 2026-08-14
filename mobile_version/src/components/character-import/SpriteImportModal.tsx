@@ -234,7 +234,7 @@ const SpriteImportModal: React.FC<Props> = ({ isOpen, onClose, character, initia
     }, 0);
 
     return createPortal(
-        <div className="fixed inset-0 z-[100000] bg-black/70 flex items-center justify-center p-4" onClick={close}>
+        <div className="fixed inset-0 z-[100000] bg-black/70 flex items-center justify-center p-4" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>
             <div className="rounded-xl w-full max-w-3xl max-h-[88vh] flex flex-col overflow-hidden"
                 style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}
                 onClick={e => e.stopPropagation()}>

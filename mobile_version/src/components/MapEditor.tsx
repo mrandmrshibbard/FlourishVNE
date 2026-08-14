@@ -102,7 +102,7 @@ const MapEditor: React.FC<{ isOpen: boolean; onClose: () => void; initialMapId?:
 
     // z-[10000]: editor canvas layers reach z-100+, which punches through a z-50 overlay.
     return createPortal(
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={backdrop}>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm" onMouseDown={backdrop}>
             <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-xl shadow-2xl w-[94vw] h-[88vh] m-4 border border-slate-700 flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between p-3 border-b border-slate-700 flex-shrink-0">
                     <div className="flex items-center gap-3">

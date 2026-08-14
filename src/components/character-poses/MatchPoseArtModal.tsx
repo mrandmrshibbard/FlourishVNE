@@ -118,7 +118,7 @@ const MatchPoseArtModal: React.FC<{
     const assignable = rows.filter(r => r.target !== 'skip').length;
 
     return createPortal(
-        <div className="fixed inset-0 z-[100000] bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-[100000] bg-black/70 flex items-center justify-center p-4" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-4 w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">
                     {t('poses.matchTitle', 'Match art by file name — "{{pose}}"', { pose: pose.name })}

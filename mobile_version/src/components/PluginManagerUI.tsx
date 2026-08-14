@@ -961,7 +961,7 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
 
             {/* Install trust prompt — discloses what's being installed before any code runs. */}
             {pendingInstall && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setPendingInstall(null)}>
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm" onMouseDown={e => { if (e.target === e.currentTarget) setPendingInstall(null); }}>
                     <div className="w-[440px] max-w-[92vw] rounded-xl border p-4 flex flex-col gap-3" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border-subtle)' }} onClick={e => e.stopPropagation()}>
                         <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                             {t('pluginManager.trustTitle', 'Install')} “{pendingInstall.name}”?

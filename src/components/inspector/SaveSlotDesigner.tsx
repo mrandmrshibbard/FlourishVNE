@@ -110,7 +110,7 @@ const SaveSlotDesigner: React.FC<{
         : t('slotDesigner.partText', 'Text');
 
     return createPortal(
-        <div className="fixed inset-0 z-[100000] bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-[100000] bg-black/70 flex items-center justify-center p-4" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-4 w-full max-w-4xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">🎨 {t('slotDesigner.title', 'Design the save slot')}</h3>
                 <p className="text-xs text-[var(--text-secondary)] mb-3">{t('slotDesigner.hint', 'Design ONE slot — the Save/Load screen repeats it for every slot. Drag pieces to place them; drag the corner square to resize. Sizes are in percent of the slot, so the design stretches with the slot.')}</p>

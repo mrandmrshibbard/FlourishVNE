@@ -130,7 +130,7 @@ const ConversationStudio: React.FC<ConversationStudioProps> = (props) => {
     return createPortal(
         // z-[10000]: the editor canvases layer content up to z-100+ (per-layer z-order), so a
         // z-50 overlay gets punched through by the phone preview behind it.
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={backdrop}>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm" onMouseDown={backdrop}>
             <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-xl shadow-2xl w-[94vw] h-[88vh] m-4 border border-slate-700 flex flex-col overflow-hidden">
                 {/* ── Header ── */}
                 <div className="flex items-center justify-between p-3 border-b border-slate-700 flex-shrink-0">

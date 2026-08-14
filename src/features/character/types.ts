@@ -154,6 +154,25 @@ export interface VNCharacterPose {
 export interface VNAnimationTrack {
     layerId: VNID;
     keys: Array<{ atMs: number; assetId: VNID | null }>;
+    /** Spin/Tilt keys: at `atMs` the layer is rotated `deg` degrees (clockwise, pivoting at the
+     *  layer box's centre — the same pivot as the authored Pose Studio rotation, which this
+     *  COMPOSES with rather than replaces). Unlike image keys these INTERPOLATE linearly between
+     *  keys, wrapping across the loop point when the animation loops — so 0ms:0° → end:360° with
+     *  loop = a continuous smooth spin. The rotation is computed per frame and never written to
+     *  the layer/pose data: stop the animation and the layer is back at its authored transform.
+     *  Additive-optional. */
+    rotationKeys?: Array<{ atMs: number; deg: number }>;
+    /** Move the piece while THIS animation is active, in percent of the character frame.
+     *  Ephemeral like the rotation — the layer's authored box/position is never written; the
+     *  moment the animation stops the piece is back where the author put it. Additive-optional. */
+    offsetX?: number;
+    offsetY?: number;
+    /** Where the Spin/Tilt rotation pivots, in percent of the LAYER'S OWN BOX (default 50/50 =
+     *  the box centre). Lets authors put the pivot ON the art when the drawing sits off-centre
+     *  inside its box (object-contain letterboxing), so a spin doesn't swing the piece sideways.
+     *  Additive-optional. */
+    pivotX?: number;
+    pivotY?: number;
 }
 
 /** A character animation: one or more layer tracks played on a shared timeline.

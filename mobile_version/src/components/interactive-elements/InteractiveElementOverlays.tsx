@@ -8,7 +8,7 @@
  * the element overlay converts to the legacy `VNHotZoneElement` runtime layout
  * so the per-type JSX can render unchanged — an implementation detail only.
  */
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
 import {
@@ -26,6 +26,7 @@ import {
 import { draggableImageElementRegion } from '../../features/scene/types';
 import ResizableDraggable from '../menu-editor/ResizableDraggable';
 import { buildOrientationTransform } from '../../utils/styleUtils';
+import { PolygonShapeSVG, PolygonVertexEditor } from './HotSpotDrawTools';
 
 /** Renders a Hot Spot overlay on the canvas. Takes a unified `UIHotSpotElement`
  *  directly — its field layout matches the legacy `VNHotSpot` so no conversion
@@ -35,10 +36,12 @@ export const HotSpotOverlay: React.FC<{
     isSelected: boolean;
     parentSize: { width: number; height: number };
     onSelect: (e: React.MouseEvent) => void;
-    onUpdate: (updates: { x?: number; y?: number; width?: number; height?: number }) => void;
+    onUpdate: (updates: { x?: number; y?: number; width?: number; height?: number; points?: number[] }) => void;
     onContextMenu?: (e: React.MouseEvent) => void;
+    /** "✏ Draw again" for drawn shapes — enters trace mode (provided by the host editor). */
+    onRequestDraw?: () => void;
     zIndex?: number;
-}> = ({ spot, isSelected, parentSize, onSelect, onUpdate, onContextMenu, zIndex }) => {
+}> = ({ spot, isSelected, parentSize, onSelect, onUpdate, onContextMenu, onRequestDraw, zIndex }) => {
     const triggerColors: Record<HotSpotTrigger, string> = {
         click: 'rgba(59, 130, 246, 0.3)',
         hover: 'rgba(234, 179, 8, 0.3)',
@@ -48,6 +51,14 @@ export const HotSpotOverlay: React.FC<{
         click: 'rgb(59, 130, 246)',
         hover: 'rgb(234, 179, 8)',
         'drag-drop': 'rgb(34, 197, 94)',
+    };
+
+    const isPoly = spot.shape === 'poly' && (spot.points?.length ?? 0) >= 6;
+    const flipTransform = buildOrientationTransform({ flipX: (spot as any).flipX, flipY: (spot as any).flipY }) || undefined;
+    // The element's on-canvas pixel size — the vertex editor needs it for delta math.
+    const spotPixelSize = {
+        width: (parentSize.width * spot.width) / 100,
+        height: (parentSize.height * spot.height) / 100,
     };
 
     return (
@@ -60,7 +71,7 @@ export const HotSpotOverlay: React.FC<{
             anchorY={0}
             // Rotation on the BOX (outline + handles follow); flips on the content.
             rotationDeg={(spot as any).rotation || undefined}
-            contentTransform={buildOrientationTransform({ flipX: (spot as any).flipX, flipY: (spot as any).flipY }) || undefined}
+            contentTransform={flipTransform}
             parentSize={parentSize}
             isSelected={isSelected}
             onSelect={onSelect}
@@ -68,18 +79,61 @@ export const HotSpotOverlay: React.FC<{
             onContextMenu={onContextMenu}
             zIndex={zIndex}
             snapGrid={1}
+            // The drawn-shape vertex layer needs its own pointer events; it lives in `overlay`
+            // (outside the pointer-events-gated children wrapper), same as the content-box editor.
+            overlay={isPoly && isSelected ? (
+                // Wrap in the same flip transform as the content so handles land ON the flipped
+                // shape; rotation is already applied by the outer box.
+                <div className="absolute inset-0" style={{ transform: flipTransform, pointerEvents: 'none' }}>
+                    <PolygonVertexEditor
+                        points={spot.points!}
+                        parentSize={spotPixelSize}
+                        selected
+                        fill="transparent"
+                        stroke="transparent"
+                        rotationDeg={(spot as any).rotation || undefined}
+                        flipX={(spot as any).flipX}
+                        flipY={(spot as any).flipY}
+                        onCommit={points => onUpdate({ points })}
+                    />
+                    {onRequestDraw && (
+                        <button
+                            type="button"
+                            className="absolute -top-5 right-0 text-[10px] bg-slate-900/80 text-sky-300 hover:text-white px-1.5 py-0.5 rounded whitespace-nowrap"
+                            style={{ pointerEvents: 'auto', zIndex: 60 }}
+                            onMouseDown={e => e.stopPropagation()}
+                            onClick={e => { e.stopPropagation(); onRequestDraw(); }}
+                        >
+                            ✏
+                        </button>
+                    )}
+                </div>
+            ) : undefined}
         >
-            <div
-                className="w-full h-full flex items-center justify-center text-xs font-bold"
-                style={{
-                    backgroundColor: triggerColors[spot.trigger],
-                    border: `2px dashed ${borderColors[spot.trigger]}`,
-                    borderRadius: spot.shape === 'circle' ? '50%' : '4px',
-                    color: borderColors[spot.trigger],
-                }}
-            >
-                {spot.name}
-            </div>
+            {isPoly ? (
+                // Drawn shape: the SVG preview replaces the border-box look. Rendered as content
+                // (inside rotation + flips) so it matches the runtime clip-path exactly.
+                <div className="w-full h-full relative flex items-center justify-center text-xs font-bold" style={{ color: borderColors[spot.trigger] }}>
+                    <PolygonShapeSVG
+                        points={spot.points!}
+                        fill={triggerColors[spot.trigger]}
+                        stroke={borderColors[spot.trigger]}
+                    />
+                    <span className="relative pointer-events-none">{spot.name}</span>
+                </div>
+            ) : (
+                <div
+                    className="w-full h-full flex items-center justify-center text-xs font-bold"
+                    style={{
+                        backgroundColor: triggerColors[spot.trigger],
+                        border: `2px dashed ${borderColors[spot.trigger]}`,
+                        borderRadius: spot.shape === 'circle' ? '50%' : '4px',
+                        color: borderColors[spot.trigger],
+                    }}
+                >
+                    {spot.name}
+                </div>
+            )}
         </ResizableDraggable>
     );
 };
@@ -185,147 +239,33 @@ function toLegacyHotZoneElement(el: VNUIElement, items?: Record<string, any>): V
     }
 }
 
-/** Polygon region overlay with per-vertex drag handles and body drag-to-move */
+/** Polygon region overlay with per-vertex drag handles and body drag-to-move.
+ *  Thin wrapper: the guts moved to the shared PolygonVertexEditor (HotSpotDrawTools),
+ *  which drawn-shape hot spots reuse. Behavior for image maps is unchanged, plus the
+ *  editor's extras (double-click an edge to add a point, double-click/right-click a
+ *  point to remove it). */
 export const PolyRegionOverlay: React.FC<{
     region: draggableImageElementRegion;
     parentSize: { width: number; height: number };
     isRegionSelected: boolean;
     onSelect: () => void;
     onUpdate: (coords: number[]) => void;
-}> = ({ region, parentSize, isRegionSelected, onSelect, onUpdate }) => {
-    const [vertexDrag, setVertexDrag] = useState<{ idx: number; startMouseX: number; startMouseY: number; startX: number; startY: number } | null>(null);
-    const [bodyDrag, setBodyDrag] = useState<{ startMouseX: number; startMouseY: number; startCoords: number[] } | null>(null);
-    // Live coords during a vertex/body drag, rendered locally so only this region re-renders per
-    // move. onUpdate (a full project dispatch re-rendering the editor) fires once, on release —
-    // without this, reshaping a polygon dispatched on every mousemove and lagged. One undo step too.
-    const [liveCoords, setLiveCoords] = useState<number[] | null>(null);
-    const liveCoordsRef = useRef<number[] | null>(null);
-
-    useEffect(() => {
-        if (!vertexDrag && !bodyDrag) return;
-        const onMove = (e: MouseEvent) => {
-            const pw = Math.max(1, parentSize.width);
-            const ph = Math.max(1, parentSize.height);
-            if (vertexDrag) {
-                const dx = ((e.clientX - vertexDrag.startMouseX) / pw) * 100;
-                const dy = ((e.clientY - vertexDrag.startMouseY) / ph) * 100;
-                let nx = vertexDrag.startX + dx;
-                let ny = vertexDrag.startY + dy;
-                nx = Math.max(0, Math.min(100, Math.round(nx * 10) / 10));
-                ny = Math.max(0, Math.min(100, Math.round(ny * 10) / 10));
-                const newCoords = [...region.coords];
-                newCoords[vertexDrag.idx * 2] = nx;
-                newCoords[vertexDrag.idx * 2 + 1] = ny;
-                liveCoordsRef.current = newCoords;
-                setLiveCoords(newCoords);
-            } else if (bodyDrag) {
-                const dx = ((e.clientX - bodyDrag.startMouseX) / pw) * 100;
-                const dy = ((e.clientY - bodyDrag.startMouseY) / ph) * 100;
-                const newCoords = bodyDrag.startCoords.map((c, i) =>
-                    Math.round((c + (i % 2 === 0 ? dx : dy)) * 10) / 10
-                );
-                liveCoordsRef.current = newCoords;
-                setLiveCoords(newCoords);
-            }
-        };
-        const onUp = () => {
-            setVertexDrag(null);
-            setBodyDrag(null);
-            const final = liveCoordsRef.current;
-            liveCoordsRef.current = null;
-            setLiveCoords(null);
-            if (final) onUpdate(final);
-        };
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp);
-        return () => {
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
-        };
-    }, [vertexDrag, bodyDrag, parentSize.width, parentSize.height, region.coords, onUpdate]);
-
-    const effCoords = liveCoords ?? region.coords;
-    const points: { x: number; y: number }[] = [];
-    for (let i = 0; i + 1 < effCoords.length; i += 2) {
-        points.push({ x: effCoords[i] ?? 0, y: effCoords[i + 1] ?? 0 });
-    }
-    const pointsStr = points.map(p => `${p.x},${p.y}`).join(' ');
-    const fill = isRegionSelected
-        ? (region.highlightColor || 'rgba(16,185,129,0.4)')
-        : (region.highlightColor || 'rgba(16,185,129,0.25)');
-    const strokeColor = isRegionSelected ? 'rgba(16,185,129,0.95)' : 'rgba(16,185,129,0.7)';
-
-    return (
-        <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
-            <svg
-                className="absolute inset-0"
-                style={{ width: '100%', height: '100%', overflow: 'visible' }}
-                viewBox="0 0 100 100"
-                preserveAspectRatio="none"
-            >
-                <polygon
-                    points={pointsStr}
-                    fill={fill}
-                    stroke={strokeColor}
-                    strokeWidth={isRegionSelected ? 2 : 1.5}
-                    vectorEffect="non-scaling-stroke"
-                    style={{ pointerEvents: 'auto', cursor: 'move' }}
-                    onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onSelect();
-                        setBodyDrag({ startMouseX: e.clientX, startMouseY: e.clientY, startCoords: [...region.coords] });
-                    }}
-                >
-                    <title>{region.tooltip || region.name}</title>
-                </polygon>
-            </svg>
-            {/* Region label anchored to first point */}
-            {points[0] && (
-                <span
-                    className="absolute text-[7px] text-emerald-300 bg-emerald-800/70 px-0.5 rounded pointer-events-none"
-                    style={{ left: `${points[0].x}%`, top: `${points[0].y}%`, transform: 'translate(4px, -100%)', whiteSpace: 'nowrap' }}
-                >
-                    {region.name}
-                </span>
-            )}
-            {/* Vertex handles — only when region is the actively selected one */}
-            {isRegionSelected && points.map((pt, pi) => (
-                <div
-                    key={pi}
-                    title={`Point ${pi + 1} — drag to reshape`}
-                    style={{
-                        position: 'absolute',
-                        left: `${pt.x}%`,
-                        top: `${pt.y}%`,
-                        transform: 'translate(-50%, -50%)',
-                        width: 10,
-                        height: 10,
-                        borderRadius: '50%',
-                        background: '#06b6d4',
-                        border: '2px solid white',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
-                        cursor: 'crosshair',
-                        pointerEvents: 'auto',
-                        zIndex: 10,
-                    }}
-                    onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onSelect();
-                        setVertexDrag({
-                            idx: pi,
-                            startMouseX: e.clientX,
-                            startMouseY: e.clientY,
-                            startX: pt.x,
-                            startY: pt.y,
-                        });
-                    }}
-                />
-            ))}
-        </div>
-    );
-};
+}> = ({ region, parentSize, isRegionSelected, onSelect, onUpdate }) => (
+    <PolygonVertexEditor
+        points={region.coords}
+        parentSize={parentSize}
+        selected={isRegionSelected}
+        fill={isRegionSelected
+            ? (region.highlightColor || 'rgba(16,185,129,0.4)')
+            : (region.highlightColor || 'rgba(16,185,129,0.25)')}
+        stroke={isRegionSelected ? 'rgba(16,185,129,0.95)' : 'rgba(16,185,129,0.7)'}
+        label={region.name}
+        tooltip={region.tooltip || region.name}
+        allowBodyDrag
+        onSelect={onSelect}
+        onCommit={onUpdate}
+    />
+);
 
 /** Renders an interactive hot zone element (image / button / text / video /
  *  text input / Interactive Image / draggable) on the canvas. Takes a unified

@@ -954,7 +954,16 @@
     "dragTagHelp": "Dê um rótulo a este objeto para que uma zona possa aceitá-lo pela etiqueta. Use a mesma etiqueta em vários objetos para deixá-los intercambiáveis (ex.: todas as chaves como “chave”). Opcional.",
     "boundItem": "Este objeto é um item (opcional)",
     "boundItemNone": "— nenhum —",
-    "boundItemHelp": "Quando definido, soltar isto num ponto de interação consome o item (a menos que ele seja reutilizável) e roda o efeito de uso dele. Se a Etiqueta de arraste estiver vazia, a própria etiqueta do item é usada."
+    "boundItemHelp": "Quando definido, soltar isto num ponto de interação consome o item (a menos que ele seja reutilizável) e roda o efeito de uso dele. Se a Etiqueta de arraste estiver vazia, a própria etiqueta do item é usada.",
+    "shapeDrawn": "Forma desenhada",
+    "drawButton": "✏ Desenhar",
+    "drawAgain": "✏ Desenhar de novo",
+    "drawInstruction": "Desenhe ao redor da área desejada. Solte para terminar.",
+    "drawCancelHint": "Esc para cancelar",
+    "drawTooSmall": "Mantenha o botão pressionado e desenhe ao redor da área.",
+    "drawnShapeHint": "Arraste os pontos redondos no canvas para ajustar. Clique duas vezes numa borda para adicionar um ponto.",
+    "polySizeHint": "Largura e altura redimensionam toda a forma desenhada.",
+    "fineTunePoints": "Ajustar pontos"
   },
   "menuEditor": {
     "noElement": "Sem elemento",
@@ -1433,12 +1442,14 @@
   "character": {
     "defaultPose": "Padrão (arte normal)",
     "effects": {
-      "glitch": "Glitch (corrupção)"
+      "glitch": "Glitch (corrupção)",
+      "wobble": "Ondulação (gelatina)"
     },
     "rimSize": "Espessura da linha",
     "colors": "Cores",
     "removeColor": "Remover cor",
-    "addColor": "+ Cor"
+    "addColor": "+ Cor",
+    "wobbleSize": "Tamanho da onda"
   },
   "cursorSelect": {
     "label": "Ponteiro do mouse ao passar por cima",
@@ -1470,7 +1481,9 @@
     "hint": "Um arquivo, muitos sons — deixe mais lento, mais rápido ou invertido.",
     "hintMusic": "A música pode mudar de velocidade; tocar ao contrário é para efeitos sonoros e vozes.",
     "preview": "Ouvir",
-    "previewTitle": "Ouça alguns segundos com estes ajustes"
+    "previewTitle": "Ouça alguns segundos com estes ajustes",
+    "previewCapNote": "Este arquivo passa de 4 MB, então no jogo ele tocará PARA FRENTE. Dica: use \"Salvar uma cópia invertida\" nos Recursos — a cópia toca ao contrário em todo lugar.",
+    "previewNoReverse": "Este som não pode ser invertido aqui — tocando para frente. Converta-o para WAV para invertê-lo."
   },
   "phoneCmd": {
     "player": "Jogador (você)",

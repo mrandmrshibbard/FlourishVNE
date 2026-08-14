@@ -6,6 +6,7 @@ import { interpolateVariables, resolveCharacterDisplayName, findCharacterBySpoke
 import { createCommand } from '../utils/commandFactory';
 import { combineConditions, resolveConditionValue } from '../utils/conditionLogic';
 import { deriveHotSpotsFromScreen, deriveInteractiveElementsFromScreen } from '../utils/interactiveElements';
+import { polygonClipPath } from '../utils/polygon';
 import { XMarkIcon, FilmIcon, VariablesIcon } from './icons';
 import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { compareBand, isBandOperator, formatBandedValue, resolveBand, hasBands } from '../features/variables/bands';
@@ -524,7 +525,7 @@ import { processDialogueText, stripDialogueTextCodes, walkToAppendGroupHead, sma
 import { resolveRewind } from './live-preview/rewind';
 import { playBlip, prepareBlipBuffer, blipIndicesFor } from './live-preview/letterBlips';
 import { noteSpeechReveal, clearSpeech, isSpeakingNow } from './live-preview/speechState';
-import { frameAssetAt, applyAnimationFrame, animationFrameUrls, autoAnimationsOf } from '../features/character/spriteAnim';
+import { frameAssetAt, applyAnimationFrame, animationFrameUrls, autoAnimationsOf, layerAdjustAt, LayerAnimAdjust } from '../features/character/spriteAnim';
 import { buildCharacterMedia, boxFieldsForStage, buildPoseStagePatch, buildAnimationStagePatch, buildCharacterSwapStagePatch } from './live-preview/command-handlers/characterHandler';
 
 const defaultSettings: GameSettings = {
@@ -1242,6 +1243,7 @@ const HotSpotOverlayElement: React.FC<{
             id: `scene-${overlay.commandId}`,
             rectPct: { x: overlay.x, y: overlay.y, width: overlay.width, height: overlay.height },
             rotation: (overlay as any).rotation,
+            polygonPct: overlay.shape === 'poly' ? overlay.points : undefined,
             acceptTag: overlay.acceptedTag || undefined,
             onDrop: () => { (overlay.actions || []).forEach(a => onAction(a)); },
         });
@@ -1255,11 +1257,16 @@ const HotSpotOverlayElement: React.FC<{
         if (overlay.advanceOnTrigger && onAdvance) onAdvance();
     };
 
+    // "Drawn shape" — clip the div to the polygon. Browsers clip pointer events to clip-path,
+    // so the click/hover hit area follows the drawn outline for free. Degenerate points fall
+    // back to the rect look/behavior.
+    const polyClip = overlay.shape === 'poly' ? polygonClipPath(overlay.points) : '';
     const style: React.CSSProperties = {
         position: 'absolute',
         left: `${overlay.x}%`, top: `${overlay.y}%`,
         width: `${overlay.width}%`, height: `${overlay.height}%`,
-        borderRadius: overlay.shape === 'circle' ? '50%' : 6,
+        borderRadius: polyClip ? undefined : (overlay.shape === 'circle' ? '50%' : 6),
+        clipPath: polyClip || undefined,
         // Honor a per-spot layer so items/images can sit above a hot spot (1 + layer*100, the shared
         // overlay band). Without a layer set, keep the legacy fixed z (above characters z-5, below dialogue z-20).
         zIndex: overlay.layer != null ? (1 + overlay.layer * 100) : 8,
@@ -1274,7 +1281,8 @@ const HotSpotOverlayElement: React.FC<{
         // invisible even in test-play. (Authors still see/position it on the scene editor canvas,
         // which always draws hot spots with a label.)
         background: overlay.visible ? (overlay.highlightColor || 'rgba(99,102,241,0.35)') : 'transparent',
-        border: overlay.visible ? `1px solid ${overlay.highlightColor || 'rgba(99,102,241,0.6)'}` : undefined,
+        // A box border can't follow a clip-path (it would be clipped away) — the filled shape alone is the visual.
+        border: overlay.visible && !polyClip ? `1px solid ${overlay.highlightColor || 'rgba(99,102,241,0.6)'}` : undefined,
         // Author-set see-through for the drawn spot; CSS opacity never affects hit-testing.
         opacity: overlay.visible ? (overlay.visibleOpacity ?? 1) : undefined,
     };
@@ -4331,6 +4339,18 @@ const HotZonedraggableImageElementRenderer: React.FC<{
                     regionStyle.width = `${r * 2}%`;
                     regionStyle.height = `${r * 2}%`;
                     regionStyle.borderRadius = '50%';
+                } else if (region.shape === 'poly' && region.coords.length >= 6) {
+                    // Poly regions previously got NO div here, so they silently did nothing in-game.
+                    // A full-size div clipped to the polygon fixes it: browsers clip pointer events
+                    // to clip-path, so only clicks inside the drawn outline land.
+                    regionStyle.left = '0';
+                    regionStyle.top = '0';
+                    regionStyle.width = '100%';
+                    regionStyle.height = '100%';
+                    regionStyle.clipPath = polygonClipPath(region.coords);
+                } else {
+                    // Unknown/degenerate shape — no hit area (matches the old rect/circle-only behavior).
+                    return null;
                 }
                 return (
                     <div
@@ -4473,6 +4493,7 @@ const InteractiveRuntime: React.FC<{
                 id: `screen-${screen.id}-${spot.id}`,
                 rectPct: { x: spot.x, y: spot.y, width: spot.width, height: spot.height },
                 rotation: (spot as any).rotation,
+                polygonPct: spot.shape === 'poly' ? spot.points : undefined,
                 acceptedElementIds: spot.acceptedElementIds,
                 acceptTag: spot.acceptTag || undefined,
                 onDrop: () => { spot.actions.forEach(a => handleLocalAction(a)); },
@@ -4590,6 +4611,9 @@ const InteractiveRuntime: React.FC<{
             {/* Hot Spots */}
             {(Object.values(hotSpots) as VNHotSpot[]).map(spot => {
                 if (spot.conditions && !evaluateConditions(spot.conditions, variables)) return null;
+                // "Drawn shape" — clip the div to the polygon; pointer events follow the clip,
+                // so only clicks inside the drawn outline land. Degenerate points = rect fallback.
+                const polyClip = spot.shape === 'poly' ? polygonClipPath(spot.points) : '';
                 return (
                     <div
                         key={spot.id}
@@ -4597,9 +4621,11 @@ const InteractiveRuntime: React.FC<{
                         style={{
                             left: `${spot.x}%`, top: `${spot.y}%`,
                             width: `${spot.width}%`, height: `${spot.height}%`,
-                            borderRadius: spot.shape === 'circle' ? '50%' : undefined,
+                            borderRadius: !polyClip && spot.shape === 'circle' ? '50%' : undefined,
+                            clipPath: polyClip || undefined,
                             backgroundColor: spot.visible ? (spot.highlightColor || 'rgba(59, 130, 246, 0.2)') : 'transparent',
-                            border: spot.visible ? `2px dashed ${spot.highlightColor || 'rgba(59, 130, 246, 0.5)'}` : 'none',
+                            // A box border can't follow a clip-path — the filled shape alone is the visual.
+                            border: spot.visible && !polyClip ? `2px dashed ${spot.highlightColor || 'rgba(59, 130, 246, 0.5)'}` : 'none',
                             opacity: spot.visible ? (spot.visibleOpacity ?? 1) : undefined,
                             pointerEvents: spot.trigger === 'drag-drop' ? 'none' : 'auto',
                             /* Rotation/flip. For click/hover spots this also rotates the HIT AREA
@@ -9547,11 +9573,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // manually-started one). Frame selections are computed per tick into a ref; the render map
     // reads them synchronously. Nothing here ever writes playerState — pure presentation.
     const animFrameSelectionsRef = useRef<Map<string, Record<string, string | null>>>(new Map());
+    // Animated layer adjustments (Spin/Tilt rotation + move-offset + pivot) — charId → layerId →
+    // LayerAnimAdjust, computed per tick from layerAdjustAt. Ephemeral by construction: never
+    // written to layers/poses/playerState; when the animation stops the entry clears and the
+    // layer is back at its authored transform/position.
+    const animLayerRotationRef = useRef<Map<string, Record<string, LayerAnimAdjust>>>(new Map());
     const animIdleScheduleRef = useRef<Map<string, number>>(new Map()); // "charId:animId" → next/current play start
     const [, bumpAnimEpoch] = useReducer((x: number) => x + 1, 0);
     useEffect(() => {
         const chars = playerState?.stageState?.characters;
-        if (!chars || playerState.mode !== 'playing') { animFrameSelectionsRef.current = new Map(); return; }
+        if (!chars || playerState.mode !== 'playing') { animFrameSelectionsRef.current = new Map(); animLayerRotationRef.current = new Map(); return; }
         // Which staged characters can animate at all?
         const animated: Array<{ char: any; charData: any; anims: any[] }> = [];
         for (const c of Object.values(chars) as any[]) {
@@ -9565,7 +9596,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             ];
             if (anims.length) animated.push({ char: c, charData, anims });
         }
-        if (!animated.length) { animFrameSelectionsRef.current = new Map(); return; }
+        if (!animated.length) { animFrameSelectionsRef.current = new Map(); animLayerRotationRef.current = new Map(); return; }
         // Prewarm every frame any of these animations can show — an unwarmed frame would hide
         // the whole sprite (atomic paint). Animation for a character stays OFF until warmed.
         for (const { char, charData, anims } of animated) {
@@ -9581,6 +9612,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             if (now - last < 33) return; // ~30fps is plenty for step-frame animation
             last = now;
             const nextMap = new Map<string, Record<string, string | null>>();
+            const nextRotMap = new Map<string, Record<string, LayerAnimAdjust>>();
             for (const { char, charData, anims } of animated) {
                 const frameUrls = animationFrameUrls(charData, anims, char.poseId)
                     .map((u: string) => resolveFieldUrl(project.id, u) || u);
@@ -9591,15 +9623,24 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const baseSel = char.layerSelections
                     ?? charData.expressions?.[char.expressionId]?.layerConfiguration ?? {};
                 let sel = baseSel;
+                // Spin/Tilt + move/pivot: adjustments share each animation's time base with its
+                // frame keys, merged per layer (a later animation in the list wins on conflict).
+                const rot: Record<string, LayerAnimAdjust> = {};
+                const mergeRot = (anim: any, tMs: number) => {
+                    const r = layerAdjustAt(anim, tMs);
+                    for (const lid of Object.keys(r)) rot[lid] = r[lid];
+                };
                 for (const anim of anims) {
                     const key = `${char.charId}:${anim.id}`;
                     if (anim.trigger === 'always' || (char.activeManualAnimationId === anim.id)) {
                         sel = applyAnimationFrame(sel, anim, now - epoch);
+                        mergeRot(anim, now - epoch);
                     } else if (anim.trigger === 'speaking') {
                         if (isSpeakingNow(char.charId, now)) {
                             const start = animIdleScheduleRef.current.get(key) ?? now;
                             if (!animIdleScheduleRef.current.has(key)) animIdleScheduleRef.current.set(key, now);
                             sel = applyAnimationFrame(sel, { ...anim, loop: true }, now - start);
+                            mergeRot({ ...anim, loop: true }, now - start);
                         } else {
                             animIdleScheduleRef.current.delete(key);
                         }
@@ -9612,6 +9653,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             const t = now - startAt;
                             if (t <= Math.max(1, anim.durationMs)) {
                                 sel = applyAnimationFrame(sel, anim, t);
+                                mergeRot(anim, t);
                             } else {
                                 animIdleScheduleRef.current.delete(key); // finished — reschedule next tick
                             }
@@ -9619,6 +9661,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     }
                 }
                 if (sel !== baseSel) nextMap.set(char.charId, sel);
+                if (Object.keys(rot).length) nextRotMap.set(char.charId, rot);
             }
             const prev = animFrameSelectionsRef.current;
             // Re-render only when some character's selections actually changed.
@@ -9629,13 +9672,33 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     if (!pv || Object.keys(v).some(lk => v[lk] !== pv[lk])) { changed = true; break; }
                 }
             }
+            // ...or some layer's animated adjustment moved visibly (0.05 epsilon keeps a flat
+            // segment / held key / static offset from re-rendering the stage every tick).
+            const prevRot = animLayerRotationRef.current;
+            if (!changed) {
+                changed = prevRot.size !== nextRotMap.size;
+                if (!changed) {
+                    outer: for (const [k, v] of nextRotMap) {
+                        const pv = prevRot.get(k);
+                        if (!pv) { changed = true; break; }
+                        for (const lk of Object.keys(v)) {
+                            const a = v[lk], b = pv[lk];
+                            if (!b
+                                || Math.abs((a.deg ?? 0) - (b.deg ?? 0)) > 0.05
+                                || Math.abs(a.dx - b.dx) > 0.05 || Math.abs(a.dy - b.dy) > 0.05
+                                || a.pivotX !== b.pivotX || a.pivotY !== b.pivotY) { changed = true; break outer; }
+                        }
+                    }
+                }
+            }
             if (changed) {
                 animFrameSelectionsRef.current = nextMap;
+                animLayerRotationRef.current = nextRotMap;
                 bumpAnimEpoch();
             }
         };
         raf = requestAnimationFrame(tick);
-        return () => { cancelAnimationFrame(raf); animFrameSelectionsRef.current = new Map(); };
+        return () => { cancelAnimationFrame(raf); animFrameSelectionsRef.current = new Map(); animLayerRotationRef.current = new Map(); };
     }, [playerState?.stageState?.characters, playerState?.mode, project]);
 
     // Ambient Noise Management
@@ -10905,7 +10968,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, hotSpotOverlays: [
                             ...(p.stageState.hotSpotOverlays || []).filter(h => h.commandId !== cmd.id),
                             { id: cmd.id, commandId: cmd.id, name: cmd.name, x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height,
-                              shape: cmd.shape, trigger: cmd.trigger, actions: cmd.actions, conditions: cmd.conditions, acceptedTag: cmd.acceptedTag,
+                              shape: cmd.shape, points: (cmd as any).points, trigger: cmd.trigger, actions: cmd.actions, conditions: cmd.conditions, acceptedTag: cmd.acceptedTag,
                               highlightColor: cmd.highlightColor, visible: cmd.visible, visibleOpacity: cmd.visibleOpacity, advanceOnTrigger: cmd.advanceOnTrigger, layer: cmd.layer, rotation: (cmd as any).rotation, flipX: (cmd as any).flipX, flipY: (cmd as any).flipY, hoverCursor: (cmd as any).hoverCursor, hoverCursorImage: (cmd as any).hoverCursorImage },
                         ] } } : p);
                         return;
@@ -11939,7 +12002,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 {
                                     id: cmd.id, commandId: cmd.id, name: cmd.name,
                                     x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height,
-                                    shape: cmd.shape, trigger: cmd.trigger, actions: cmd.actions,
+                                    shape: cmd.shape, points: cmd.points, trigger: cmd.trigger, actions: cmd.actions,
                                     conditions: cmd.conditions, acceptedTag: cmd.acceptedTag,
                                     highlightColor: cmd.highlightColor, visible: cmd.visible,
                                     visibleOpacity: cmd.visibleOpacity,
@@ -15367,14 +15430,26 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             // character's current frame selections — swap the media in. The
                             // char object is replaced locally; playerState is never touched.
                             const animSel = animFrameSelectionsRef.current.get(char.charId);
-                            if (animSel && !char.isVideo) {
+                            // Spin/Tilt lane: this character's animated per-layer rotation (degrees),
+                            // computed by the same clock. Applied per-layer below, COMPOSED with the
+                            // authored Pose Studio transform — never written anywhere.
+                            const animRot = animLayerRotationRef.current.get(char.charId);
+                            let animLayerIds: Array<string | null> | null = null;
+                            if ((animSel || animRot) && !char.isVideo) {
                                 const animCharData = project.characters[char.charId];
                                 if (animCharData) {
                                     const wrapUrl = (u: string) => resolveFieldUrl(project.id, u) || u;
-                                    const media = buildCharacterMedia(animCharData, animSel, wrapUrl, char.poseId);
-                                    // animBaseImageUrls: the element's key must come from the PRE-animation
-                                    // urls, or every frame swap would remount and replay the entrance.
-                                    char = { ...char, animBaseImageUrls: char.imageUrls, imageUrls: media.imageUrls, ...boxFieldsForStage(media.imageBoxes, media.videoBoxes) } as StageCharacterState;
+                                    const mediaSel = animSel
+                                        ?? (char as any).layerSelections
+                                        ?? animCharData.expressions?.[char.expressionId]?.layerConfiguration ?? {};
+                                    const media = buildCharacterMedia(animCharData, mediaSel, wrapUrl, char.poseId);
+                                    // Which layer each img index belongs to — targets the rotation.
+                                    animLayerIds = media.imageLayerIds as Array<string | null>;
+                                    if (animSel) {
+                                        // animBaseImageUrls: the element's key must come from the PRE-animation
+                                        // urls, or every frame swap would remount and replay the entrance.
+                                        char = { ...char, animBaseImageUrls: char.imageUrls, imageUrls: media.imageUrls, ...boxFieldsForStage(media.imageBoxes, media.videoBoxes) } as StageCharacterState;
+                                    }
                                 }
                             }
                             let transitionClass = '';
@@ -15513,6 +15588,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             // Glitch (FNF-style corruption) on ONE character: displacement filter on the
                             // sprite content + bursty jitter + discoloured bands masked to the sprite.
                             let charGlitch: { intensity: number; speed: number; colors: string[]; rimSize: number } | null = null;
+                            // Wobble (jelly): the same displacement-filter chain as glitch but SMOOTH —
+                            // continuous turbulence with linear SMIL, no snapping. Composes with frame
+                            // animations by construction (those swap layer imgs; this is a filter).
+                            let charWobble: { intensity: number; speed: number; size: number } | null = null;
 
                             for (const eff of effectsList) {
                                 if (!eff || eff.type === 'none') continue;
@@ -15587,6 +15666,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         combinedFilter += ` url(#vnfx-charglitch-${char.charId})`;
                                         break;
                                     }
+                                    case 'wobble': {
+                                        charWobble = { intensity, speed, size: (eff as any).wobbleSize ?? 1 };
+                                        // Must be a real `filter:` on the content (never backdrop-filter —
+                                        // Chromium ignores SVG reference filters there).
+                                        combinedFilter += ` url(#vnfx-charwobble-${char.charId})`;
+                                        break;
+                                    }
                                 }
                             }
 
@@ -15606,6 +15692,43 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             if (dnSpriteTint && !char.isVideo) contentEffectStyle.isolation = 'isolate';
                             const hasContentEffect = combinedFilter || combinedFilterAnimation || flickerAnimation || (!!dnSpriteTint && !char.isVideo);
                             
+                            // Spin/Tilt + move/pivot: the animated adjustment for the layer behind
+                            // img index, decomposed into transform pieces. Order is load-bearing:
+                            //   translate (move, STAGE axes — leftmost = parent frame)
+                            //   → authored box transform → rotate (about the track's pivot).
+                            // The move offset is authored in % of the CHARACTER FRAME; CSS translate %
+                            // is relative to the ELEMENT, so it's rescaled by the box size.
+                            const layerAnimParts = (index: number): { pre: string; rot: string; origin?: string } => {
+                                const lid = animLayerIds?.[index];
+                                const a = lid != null && animRot ? animRot[lid] : undefined;
+                                if (!a) return { pre: '', rot: '' };
+                                const box = char.imageBoxes?.[index];
+                                const bw = box?.width || 100;
+                                const bh = box?.height || 100;
+                                return {
+                                    pre: (a.dx || a.dy) ? `translate(${((a.dx / bw) * 100).toFixed(2)}%, ${((a.dy / bh) * 100).toFixed(2)}%) ` : '',
+                                    rot: (a.deg !== undefined && a.deg !== 0) ? `rotate(${a.deg.toFixed(2)}deg) ` : '',
+                                    // Custom pivot only when set off-centre — the default stays the box
+                                    // centre, matching the authored Pose Studio rotation contract.
+                                    origin: (a.pivotX !== 50 || a.pivotY !== 50) ? `${a.pivotX}% ${a.pivotY}%` : undefined,
+                                };
+                            };
+                            // Style patch for a layer copy: composed transform + a short linear
+                            // transition that smooths the 30fps clock into continuous motion.
+                            const layerAnimStyle = (index: number): React.CSSProperties => {
+                                const p = layerAnimParts(index);
+                                // Pivot alone changes nothing — and returning `transform: ''` here
+                                // would CLEAR the authored box transform, so bail unless we have
+                                // an actual translate/rotate to compose.
+                                if (!p.pre && !p.rot) return {};
+                                const boxTf = layerBoxTransform(char.imageBoxes?.[index]);
+                                const style: React.CSSProperties = {
+                                    transform: `${p.pre}${boxTf ? boxTf + ' ' : ''}${p.rot}`.trim(),
+                                    transition: 'transform 40ms linear',
+                                };
+                                if (p.origin) style.transformOrigin = p.origin;
+                                return style;
+                            };
                             // Build nested wrappers: position div > transform effect divs > filter/content div > sprites
                             const spriteContent = (
                                 <>
@@ -15631,7 +15754,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                                 src={url}
                                                 alt=""
                                                 className="absolute top-0 left-0 w-full h-full object-contain"
-                                                style={{ zIndex: index, ...layerBoxStyle(char.imageBoxes?.[index]) }}
+                                                style={{ zIndex: index, ...layerBoxStyle(char.imageBoxes?.[index]), ...layerAnimStyle(index) }}
                                             />
                                         ))
                                     )}
@@ -15649,6 +15772,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                             WebkitMaskPosition: 'center', maskPosition: 'center',
                                             transition: `opacity ${dnTrans}s ease-in-out, background-color ${dnTrans}s ease-in-out`,
                                             ...layerBoxStyle(char.imageBoxes?.[index]),
+                                            // Spin/Tilt + move: the tint mask must ride the layer's animated
+                                            // adjustment (transform/origin patch; its opacity transition stays).
+                                            ...(() => { const s = layerAnimStyle(index); return s.transform ? { transform: s.transform, ...(s.transformOrigin ? { transformOrigin: s.transformOrigin } : {}) } : {}; })(),
                                         }} />
                                     ))}
                                     {/* Glitch: RIM GHOSTS — solid-colour copies of the sprite (masked to its own
@@ -15684,7 +15810,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                                 WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
                                                 WebkitMaskPosition: 'center', maskPosition: 'center',
                                                 ...boxStyle,
-                                                transform: `${boxTf ? boxTf + ' ' : ''}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + 0.015 * Math.max(0.2, Math.min(3, g.rimSize))).toFixed(3)})`,
+                                                // Spin/Tilt + move ride between the box transform and the glitch push,
+                                                // so an adjusted layer's ghost keeps hugging its silhouette.
+                                                ...(layerAnimParts(index).origin ? { transformOrigin: layerAnimParts(index).origin } : {}),
+                                                transform: `${layerAnimParts(index).pre}${boxTf ? boxTf + ' ' : ''}${layerAnimParts(index).rot}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + 0.015 * Math.max(0.2, Math.min(3, g.rimSize))).toFixed(3)})`,
                                             }} />
                                             );
                                         });
@@ -15722,7 +15851,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                                 WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
                                                 WebkitMaskPosition: 'center', maskPosition: 'center',
                                                 ...boxStyle,
-                                                transform: `${boxTf ? boxTf + ' ' : ''}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + (0.035 + ci * 0.012) * rim).toFixed(3)})`,
+                                                // Spin/Tilt + move compose here too (see the rim ghosts above).
+                                                ...(layerAnimParts(index).origin ? { transformOrigin: layerAnimParts(index).origin } : {}),
+                                                transform: `${layerAnimParts(index).pre}${boxTf ? boxTf + ' ' : ''}${layerAnimParts(index).rot}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + (0.035 + ci * 0.012) * rim).toFixed(3)})`,
                                             }} />
                                             );
                                         });
@@ -15756,6 +15887,44 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                             </defs>
                                         </svg>
                                     )}
+                                    {/* Wobble (jelly): same displacement chain as glitch but SMOOTH — low-frequency
+                                        turbulence, linear SMIL on frequency + scale, so the sprite undulates
+                                        continuously instead of snapping. Stable per-character id; SMIL runs at
+                                        60fps with zero JS per frame. Frame animations keep playing under it —
+                                        they swap which layer image shows, this only bends the painted pixels. */}
+                                    {charWobble && (() => {
+                                        // wobbleSize: bigger = broader, softer waves (lower spatial frequency).
+                                        const baseF = 0.012 / Math.max(0.3, charWobble.size);
+                                        const scaleA = (4 + 9 * charWobble.intensity).toFixed(1);
+                                        const scaleB = (2 + 5 * charWobble.intensity).toFixed(1);
+                                        const dur = (2.4 / charWobble.speed).toFixed(2);
+                                        return (
+                                            <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+                                                <defs>
+                                                    <filter id={`vnfx-charwobble-${char.charId}`} x="-15%" y="-15%" width="130%" height="130%">
+                                                        <feTurbulence type="turbulence" baseFrequency={`${baseF.toFixed(4)} ${(baseF * 1.4).toFixed(4)}`} numOctaves="2" seed="7" result="noise">
+                                                            <animate
+                                                                attributeName="baseFrequency"
+                                                                values={`${baseF.toFixed(4)} ${(baseF * 1.4).toFixed(4)};${(baseF * 1.25).toFixed(4)} ${(baseF * 1.05).toFixed(4)};${baseF.toFixed(4)} ${(baseF * 1.4).toFixed(4)}`}
+                                                                dur={`${dur}s`}
+                                                                calcMode="linear"
+                                                                repeatCount="indefinite"
+                                                            />
+                                                        </feTurbulence>
+                                                        <feDisplacementMap in="SourceGraphic" in2="noise" xChannelSelector="R" yChannelSelector="G" scale={scaleA}>
+                                                            <animate
+                                                                attributeName="scale"
+                                                                values={`${scaleA};${scaleB};${scaleA}`}
+                                                                dur={`${(1.6 / charWobble.speed).toFixed(2)}s`}
+                                                                calcMode="linear"
+                                                                repeatCount="indefinite"
+                                                            />
+                                                        </feDisplacementMap>
+                                                    </filter>
+                                                </defs>
+                                            </svg>
+                                        );
+                                    })()}
                                 </>
                             );
 

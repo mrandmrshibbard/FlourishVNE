@@ -1242,7 +1242,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const anim = (_e = character == null ? void 0 : character.animations) == null ? void 0 : _e[animationId];
         if (!character || !anim) return state2;
         const next = { ...anim, ...updates };
-        next.tracks = (next.tracks || []).map((tr) => ({ ...tr, keys: [...tr.keys || []].sort((a, b) => a.atMs - b.atMs) }));
+        next.tracks = (next.tracks || []).map((tr) => ({
+          ...tr,
+          keys: [...tr.keys || []].sort((a, b) => a.atMs - b.atMs),
+          ...tr.rotationKeys ? { rotationKeys: [...tr.rotationKeys].sort((a, b) => a.atMs - b.atMs) } : {}
+        }));
         return { ...state2, characters: { ...state2.characters, [characterId]: { ...character, animations: { ...character.animations, [animationId]: next } } } };
       }
       case "DELETE_CHARACTER_ANIMATION": {
@@ -5202,7 +5206,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return null;
     }
   }
-  const CARRIED_THROUGH = ["rotation", "flipX", "flipY", "layer"];
+  const CARRIED_THROUGH = ["rotation", "flipX", "flipY", "layer", "points"];
   const withSharedElementProps = (converted, source) => {
     if (!converted) return converted;
     const extra = {};
@@ -5236,6 +5240,33 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     }
     return out;
+  }
+  function pointInPolygon(px, py, points) {
+    const n = Math.floor(points.length / 2);
+    if (n < 3) return false;
+    let inside = false;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const xi = points[i * 2];
+      const yi = points[i * 2 + 1];
+      const xj = points[j * 2];
+      const yj = points[j * 2 + 1];
+      const cross = (px - xi) * (yj - yi) - (py - yi) * (xj - xi);
+      if (Math.abs(cross) < 1e-9 && px >= Math.min(xi, xj) - 1e-9 && px <= Math.max(xi, xj) + 1e-9 && py >= Math.min(yi, yj) - 1e-9 && py <= Math.max(yi, yj) + 1e-9) {
+        return true;
+      }
+      if (yi > py !== yj > py && px < (xj - xi) * (py - yi) / (yj - yi) + xi) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+  function polygonClipPath(points) {
+    if (!points || points.length < 6) return "";
+    const parts = [];
+    for (let i = 0; i + 1 < points.length; i += 2) {
+      parts.push(`${points[i]}% ${points[i + 1]}%`);
+    }
+    return `polygon(${parts.join(", ")})`;
   }
   const VariablesIcon = ({ className, title, ...props }) => /* @__PURE__ */ jsxRuntime2.jsxs("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 20 20", fill: "currentColor", className: `w-5 h-5 ${className || ""}`, ...props, children: [
     title && /* @__PURE__ */ jsxRuntime2.jsx("title", { children: title }),
@@ -7225,11 +7256,419 @@ void main() {
     if (type === "haze") return { drift: [drift * 0.6, 0], scale: 2.2, contrast: 1 * dContrast, bandY: 0.5, bandSoft: 1, baseAlpha: Math.min(1, 0.55 * dAlpha), defaultColor: "#c9cfd8" };
     return { drift: [drift * 0.8, -0.01 * speed], scale: 4, contrast: 1.7 * dContrast, bandY: 0.3, bandSoft: 0.8, baseAlpha: Math.min(1, 0.85 * dAlpha), defaultColor: "#4a4a52" };
   }
+  const NOISE = `
+float vnNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    float a = vnHash(i);
+    float b = vnHash(i + vec2(1.0, 0.0));
+    float c = vnHash(i + vec2(0.0, 1.0));
+    float d = vnHash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+float fbm(vec2 p) {
+    float v = 0.0;
+    float amp = 0.55;
+    for (int i = 0; i < 3; i++) {
+        v += amp * vnNoise(p);
+        p = p * 2.03 + vec2(17.7, 9.2);
+        amp *= 0.5;
+    }
+    return v;
+}
+`;
+  const RAIN_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;  // 0..1 — density AND opacity
+uniform vec3 uColor;
+uniform float uFall;       // fall speed (cells/sec)
+uniform float uSlant;      // sideways drift (uv per unit height)
+uniform float uLen;        // streak length multiplier ~0.4..1.6
+${DITHER}
+float rainLayer(vec2 uv, float scale, float speed, float w, float seed) {
+    // Slanted, tall cells: one potential drop per cell, staggered per column.
+    uv.x += uv.y * uSlant;
+    vec2 p = vec2(uv.x * scale, uv.y * scale / (10.0 * uLen));
+    p.y += uTime * speed + seed * 37.7;
+    vec2 id = floor(p);
+    float h = vnHash(id + seed);
+    vec2 f = fract(p);
+    // Only a portion of cells carry a drop — density rides intensity.
+    if (h > 0.25 + uIntensity * 0.65) return 0.0;
+    float x = f.x - 0.5 + (h - 0.5) * 0.55;
+    // Streak: bright head fading up its tail.
+    float streak = smoothstep(w, w * 0.25, abs(x))
+                 * smoothstep(0.0, 0.25, f.y) * smoothstep(1.0, 0.55, f.y);
+    return streak;
+}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y);
+    float aspect = uResolution.x / max(uResolution.y, 1.0);
+    vec2 uv = vec2(frag.x * aspect, frag.y);
+    // Three depths: near (fast, bold), mid, far (slow, faint) — parallax Classic can't do.
+    float a = 0.0;
+    a += rainLayer(uv, 22.0, uFall * 1.25, 0.085, 1.0) * 0.5;
+    a += rainLayer(uv, 34.0, uFall,        0.075, 2.0) * 0.34;
+    a += rainLayer(uv, 52.0, uFall * 0.8,  0.065, 3.0) * 0.2;
+    a *= uIntensity * 0.9;
+    float dith = (vnHash(vUv * uResolution + uTime) - 0.5) / 255.0;
+    a = clamp(a + dith, 0.0, 1.0);
+    gl_FragColor = vec4(uColor * a, a);
+}
+`;
+  function rainConfig(speed = 0.5, wind = 0.5, dropLength = 0.5) {
+    return {
+      fall: 2.6 * (0.3 + speed * 1.4),
+      slant: (wind - 0.5) * 0.9,
+      // centred: 0.5 = straight down, matches calm default
+      len: 0.4 + dropLength * 1.2,
+      // the Classic lenMul range exactly
+      defaultColor: "#b4d2ff"
+    };
+  }
+  const SNOW_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;
+uniform vec3 uColor;
+uniform float uFall;       // fall speed
+uniform float uDrift;      // sideways wind
+uniform float uSize;       // flake size multiplier
+uniform float uWobble;     // sway amplitude
+uniform float uAsh;        // 0 = snow (bright, soft), 1 = ash (small, dimmer, tumbling)
+${DITHER}
+float flakeLayer(vec2 uv, float scale, float speed, float seed) {
+    vec2 p = uv * scale;
+    p.y += uTime * speed + seed * 19.1;
+    p.x += uTime * uDrift * speed * 0.45;
+    vec2 id = floor(p);
+    float h = vnHash(id + seed);
+    if (h > 0.20 + uIntensity * 0.5) return 0.0;
+    vec2 f = fract(p);
+    // Per-flake wobble: each sways on its own phase; ash tumbles faster and smaller.
+    float sway = sin(uTime * (0.8 + h * 1.6) * (1.0 + uAsh * 0.8) + h * 40.0) * uWobble;
+    vec2 center = vec2(0.25 + h * 0.5 + sway, 0.25 + fract(h * 7.3) * 0.5);
+    float r = (0.05 + fract(h * 13.7) * 0.06) * uSize * (1.0 - uAsh * 0.35);
+    float d = distance(f, center);
+    // Soft-edged disc with a faint halo (snow) or a harder small mote (ash).
+    float body = smoothstep(r, r * mix(0.35, 0.75, uAsh), d);
+    float halo = (1.0 - uAsh) * 0.25 * smoothstep(r * 2.4, r, d);
+    // Gentle per-flake twinkle so the field feels alive.
+    float tw = 0.8 + 0.2 * sin(uTime * (1.0 + h * 2.0) + h * 90.0);
+    return (body + halo) * tw;
+}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y);
+    float aspect = uResolution.x / max(uResolution.y, 1.0);
+    vec2 uv = vec2(frag.x * aspect, frag.y);
+    float a = 0.0;
+    a += flakeLayer(uv, 7.0,  uFall,        1.0) * 0.55;
+    a += flakeLayer(uv, 11.0, uFall * 0.75, 2.0) * 0.35;
+    a += flakeLayer(uv, 17.0, uFall * 0.55, 3.0) * 0.22;
+    a *= uIntensity * mix(0.85, 0.6, uAsh);
+    float dith = (vnHash(vUv * uResolution + uTime) - 0.5) / 255.0;
+    a = clamp(a + dith, 0.0, 1.0);
+    gl_FragColor = vec4(uColor * a, a);
+}
+`;
+  function snowConfig(variant, speed = 0.5, wind = 0.5, particleSize = 0.5) {
+    const ash = variant === "ash" ? 1 : 0;
+    return {
+      fall: (variant === "ash" ? 0.34 : 0.22) * (0.4 + speed * 1.4),
+      drift: (wind - 0.5) * 2.2,
+      size: 0.55 + particleSize * 1.1,
+      wobble: (variant === "ash" ? 0.06 : 0.11) * (0.5 + wind),
+      ash,
+      defaultColor: variant === "ash" ? "#b0a89e" : "#ffffff"
+    };
+  }
+  const SUNBEAMS_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;
+uniform vec3 uColor;
+uniform float uRayFreq;    // shafts around the arc (spread: wide rays = low freq)
+uniform float uSway;       // shaft drift speed
+${DITHER}
+${NOISE}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y);
+    float aspect = uResolution.x / max(uResolution.y, 1.0);
+    // Light source just above the top centre — rays fan down across the scene.
+    vec2 src = vec2(0.5 * aspect, -0.15);
+    vec2 p = vec2(frag.x * aspect, frag.y);
+    vec2 rel = p - src;
+    float ang = atan(rel.x, rel.y);           // 0 = straight down
+    float dist = length(rel);
+    // Shafts: two drifting noise bands over the angle — broad structure + fine detail.
+    float shaft = fbm(vec2(ang * uRayFreq, uTime * uSway))
+                * (0.6 + 0.4 * vnNoise(vec2(ang * uRayFreq * 2.7 + 13.1, uTime * uSway * 0.6)));
+    shaft = pow(clamp(shaft * 1.5, 0.0, 1.0), 2.2);
+    // Fade with distance from the source and toward the bottom (light dies in the depth).
+    float reach = smoothstep(1.65, 0.15, dist);
+    float depthFade = smoothstep(1.05, 0.25, frag.y);
+    // A soft ambient glow near the source so the fan has a bright origin.
+    float glow = 0.35 * smoothstep(0.9, 0.0, dist);
+    float a = (shaft * reach * depthFade + glow) * uIntensity * 0.55;
+    float dith = (vnHash(vUv * uResolution) - 0.5) / 255.0;
+    a = clamp(a + dith, 0.0, 0.85);
+    gl_FragColor = vec4(uColor * a, a);
+}
+`;
+  function sunbeamsConfig(spread = 0.5, speed = 0.5) {
+    return {
+      rayFreq: 9 - spread * 6,
+      // wide spread = broad soft rays
+      sway: 0.05 + speed * 0.22,
+      defaultColor: "#ffe9b8"
+    };
+  }
+  const SHIMMER_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;
+uniform vec3 uColor;
+uniform float uDriftDir;   // -1 = up (default), 1 = down
+uniform float uDensity;    // particle density 0..1
+uniform float uSpeed;
+uniform float uSideMin;    // horizontal window (uv) the waves live in
+uniform float uSideMax;
+uniform float uWavesOn;    // 0 = particles only
+${DITHER}
+${NOISE}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y);
+    float aspect = uResolution.x / max(uResolution.y, 1.0);
+    float a = 0.0;
+    // Light curtains: slow vertical waves warped by fbm, masked to the chosen side.
+    if (uWavesOn > 0.5) {
+        float sideMask = smoothstep(uSideMin - 0.12, uSideMin + 0.08, frag.x)
+                       * smoothstep(uSideMax + 0.12, uSideMax - 0.08, frag.x);
+        vec2 wp = vec2(frag.x * aspect * 2.2, frag.y * 1.1 + uDriftDir * uTime * uSpeed * 0.4);
+        float w1 = fbm(wp + vec2(0.0, uTime * uSpeed * 0.13));
+        float w2 = fbm(wp * 1.9 + vec2(7.7, uTime * uSpeed * 0.21));
+        float waves = pow(clamp(w1 * 0.7 + w2 * 0.5, 0.0, 1.0), 2.6);
+        a += waves * sideMask * 0.5;
+    }
+    // Motes: three drifting cell layers of soft twinkling particles.
+    for (int i = 0; i < 3; i++) {
+        float fi = float(i);
+        float scale = 9.0 + fi * 7.0;
+        vec2 p = vec2(frag.x * aspect, frag.y + uDriftDir * uTime * uSpeed * (0.05 + fi * 0.03)) * scale;
+        p.x += sin(uTime * (0.3 + fi * 0.2) + fi * 5.0) * 0.35;
+        vec2 id = floor(p);
+        float h = vnHash(id + fi * 31.0);
+        if (h > uDensity * 0.55) continue;
+        vec2 f = fract(p);
+        vec2 c = vec2(0.3 + h * 0.4, 0.3 + fract(h * 9.7) * 0.4);
+        float d = distance(f, c);
+        float tw = 0.5 + 0.5 * sin(uTime * (1.5 + h * 3.0) + h * 80.0);
+        a += smoothstep(0.09, 0.01, d) * tw * (0.5 - fi * 0.12);
+    }
+    a *= uIntensity;
+    float dith = (vnHash(vUv * uResolution) - 0.5) / 255.0;
+    a = clamp(a + dith, 0.0, 0.9);
+    gl_FragColor = vec4(uColor * a, a);
+}
+`;
+  function shimmerConfig(side = "full", direction = "up", particlesOnly = false, density = 0.5, speed = 0.5) {
+    return {
+      sideMin: side === "right" ? 0.55 : 0,
+      sideMax: side === "left" ? 0.45 : 1,
+      driftDir: direction === "down" ? 1 : -1,
+      speed: 0.4 + speed * 1.6,
+      density: Math.max(0.05, density),
+      wavesOn: particlesOnly ? 0 : 1,
+      defaultColor: "#ffe9c9"
+    };
+  }
+  const FIREWORKS_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;
+uniform float uRate;       // bursts per second (per slot)
+uniform vec3 uTint;        // author colour; uTintOn 0 = per-burst hues
+uniform float uTintOn;
+${DITHER}
+vec2 vnHash2(float n) {
+    return fract(sin(vec2(n, n * 1.61)) * vec2(43758.5453, 22578.1459));
+}
+vec3 burstColor(float seed) {
+    // Cheerful saturated hues via a cosine palette.
+    return 0.55 + 0.45 * cos(6.2831 * (seed + vec3(0.0, 0.33, 0.67)));
+}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y);
+    float aspect = uResolution.x / max(uResolution.y, 1.0);
+    vec2 p = vec2(frag.x * aspect, frag.y);
+    vec3 acc = vec3(0.0);
+    // Three staggered burst slots, each on its own clock.
+    for (int b = 0; b < 3; b++) {
+        float fb = float(b);
+        float t = uTime * uRate + fb * 0.37;
+        float cyc = floor(t);
+        float tc = fract(t);                     // 0..1 through this burst's life
+        float seed = cyc * 7.13 + fb * 131.7;
+        vec2 center = vec2((0.15 + vnHash2(seed).x * 0.7) * aspect, 0.12 + vnHash2(seed).y * 0.38);
+        vec3 col = uTintOn > 0.5 ? uTint : burstColor(vnHash2(seed + 3.0).x);
+        // Expansion eases out; sparks droop under gravity as they age.
+        float r = 0.28 * (1.0 - pow(1.0 - min(tc * 1.25, 1.0), 2.2));
+        float fade = smoothstep(1.0, 0.35, tc);
+        float grav = tc * tc * 0.14;
+        for (int s = 0; s < 24; s++) {
+            float fs = float(s);
+            float ha = vnHash(vec2(seed, fs));
+            float ang = (fs + ha * 0.9) * (6.2831 / 24.0);
+            float rr = r * (0.75 + ha * 0.35);
+            vec2 sp = center + vec2(cos(ang), sin(ang)) * rr + vec2(0.0, grav);
+            float d = distance(p, sp);
+            // Spark point + a short trail back along its path.
+            float pt = exp(-d * d * 5200.0) * 1.1;
+            vec2 tp = center + vec2(cos(ang), sin(ang)) * rr * 0.82 + vec2(0.0, grav * 0.8);
+            float trail = exp(-distance(p, tp) * distance(p, tp) * 2600.0) * 0.35;
+            float tw = 0.7 + 0.3 * sin(uTime * 24.0 + ha * 50.0);   // sparkle
+            acc += col * (pt + trail) * fade * tw;
+        }
+        // Rocket streak rising before the burst (first 20% of the cycle shows the tail end).
+        if (tc < 0.18) {
+            float rise = tc / 0.18;
+            vec2 rp = vec2(center.x, mix(1.05, center.y, rise));
+            float d = distance(p, rp);
+            acc += vec3(1.0, 0.9, 0.7) * exp(-d * d * 4200.0) * 0.8 * (1.0 - rise * 0.5);
+        }
+    }
+    acc *= uIntensity;
+    float dith = (vnHash(vUv * uResolution + uTime) - 0.5) / 255.0;
+    acc = clamp(acc + dith, 0.0, 1.0);
+    float a = clamp(max(acc.r, max(acc.g, acc.b)), 0.0, 1.0);
+    gl_FragColor = vec4(acc * a, a);
+}
+`;
+  function fireworksConfig(speed = 0.5) {
+    return { rate: 0.25 + speed * 0.55 };
+  }
+  const LIGHTNING_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;
+uniform vec3 uColor;
+uniform float uCycle;      // seconds per strike cycle (Classic: 3..14)
+${DITHER}
+${NOISE}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y);
+    float t = uTime / uCycle;
+    float cyc = floor(t);
+    float tc = fract(t);
+    float seed = vnHash(vec2(cyc, 7.0));
+    // Flash envelope — the Classic double-flash timing (quick hit, dip, second hit),
+    // plus the faint mid-cycle echo at ~55%.
+    float f1 = smoothstep(0.0, 0.012, tc) * smoothstep(0.024, 0.012, tc);
+    float f2 = smoothstep(0.024, 0.036, tc) * smoothstep(0.065, 0.040, tc) * 0.85;
+    float f3 = smoothstep(0.54, 0.55, tc) * smoothstep(0.565, 0.555, tc) * 0.55;
+    float flash = max(max(f1, f2), f3);
+    // The bolt: a jagged noise-displaced path from the top, alive only during the strike.
+    float boltLife = smoothstep(0.0, 0.004, tc) * smoothstep(0.05, 0.02, tc);
+    float a = flash * 0.55;
+    if (boltLife > 0.001) {
+        float bx = 0.18 + seed * 0.64;                       // strike position per cycle
+        float wob = (fbm(vec2(frag.y * 3.5 + cyc * 17.0, cyc * 3.1)) - 0.5) * 0.34
+                  + (vnNoise(vec2(frag.y * 14.0, cyc * 9.0)) - 0.5) * 0.08;
+        float path = bx + wob * (0.25 + frag.y);             // wanders more as it descends
+        float d = abs(frag.x - path);
+        float core = smoothstep(0.004, 0.0005, d) * 1.4;
+        float glow = exp(-d * 26.0) * 0.5;
+        // A fainter branch splitting off partway down.
+        float branch = 0.0;
+        if (frag.y > 0.25 + seed * 0.3) {
+            float bpath = path + (frag.y - (0.25 + seed * 0.3)) * (seed > 0.5 ? 0.35 : -0.35);
+            float bd = abs(frag.x - bpath);
+            branch = (smoothstep(0.002, 0.0004, bd) * 0.8 + exp(-bd * 34.0) * 0.3)
+                   * smoothstep(0.85, 0.4, frag.y);
+        }
+        float ground = smoothstep(1.0, 0.85, frag.y);        // bolt fades before the floor
+        a += (core + glow + branch) * boltLife * ground;
+    }
+    a *= uIntensity;
+    float dith = (vnHash(vUv * uResolution + uTime) - 0.5) / 255.0;
+    a = clamp(a + dith, 0.0, 1.0);
+    gl_FragColor = vec4(uColor * a, a);
+}
+`;
+  function lightningCycleSeconds(speed = 0.5) {
+    return 14 - speed * 11;
+  }
+  const CRT_FS = `
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uIntensity;
+uniform float uSpacing;    // scanline period, CSS px
+uniform float uRoll;       // rolling-bar cycle seconds
+uniform float uDpr;
+${DITHER}
+void main() {
+    vec2 frag = vec2(vUv.x, 1.0 - vUv.y) * uResolution;
+    vec2 css = frag / uDpr;
+    // Scanline mask — soft sine stripes at the authored spacing (Classic's hard 2px lines).
+    float scan = 0.5 + 0.5 * cos(css.y * 6.2831 / max(uSpacing, 2.0));
+    float dark = scan * scan * 0.5;
+    // Aperture grille: faint RGB triads across x — the colour fringe of a real tube.
+    float triad = mod(floor(css.x / max(uDpr, 1.0)), 3.0);
+    vec3 grille = vec3(0.0);
+    if (triad < 0.5) grille = vec3(0.05, 0.0, 0.0);
+    else if (triad < 1.5) grille = vec3(0.0, 0.05, 0.0);
+    else grille = vec3(0.0, 0.0, 0.05);
+    // Rolling refresh bar: a soft bright band sweeping down.
+    float rollY = fract(uTime / max(uRoll, 0.5));
+    float bar = smoothstep(0.09, 0.0, abs(1.0 - vUv.y - rollY)) * 0.055;
+    // Vignette + a whisper of mains flicker.
+    vec2 v = vUv - 0.5;
+    float vig = smoothstep(0.85, 0.25, length(v) * 1.35);
+    float flick = 0.97 + 0.03 * sin(uTime * 11.0);
+    float darkA = clamp((dark + (1.0 - vig) * 0.35) * uIntensity * flick, 0.0, 0.85);
+    vec3 add = (grille + vec3(bar)) * uIntensity * flick;
+    float dith = (vnHash(vUv * uResolution) - 0.5) / 255.0;
+    darkA = clamp(darkA + dith, 0.0, 1.0);
+    // Darkness (premultiplied black) with a small additive tint on top.
+    vec3 col = add * (1.0 - darkA);
+    float a = clamp(darkA + max(add.r, max(add.g, add.b)), 0.0, 1.0);
+    gl_FragColor = vec4(col, a);
+}
+`;
+  function crtConfig(lineSpacing = 0.5, speed = 0.5) {
+    return {
+      spacing: 2 + Math.round(lineSpacing * 8) + 2,
+      roll: 9 - speed * 7.5
+    };
+  }
   const FS_BY_KIND = {
     lights: LIGHTS_FS,
     beams: BEAMS_FS,
     flashlight: FLASHLIGHT_FS,
-    atmosphere: ATMOS_FS
+    atmosphere: ATMOS_FS,
+    rain: RAIN_FS,
+    snow: SNOW_FS,
+    sunbeams: SUNBEAMS_FS,
+    shimmer: SHIMMER_FS,
+    fireworks: FIREWORKS_FS,
+    lightning: LIGHTNING_FS,
+    crt: CRT_FS
   };
   const hexToRgb01 = (hex, fallback) => {
     const m = /^#?([0-9a-f]{6})$/i.exec((hex || "").trim());
@@ -7314,7 +7753,7 @@ void main() {
           gl.uniform3f(loc("uDarkColor"), u.darkColor[0], u.darkColor[1], u.darkColor[2]);
           gl.uniform1f(loc("uHole"), u.hole);
           gl.drawArrays(gl.TRIANGLES, 0, 3);
-        } else {
+        } else if (p.kind === "atmosphere") {
           gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
           const cfg = atmosphereConfig(p.type, p.speed ?? 1, p.wind ?? 0.5, p.density ?? 0.5);
           const col = hexToRgb01(p.color || cfg.defaultColor, [0.8, 0.84, 0.88]);
@@ -7327,6 +7766,90 @@ void main() {
           gl.uniform1f(loc("uContrast"), cfg.contrast);
           gl.uniform1f(loc("uBandY"), cfg.bandY);
           gl.uniform1f(loc("uBandSoft"), cfg.bandSoft);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        } else if (p.kind === "rain") {
+          gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          const cfg = rainConfig(p.speed ?? 0.5, p.wind ?? 0.5, p.dropLength ?? 0.5);
+          const col = hexToRgb01(p.color || cfg.defaultColor, [0.7, 0.82, 1]);
+          gl.uniform2f(loc("uResolution"), w, h);
+          gl.uniform1f(loc("uTime"), t);
+          gl.uniform1f(loc("uIntensity"), Math.max(0, Math.min(1, p.intensity)));
+          gl.uniform3f(loc("uColor"), col[0], col[1], col[2]);
+          gl.uniform1f(loc("uFall"), cfg.fall);
+          gl.uniform1f(loc("uSlant"), cfg.slant);
+          gl.uniform1f(loc("uLen"), cfg.len);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        } else if (p.kind === "snow") {
+          gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          const cfg = snowConfig(p.variant, p.speed ?? 0.5, p.wind ?? 0.5, p.particleSize ?? 0.5);
+          const col = hexToRgb01(p.color || cfg.defaultColor, [1, 1, 1]);
+          gl.uniform2f(loc("uResolution"), w, h);
+          gl.uniform1f(loc("uTime"), t);
+          gl.uniform1f(loc("uIntensity"), Math.max(0, Math.min(1, p.intensity)));
+          gl.uniform3f(loc("uColor"), col[0], col[1], col[2]);
+          gl.uniform1f(loc("uFall"), cfg.fall);
+          gl.uniform1f(loc("uDrift"), cfg.drift);
+          gl.uniform1f(loc("uSize"), cfg.size);
+          gl.uniform1f(loc("uWobble"), cfg.wobble);
+          gl.uniform1f(loc("uAsh"), cfg.ash);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        } else if (p.kind === "sunbeams") {
+          gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          const cfg = sunbeamsConfig(p.spread ?? 0.5, p.speed ?? 0.5);
+          const col = hexToRgb01(p.color || cfg.defaultColor, [1, 0.91, 0.72]);
+          gl.uniform2f(loc("uResolution"), w, h);
+          gl.uniform1f(loc("uTime"), t);
+          gl.uniform1f(loc("uIntensity"), Math.max(0, Math.min(1, p.intensity)));
+          gl.uniform3f(loc("uColor"), col[0], col[1], col[2]);
+          gl.uniform1f(loc("uRayFreq"), cfg.rayFreq);
+          gl.uniform1f(loc("uSway"), cfg.sway);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        } else if (p.kind === "shimmer") {
+          gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          const cfg = shimmerConfig(p.side ?? "full", p.direction ?? "up", !!p.particlesOnly, p.density ?? 0.5, p.speed ?? 0.5);
+          const col = hexToRgb01(p.color || cfg.defaultColor, [1, 0.91, 0.79]);
+          gl.uniform2f(loc("uResolution"), w, h);
+          gl.uniform1f(loc("uTime"), t);
+          gl.uniform1f(loc("uIntensity"), Math.max(0, Math.min(1, p.intensity)));
+          gl.uniform3f(loc("uColor"), col[0], col[1], col[2]);
+          gl.uniform1f(loc("uDriftDir"), cfg.driftDir);
+          gl.uniform1f(loc("uDensity"), cfg.density);
+          gl.uniform1f(loc("uSpeed"), cfg.speed);
+          gl.uniform1f(loc("uSideMin"), cfg.sideMin);
+          gl.uniform1f(loc("uSideMax"), cfg.sideMax);
+          gl.uniform1f(loc("uWavesOn"), cfg.wavesOn);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        } else if (p.kind === "fireworks") {
+          gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          const cfg = fireworksConfig(p.speed ?? 0.5);
+          const tinted = !!p.color;
+          const col = hexToRgb01(p.color || "#ffffff", [1, 1, 1]);
+          gl.uniform2f(loc("uResolution"), w, h);
+          gl.uniform1f(loc("uTime"), t);
+          gl.uniform1f(loc("uIntensity"), Math.max(0, Math.min(1, p.intensity)));
+          gl.uniform1f(loc("uRate"), cfg.rate);
+          gl.uniform3f(loc("uTint"), col[0], col[1], col[2]);
+          gl.uniform1f(loc("uTintOn"), tinted ? 1 : 0);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        } else if (p.kind === "lightning") {
+          gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          const col = hexToRgb01(p.color || "#eaf2ff", [0.92, 0.95, 1]);
+          gl.uniform2f(loc("uResolution"), w, h);
+          gl.uniform1f(loc("uTime"), t);
+          gl.uniform1f(loc("uIntensity"), Math.max(0, Math.min(1, p.intensity)));
+          gl.uniform3f(loc("uColor"), col[0], col[1], col[2]);
+          gl.uniform1f(loc("uCycle"), lightningCycleSeconds(p.speed ?? 0.5));
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        } else {
+          gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          const cfg = crtConfig(p.lineSpacing ?? 0.5, p.speed ?? 0.5);
+          const dprNow = Math.max(1, Math.min(2, typeof window !== "undefined" && window.devicePixelRatio || 1));
+          gl.uniform2f(loc("uResolution"), w, h);
+          gl.uniform1f(loc("uTime"), t);
+          gl.uniform1f(loc("uIntensity"), Math.max(0, Math.min(1, p.intensity)));
+          gl.uniform1f(loc("uSpacing"), cfg.spacing);
+          gl.uniform1f(loc("uRoll"), cfg.roll);
+          gl.uniform1f(loc("uDpr"), dprNow);
           gl.drawArrays(gl.TRIANGLES, 0, 3);
         }
         raf = requestAnimationFrame(frame);
@@ -10393,7 +10916,15 @@ void main() {
     const sunbeamsBlend = ((_u = sunbeams == null ? void 0 : sunbeams.params) == null ? void 0 : _u.blendMode) || "screen";
     const shimmerBlend = ((_v = shimmer == null ? void 0 : shimmer.params) == null ? void 0 : _v.blendMode) || "overlay";
     return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className, children: [
-      scanlinesOpacity > 0 && /* @__PURE__ */ jsxRuntime2.jsx(
+      scanlinesOpacity > 0 && (scanlines && isEnhanced(scanlines.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(
+        GlFxCanvas,
+        {
+          kind: "crt",
+          width: safeWidth,
+          height: safeHeight,
+          getParams: () => ({ kind: "crt", intensity: clamp01(scanlines.intensity), lineSpacing: ep(scanlines.params, "lineSpacing"), speed: ep(scanlines.params, "speed") })
+        }
+      ) : /* @__PURE__ */ jsxRuntime2.jsx(
         "div",
         {
           className: "vnfx-scanlines",
@@ -10403,7 +10934,7 @@ void main() {
             animationDuration: `${slSpeed}s`
           }
         }
-      ),
+      )),
       chromaOpacity > 0 && /* @__PURE__ */ jsxRuntime2.jsx(
         "div",
         {
@@ -10467,7 +10998,16 @@ void main() {
           }
         )
       ] }),
-      sunbeams && clamp01(sunbeams.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx(
+      sunbeams && clamp01(sunbeams.intensity) > 0 && (isEnhanced(sunbeams.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(
+        GlFxCanvas,
+        {
+          kind: "sunbeams",
+          width: safeWidth,
+          height: safeHeight,
+          style: { mixBlendMode: sunbeamsBlend },
+          getParams: () => ({ kind: "sunbeams", intensity: clamp01(sunbeams.intensity), color: sunbeams.color, speed: ep(sunbeams.params, "speed"), spread: ep(sunbeams.params, "spread") })
+        }
+      ) : /* @__PURE__ */ jsxRuntime2.jsx(
         "canvas",
         {
           ref: sunbeamsCanvasRef,
@@ -10475,8 +11015,29 @@ void main() {
           style: { mixBlendMode: sunbeamsBlend },
           "aria-hidden": true
         }
-      ),
-      shimmer && clamp01(shimmer.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx(
+      )),
+      shimmer && clamp01(shimmer.intensity) > 0 && (isEnhanced(shimmer.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(
+        GlFxCanvas,
+        {
+          kind: "shimmer",
+          width: safeWidth,
+          height: safeHeight,
+          style: { mixBlendMode: shimmerBlend },
+          getParams: () => {
+            var _a2, _b2, _c2;
+            return {
+              kind: "shimmer",
+              intensity: clamp01(shimmer.intensity),
+              color: shimmer.color,
+              speed: ep(shimmer.params, "speed"),
+              density: ep(shimmer.params, "particleDensity"),
+              side: ((_a2 = shimmer.params) == null ? void 0 : _a2.shimmerSide) ?? "full",
+              direction: ((_b2 = shimmer.params) == null ? void 0 : _b2.shimmerDirection) ?? "up",
+              particlesOnly: !!((_c2 = shimmer.params) == null ? void 0 : _c2.shimmerParticlesOnly)
+            };
+          }
+        }
+      ) : /* @__PURE__ */ jsxRuntime2.jsx(
         "canvas",
         {
           ref: shimmerCanvasRef,
@@ -10484,23 +11045,39 @@ void main() {
           style: { mixBlendMode: shimmerBlend },
           "aria-hidden": true
         }
-      ),
-      rain && clamp01(rain.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx(
+      )),
+      rain && clamp01(rain.intensity) > 0 && (isEnhanced(rain.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(
+        GlFxCanvas,
+        {
+          kind: "rain",
+          width: safeWidth,
+          height: safeHeight,
+          getParams: () => ({ kind: "rain", intensity: clamp01(rain.intensity), color: rain.color, speed: ep(rain.params, "speed"), wind: ep(rain.params, "windStrength"), dropLength: ep(rain.params, "dropLength") })
+        }
+      ) : /* @__PURE__ */ jsxRuntime2.jsx(
         "canvas",
         {
           ref: rainCanvasRef,
           className: "vnfx-canvas",
           "aria-hidden": true
         }
-      ),
-      snowAsh && clamp01(snowAsh.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx(
+      )),
+      snowAsh && clamp01(snowAsh.intensity) > 0 && (isEnhanced(snowAsh.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(
+        GlFxCanvas,
+        {
+          kind: "snow",
+          width: safeWidth,
+          height: safeHeight,
+          getParams: () => ({ kind: "snow", variant: snowAsh.variant === "ash" ? "ash" : "snow", intensity: clamp01(snowAsh.intensity), color: snowAsh.color, speed: ep(snowAsh.params, "speed"), wind: ep(snowAsh.params, "windStrength"), particleSize: ep(snowAsh.params, "particleSize") })
+        }
+      ) : /* @__PURE__ */ jsxRuntime2.jsx(
         "canvas",
         {
           ref: snowCanvasRef,
           className: "vnfx-canvas",
           "aria-hidden": true
         }
-      ),
+      )),
       haze && clamp01(haze.intensity) > 0 && (isEnhanced(haze.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(
         GlFxCanvas,
         {
@@ -10531,7 +11108,16 @@ void main() {
           getParams: () => ({ kind: "atmosphere", type: "smoke", intensity: clamp01(smoke.intensity), color: smoke.color, speed: ep(smoke.params, "speed", 1), wind: ep(smoke.params, "windStrength"), density: ep(smoke.params, "particleDensity") })
         }
       ) : /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: smokeCanvasRef, className: "vnfx-canvas", "aria-hidden": true })),
-      fireworks && clamp01(fireworks.intensity) > 0 && /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: fireworksCanvasRef, className: "vnfx-canvas", style: { mixBlendMode: "screen" }, "aria-hidden": true }),
+      fireworks && clamp01(fireworks.intensity) > 0 && (isEnhanced(fireworks.effectStyle) && webglLikelyAvailable() ? /* @__PURE__ */ jsxRuntime2.jsx(
+        GlFxCanvas,
+        {
+          kind: "fireworks",
+          width: safeWidth,
+          height: safeHeight,
+          style: { mixBlendMode: "screen" },
+          getParams: () => ({ kind: "fireworks", intensity: clamp01(fireworks.intensity), color: fireworks.color, speed: ep(fireworks.params, "speed") })
+        }
+      ) : /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: fireworksCanvasRef, className: "vnfx-canvas", style: { mixBlendMode: "screen" }, "aria-hidden": true })),
       spotlight && clamp01(spotlight.intensity) > 0 && (() => {
         var _a2;
         const darkness = clamp01(spotlight.intensity);
@@ -10602,6 +11188,18 @@ void main() {
         ) : /* @__PURE__ */ jsxRuntime2.jsx(LightsLayer, { lights: scaled, stageW: safeWidth, stageH: safeHeight }) });
       })(),
       lightning && clamp01(lightning.intensity) > 0 && (() => {
+        if (isEnhanced(lightning.effectStyle) && webglLikelyAvailable()) {
+          return /* @__PURE__ */ jsxRuntime2.jsx(
+            GlFxCanvas,
+            {
+              kind: "lightning",
+              width: safeWidth,
+              height: safeHeight,
+              style: { mixBlendMode: "screen" },
+              getParams: () => ({ kind: "lightning", intensity: clamp01(lightning.intensity), color: lightning.color, speed: ep(lightning.params, "speed") })
+            }
+          );
+        }
         const cycle = (14 - ep(lightning.params, "speed") * 11).toFixed(2);
         const { r, g, b } = parseColor(lightning.color, { r: 234, g: 242, b: 255 });
         return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0", style: { opacity: clamp01(lightning.intensity), mixBlendMode: "screen" }, children: [
@@ -11120,6 +11718,11 @@ void main() {
         py = cy + dx * Math.sin(rad) + dy * Math.cos(rad);
       }
       if (px >= x && px <= x + width && py >= y && py <= y + height) {
+        if (t.polygonPct && t.polygonPct.length >= 6) {
+          const lx = width > 0 ? (px - x) / width * 100 : 0;
+          const ly = height > 0 ? (py - y) / height * 100 : 0;
+          if (!pointInPolygon(lx, ly, t.polygonPct)) continue;
+        }
         if (!best || t.order > best.order) best = t;
       }
     }
@@ -12504,6 +13107,8 @@ void main() {
     const videoTrims = [];
     const imageBoxes = [];
     const videoBoxes = [];
+    const imageLayerIds = [];
+    const videoLayerIds = [];
     let hasVideo = false;
     let videoLoop = false;
     const base = characterBaseArtForPose(charData, poseId);
@@ -12511,11 +13116,13 @@ void main() {
       videoUrls.push(wrap(base.videoUrl));
       videoTrims.push({ start: base.trimStart, end: base.trimEnd });
       videoBoxes.push(null);
+      videoLayerIds.push(null);
       hasVideo = true;
       videoLoop = !!base.loop;
     } else if (base.imageUrl) {
       imageUrls.push(wrap(base.imageUrl));
       imageBoxes.push(null);
+      imageLayerIds.push(null);
     }
     const hidden = poseHiddenLayerIds(charData, poseId);
     layerOrderForPose(charData, poseId).forEach((layer) => {
@@ -12528,14 +13135,16 @@ void main() {
         videoUrls.push(wrap(art.videoUrl));
         videoTrims.push({});
         videoBoxes.push(box);
+        videoLayerIds.push(layer.id);
         hasVideo = true;
         videoLoop = videoLoop || !!art.loop;
       } else if (art == null ? void 0 : art.imageUrl) {
         imageUrls.push(wrap(art.imageUrl));
         imageBoxes.push(box);
+        imageLayerIds.push(layer.id);
       }
     });
-    return { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes };
+    return { imageUrls, videoUrls, videoTrims, hasVideo, videoLoop, imageBoxes, videoBoxes, imageLayerIds, videoLayerIds };
   }
   function boxFieldsForStage(imageBoxes, videoBoxes) {
     return {
@@ -14626,6 +15235,7 @@ void main() {
     let navigationRequest;
     let pendingCommonEvent;
     const playMusicImperative = (nameOrId, loop, volume) => {
+      var _a2, _b;
       const audioId = resolveAudioId(nameOrId);
       const url = context.assetResolver(audioId, "audio");
       const audio = context.musicAudioRef.current;
@@ -14645,7 +15255,7 @@ void main() {
       if (isNewTrack) {
         audio.src = url;
         audio.load();
-        applyAudioAdjust(audio, null);
+        applyAudioAdjust(audio, musicChannelAdjust(resolveAudioAdjust(void 0, (_b = (_a2 = project.audio) == null ? void 0 : _a2[audioId]) == null ? void 0 : _b.audioAdjust)));
         audio.addEventListener("canplaythrough", startPlayback, { once: true });
       } else if (audio.paused) {
         startPlayback();
@@ -15967,6 +16577,66 @@ void main() {
     });
     return changed ? next : selections;
   }
+  function rotationAt(anim, tMs) {
+    var _a;
+    const out = {};
+    const dur = Math.max(1, anim.durationMs || 1);
+    const t = anim.loop ? (tMs % dur + dur) % dur : Math.min(Math.max(0, tMs), dur);
+    for (const track of anim.tracks || []) {
+      if (!(track == null ? void 0 : track.layerId) || !((_a = track.rotationKeys) == null ? void 0 : _a.length)) continue;
+      const keys = [...track.rotationKeys].sort((a, b) => a.atMs - b.atMs);
+      let deg;
+      if (t <= keys[0].atMs) {
+        if (anim.loop && keys.length > 1) {
+          const last = keys[keys.length - 1];
+          const span = dur - last.atMs + keys[0].atMs;
+          deg = span <= 0 ? keys[0].deg : last.deg + (last.deg === keys[0].deg ? 0 : (keys[0].deg - last.deg) * ((t - last.atMs + dur) % dur) / span);
+        } else {
+          deg = keys[0].deg;
+        }
+      } else if (t >= keys[keys.length - 1].atMs) {
+        const last = keys[keys.length - 1];
+        if (anim.loop && keys.length > 1) {
+          const span = dur - last.atMs + keys[0].atMs;
+          deg = span <= 0 ? keys[0].deg : last.deg + (keys[0].deg - last.deg) * ((t - last.atMs) / span);
+        } else {
+          deg = last.deg;
+        }
+      } else {
+        let deg2 = keys[0].deg;
+        for (let i = 0; i + 1 < keys.length; i++) {
+          const a = keys[i], b = keys[i + 1];
+          if (t >= a.atMs && t <= b.atMs) {
+            const span = b.atMs - a.atMs;
+            deg2 = span <= 0 ? b.deg : a.deg + (b.deg - a.deg) * ((t - a.atMs) / span);
+            break;
+          }
+        }
+        deg = deg2;
+      }
+      out[track.layerId] = deg;
+    }
+    return out;
+  }
+  function layerAdjustAt(anim, tMs) {
+    const rot = rotationAt(anim, tMs);
+    const out = {};
+    for (const track of anim.tracks || []) {
+      if (!(track == null ? void 0 : track.layerId)) continue;
+      const deg = rot[track.layerId];
+      const dx = track.offsetX ?? 0;
+      const dy = track.offsetY ?? 0;
+      if (deg === void 0 && dx === 0 && dy === 0) continue;
+      out[track.layerId] = {
+        ...deg !== void 0 ? { deg } : {},
+        dx,
+        dy,
+        pivotX: track.pivotX ?? 50,
+        pivotY: track.pivotY ?? 50
+      };
+    }
+    return out;
+  }
   function animationFrameUrls(charData, anims, poseId) {
     var _a, _b;
     const urls = /* @__PURE__ */ new Set();
@@ -16816,6 +17486,7 @@ void main() {
         id: `scene-${overlay.commandId}`,
         rectPct: { x: overlay.x, y: overlay.y, width: overlay.width, height: overlay.height },
         rotation: overlay.rotation,
+        polygonPct: overlay.shape === "poly" ? overlay.points : void 0,
         acceptTag: overlay.acceptedTag || void 0,
         onDrop: () => {
           (overlay.actions || []).forEach((a) => onAction(a));
@@ -16828,13 +17499,15 @@ void main() {
       (overlay.actions || []).forEach((a) => onAction(a));
       if (overlay.advanceOnTrigger && onAdvance) onAdvance();
     };
+    const polyClip = overlay.shape === "poly" ? polygonClipPath(overlay.points) : "";
     const style = {
       position: "absolute",
       left: `${overlay.x}%`,
       top: `${overlay.y}%`,
       width: `${overlay.width}%`,
       height: `${overlay.height}%`,
-      borderRadius: overlay.shape === "circle" ? "50%" : 6,
+      borderRadius: polyClip ? void 0 : overlay.shape === "circle" ? "50%" : 6,
+      clipPath: polyClip || void 0,
       // Honor a per-spot layer so items/images can sit above a hot spot (1 + layer*100, the shared
       // overlay band). Without a layer set, keep the legacy fixed z (above characters z-5, below dialogue z-20).
       zIndex: overlay.layer != null ? 1 + overlay.layer * 100 : 8,
@@ -16849,7 +17522,8 @@ void main() {
       // invisible even in test-play. (Authors still see/position it on the scene editor canvas,
       // which always draws hot spots with a label.)
       background: overlay.visible ? overlay.highlightColor || "rgba(99,102,241,0.35)" : "transparent",
-      border: overlay.visible ? `1px solid ${overlay.highlightColor || "rgba(99,102,241,0.6)"}` : void 0,
+      // A box border can't follow a clip-path (it would be clipped away) — the filled shape alone is the visual.
+      border: overlay.visible && !polyClip ? `1px solid ${overlay.highlightColor || "rgba(99,102,241,0.6)"}` : void 0,
       // Author-set see-through for the drawn spot; CSS opacity never affects hit-testing.
       opacity: overlay.visible ? overlay.visibleOpacity ?? 1 : void 0
     };
@@ -19365,6 +20039,14 @@ void main() {
           regionStyle.width = `${r * 2}%`;
           regionStyle.height = `${r * 2}%`;
           regionStyle.borderRadius = "50%";
+        } else if (region.shape === "poly" && region.coords.length >= 6) {
+          regionStyle.left = "0";
+          regionStyle.top = "0";
+          regionStyle.width = "100%";
+          regionStyle.height = "100%";
+          regionStyle.clipPath = polygonClipPath(region.coords);
+        } else {
+          return null;
         }
         return /* @__PURE__ */ jsxRuntime2.jsx(
           "div",
@@ -19473,6 +20155,7 @@ void main() {
           id: `screen-${screen.id}-${spot.id}`,
           rectPct: { x: spot.x, y: spot.y, width: spot.width, height: spot.height },
           rotation: spot.rotation,
+          polygonPct: spot.shape === "poly" ? spot.points : void 0,
           acceptedElementIds: spot.acceptedElementIds,
           acceptTag: spot.acceptTag || void 0,
           onDrop: () => {
@@ -19583,6 +20266,7 @@ void main() {
         Object.values(hotSpots).map((spot) => {
           var _a;
           if (spot.conditions && !evaluateConditions2(spot.conditions, variables)) return null;
+          const polyClip = spot.shape === "poly" ? polygonClipPath(spot.points) : "";
           return /* @__PURE__ */ jsxRuntime2.jsx(
             "div",
             {
@@ -19592,9 +20276,11 @@ void main() {
                 top: `${spot.y}%`,
                 width: `${spot.width}%`,
                 height: `${spot.height}%`,
-                borderRadius: spot.shape === "circle" ? "50%" : void 0,
+                borderRadius: !polyClip && spot.shape === "circle" ? "50%" : void 0,
+                clipPath: polyClip || void 0,
                 backgroundColor: spot.visible ? spot.highlightColor || "rgba(59, 130, 246, 0.2)" : "transparent",
-                border: spot.visible ? `2px dashed ${spot.highlightColor || "rgba(59, 130, 246, 0.5)"}` : "none",
+                // A box border can't follow a clip-path — the filled shape alone is the visual.
+                border: spot.visible && !polyClip ? `2px dashed ${spot.highlightColor || "rgba(59, 130, 246, 0.5)"}` : "none",
                 opacity: spot.visible ? spot.visibleOpacity ?? 1 : void 0,
                 pointerEvents: spot.trigger === "drag-drop" ? "none" : "auto",
                 /* Rotation/flip. For click/hover spots this also rotates the HIT AREA
@@ -23743,6 +24429,7 @@ void main() {
       };
     }, [(_h = playerState == null ? void 0 : playerState.stageState) == null ? void 0 : _h.characters]);
     const animFrameSelectionsRef = React2.useRef(/* @__PURE__ */ new Map());
+    const animLayerRotationRef = React2.useRef(/* @__PURE__ */ new Map());
     const animIdleScheduleRef = React2.useRef(/* @__PURE__ */ new Map());
     const [, bumpAnimEpoch] = React2.useReducer((x) => x + 1, 0);
     React2.useEffect(() => {
@@ -23750,6 +24437,7 @@ void main() {
       const chars = (_a2 = playerState == null ? void 0 : playerState.stageState) == null ? void 0 : _a2.characters;
       if (!chars || playerState.mode !== "playing") {
         animFrameSelectionsRef.current = /* @__PURE__ */ new Map();
+        animLayerRotationRef.current = /* @__PURE__ */ new Map();
         return;
       }
       const animated = [];
@@ -23765,6 +24453,7 @@ void main() {
       }
       if (!animated.length) {
         animFrameSelectionsRef.current = /* @__PURE__ */ new Map();
+        animLayerRotationRef.current = /* @__PURE__ */ new Map();
         return;
       }
       for (const { char, charData, anims } of animated) {
@@ -23782,20 +24471,28 @@ void main() {
         if (now - last < 33) return;
         last = now;
         const nextMap = /* @__PURE__ */ new Map();
+        const nextRotMap = /* @__PURE__ */ new Map();
         for (const { char, charData, anims } of animated) {
           const frameUrls = animationFrameUrls(charData, anims, char.poseId).map((u) => resolveFieldUrl(project.id, u) || u);
           if (frameUrls.some((u) => !vnLoadedImages.has(u))) continue;
           const baseSel = char.layerSelections ?? ((_b2 = (_a3 = charData.expressions) == null ? void 0 : _a3[char.expressionId]) == null ? void 0 : _b2.layerConfiguration) ?? {};
           let sel = baseSel;
+          const rot = {};
+          const mergeRot = (anim, tMs) => {
+            const r = layerAdjustAt(anim, tMs);
+            for (const lid of Object.keys(r)) rot[lid] = r[lid];
+          };
           for (const anim of anims) {
             const key = `${char.charId}:${anim.id}`;
             if (anim.trigger === "always" || char.activeManualAnimationId === anim.id) {
               sel = applyAnimationFrame(sel, anim, now - epoch);
+              mergeRot(anim, now - epoch);
             } else if (anim.trigger === "speaking") {
               if (isSpeakingNow(char.charId, now)) {
                 const start = animIdleScheduleRef.current.get(key) ?? now;
                 if (!animIdleScheduleRef.current.has(key)) animIdleScheduleRef.current.set(key, now);
                 sel = applyAnimationFrame(sel, { ...anim, loop: true }, now - start);
+                mergeRot({ ...anim, loop: true }, now - start);
               } else {
                 animIdleScheduleRef.current.delete(key);
               }
@@ -23808,6 +24505,7 @@ void main() {
                 const t = now - startAt2;
                 if (t <= Math.max(1, anim.durationMs)) {
                   sel = applyAnimationFrame(sel, anim, t);
+                  mergeRot(anim, t);
                 } else {
                   animIdleScheduleRef.current.delete(key);
                 }
@@ -23815,6 +24513,7 @@ void main() {
             }
           }
           if (sel !== baseSel) nextMap.set(char.charId, sel);
+          if (Object.keys(rot).length) nextRotMap.set(char.charId, rot);
         }
         const prev = animFrameSelectionsRef.current;
         let changed = prev.size !== nextMap.size;
@@ -23827,8 +24526,29 @@ void main() {
             }
           }
         }
+        const prevRot = animLayerRotationRef.current;
+        if (!changed) {
+          changed = prevRot.size !== nextRotMap.size;
+          if (!changed) {
+            outer: for (const [k, v] of nextRotMap) {
+              const pv = prevRot.get(k);
+              if (!pv) {
+                changed = true;
+                break;
+              }
+              for (const lk of Object.keys(v)) {
+                const a = v[lk], b = pv[lk];
+                if (!b || Math.abs((a.deg ?? 0) - (b.deg ?? 0)) > 0.05 || Math.abs(a.dx - b.dx) > 0.05 || Math.abs(a.dy - b.dy) > 0.05 || a.pivotX !== b.pivotX || a.pivotY !== b.pivotY) {
+                  changed = true;
+                  break outer;
+                }
+              }
+            }
+          }
+        }
         if (changed) {
           animFrameSelectionsRef.current = nextMap;
+          animLayerRotationRef.current = nextRotMap;
           bumpAnimEpoch();
         }
       };
@@ -23836,6 +24556,7 @@ void main() {
       return () => {
         cancelAnimationFrame(raf);
         animFrameSelectionsRef.current = /* @__PURE__ */ new Map();
+        animLayerRotationRef.current = /* @__PURE__ */ new Map();
       };
     }, [(_i = playerState == null ? void 0 : playerState.stageState) == null ? void 0 : _i.characters, playerState == null ? void 0 : playerState.mode, project]);
     React2.useEffect(() => {
@@ -25099,6 +25820,7 @@ void main() {
                     width: cmd.width,
                     height: cmd.height,
                     shape: cmd.shape,
+                    points: cmd.points,
                     trigger: cmd.trigger,
                     actions: cmd.actions,
                     conditions: cmd.conditions,
@@ -26061,6 +26783,7 @@ void main() {
                         width: cmd.width,
                         height: cmd.height,
                         shape: cmd.shape,
+                        points: cmd.points,
                         trigger: cmd.trigger,
                         actions: cmd.actions,
                         conditions: cmd.conditions,
@@ -28869,14 +29592,20 @@ void main() {
                 const emphasisDim = project.ui.speakerEmphasisDim ?? 0.5;
                 const emphasisScale = project.ui.speakerEmphasisScale ?? 1.04;
                 return allChars.map((char) => {
-                  var _a4, _b3, _c3;
+                  var _a4, _b3, _c3, _d3, _e3;
                   const animSel = animFrameSelectionsRef.current.get(char.charId);
-                  if (animSel && !char.isVideo) {
+                  const animRot = animLayerRotationRef.current.get(char.charId);
+                  let animLayerIds = null;
+                  if ((animSel || animRot) && !char.isVideo) {
                     const animCharData = project.characters[char.charId];
                     if (animCharData) {
                       const wrapUrl = (u) => resolveFieldUrl(project.id, u) || u;
-                      const media = buildCharacterMedia(animCharData, animSel, wrapUrl, char.poseId);
-                      char = { ...char, animBaseImageUrls: char.imageUrls, imageUrls: media.imageUrls, ...boxFieldsForStage(media.imageBoxes, media.videoBoxes) };
+                      const mediaSel = animSel ?? char.layerSelections ?? ((_b3 = (_a4 = animCharData.expressions) == null ? void 0 : _a4[char.expressionId]) == null ? void 0 : _b3.layerConfiguration) ?? {};
+                      const media = buildCharacterMedia(animCharData, mediaSel, wrapUrl, char.poseId);
+                      animLayerIds = media.imageLayerIds;
+                      if (animSel) {
+                        char = { ...char, animBaseImageUrls: char.imageUrls, imageUrls: media.imageUrls, ...boxFieldsForStage(media.imageBoxes, media.videoBoxes) };
+                      }
                     }
                   }
                   let transitionClass = "";
@@ -28939,7 +29668,7 @@ void main() {
                           startOffsetX = startCoords.x - endCoords.x;
                           startOffsetY = startCoords.y - endCoords.y;
                         }
-                        if (startOffsetX === 0 && ((_a4 = char.transition) == null ? void 0 : _a4.action) === "show") {
+                        if (startOffsetX === 0 && ((_c3 = char.transition) == null ? void 0 : _c3.action) === "show") {
                           let endX = 50;
                           if (typeof endPos === "object") endX = endPos.x;
                           else if (typeof endPos === "string") {
@@ -28979,6 +29708,7 @@ void main() {
                   let flickerAnimation = "";
                   let filterVars = {};
                   let charGlitch = null;
+                  let charWobble = null;
                   for (const eff of effectsList) {
                     if (!eff || eff.type === "none") continue;
                     const speed = eff.speed ?? 1;
@@ -29048,6 +29778,11 @@ void main() {
                         combinedFilter += ` url(#vnfx-charglitch-${char.charId})`;
                         break;
                       }
+                      case "wobble": {
+                        charWobble = { intensity, speed, size: eff.wobbleSize ?? 1 };
+                        combinedFilter += ` url(#vnfx-charwobble-${char.charId})`;
+                        break;
+                      }
                     }
                   }
                   if (dnCharFilter && !char.charId.startsWith("__ghost")) combinedFilter += ` ${dnCharFilter}`;
@@ -29060,9 +29795,37 @@ void main() {
                   Object.assign(contentEffectStyle, filterVars);
                   if (dnSpriteTint && !char.isVideo) contentEffectStyle.isolation = "isolate";
                   combinedFilter || combinedFilterAnimation || flickerAnimation || !!dnSpriteTint && !char.isVideo;
+                  const layerAnimParts = (index) => {
+                    var _a5;
+                    const lid = animLayerIds == null ? void 0 : animLayerIds[index];
+                    const a = lid != null && animRot ? animRot[lid] : void 0;
+                    if (!a) return { pre: "", rot: "" };
+                    const box = (_a5 = char.imageBoxes) == null ? void 0 : _a5[index];
+                    const bw = (box == null ? void 0 : box.width) || 100;
+                    const bh = (box == null ? void 0 : box.height) || 100;
+                    return {
+                      pre: a.dx || a.dy ? `translate(${(a.dx / bw * 100).toFixed(2)}%, ${(a.dy / bh * 100).toFixed(2)}%) ` : "",
+                      rot: a.deg !== void 0 && a.deg !== 0 ? `rotate(${a.deg.toFixed(2)}deg) ` : "",
+                      // Custom pivot only when set off-centre — the default stays the box
+                      // centre, matching the authored Pose Studio rotation contract.
+                      origin: a.pivotX !== 50 || a.pivotY !== 50 ? `${a.pivotX}% ${a.pivotY}%` : void 0
+                    };
+                  };
+                  const layerAnimStyle = (index) => {
+                    var _a5;
+                    const p = layerAnimParts(index);
+                    if (!p.pre && !p.rot) return {};
+                    const boxTf = layerBoxTransform((_a5 = char.imageBoxes) == null ? void 0 : _a5[index]);
+                    const style = {
+                      transform: `${p.pre}${boxTf ? boxTf + " " : ""}${p.rot}`.trim(),
+                      transition: "transform 40ms linear"
+                    };
+                    if (p.origin) style.transformOrigin = p.origin;
+                    return style;
+                  };
                   const spriteContent = /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
                     char.isVideo && char.videoUrls ? char.videoUrls.map((url, index) => {
-                      var _a5, _b4, _c4, _d3, _e3;
+                      var _a5, _b4, _c4, _d4, _e4;
                       return /* @__PURE__ */ jsxRuntime2.jsx(
                         TrimmedVideo,
                         {
@@ -29071,10 +29834,10 @@ void main() {
                           muted: true,
                           loop: char.videoLoop,
                           trimStart: (_b4 = (_a5 = char.videoTrims) == null ? void 0 : _a5[index]) == null ? void 0 : _b4.start,
-                          trimEnd: (_d3 = (_c4 = char.videoTrims) == null ? void 0 : _c4[index]) == null ? void 0 : _d3.end,
+                          trimEnd: (_d4 = (_c4 = char.videoTrims) == null ? void 0 : _c4[index]) == null ? void 0 : _d4.end,
                           playsInline: true,
                           className: "absolute top-0 left-0 w-full h-full object-contain",
-                          style: { zIndex: index, ...layerBoxStyle((_e3 = char.videoBoxes) == null ? void 0 : _e3[index]) }
+                          style: { zIndex: index, ...layerBoxStyle((_e4 = char.videoBoxes) == null ? void 0 : _e4[index]) }
                         },
                         index
                       );
@@ -29086,7 +29849,7 @@ void main() {
                           src: url,
                           alt: "",
                           className: "absolute top-0 left-0 w-full h-full object-contain",
-                          style: { zIndex: index, ...layerBoxStyle((_a5 = char.imageBoxes) == null ? void 0 : _a5[index]) }
+                          style: { zIndex: index, ...layerBoxStyle((_a5 = char.imageBoxes) == null ? void 0 : _a5[index]), ...layerAnimStyle(index) }
                         },
                         index
                       );
@@ -29113,7 +29876,13 @@ void main() {
                         WebkitMaskPosition: "center",
                         maskPosition: "center",
                         transition: `opacity ${dnTrans}s ease-in-out, background-color ${dnTrans}s ease-in-out`,
-                        ...layerBoxStyle((_a5 = char.imageBoxes) == null ? void 0 : _a5[index])
+                        ...layerBoxStyle((_a5 = char.imageBoxes) == null ? void 0 : _a5[index]),
+                        // Spin/Tilt + move: the tint mask must ride the layer's animated
+                        // adjustment (transform/origin patch; its opacity transition stays).
+                        ...(() => {
+                          const s = layerAnimStyle(index);
+                          return s.transform ? { transform: s.transform, ...s.transformOrigin ? { transformOrigin: s.transformOrigin } : {} } : {};
+                        })()
                       } }, `dn-tint-${index}`);
                     }),
                     charGlitch && !char.isVideo && charGlitch.colors.map((rimColor, ci) => {
@@ -29147,7 +29916,10 @@ void main() {
                           WebkitMaskPosition: "center",
                           maskPosition: "center",
                           ...boxStyle,
-                          transform: `${boxTf ? boxTf + " " : ""}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + 0.015 * Math.max(0.2, Math.min(3, g.rimSize))).toFixed(3)})`
+                          // Spin/Tilt + move ride between the box transform and the glitch push,
+                          // so an adjusted layer's ghost keeps hugging its silhouette.
+                          ...layerAnimParts(index).origin ? { transformOrigin: layerAnimParts(index).origin } : {},
+                          transform: `${layerAnimParts(index).pre}${boxTf ? boxTf + " " : ""}${layerAnimParts(index).rot}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + 0.015 * Math.max(0.2, Math.min(3, g.rimSize))).toFixed(3)})`
                         } }, `glitch-rim-${ci}-${index}`);
                       });
                     }),
@@ -29186,7 +29958,9 @@ void main() {
                           WebkitMaskPosition: "center",
                           maskPosition: "center",
                           ...boxStyle,
-                          transform: `${boxTf ? boxTf + " " : ""}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + (0.035 + ci * 0.012) * rim).toFixed(3)})`
+                          // Spin/Tilt + move compose here too (see the rim ghosts above).
+                          ...layerAnimParts(index).origin ? { transformOrigin: layerAnimParts(index).origin } : {},
+                          transform: `${layerAnimParts(index).pre}${boxTf ? boxTf + " " : ""}${layerAnimParts(index).rot}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + (0.035 + ci * 0.012) * rim).toFixed(3)})`
                         } }, `glitch-px-${ci}-${index}`);
                       });
                     }),
@@ -29208,9 +29982,37 @@ void main() {
                           repeatCount: "indefinite"
                         }
                       ) })
-                    ] }) }) })
+                    ] }) }) }),
+                    charWobble && (() => {
+                      const baseF = 0.012 / Math.max(0.3, charWobble.size);
+                      const scaleA = (4 + 9 * charWobble.intensity).toFixed(1);
+                      const scaleB = (2 + 5 * charWobble.intensity).toFixed(1);
+                      const dur = (2.4 / charWobble.speed).toFixed(2);
+                      return /* @__PURE__ */ jsxRuntime2.jsx("svg", { width: "0", height: "0", style: { position: "absolute" }, "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntime2.jsx("defs", { children: /* @__PURE__ */ jsxRuntime2.jsxs("filter", { id: `vnfx-charwobble-${char.charId}`, x: "-15%", y: "-15%", width: "130%", height: "130%", children: [
+                        /* @__PURE__ */ jsxRuntime2.jsx("feTurbulence", { type: "turbulence", baseFrequency: `${baseF.toFixed(4)} ${(baseF * 1.4).toFixed(4)}`, numOctaves: "2", seed: "7", result: "noise", children: /* @__PURE__ */ jsxRuntime2.jsx(
+                          "animate",
+                          {
+                            attributeName: "baseFrequency",
+                            values: `${baseF.toFixed(4)} ${(baseF * 1.4).toFixed(4)};${(baseF * 1.25).toFixed(4)} ${(baseF * 1.05).toFixed(4)};${baseF.toFixed(4)} ${(baseF * 1.4).toFixed(4)}`,
+                            dur: `${dur}s`,
+                            calcMode: "linear",
+                            repeatCount: "indefinite"
+                          }
+                        ) }),
+                        /* @__PURE__ */ jsxRuntime2.jsx("feDisplacementMap", { in: "SourceGraphic", in2: "noise", xChannelSelector: "R", yChannelSelector: "G", scale: scaleA, children: /* @__PURE__ */ jsxRuntime2.jsx(
+                          "animate",
+                          {
+                            attributeName: "scale",
+                            values: `${scaleA};${scaleB};${scaleA}`,
+                            dur: `${(1.6 / charWobble.speed).toFixed(2)}s`,
+                            calcMode: "linear",
+                            repeatCount: "indefinite"
+                          }
+                        ) })
+                      ] }) }) });
+                    })()
                   ] });
-                  const spriteReady = !!char.isVideo || !((_b3 = char.imageUrls) == null ? void 0 : _b3.length) || char.imageUrls.every((u) => vnLoadedImages.has(u));
+                  const spriteReady = !!char.isVideo || !((_d3 = char.imageUrls) == null ? void 0 : _d3.length) || char.imageUrls.every((u) => vnLoadedImages.has(u));
                   let wrappedContent = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: { ...contentEffectStyle, ...spriteReady ? {} : { visibility: "hidden" } }, children: spriteContent });
                   for (let tIdx = transformEffects.length - 1; tIdx >= 0; tIdx--) {
                     wrappedContent = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: transformEffects[tIdx].style, children: wrappedContent });
@@ -29240,7 +30042,7 @@ void main() {
                     orientTransform = `${orientTransform} scale(${scaleX}, ${scaleY})`.trim();
                   }
                   orientTransform = orientTransform.trim();
-                  const slideOnInner = ((_c3 = char.transition) == null ? void 0 : _c3.type) === "slide" && !!orientTransform;
+                  const slideOnInner = ((_e3 = char.transition) == null ? void 0 : _e3.type) === "slide" && !!orientTransform;
                   let transformStr = positionStyle.transform || "";
                   if (!slideOnInner && orientTransform) {
                     transformStr = `${transformStr} ${orientTransform}`.trim();

@@ -113,6 +113,8 @@ import TrimmedVideo from './ui/TrimmedVideo';
 import { canvasPointPick, useCanvasPointPick } from '../utils/canvasPointPick';
 import { useCommandRadial } from './inspector/CommandRadialContext';
 import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform, cssFontFamily } from '../utils/styleUtils';
+import { PolygonShapeSVG, PolygonVertexEditor, PolygonTraceOverlay } from './interactive-elements/HotSpotDrawTools';
+import { subscribeTrace, TraceTarget } from './interactive-elements/hotspotTraceBus';
 import { GradientText } from './ui/GradientText';
 
 /** Convert hex color + opacity (0-100) to rgba string */
@@ -249,7 +251,7 @@ interface StageState {
     textOverlays: TextOverlay[];
     imageOverlays: ImageOverlay[];
     buttonOverlays: ButtonOverlay[];
-    hotSpotOverlays: { id: string; name: string; x: number; y: number; width: number; height: number; shape: 'rect' | 'circle'; trigger: string; visible?: boolean; highlightColor?: string; rotation?: number; flipX?: boolean; flipY?: boolean }[];
+    hotSpotOverlays: { id: string; name: string; x: number; y: number; width: number; height: number; shape: 'rect' | 'circle' | 'poly'; points?: number[]; trigger: string; visible?: boolean; highlightColor?: string; rotation?: number; flipX?: boolean; flipY?: boolean }[];
     screen: {
         shake: { active: boolean; intensity: number };
         tint: string;
@@ -766,6 +768,7 @@ const StagingArea: React.FC<{
                         hotSpotOverlays.push({
                             id: command.id, name: command.name, x: command.x, y: command.y,
                             width: command.width, height: command.height, shape: command.shape,
+                            points: command.points,
                             trigger: command.trigger, visible: command.visible, highlightColor: command.highlightColor,
                             rotation: (command as any).rotation, flipX: (command as any).flipX, flipY: (command as any).flipY,
                         });
@@ -1037,6 +1040,16 @@ const StagingArea: React.FC<{
             dispatch({ type: 'UPDATE_COMMON_EVENT_COMMAND', payload: { commonEventId: found.commonEventId, commandIndex: found.index, updates } });
         }
     }, [resolveCommandById, dispatch]);
+
+    // "✏ Draw it" (drawn-shape hot spots): inspectors request trace mode via the bus; this
+    // canvas hosts the overlay when the target is a scene command it can resolve. Commit
+    // auto-fits the spot's box to the trace and stores box-relative points, in ONE update.
+    const [traceCommandId, setTraceCommandId] = useState<string | null>(null);
+    useEffect(() => subscribeTrace((target: TraceTarget) => {
+        if (target.kind === 'scene-command' && resolveCommandById(target.commandId)) {
+            setTraceCommandId(target.commandId);
+        }
+    }), [resolveCommandById]);
 
     // Commit a character's scale (used by the Fit-to-screen toolbar) — one dispatch = one undo step.
     const commitCharScale = useCallback((sourceCommandId: string, scale: number) => {
@@ -2375,6 +2388,10 @@ const StagingArea: React.FC<{
                     const displayH = isResizing && overlayResizeSize ? overlayResizeSize.height : hs.height;
                     const outline = hs.highlightColor || 'rgba(99,102,241,0.9)';
                     const ce = ceMeta[hs.id];
+                    // "Drawn shape": the SVG outline replaces the border-box look. It renders as a
+                    // CHILD of the spot div, so it inherits the rotation/flip transform — the editor
+                    // preview matches the runtime clip-path exactly.
+                    const isPoly = hs.shape === 'poly' && (hs.points?.length ?? 0) >= 6;
                     return (
                         <React.Fragment key={hs.id}>
                             <div
@@ -2382,11 +2399,11 @@ const StagingArea: React.FC<{
                                     position: 'absolute',
                                     left: `${displayX}%`, top: `${displayY}%`,
                                     width: `${displayW}%`, height: `${displayH}%`,
-                                    borderRadius: hs.shape === 'circle' ? '50%' : 6,
+                                    borderRadius: !isPoly && hs.shape === 'circle' ? '50%' : (isPoly ? undefined : 6),
                                     // Editor preview of the spot's rotation/flip, matching the runtime.
                                     transform: buildOrientationTransform(hs) || undefined,
-                                    border: `2px dashed ${outline}`,
-                                    background: hs.visible ? (hs.highlightColor || 'rgba(99,102,241,0.25)') : 'rgba(99,102,241,0.08)',
+                                    border: isPoly ? 'none' : `2px dashed ${outline}`,
+                                    background: isPoly ? 'transparent' : (hs.visible ? (hs.highlightColor || 'rgba(99,102,241,0.25)') : 'rgba(99,102,241,0.08)'),
                                     cursor: isDragging ? 'grabbing' : 'grab',
                                     zIndex: isDragging ? 50 : 9,
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2397,7 +2414,27 @@ const StagingArea: React.FC<{
                                 onDoubleClick={(ce && onOpenCommonEvent) ? (e) => { e.stopPropagation(); onOpenCommonEvent(ce.eventId, ce.ceIndex); } : undefined}
                                 title={ce ? t('fromCommonEvent', 'From event: {{name}} — edits change every scene that calls it. Double-click to open.', { name: ce.eventName }) : `${hs.name} (${hs.trigger})`}
                             >
-                                <span className="text-[10px] text-white/90 px-1 py-0.5 rounded bg-black/50 pointer-events-none truncate max-w-full">
+                                {isPoly && (
+                                    <PolygonShapeSVG
+                                        points={hs.points!}
+                                        fill={hs.visible ? (hs.highlightColor || 'rgba(99,102,241,0.25)') : 'rgba(99,102,241,0.10)'}
+                                        stroke={outline}
+                                    />
+                                )}
+                                {isPoly && isSelectedEl(hs.id) && !isDragging && !isResizing && (
+                                    <PolygonVertexEditor
+                                        points={hs.points!}
+                                        parentSize={{ width: (stageSize.width * displayW) / 100, height: (stageSize.height * displayH) / 100 }}
+                                        selected
+                                        fill="transparent"
+                                        stroke="transparent"
+                                        rotationDeg={hs.rotation || undefined}
+                                        flipX={hs.flipX}
+                                        flipY={hs.flipY}
+                                        onCommit={points => applyCommandUpdate(hs.id, { points })}
+                                    />
+                                )}
+                                <span className="relative text-[10px] text-white/90 px-1 py-0.5 rounded bg-black/50 pointer-events-none truncate max-w-full">
                                     🎯 {hs.name}
                                 </span>
                                 {ce && <CeBadge name={ce.eventName} />}
@@ -2418,6 +2455,18 @@ const StagingArea: React.FC<{
                 {currentChoices && renderChoiceMenu(currentChoices)}
                 {stageState.textInput && renderInputBox(stageState.textInput)}
                 {renderLightMarkers()}
+
+                {/* Freehand trace mode ("✏ Draw it") — whole-canvas surface, above everything. */}
+                {traceCommandId && (
+                    <PolygonTraceOverlay
+                        getStageRect={() => stageRef.current?.getBoundingClientRect() ?? null}
+                        onCommit={res => {
+                            applyCommandUpdate(traceCommandId, { x: res.x, y: res.y, width: res.width, height: res.height, shape: 'poly', points: res.points });
+                            setTraceCommandId(null);
+                        }}
+                        onCancel={() => setTraceCommandId(null)}
+                    />
+                )}
 
                  {stageState.flash && (
                     <div className="absolute inset-0 z-50" style={{ backgroundColor: stageState.flash.color, opacity: 0.7 }}></div>

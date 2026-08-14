@@ -47,6 +47,9 @@ import { isCommandGrouped } from './inspector/inspectorGroups';
 import { ChoiceLayoutSelect, ChoiceOptionAppearance } from './inspector/ChoiceAppearanceFields';
 import { SetVariablePreview } from './inspector/SetVariablePreview';
 import ActionCard from './menu-editor/ActionCard';
+import { DEFAULT_POLY_POINTS } from './interactive-elements/HotSpotDrawTools';
+import { requestTrace } from './interactive-elements/hotspotTraceBus';
+import { ENHANCED_OVERLAY_TYPES } from './live-preview/fx/glFx';
 import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { pluginManager } from '../features/plugins/PluginManagerService';
 
@@ -1137,7 +1140,12 @@ const PropertiesInspector: React.FC<{
                 
                 return <>
                     <FormField label={t('screen.effect')}>
-                        <Select value={effectType} onChange={e => updateCommand({ effectType: e.target.value, color: undefined })}>
+                        <Select value={effectType} onChange={e => {
+                            const next = e.target.value;
+                            // Same rule as the accordion editor: a type with no Enhanced look
+                            // drops the style field (absence is data — no orphan effectStyle).
+                            updateCommand({ effectType: next, color: undefined, ...(ENHANCED_OVERLAY_TYPES.has(next) ? {} : { effectStyle: undefined }) } as any);
+                        }}>
                             <option value="crtScanlines">{t('screen.effects.crtScanlines')}</option>
                             <option value="chromaticGlitch">{t('screen.effects.chromaticGlitch')}</option>
                             <option value="sunbeams">{t('screen.effects.sunbeams')}</option>
@@ -1610,9 +1618,19 @@ const PropertiesInspector: React.FC<{
                     </div>
                     <div className="grid grid-cols-2 gap-1">
                         <FormField label={t('hotspot.shape')}>
-                            <Select value={cmd.shape} onChange={e => updateCommand({ shape: e.target.value as 'rect' | 'circle' })}>
+                            <Select value={cmd.shape} onChange={e => {
+                                const shape = e.target.value as 'rect' | 'circle' | 'poly';
+                                // Switching TO "Drawn shape" seeds a safe default diamond; existing
+                                // points are kept so toggling shapes is lossless.
+                                if (shape === 'poly' && !(cmd.points && cmd.points.length >= 6)) {
+                                    updateCommand({ shape, points: [...DEFAULT_POLY_POINTS] });
+                                } else {
+                                    updateCommand({ shape });
+                                }
+                            }}>
                                 <option value="rect">{t('hotspot.rect')}</option>
                                 <option value="circle">{t('hotspot.circle')}</option>
+                                <option value="poly">{t('hotspot.shapeDrawn', 'Drawn shape')}</option>
                             </Select>
                         </FormField>
                         <FormField label={t('hotspot.trigger')}>
@@ -1623,6 +1641,40 @@ const PropertiesInspector: React.FC<{
                             </Select>
                         </FormField>
                     </div>
+                    {cmd.shape === 'poly' && (
+                        <div className="space-y-1">
+                            <button
+                                type="button"
+                                onClick={() => requestTrace({ kind: 'scene-command', commandId: cmd.id })}
+                                className="w-full bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold px-2 py-1.5 rounded transition-colors"
+                            >
+                                {(cmd.points && cmd.points.length >= 6) ? t('hotspot.drawAgain', '✏ Draw again') : t('hotspot.drawButton', '✏ Draw it')}
+                            </button>
+                            <p className="text-[10px] text-[var(--text-muted)]">{t('hotspot.drawnShapeHint', 'Drag the round dots on the canvas to fine-tune. Double-click an edge to add a dot.')}</p>
+                            <p className="text-[10px] text-[var(--text-muted)]">{t('hotspot.polySizeHint', 'Width and height resize the whole drawn shape.')}</p>
+                            <details className="rounded border border-[var(--border-subtle)] bg-[var(--bg-primary)]/40 p-1.5">
+                                <summary className="text-[var(--text-secondary)] text-[10px] cursor-pointer select-none">{t('hotspot.fineTunePoints', 'Fine-tune points')}</summary>
+                                <div className="space-y-1 mt-1">
+                                    {Array.from({ length: Math.floor((cmd.points?.length ?? 0) / 2) }).map((_, pi) => (
+                                        <div key={pi} className="grid grid-cols-3 gap-1 items-end">
+                                            <input type="number" value={cmd.points?.[pi * 2] ?? 0}
+                                                onChange={e => { const c = [...(cmd.points || [])]; c[pi * 2] = parseFloat(e.target.value) || 0; updateCommand({ points: c }); }}
+                                                className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" title={`P${pi + 1} X`} />
+                                            <input type="number" value={cmd.points?.[pi * 2 + 1] ?? 0}
+                                                onChange={e => { const c = [...(cmd.points || [])]; c[pi * 2 + 1] = parseFloat(e.target.value) || 0; updateCommand({ points: c }); }}
+                                                className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" title={`P${pi + 1} Y`} />
+                                            <button
+                                                onClick={() => { const c = [...(cmd.points || [])]; if (c.length <= 6) return; c.splice(pi * 2, 2); updateCommand({ points: c }); }}
+                                                disabled={(cmd.points?.length ?? 0) <= 6}
+                                                className="text-red-400 hover:text-red-300 disabled:opacity-30 text-[10px] p-0.5" title={t('hotspot.removePoint', 'Remove point')}>✕</button>
+                                        </div>
+                                    ))}
+                                    <button onClick={() => updateCommand({ points: [...(cmd.points || []), 50, 50] })}
+                                        className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white px-1.5 py-0.5 rounded transition-colors">{t('hotspot.addPoint', '+ Add Point')}</button>
+                                </div>
+                            </details>
+                        </div>
+                    )}
                     {cmd.trigger === 'drag-drop' && (
                         <FormField label={t('hotspot.acceptTag')}>
                             <TextInput list="flourish-hotspot-cmd-tags2" value={cmd.acceptedTag || ''} onChange={e => updateCommand({ acceptedTag: e.target.value })} placeholder={t('hotspot.acceptTagPlaceholder')} />

@@ -1008,16 +1008,22 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
   return (
     <div className={className}>
-      {/* CRT Scanlines */}
+      {/* CRT Scanlines. Enhanced = scanline mask + RGB aperture grille + rolling refresh
+          bar + vignette + mains flicker — a real tube, not just stripes. */}
       {scanlinesOpacity > 0 && (
-        <div
-          className="vnfx-scanlines"
-          style={{
-            opacity: scanlinesOpacity,
-            backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent ${slLineSpacing}px, rgba(0,0,0,0.4) ${slLineSpacing}px, rgba(0,0,0,0.4) ${slLineSpacing + 2}px)`,
-            animationDuration: `${slSpeed}s`,
-          }}
-        />
+        (scanlines && isEnhanced(scanlines.effectStyle) && webglLikelyAvailable()) ? (
+          <GlFxCanvas kind="crt" width={safeWidth} height={safeHeight}
+            getParams={() => ({ kind: 'crt', intensity: clamp01(scanlines.intensity), lineSpacing: ep(scanlines.params, 'lineSpacing'), speed: ep(scanlines.params, 'speed') })} />
+        ) : (
+          <div
+            className="vnfx-scanlines"
+            style={{
+              opacity: scanlinesOpacity,
+              backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent ${slLineSpacing}px, rgba(0,0,0,0.4) ${slLineSpacing}px, rgba(0,0,0,0.4) ${slLineSpacing + 2}px)`,
+              animationDuration: `${slSpeed}s`,
+            }}
+          />
+        )
       )}
 
       {/* Chromatic glitch */}
@@ -1085,42 +1091,69 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
         </>
       )}
 
-      {/* Sunbeams - canvas-based with configurable blend mode */}
+      {/* Sunbeams - canvas-based with configurable blend mode. Enhanced = volumetric fbm god
+          rays. Same probe-at-mount rule as atmosphere: the classic sims attach in effects that
+          would not re-run after a late fallback. */}
       {sunbeams && clamp01(sunbeams.intensity) > 0 && (
-        <canvas
-          ref={sunbeamsCanvasRef}
-          className="vnfx-canvas"
-          style={{ mixBlendMode: sunbeamsBlend }}
-          aria-hidden
-        />
+        (isEnhanced(sunbeams.effectStyle) && webglLikelyAvailable()) ? (
+          <GlFxCanvas kind="sunbeams" width={safeWidth} height={safeHeight} style={{ mixBlendMode: sunbeamsBlend }}
+            getParams={() => ({ kind: 'sunbeams', intensity: clamp01(sunbeams.intensity), color: sunbeams.color, speed: ep(sunbeams.params, 'speed'), spread: ep(sunbeams.params, 'spread') })} />
+        ) : (
+          <canvas
+            ref={sunbeamsCanvasRef}
+            className="vnfx-canvas"
+            style={{ mixBlendMode: sunbeamsBlend }}
+            aria-hidden
+          />
+        )
       )}
 
-      {/* Shimmer - canvas-based with configurable blend mode */}
+      {/* Shimmer - canvas-based with configurable blend mode. Enhanced = light curtains + motes. */}
       {shimmer && clamp01(shimmer.intensity) > 0 && (
-        <canvas
-          ref={shimmerCanvasRef}
-          className="vnfx-canvas"
-          style={{ mixBlendMode: shimmerBlend }}
-          aria-hidden
-        />
+        (isEnhanced(shimmer.effectStyle) && webglLikelyAvailable()) ? (
+          <GlFxCanvas kind="shimmer" width={safeWidth} height={safeHeight} style={{ mixBlendMode: shimmerBlend }}
+            getParams={() => ({
+              kind: 'shimmer', intensity: clamp01(shimmer.intensity), color: shimmer.color,
+              speed: ep(shimmer.params, 'speed'), density: ep(shimmer.params, 'particleDensity'),
+              side: shimmer.params?.shimmerSide ?? 'full', direction: shimmer.params?.shimmerDirection ?? 'up',
+              particlesOnly: !!shimmer.params?.shimmerParticlesOnly,
+            })} />
+        ) : (
+          <canvas
+            ref={shimmerCanvasRef}
+            className="vnfx-canvas"
+            style={{ mixBlendMode: shimmerBlend }}
+            aria-hidden
+          />
+        )
       )}
 
-      {/* Rain */}
+      {/* Rain. Enhanced = three parallax streak layers. */}
       {rain && clamp01(rain.intensity) > 0 && (
-        <canvas
-          ref={rainCanvasRef}
-          className="vnfx-canvas"
-          aria-hidden
-        />
+        (isEnhanced(rain.effectStyle) && webglLikelyAvailable()) ? (
+          <GlFxCanvas kind="rain" width={safeWidth} height={safeHeight}
+            getParams={() => ({ kind: 'rain', intensity: clamp01(rain.intensity), color: rain.color, speed: ep(rain.params, 'speed'), wind: ep(rain.params, 'windStrength'), dropLength: ep(rain.params, 'dropLength') })} />
+        ) : (
+          <canvas
+            ref={rainCanvasRef}
+            className="vnfx-canvas"
+            aria-hidden
+          />
+        )
       )}
 
-      {/* Snow / Ash */}
+      {/* Snow / Ash. Enhanced = soft parallax flakes with wobble + twinkle. */}
       {snowAsh && clamp01(snowAsh.intensity) > 0 && (
-        <canvas
-          ref={snowCanvasRef}
-          className="vnfx-canvas"
-          aria-hidden
-        />
+        (isEnhanced(snowAsh.effectStyle) && webglLikelyAvailable()) ? (
+          <GlFxCanvas kind="snow" width={safeWidth} height={safeHeight}
+            getParams={() => ({ kind: 'snow', variant: snowAsh.variant === 'ash' ? 'ash' : 'snow', intensity: clamp01(snowAsh.intensity), color: snowAsh.color, speed: ep(snowAsh.params, 'speed'), wind: ep(snowAsh.params, 'windStrength'), particleSize: ep(snowAsh.params, 'particleSize') })} />
+        ) : (
+          <canvas
+            ref={snowCanvasRef}
+            className="vnfx-canvas"
+            aria-hidden
+          />
+        )
       )}
 
       {/* Haze / Fog / Smoke. Enhanced = fbm shader. NOTE: the enhanced↔classic choice is made
@@ -1159,9 +1192,15 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
         )
       )}
 
-      {/* Fireworks (continuous show) — additive glow */}
+      {/* Fireworks (continuous show) — additive glow. Enhanced = procedural bursts with
+          gravity droop, rising rockets, trails, and sparkle. */}
       {fireworks && clamp01(fireworks.intensity) > 0 && (
-        <canvas ref={fireworksCanvasRef} className="vnfx-canvas" style={{ mixBlendMode: 'screen' }} aria-hidden />
+        (isEnhanced(fireworks.effectStyle) && webglLikelyAvailable()) ? (
+          <GlFxCanvas kind="fireworks" width={safeWidth} height={safeHeight} style={{ mixBlendMode: 'screen' }}
+            getParams={() => ({ kind: 'fireworks', intensity: clamp01(fireworks.intensity), color: fireworks.color, speed: ep(fireworks.params, 'speed') })} />
+        ) : (
+          <canvas ref={fireworksCanvasRef} className="vnfx-canvas" style={{ mixBlendMode: 'screen' }} aria-hidden />
+        )
       )}
 
       {/* Spotlight — positionable stage beams over a darkened screen. Same geometry as the scene
@@ -1232,6 +1271,13 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
           the glitch bands); speed sets how often it strikes. Keyframes are defined here, NOT in
           LivePreview's style block, so the effect is self-contained wherever this renders. */}
       {lightning && clamp01(lightning.intensity) > 0 && (() => {
+        // Enhanced = the same storm cadence plus a real procedural bolt with branches.
+        if (isEnhanced(lightning.effectStyle) && webglLikelyAvailable()) {
+          return (
+            <GlFxCanvas kind="lightning" width={safeWidth} height={safeHeight} style={{ mixBlendMode: 'screen' }}
+              getParams={() => ({ kind: 'lightning', intensity: clamp01(lightning.intensity), color: lightning.color, speed: ep(lightning.params, 'speed') })} />
+          );
+        }
         const cycle = (14 - ep(lightning.params, 'speed') * 11).toFixed(2);
         const { r, g, b } = parseColor(lightning.color, { r: 234, g: 242, b: 255 });
         return (

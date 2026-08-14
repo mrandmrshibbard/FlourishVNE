@@ -113,7 +113,7 @@ const ExtensionDatabaseManager: React.FC<{ onClose: () => void }> = ({ onClose }
     };
 
     return (
-        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/70 backdrop-blur-sm" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div
                 className="w-[860px] max-w-[94vw] h-[600px] max-h-[90vh] rounded-xl border flex flex-col overflow-hidden"
                 style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border-subtle)' }}

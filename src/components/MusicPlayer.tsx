@@ -74,6 +74,10 @@ interface MusicPlayerProps {
     currentSong: string;
     /** Callback when song changes */
     onSongChange: (name: string) => void;
+    /** Editor mode: render the docked state as a compact HEADER button (in normal flow)
+     *  instead of the floating bottom-right FAB, so it never covers canvases or panels.
+     *  The popped-out panel is identical in both modes. */
+    inline?: boolean;
 }
 
 export const MusicPlayer: React.FC<MusicPlayerProps> = ({
@@ -81,10 +85,14 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
     onPlayingChange,
     currentSong,
     onSongChange,
+    inline,
 }) => {
     const { t } = useTranslation('contentTools');
     const [poppedOut, setPoppedOut] = useState(false);
     const [showSongList, setShowSongList] = useState(false);
+    // Which way the song list opens + how tall it may grow — measured from the trigger's
+    // viewport position when it opens, so it can never run off the top of the window.
+    const [listPlacement, setListPlacement] = useState<{ dir: 'up' | 'down'; maxHeight: number }>({ dir: 'up', maxHeight: 320 });
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const dragOffset = useRef({ x: 0, y: 0 });
@@ -182,7 +190,38 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
         };
     }, [isDragging]);
 
-    // ── Minimised (docked) FAB ──
+    // ── Minimised (docked) state ──
+
+    if (!poppedOut && inline) {
+        // Editor header button: normal flow (never covers canvases), covered by the
+        // test-play overlay like the rest of the chrome. Click = play/pause; right-click
+        // = pop out the full player, same gestures as the hub FAB.
+        return (
+            <button
+                onClick={handleTogglePlay}
+                onContextMenu={(e) => {
+                    e.preventDefault();
+                    handlePopOut();
+                }}
+                className="relative bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border rounded-lg p-1.5 flex items-center transition-all group"
+                style={{ borderColor: isPlaying ? 'var(--accent-pink)' : 'var(--border-subtle)' }}
+                title={`${isPlaying ? t('musicPlayer.fabTitlePlaying') : t('musicPlayer.fabTitleStopped')} · ${t('musicPlayer.rightClickPopOut')}`}
+            >
+                {isPlaying ? (
+                    <MusicNoteIcon className="w-4 h-4 text-[var(--accent-pink)]" />
+                ) : (
+                    <MusicOffIcon className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)] transition-colors" />
+                )}
+                {isPlaying && (
+                    <span className="absolute -top-0.5 -right-0.5 flex gap-[1.5px]">
+                        <span className="w-[2px] h-2 bg-[var(--accent-cyan)] rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+                        <span className="w-[2px] h-1.5 bg-[var(--accent-mint)] rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                        <span className="w-[2px] h-2.5 bg-[var(--accent-pink)] rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                    </span>
+                )}
+            </button>
+        );
+    }
 
     if (!poppedOut) {
         return (
@@ -235,7 +274,9 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
         <div
             ref={panelRef}
             onMouseDown={handleMouseDown}
-            className="fixed z-[9999]"
+            // Below the test-play overlay (z-9000) so the player never floats over a running
+            // game; above the canvas chrome cap (8000) so it stays grabbable everywhere else.
+            className="fixed z-[8500]"
             style={{
                 left: position.x,
                 top: position.y,
@@ -244,7 +285,10 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
             }}
         >
             <div
-                className="rounded-xl border shadow-2xl overflow-hidden backdrop-blur-md"
+                // overflow must stay VISIBLE: the song list opens beyond the panel's edge, and
+                // overflow-hidden (previously here for the rounded corners) clipped it at the
+                // panel's top. The title bar rounds its own top corners instead.
+                className="rounded-xl border shadow-2xl overflow-visible backdrop-blur-md"
                 style={{
                     background: 'var(--bg-primary)',
                     borderColor: isPlaying ? 'var(--accent-pink)' : 'var(--border-subtle)',
@@ -255,7 +299,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
             >
                 {/* Title bar – draggable area */}
                 <div
-                    className="flex items-center justify-between px-3 py-2 border-b"
+                    className="flex items-center justify-between px-3 py-2 border-b rounded-t-xl"
                     style={{
                         borderColor: 'var(--border-subtle)',
                         background: isPlaying
@@ -303,7 +347,19 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     {/* Song name + selector */}
                     <div className="relative" ref={songListRef}>
                         <button
-                            onClick={() => setShowSongList((p) => !p)}
+                            onClick={(e) => {
+                                // Open toward whichever side has more room, capped so the list can
+                                // never run off the top (or bottom) of the window — with the panel
+                                // dragged high, the old always-upward list clipped at the viewport.
+                                if (!showSongList) {
+                                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                    const spaceAbove = rect.top - 12;
+                                    const spaceBelow = window.innerHeight - rect.bottom - 12;
+                                    const dir = spaceAbove >= spaceBelow ? 'up' : 'down';
+                                    setListPlacement({ dir, maxHeight: Math.max(120, Math.min(320, dir === 'up' ? spaceAbove : spaceBelow)) });
+                                }
+                                setShowSongList((p) => !p);
+                            }}
                             className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg border text-left transition-colors hover:border-[var(--accent-cyan)]"
                             style={{
                                 background: 'var(--bg-secondary)',
@@ -320,8 +376,8 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
                         {showSongList && (
                             <div
-                                className="absolute bottom-full mb-1 left-0 right-0 rounded-lg border shadow-xl overflow-hidden"
-                                style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)', zIndex: 10 }}
+                                className={`absolute left-0 right-0 rounded-lg border shadow-xl overflow-y-auto ${listPlacement.dir === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'}`}
+                                style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)', zIndex: 10, maxHeight: listPlacement.maxHeight }}
                             >
                                 {songs.map((name) => (
                                     <button

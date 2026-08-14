@@ -830,7 +830,16 @@
     "visibleOpacity": "透明度",
     "boundItem": "これはアイテムです（任意）",
     "boundItemNone": "— なし —",
-    "boundItemHelp": "設定すると、ホットスポットにドロップしたときアイテムを消費し（再利用可の場合を除く）、その使用効果が実行されます。ドラッグタグが空欄なら、アイテム自身のタグが使われます。"
+    "boundItemHelp": "設定すると、ホットスポットにドロップしたときアイテムを消費し（再利用可の場合を除く）、その使用効果が実行されます。ドラッグタグが空欄なら、アイテム自身のタグが使われます。",
+    "shapeDrawn": "手描きの形",
+    "drawButton": "✏ 描く",
+    "drawAgain": "✏ 描き直す",
+    "drawInstruction": "囲みたい範囲をなぞってください。離すと完成します。",
+    "drawCancelHint": "Escでキャンセル",
+    "drawTooSmall": "ボタンを押したまま、範囲を囲むように描いてください。",
+    "drawnShapeHint": "キャンバス上の丸い点をドラッグして微調整。辺をダブルクリックで点を追加。",
+    "polySizeHint": "幅と高さで描いた形全体の大きさが変わります。",
+    "fineTunePoints": "点の微調整"
   },
   "menuEditor": {
     "noElement": "要素なし",
@@ -1262,12 +1271,14 @@
   "character": {
     "defaultPose": "デフォルト（通常の画像）",
     "effects": {
-      "glitch": "グリッチ（ノイズ）"
+      "glitch": "グリッチ（ノイズ）",
+      "wobble": "ぷるぷる（ゼリー）"
     },
     "rimSize": "線の太さ",
     "colors": "色",
     "removeColor": "色を削除",
-    "addColor": "＋色"
+    "addColor": "＋色",
+    "wobbleSize": "波の大きさ"
   },
   "varFollow": {
     "tip": "この値を数値変数で動かせます",
@@ -1291,7 +1302,9 @@
     "hint": "1 つのファイルからいろいろな音に — 遅く、速く、逆再生。",
     "hintMusic": "音楽は速さを変えられます。逆再生は効果音とボイス専用です。",
     "previewTitle": "この設定で数秒だけ聴いてみる",
-    "preview": "試聴"
+    "preview": "試聴",
+    "previewCapNote": "このファイルは 4 MB を超えているため、ゲーム内では通常方向で再生されます。ヒント: アセットの「逆再生コピーを保存」を使えば、コピーはどこでも逆再生されます。",
+    "previewNoReverse": "このサウンドはここでは逆再生にできないため、通常方向で再生します。逆再生するには WAV に変換してください。"
   },
   "bands": {
     "andUpShort": "以上"

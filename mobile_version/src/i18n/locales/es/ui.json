@@ -830,7 +830,16 @@
     "visibleOpacity": "Transparencia",
     "boundItem": "Este objeto es un objeto del inventario (opcional)",
     "boundItemNone": "— ninguno —",
-    "boundItemHelp": "Si lo defines, soltar esto en una zona interactiva consume el objeto (salvo que sea reutilizable) y ejecuta su efecto de uso. Si la Etiqueta de arrastre está vacía, se usa la propia etiqueta del objeto."
+    "boundItemHelp": "Si lo defines, soltar esto en una zona interactiva consume el objeto (salvo que sea reutilizable) y ejecuta su efecto de uso. Si la Etiqueta de arrastre está vacía, se usa la propia etiqueta del objeto.",
+    "shapeDrawn": "Forma dibujada",
+    "drawButton": "✏ Dibujarla",
+    "drawAgain": "✏ Dibujar de nuevo",
+    "drawInstruction": "Dibuja alrededor del área que quieras. Suelta para terminar.",
+    "drawCancelHint": "Esc para cancelar",
+    "drawTooSmall": "Mantén pulsado el botón y dibuja alrededor del área.",
+    "drawnShapeHint": "Arrastra los puntos redondos en el lienzo para ajustar. Doble clic en un borde para añadir un punto.",
+    "polySizeHint": "El ancho y el alto redimensionan toda la forma dibujada.",
+    "fineTunePoints": "Ajustar puntos"
   },
   "menuEditor": {
     "noElement": "Sin elemento",
@@ -1262,12 +1271,14 @@
   "character": {
     "defaultPose": "Predeterminada (arte normal)",
     "effects": {
-      "glitch": "Glitch (corrupción)"
+      "glitch": "Glitch (corrupción)",
+      "wobble": "Ondulación (gelatina)"
     },
     "rimSize": "Grosor de la línea",
     "colors": "Colores",
     "removeColor": "Quitar color",
-    "addColor": "+ Color"
+    "addColor": "+ Color",
+    "wobbleSize": "Tamaño de onda"
   },
   "varFollow": {
     "tip": "Deja que una variable numérica controle este valor",
@@ -1291,7 +1302,9 @@
     "hint": "Un archivo, muchos sonidos: ralentízalo, acelégralo o dale la vuelta.",
     "hintMusic": "La música puede cambiar de velocidad; reproducir al revés es para efectos de sonido y voces.",
     "previewTitle": "Escuchar unos segundos con estos ajustes",
-    "preview": "Vista previa"
+    "preview": "Vista previa",
+    "previewCapNote": "Este archivo supera los 4 MB, así que en el juego se reproducirá HACIA ADELANTE. Consejo: usa \"Guardar una copia invertida\" en Recursos: la copia se reproduce al revés en todas partes.",
+    "previewNoReverse": "Este sonido no se puede invertir aquí: se reproduce hacia adelante. Conviértelo a WAV para invertirlo."
   },
   "bands": {
     "andUpShort": "o más"

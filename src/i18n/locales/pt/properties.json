@@ -516,7 +516,8 @@
       "silhouette": "Silhueta",
       "breathing": "Respiração",
       "flicker": "Cintilar",
-      "glitch": "Glitch (corrupção)"
+      "glitch": "Glitch (corrupção)",
+      "wobble": "Ondulação (gelatina)"
     },
     "colors": "Cores",
     "addColor": "+ Cor",
@@ -530,7 +531,8 @@
     "noAnimations": "Este personagem ainda não tem animações — crie uma na aba Personagens (🎞️ Animações).",
     "animation": "Animação",
     "stopAnimation": "Nenhuma (parar a atual)",
-    "playAnimationHint": "O personagem já precisa estar em cena. Uma animação em repetição continua até você pará-la ou trocá-la — animações configuradas para tocar sozinhas não precisam deste comando."
+    "playAnimationHint": "O personagem já precisa estar em cena. Uma animação em repetição continua até você pará-la ou trocá-la — animações configuradas para tocar sozinhas não precisam deste comando.",
+    "wobbleSize": "Tamanho da onda"
   },
   "button": {
     "buttonText": "Texto do Botão",
@@ -814,7 +816,15 @@
     "actions": "Ações",
     "targetToHide": "Ponto interativo alvo a ocultar",
     "selectToHide": "Selecionar ponto interativo...",
-    "acceptTagHelp": "Aceita um item carregado ou objeto arrastado cuja etiqueta bata com esta. Marque um item-chave como “chave” e aceite “chave” aqui. Deixe vazio para aceitar qualquer coisa solta aqui."
+    "acceptTagHelp": "Aceita um item carregado ou objeto arrastado cuja etiqueta bata com esta. Marque um item-chave como “chave” e aceite “chave” aqui. Deixe vazio para aceitar qualquer coisa solta aqui.",
+    "shapeDrawn": "Forma desenhada",
+    "drawButton": "✏ Desenhar",
+    "drawAgain": "✏ Desenhar de novo",
+    "drawnShapeHint": "Arraste os pontos redondos no canvas para ajustar. Clique duas vezes numa borda para adicionar um ponto.",
+    "polySizeHint": "Largura e altura redimensionam toda a forma desenhada.",
+    "fineTunePoints": "Ajustar pontos",
+    "removePoint": "Remover ponto",
+    "addPoint": "+ Adicionar ponto"
   },
   "bg": {
     "stack": "Empilhar (não substituir)",

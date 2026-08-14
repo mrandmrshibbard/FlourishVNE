@@ -13,6 +13,7 @@ import {
 import { fileToBase64 } from '../utils/file';
 import { formatBytes, LARGE_ASSET_WARN_BYTES } from '../utils/projectAssetSize';
 import { ingestUpload, resolveFieldUrl, refToRelPath, getProjectAssetSizes, isElectronAssetStore } from '../utils/assetStore';
+import { bakeReversedWavFromUrl, reversedAssetName } from '../utils/reverseAudioAsset';
 import TrimmedVideo from './ui/TrimmedVideo';
 import VideoTrimFields from './ui/VideoTrimFields';
 import AudioAdjustFields from './ui/AudioAdjustFields';
@@ -242,6 +243,8 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
 
     // Edit state
     const [renamingId, setRenamingId] = useState<string | null>(null);
+    // "Save a reversed copy" in flight for this audio asset id (one at a time).
+    const [reversingId, setReversingId] = useState<string | null>(null);
     const [renamingFolderPath, setRenamingFolderPath] = useState<string | null>(null);
     const [creatingFolder, setCreatingFolder] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
@@ -392,6 +395,44 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
         await handleFileDrop(Array.from(files));
         if (fileInputRef.current) fileInputRef.current.value = '';
     }, [handleFileDrop]);
+
+    // "Save a reversed copy" — bake a backwards 16-bit WAV of an audio asset ONCE, at author
+    // time, and add it to the project as a NEW ordinary asset. This is the sanctioned route to
+    // reversed MUSIC: the runtime deliberately refuses to reverse the music channel (a looping
+    // song would decode to PCM in memory on every play), but a baked copy is just a normal
+    // file — it plays everywhere, in built games, at zero runtime cost.
+    const handleSaveReversed = useCallback(async (asset: any) => {
+        if (reversingId || !asset?.audioUrl) return;
+        setReversingId(asset.id);
+        try {
+            const src = resolveFieldUrl(project.id, asset.audioUrl);
+            const result = src ? await bakeReversedWavFromUrl(src) : null;
+            if (!result || result.ok === false) {
+                // Non-WAV on desktop / unreadable WAV / undecodable data: the answer is the
+                // same plain-words fix. Anything else is a generic failure.
+                const reason: string = (result && result.ok === false) ? result.reason : 'fetch-failed';
+                const needsWav = reason === 'desktop-non-wav' || reason === 'bad-wav' || reason === 'decode-failed';
+                toast.error(needsWav
+                    ? t('reverseNeedsWav', "This sound's format can't be reversed here. Convert it to a WAV file, upload that, then save a reversed copy.")
+                    : t('reverseFailed', "Couldn't reverse this sound."));
+                return;
+            }
+            const newId = `audi-${Math.random().toString(36).substring(2, 9)}`;
+            const name = reversedAssetName(asset.name, Object.values(project.audio || {}).map((a: any) => a?.name || ''));
+            // ingestUpload sniffs the extension from file.name, so wrap the bytes as a File.
+            const file = new File([result.wav], `${name}.wav`, { type: 'audio/wav' });
+            const url = await ingestUpload(ctxProject.id, 'audio', newId, file);
+            addAsset('audio', name, url, asset.path || '', false, newId);
+            setSelectedAssetIds(new Set([newId]));
+            toast.success(t('reverseSaved', '"{{name}}" saved to your sounds ({{size}}). It plays backwards everywhere — including as music.', { name, size: formatBytes(result.wav.byteLength) }), { duration: 7000 });
+            // Same heads-up as uploads: WAV is uncompressed, long songs get big.
+            if (result.wav.byteLength > LARGE_ASSET_WARN_BYTES) {
+                toast.warning(t('toastLargeAsset', 'Large file added: {{files}}. Large media slows the editor and makes exports big — consider compressing it.', { files: `${name}.wav (${formatBytes(result.wav.byteLength)})` }), { duration: 8000 });
+            }
+        } finally {
+            setReversingId(null);
+        }
+    }, [reversingId, project.id, project.audio, ctxProject.id, addAsset, toast, t]);
 
     const handleReplaceAsset = useCallback(async (assetId: string, assetType: AssetType) => {
         const input = document.createElement('input');
@@ -855,6 +896,8 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                         onReplace={() => handleReplaceAsset(selectedAssetForInspector.id, selectedCategory)}
                         onRename={() => setRenamingId(selectedAssetForInspector.id)}
                         onDelete={() => handleDeleteAsset(selectedAssetForInspector.id, selectedAssetForInspector.name)}
+                        onSaveReversed={selectedCategory === 'audio' ? () => handleSaveReversed(selectedAssetForInspector) : undefined}
+                        reversing={reversingId === selectedAssetForInspector.id}
                     />
                 </div>
             )}
@@ -1252,7 +1295,10 @@ const AssetInspector: React.FC<{
     onReplace: () => void;
     onRename: () => void;
     onDelete: () => void;
-}> = ({ asset, assetType, project, onClose, onUpdate, onReplace, onRename, onDelete }) => {
+    /** Audio only: bake a backwards copy into the project as a new asset. */
+    onSaveReversed?: () => void;
+    reversing?: boolean;
+}> = ({ asset, assetType, project, onClose, onUpdate, onReplace, onRename, onDelete, onSaveReversed, reversing }) => {
     const { t } = useTranslation('assets');
     const size = estimateDataUrlSize(getAssetUrl(asset));
     const usage = useMemo(() => findAssetUsage(project, asset.id), [project, asset.id]);
@@ -1308,6 +1354,21 @@ const AssetInspector: React.FC<{
                             audioId={asset.id}
                         />
                         <p className="text-[10px] text-[var(--text-muted)] mt-1">{t('defaultShapingHint', 'Applies wherever this sound is used, unless a command or button sets its own. "Play backwards" only affects sound effects and voices — music always plays forward.')}</p>
+                    </div>
+                )}
+                {/* Save a reversed copy — the author-time bake. The copy is an ordinary WAV
+                    asset, so it plays backwards EVERYWHERE, including the music channel the
+                    live "Play backwards" toggle deliberately refuses. */}
+                {asset.audioUrl && onSaveReversed && (
+                    <div className="bg-[var(--bg-primary)] rounded-lg p-3">
+                        <button
+                            onClick={onSaveReversed}
+                            disabled={reversing}
+                            className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-wait text-white text-xs font-semibold px-2 py-2 rounded-lg transition-colors"
+                        >
+                            {reversing ? t('reversing', 'Reversing…') : t('reverseCopy', '⏪ Save a reversed copy')}
+                        </button>
+                        <p className="text-[10px] text-[var(--text-muted)] mt-1">{t('reverseCopyHint', 'Makes a new sound in your assets that plays backwards. The copy works everywhere — including as music.')}</p>
                     </div>
                 )}
 
@@ -1389,7 +1450,7 @@ const FolderSelectorModal: React.FC<{
     });
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="bg-[var(--bg-primary)] rounded-xl shadow-2xl w-full max-w-md border border-[var(--border-subtle)]" onClick={e => e.stopPropagation()}>
                 <div className="p-5 border-b border-[var(--border-subtle)]">
                     <h3 className="text-lg font-bold text-white">{t('moveAsset')}</h3>
@@ -1448,7 +1509,7 @@ const ConfirmDialog: React.FC<{
 }> = ({ isOpen, title, message, confirmText = 'Confirm', cancelText = 'Cancel', danger = false, onConfirm, onCancel }) => {
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onCancel}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onMouseDown={e => { if (e.target === e.currentTarget) onCancel(); }}>
             <div className="bg-[var(--bg-primary)] rounded-xl shadow-2xl w-full max-w-md border border-[var(--border-subtle)]" onClick={e => e.stopPropagation()}>
                 <div className="p-5 border-b border-[var(--border-subtle)]"><h3 className="text-lg font-bold text-white">{title}</h3></div>
                 <div className="p-5"><p className="text-[var(--text-primary)]">{message}</p></div>

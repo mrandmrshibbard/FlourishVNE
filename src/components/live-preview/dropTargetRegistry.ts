@@ -13,6 +13,8 @@
  * id and removed via the returned unregister fn, so remounts/scene changes stay clean.
  */
 
+import { pointInPolygon } from '../../utils/polygon';
+
 export interface RegistryDropTarget {
     /** Unique, surface-namespaced id, e.g. `screen-<screenId>-<spotId>` or `scene-<commandId>`. */
     id: string;
@@ -23,6 +25,11 @@ export interface RegistryDropTarget {
      *  its unrotated rect would be. Flips need no handling — mirroring a rect doesn't change the
      *  area it covers. Absent/0 = plain rect test. */
     rotation?: number;
+    /** "Drawn shape" spots: flat [x1,y1,x2,y2,…] vertex pairs, percent of rectPct's own box
+     *  (0-100). When present (≥3 points) the hit-test additionally requires the point to be
+     *  inside this polygon — run AFTER the rotation inverse-transform, since the polygon lives
+     *  in the target's local (unrotated) space. Absent = plain rect test. */
+    polygonPct?: number[];
     /** If set, only these dragged element ids are accepted. */
     acceptedElementIds?: string[];
     /** If set, only a dragged element carrying this tag is accepted. */
@@ -71,6 +78,12 @@ export function hitTestDropTarget(
             py = cy + dx * Math.sin(rad) + dy * Math.cos(rad);
         }
         if (px >= x && px <= x + width && py >= y && py <= y + height) {
+            if (t.polygonPct && t.polygonPct.length >= 6) {
+                // Drawn shape: box-relative % of the (already inverse-rotated) point, then polygon test.
+                const lx = width > 0 ? ((px - x) / width) * 100 : 0;
+                const ly = height > 0 ? ((py - y) / height) * 100 : 0;
+                if (!pointInPolygon(lx, ly, t.polygonPct)) continue;
+            }
             if (!best || t.order > best.order) best = t;
         }
     }

@@ -225,7 +225,7 @@ export const CompareMergeModal: React.FC<{ project: VNProject; onClose: () => vo
     };
 
     return (
-        <div className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl w-full max-w-6xl h-[88vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border-subtle)]">
@@ -376,7 +376,7 @@ export const CompareMergeModal: React.FC<{ project: VNProject; onClose: () => vo
 
                 {/* Confirm import panel */}
                 {pending && (
-                    <div className="absolute inset-0 z-10 bg-black/60 flex items-center justify-center p-6" onClick={() => setPending(null)}>
+                    <div className="absolute inset-0 z-10 bg-black/60 flex items-center justify-center p-6" onMouseDown={e => { if (e.target === e.currentTarget) setPending(null); }}>
                         <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
                             <div className="px-5 py-3 border-b border-[var(--border-subtle)]">
                                 {(() => {
