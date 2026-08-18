@@ -132,7 +132,7 @@
     "color": "Colore",
     "animation": "Animazione",
     "letStoryContinue": "Lascia proseguire la storia",
-    "letStoryContinueHint": "Il comando successivo parte subito: perfetto per far comparire un personaggio mentre il dialogo viene scritto."
+    "letStoryContinueHint": "Il comando successivo parte subito — perfetto per un personaggio che appare mentre il dialogo si scrive. Per far accadere più comandi INSIEME (come tre immagini che scompaiono in una volta), attivalo su ciascuno tranne l’ultimo."
   },
   "text": {
     "text": "Testo",
@@ -297,7 +297,8 @@
     "allSounds": "Tutti gli effetti sonori",
     "fadeOutSec": "Dissolvenza in uscita (s)",
     "fadeOutHint": "0 = interrompi all'istante",
-    "shaping": "Regolazione audio"
+    "shaping": "Regolazione audio",
+    "crossfadeHint": "Con una dissolvenza impostata, cambiare brano crea una dissolvenza incrociata: il vecchio brano sfuma mentre il nuovo entra, senza tagli netti."
   },
   "movie": {
     "video": "Video",
@@ -338,7 +339,9 @@
   "jump": {
     "targetScene": "Scena di destinazione",
     "transition": "Transizione di scena",
-    "transitionHint": "Solo per questo salto: sostituisce la transizione di uscita impostata nelle Impostazioni scena."
+    "transitionHint": "Solo per questo salto: sostituisce la transizione di uscita impostata nelle Impostazioni scena.",
+    "fadeColor": "Colore della dissolvenza",
+    "fadeColorHint": "Solo per questo salto — lo schermo sfuma attraverso questo colore e, con qualsiasi colore diverso dal nero, la scena riappare anche da esso."
   },
   "wait": {
     "waitMode": "Modalità di attesa",
@@ -354,7 +357,8 @@
     "removeItem": "Rimuovi oggetto",
     "untilCondition": "Finché una condizione non è vera (in tempo reale)",
     "conditionHint": "Prosegue non appena è soddisfatta (viene controllata di continuo).",
-    "quantity": "Quantità richiesta"
+    "quantity": "Quantità richiesta",
+    "conditionEmptyWarning": "Aggiungi almeno una condizione: senza nessuna, questa Attesa viene saltata subito."
   },
   "screen": {
     "intensity": "Intensità: {{value}}",
@@ -1035,5 +1039,9 @@
   },
   "screenFx": {
     "density": "Densità"
+  },
+  "flow": {
+    "autoSaveSlot": "Slot di salvataggio",
+    "autoSaveHint": "Salva la partita in silenzio a questo punto — niente menu, la storia continua. Lo slot 0 è lo slot speciale Continua: il pulsante Continua della schermata del titolo lo carica."
   }
 }

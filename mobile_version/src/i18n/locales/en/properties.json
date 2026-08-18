@@ -118,7 +118,8 @@
     "scaleY": "Scale Y",
     "rotation": "Rotation (°)",
     "color": "Color",
-    "animation": "Animation"
+    "animation": "Animation",
+    "letStoryContinueHint": "The next command starts right away — great for a character fading in while dialogue types. To make several commands happen TOGETHER (like three images hiding at once), turn this on for each of them except the last one."
   },
   "text": {
     "text": "Text",
@@ -269,7 +270,8 @@
     "targetSound": "Sound to Stop",
     "allSounds": "All sound effects",
     "fadeOutSec": "Fade Out (s)",
-    "fadeOutHint": "0 = stop instantly"
+    "fadeOutHint": "0 = stop instantly",
+    "crossfadeHint": "With a fade set, switching songs crossfades — the old song fades out while the new one fades in, no hard cut."
   },
   "movie": {
     "video": "Video",
@@ -310,7 +312,9 @@
   "jump": {
     "targetScene": "Target Scene",
     "transition": "Scene transition",
-    "transitionHint": "Just for this jump — overrides the scene's exit transition from Scene Settings."
+    "transitionHint": "Just for this jump — overrides the scene's exit transition from Scene Settings.",
+    "fadeColor": "Fade color",
+    "fadeColorHint": "Just for this jump — the screen fades through this color, and with any color but black it also fades back in from it."
   },
   "sceneTransitionSelect": {
     "useSceneSetting": "Use the scene's setting",
@@ -333,7 +337,8 @@
     "requireAny": "Any one of these items",
     "noItems": "No items defined yet",
     "addItem": "+ Add item",
-    "removeItem": "Remove item"
+    "removeItem": "Remove item",
+    "conditionEmptyWarning": "Add at least one condition — with none set, this Wait is skipped instantly."
   },
   "screen": {
     "intensity": "Intensity: {{value}}",
@@ -763,5 +768,9 @@
   },
   "screenFx": {
     "density": "Density"
+  },
+  "flow": {
+    "autoSaveSlot": "Save slot",
+    "autoSaveHint": "Saves the game silently at this point — no menu, the story keeps going. Slot 0 is the special Continue slot: the title screen’s Continue button loads it."
   }
 }

@@ -54,7 +54,7 @@ export const COMMAND_CATEGORIES = {
     'Flow Control': {
         color: 'bg-indigo-500/20 border-indigo-500 text-indigo-300',
         headerColor: 'bg-indigo-600/30 text-indigo-200',
-        commands: [CommandType.BranchStart, CommandType.BranchEnd, CommandType.Wait, CommandType.StartTimer, CommandType.StopTimer, CommandType.RunScript, CommandType.CallCommonEvent]
+        commands: [CommandType.BranchStart, CommandType.BranchEnd, CommandType.Wait, CommandType.StartTimer, CommandType.StopTimer, CommandType.AutoSave, CommandType.RunScript, CommandType.CallCommonEvent]
     },
     'Phone': {
         color: 'bg-rose-500/20 border-rose-500 text-rose-300',

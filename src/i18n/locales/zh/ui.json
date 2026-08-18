@@ -75,7 +75,8 @@
     "playCharacterAnimation": "播放角色动画",
     "setLanguage": "切换语言",
     "setFullscreen": "全屏",
-    "closeScreen": "关闭界面"
+    "closeScreen": "关闭界面",
+    "hideImage": "隐藏图片（场景中）"
   },
   "actionsList": {
     "actions": "操作",
@@ -415,7 +416,14 @@
     "snapTip": "智能吸附到边缘、中心和其他元素。拖动时按住 Alt 可自由摆放。",
     "snap": "吸附",
     "confirmBoxLabel": "对话框",
-    "popOutProperties": "在独立窗口中打开属性面板"
+    "popOutProperties": "在独立窗口中打开属性面板",
+    "groupNameMentions": "角色名字提及",
+    "nameMentionsHint": "当对话中提到某个角色的名字时，以该角色自己的样式显示。昵称也算——角色当前使用的名字才会亮起。",
+    "nameMentionsOn": "为被提及的角色名字设置样式",
+    "nameMentionsColor": "使用其名字颜色",
+    "nameMentionsFont": "使用其字体（如果有）",
+    "nameMentionsBold": "将名字加粗",
+    "nameMentionsGlossary": "如果名字同时也是词汇表条目，则词汇表的样式和提示优先。"
   },
   "elementInspector": {
     "propsTitle": "属性",
@@ -1218,7 +1226,12 @@
     "closeThisScreen": "此按钮所在的界面",
     "groupVideos": "视频",
     "groupBackgrounds": "背景",
-    "groupImages": "图片"
+    "groupImages": "图片",
+    "imageToHide": "要隐藏的图片",
+    "selectImage": "选择图片…",
+    "unnamedImage": "未命名图片",
+    "inScene": "故事中",
+    "noPictures": "还没有图片——请在画面中添加图片，或在场景中添加显示图片命令。"
   },
   "effectStyle": {
     "label": "特效风格",

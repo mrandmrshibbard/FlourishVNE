@@ -75,7 +75,8 @@
     "playCharacterAnimation": "Riproduci animazione del personaggio",
     "setLanguage": "Cambia lingua",
     "setFullscreen": "Schermo intero",
-    "closeScreen": "Chiudi schermata"
+    "closeScreen": "Chiudi schermata",
+    "hideImage": "Nascondi immagine (nella scena)"
   },
   "actionsList": {
     "actions": "Azioni",
@@ -415,7 +416,14 @@
     "snapTip": "Aggancio intelligente a bordi, centri e altri elementi. Tieni premuto Alt mentre trascini per posizionare liberamente.",
     "snap": "Aggancio",
     "confirmBoxLabel": "Finestra di dialogo",
-    "popOutProperties": "Apri le proprietà in una finestra separata"
+    "popOutProperties": "Apri le proprietà in una finestra separata",
+    "groupNameMentions": "Menzioni dei personaggi",
+    "nameMentionsHint": "Quando il nome di un personaggio compare nel dialogo, viene mostrato nello stile di quel personaggio. I soprannomi contano: si evidenzia il nome che il personaggio usa in quel momento.",
+    "nameMentionsOn": "Stilizza i nomi dei personaggi menzionati",
+    "nameMentionsColor": "Usa il colore del loro nome",
+    "nameMentionsFont": "Usa il loro font (se ne hanno uno)",
+    "nameMentionsBold": "Rendi il nome in grassetto",
+    "nameMentionsGlossary": "Se un nome è anche un termine del Glossario, vincono lo stile e il tooltip del Glossario."
   },
   "elementInspector": {
     "propsTitle": "Proprietà",
@@ -1218,7 +1226,12 @@
     "closeThisScreen": "La schermata su cui si trova questo pulsante",
     "groupVideos": "Video",
     "groupBackgrounds": "Sfondi",
-    "groupImages": "Immagini"
+    "groupImages": "Immagini",
+    "imageToHide": "Immagine da nascondere",
+    "selectImage": "Seleziona un'immagine…",
+    "unnamedImage": "Immagine senza titolo",
+    "inScene": "nella storia",
+    "noPictures": "Ancora nessuna immagine: aggiungi un'immagine a una schermata o un comando Mostra immagine a una scena."
   },
   "effectStyle": {
     "label": "Stile dell'effetto",

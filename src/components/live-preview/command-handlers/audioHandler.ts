@@ -11,6 +11,23 @@ export const musicChannelAdjust = (adjust: VNAudioAdjust | null): VNAudioAdjust 
     return out;
 };
 
+/** Fade a throwaway crossfade clone out and dispose it. Deliberately NOT context.fadeAudio:
+ *  that helper multiplexes two SHARED interval refs (music/ambient) — routing a clone fade
+ *  through it would cancel an in-flight ambient fade (and vice versa). This timer is
+ *  self-owned and always terminates in ≤ the fade duration, even if the player unmounts. */
+const fadeOutAndDispose = (el: HTMLAudioElement, durationSec: number) => {
+    const start = el.volume;
+    const t0 = Date.now();
+    const id = window.setInterval(() => {
+        const p = Math.min((Date.now() - t0) / (Math.max(0.05, durationSec) * 1000), 1);
+        try { el.volume = Math.max(0, start * (1 - p)); } catch { /* detached */ }
+        if (p >= 1) {
+            window.clearInterval(id);
+            try { el.pause(); el.src = ''; } catch { /* already gone */ }
+        }
+    }, 30);
+};
+
 /**
  * Handles playing background music with fade in/out
  * Supports looping and volume control
@@ -96,6 +113,30 @@ export function handlePlayMusic(
       console.error("[PlayMusic] Music play failed:", e);
     });
   };
+
+  // TRUE CROSSFADE: with a fade set and a DIFFERENT track playing, the outgoing music
+  // moves onto a throwaway clone that fades out in parallel while the main channel loads
+  // and fades the new track in — no hard cut, no silence gap. The clone carries position,
+  // rate and pitch mode so the handoff is seamless, and disposes itself when its fade
+  // lands. Crossfade is cosmetic: any failure here must never block the new track.
+  if (isNewTrack && (command.fadeDuration ?? 0) > 0 && !audio.paused && audio.src) {
+    try {
+      const outgoing = new Audio(audio.src);
+      outgoing.loop = audio.loop;
+      outgoing.volume = audio.volume;
+      outgoing.playbackRate = audio.playbackRate;
+      try { (outgoing as any).preservesPitch = (audio as any).preservesPitch; } catch { /* older engines */ }
+      const at = audio.currentTime;
+      const begin = () => {
+        try { outgoing.currentTime = at; } catch { /* metadata not ready — start from 0 */ }
+        outgoing.play()
+          .then(() => fadeOutAndDispose(outgoing, command.fadeDuration))
+          .catch(() => { try { outgoing.src = ''; } catch { /* noop */ } });
+      };
+      if (outgoing.readyState >= 1) begin();
+      else outgoing.addEventListener('loadedmetadata', begin, { once: true });
+    } catch { /* cosmetic — fall through to the normal hard swap */ }
+  }
 
   if (isNewTrack) {
     audio.src = url;

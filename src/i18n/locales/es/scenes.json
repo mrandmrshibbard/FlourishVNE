@@ -70,7 +70,9 @@
     "dayNightCycle": "Seguir el ciclo",
     "dayNightFixed": "Hora fija",
     "dayNightOff": "Sin tintado",
-    "dayNightFixedHour": "Hora fija (0–24)"
+    "dayNightFixedHour": "Hora fija (0–24)",
+    "fadeColor": "Color del fundido",
+    "fadeColorHint": "La pantalla se funde a través de este color. El negro es el corte clásico; el blanco se siente suave y soñador — con cualquier otro color, la escena también reaparece desde él."
   },
   "expandCommands": "Mostrar comandos",
   "collapseCommands": "Ocultar comandos",

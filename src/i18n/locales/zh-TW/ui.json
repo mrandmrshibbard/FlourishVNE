@@ -75,7 +75,8 @@
     "playCharacterAnimation": "播放角色動畫",
     "setLanguage": "切換語言",
     "setFullscreen": "全螢幕",
-    "closeScreen": "關閉畫面"
+    "closeScreen": "關閉畫面",
+    "hideImage": "隱藏圖片（場景中）"
   },
   "actionsList": {
     "actions": "動作",
@@ -415,7 +416,14 @@
     "snapTip": "智慧吸附到邊緣、中心和其他元素。拖曳時按住 Alt 可自由擺放。",
     "snap": "吸附",
     "confirmBoxLabel": "對話框",
-    "popOutProperties": "在獨立視窗中開啟屬性面板"
+    "popOutProperties": "在獨立視窗中開啟屬性面板",
+    "groupNameMentions": "角色名字提及",
+    "nameMentionsHint": "當對話中提到某個角色的名字時，以該角色自己的樣式顯示。暱稱也算——角色目前使用的名字才會亮起。",
+    "nameMentionsOn": "為被提及的角色名字設定樣式",
+    "nameMentionsColor": "使用其名字顏色",
+    "nameMentionsFont": "使用其字型（如果有）",
+    "nameMentionsBold": "將名字加粗",
+    "nameMentionsGlossary": "如果名字同時也是詞彙表條目，則詞彙表的樣式和提示優先。"
   },
   "elementInspector": {
     "propsTitle": "屬性",
@@ -1218,7 +1226,12 @@
     "closeThisScreen": "此按鈕所在的畫面",
     "groupVideos": "影片",
     "groupBackgrounds": "背景",
-    "groupImages": "圖片"
+    "groupImages": "圖片",
+    "imageToHide": "要隱藏的圖片",
+    "selectImage": "選擇圖片…",
+    "unnamedImage": "未命名圖片",
+    "inScene": "故事中",
+    "noPictures": "還沒有圖片——請在畫面中新增圖片，或在場景中新增「顯示圖片」命令。"
   },
   "effectStyle": {
     "label": "特效風格",

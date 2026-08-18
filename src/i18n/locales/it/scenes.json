@@ -70,7 +70,9 @@
     "dayNightCycle": "Segui il ciclo",
     "dayNightFixed": "Orario fisso",
     "dayNightOff": "Nessuna colorazione",
-    "dayNightFixedHour": "Ora fissa (0–24)"
+    "dayNightFixedHour": "Ora fissa (0–24)",
+    "fadeColor": "Colore della dissolvenza",
+    "fadeColorHint": "Lo schermo sfuma attraverso questo colore. Il nero è il taglio classico; il bianco è morbido e sognante — con qualsiasi altro colore la scena riappare anche da esso."
   },
   "expandCommands": "Mostra comandi",
   "collapseCommands": "Nascondi comandi",

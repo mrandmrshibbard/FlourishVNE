@@ -75,7 +75,8 @@
     "playCharacterAnimation": "Reproducir animación del personaje",
     "setLanguage": "Cambiar idioma",
     "setFullscreen": "Pantalla completa",
-    "closeScreen": "Cerrar pantalla"
+    "closeScreen": "Cerrar pantalla",
+    "hideImage": "Ocultar imagen (en la escena)"
   },
   "actionsList": {
     "actions": "Acciones",
@@ -415,7 +416,14 @@
     "snapTip": "Ajuste inteligente a bordes, centros y otros elementos. Mantén Alt al arrastrar para colocar libremente.",
     "snap": "Ajuste",
     "confirmBoxLabel": "Cuadro de diálogo",
-    "popOutProperties": "Abrir las propiedades en su propia ventana"
+    "popOutProperties": "Abrir las propiedades en su propia ventana",
+    "groupNameMentions": "Menciones de personajes",
+    "nameMentionsHint": "Cuando el nombre de un personaje aparece dentro del diálogo, se muestra con el estilo propio de ese personaje. Los apodos cuentan: el nombre que el personaje usa actualmente es el que se resalta.",
+    "nameMentionsOn": "Dar estilo a los nombres mencionados",
+    "nameMentionsColor": "Usar el color de su nombre",
+    "nameMentionsFont": "Usar su fuente (si tiene una)",
+    "nameMentionsBold": "Poner el nombre en negrita",
+    "nameMentionsGlossary": "Si un nombre también es un término del Glosario, ganan el estilo y la ventana del Glosario."
   },
   "elementInspector": {
     "propsTitle": "Propiedades",
@@ -1218,7 +1226,12 @@
     "closeThisScreen": "La pantalla en la que está este botón",
     "groupVideos": "Vídeos",
     "groupBackgrounds": "Fondos",
-    "groupImages": "Imágenes"
+    "groupImages": "Imágenes",
+    "imageToHide": "Imagen a ocultar",
+    "selectImage": "Selecciona una imagen…",
+    "unnamedImage": "Imagen sin título",
+    "inScene": "en la historia",
+    "noPictures": "Aún no hay imágenes: añade una imagen a una pantalla o un comando Mostrar imagen a una escena."
   },
   "effectStyle": {
     "label": "Estilo del efecto",

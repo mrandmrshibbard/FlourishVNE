@@ -447,6 +447,11 @@ export interface PlayerState {
             voiceAudioId?: VNID | null;
             /** Text effect for this dialogue line */
             textEffect?: VNDialogueTextEffect;
+            /** Name-box: inline effect spans parsed from [tags] typed in the character's
+             *  name (clean-text coordinates over characterName). Additive-optional. */
+            nameEffectSpans?: Array<{ start: number; end: number; effect: string; intensity?: number }>;
+            /** Name-box: whole-name effect (the character's Name effect setting). Additive-optional. */
+            nameTextEffect?: VNDialogueTextEffect;
             /** Per-line textbox theme override id (from the Dialogue command); resolved at render. */
             textboxThemeId?: VNID | null;
             /** Per-line text-speed override (1-100); unset = use the global Text Speed setting. */

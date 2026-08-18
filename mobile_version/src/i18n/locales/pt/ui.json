@@ -198,7 +198,8 @@
     "playCharacterAnimation": "Tocar animação do personagem",
     "setLanguage": "Alterar idioma",
     "setFullscreen": "Tela cheia",
-    "closeScreen": "Fechar tela"
+    "closeScreen": "Fechar tela",
+    "hideImage": "Ocultar imagem (na cena)"
   },
   "actionsList": {
     "actions": "Ações",
@@ -538,7 +539,14 @@
     "snapTip": "Encaixe inteligente em bordas, centros e outros elementos. Segure Alt ao arrastar para posicionar livremente.",
     "snap": "Encaixe",
     "confirmBoxLabel": "Caixa de diálogo",
-    "popOutProperties": "Abrir as propriedades numa janela própria"
+    "popOutProperties": "Abrir as propriedades numa janela própria",
+    "groupNameMentions": "Menções de personagens",
+    "nameMentionsHint": "Quando o nome de um personagem aparece no diálogo, ele é mostrado no estilo próprio desse personagem. Apelidos contam: o nome que o personagem usa no momento é o que se destaca.",
+    "nameMentionsOn": "Estilizar nomes de personagens mencionados",
+    "nameMentionsColor": "Usar a cor do nome dele",
+    "nameMentionsFont": "Usar a fonte dele (quando tiver uma)",
+    "nameMentionsBold": "Deixar o nome em negrito",
+    "nameMentionsGlossary": "Se um nome também for um termo do Glossário, o estilo e a dica do Glossário vencem."
   },
   "elementInspector": {
     "itemWhich": "Item",
@@ -1437,7 +1445,12 @@
     "closeThisScreen": "A tela em que este botão está",
     "groupVideos": "Vídeos",
     "groupBackgrounds": "Planos de fundo",
-    "groupImages": "Imagens"
+    "groupImages": "Imagens",
+    "imageToHide": "Imagem a ocultar",
+    "selectImage": "Selecione uma imagem…",
+    "unnamedImage": "Imagem sem título",
+    "inScene": "na história",
+    "noPictures": "Ainda não há imagens — adicione uma imagem a uma tela ou um comando Mostrar imagem a uma cena."
   },
   "character": {
     "defaultPose": "Padrão (arte normal)",

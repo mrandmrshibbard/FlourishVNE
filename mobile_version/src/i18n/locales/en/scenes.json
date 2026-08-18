@@ -66,7 +66,9 @@
     "fallbackScene": "Fallback Scene",
     "fallbackDesc": "If conditions fail, jump to this scene instead:",
     "skipToNext": "Skip to next scene in sequence",
-    "done": "Done"
+    "done": "Done",
+    "fadeColor": "Fade color",
+    "fadeColorHint": "The screen fades through this color. Black is the classic cut; white feels soft and dreamy — with any other color, the scene also fades back in from it."
   },
   "flowMap": {
     "title": "Story map",

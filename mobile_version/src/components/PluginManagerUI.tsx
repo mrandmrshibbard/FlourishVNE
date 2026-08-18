@@ -67,7 +67,7 @@ const plugin = {
         api.notify('Added ' + params.amount, 'success');
       },
     });
-    // Custom screen effect → appears in "Set Screen Overlay Effect".
+    // Custom screen effect → appears in "Set Screen Effect".
     api.registerEffect({
       type: 'pulseVignette', displayName: 'Pulse Vignette',
       description: 'A soft pulsing vignette.', parameters: [],

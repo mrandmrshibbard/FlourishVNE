@@ -1143,6 +1143,21 @@ export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array
         }
     }
 
+    // Repair: every command must carry an id. The editor's add-path always assigns one, but
+    // hand-authored / tool-generated project.json files may omit them — and id-less commands
+    // break identity checks across the editor (e.g. the Scene Editor's
+    // `dropTarget?.commandId === cmd.id` passes on undefined === undefined and then
+    // dereferences the null dropTarget → white screen). Cheap, idempotent, runs on every load.
+    const ensureCommandIds = (commands: Array<{ id?: string } | null | undefined> | undefined) => {
+        for (const cmd of commands || []) {
+            if (cmd && (typeof cmd.id !== 'string' || !cmd.id)) {
+                cmd.id = `cmd-${Math.random().toString(36).substring(2, 9)}`;
+            }
+        }
+    };
+    for (const scene of Object.values(project.scenes || {})) ensureCommandIds((scene as any)?.commands);
+    for (const ev of Object.values((project as any).commonEvents || {})) ensureCommandIds((ev as any)?.commands);
+
     // Optionally read manifest
     let parsedManifest: ExportManifest | undefined = undefined;
     const manifestFile = zip.file('manifest.json');

@@ -6,6 +6,21 @@ import { normalizeLayerBox } from '../layout';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
+/** Normalize an animation: every lane's keys sorted by time so consumers can rely on order;
+ *  an absent lane stays absent (minimal JSON). The UPDATE/IMPORT contract. */
+const sortAnimationKeys = (anim: VNCharacterAnimation): VNCharacterAnimation => {
+    const next: VNCharacterAnimation = { ...anim };
+    next.tracks = (next.tracks || []).map(tr => ({
+        ...tr,
+        keys: [...(tr.keys || [])].sort((a, b) => a.atMs - b.atMs),
+        ...(tr.rotationKeys ? { rotationKeys: [...tr.rotationKeys].sort((a, b) => a.atMs - b.atMs) } : {}),
+        ...(tr.scaleKeys ? { scaleKeys: [...tr.scaleKeys].sort((a, b) => a.atMs - b.atMs) } : {}),
+        ...(tr.moveKeys ? { moveKeys: [...tr.moveKeys].sort((a, b) => a.atMs - b.atMs) } : {}),
+    }));
+    if (next.motionKeys) next.motionKeys = [...next.motionKeys].sort((a, b) => a.atMs - b.atMs);
+    return next;
+};
+
 export type CharacterAction =
     | { type: 'ADD_CHARACTER'; payload: { name: string; color: string } }
     | { type: 'DELETE_CHARACTER'; payload: { characterId: VNID } }
@@ -44,6 +59,14 @@ export type CharacterAction =
     | { type: 'DUPLICATE_POSE', payload: { characterId: VNID, poseId: VNID, newPoseId?: VNID, newName?: string } }
     | { type: 'ADD_CHARACTER_ANIMATION', payload: { characterId: VNID, name: string } }
     | { type: 'UPDATE_CHARACTER_ANIMATION', payload: { characterId: VNID, animationId: VNID, updates: Partial<VNCharacterAnimation> } }
+    /** Copy an animation on the same character (deep copy — tracks/keys are nested arrays that
+     *  must not be shared with the undo history). Caller may supply newAnimationId so the UI
+     *  can select the copy (the DUPLICATE_POSE convention). */
+    | { type: 'DUPLICATE_CHARACTER_ANIMATION', payload: { characterId: VNID, animationId: VNID, newAnimationId?: VNID, newName?: string } }
+    /** Land a FULLY-FORMED animation on a character (the paste path — the caller has already
+     *  remapped layer/asset ids for this character and supplied a fresh id). Collision-guarded;
+     *  keys are normalized (sorted) like UPDATE does. */
+    | { type: 'IMPORT_CHARACTER_ANIMATION', payload: { characterId: VNID, animation: VNCharacterAnimation } }
     | { type: 'DELETE_CHARACTER_ANIMATION', payload: { characterId: VNID, animationId: VNID } };
 
 /**
@@ -378,15 +401,30 @@ export const characterReducer = (state: VNProject, action: CharacterAction): VNP
         const character = state.characters[characterId];
         const anim = character?.animations?.[animationId];
         if (!character || !anim) return state;
-        const next: VNCharacterAnimation = { ...anim, ...updates };
-        // Normalize: keys sorted by time so every consumer can rely on order. Spin/Tilt
-        // rotation keys get the same treatment; an absent lane stays absent (minimal JSON).
-        next.tracks = (next.tracks || []).map(tr => ({
-            ...tr,
-            keys: [...(tr.keys || [])].sort((a, b) => a.atMs - b.atMs),
-            ...(tr.rotationKeys ? { rotationKeys: [...tr.rotationKeys].sort((a, b) => a.atMs - b.atMs) } : {}),
-        }));
+        const next = sortAnimationKeys({ ...anim, ...updates });
         return { ...state, characters: { ...state.characters, [characterId]: { ...character, animations: { ...character.animations, [animationId]: next } } } };
+    }
+
+    case 'DUPLICATE_CHARACTER_ANIMATION': {
+        const { characterId, animationId, newAnimationId, newName } = action.payload;
+        const character = state.characters[characterId];
+        const src = character?.animations?.[animationId];
+        if (!character || !src) return state;
+        const newId = newAnimationId || `anim-${generateId()}`;
+        if (character.animations![newId]) return state;
+        // Deep copy — tracks/keys are nested arrays; sharing them with the source would let
+        // edits to the copy mutate the original inside the undo history.
+        const copy: VNCharacterAnimation = { ...JSON.parse(JSON.stringify(src)), id: newId, name: newName || `${src.name} (copy)` };
+        return { ...state, characters: { ...state.characters, [characterId]: { ...character, animations: { ...character.animations, [newId]: copy } } } };
+    }
+
+    case 'IMPORT_CHARACTER_ANIMATION': {
+        const { characterId, animation } = action.payload;
+        const character = state.characters[characterId];
+        if (!character || !animation?.id) return state;
+        if (character.animations?.[animation.id]) return state;
+        const stored = sortAnimationKeys(JSON.parse(JSON.stringify(animation)));
+        return { ...state, characters: { ...state.characters, [characterId]: { ...character, animations: { ...(character.animations || {}), [animation.id]: stored } } } };
     }
 
     case 'DELETE_CHARACTER_ANIMATION': {

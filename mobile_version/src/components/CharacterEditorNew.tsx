@@ -19,6 +19,7 @@ import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import { VNID } from '../types';
 import { VNCharacter, VNCharacterExpression, VNCharacterLayer, VNCharacterPose, VNLayerAsset, VNCharacterTextbox } from '../features/character/types';
+import type { VNDialogueTextEffect } from '../features/scene/types';
 import { assetArtForPose, assetHasPoseArt, characterBaseArtForPose } from '../features/character/poseArt';
 import { layerBoxStyle, layerOrderForPose, poseHiddenLayerIds, resolveLayerBox } from '../features/character/layout';
 import MatchPoseArtModal from './character-poses/MatchPoseArtModal';
@@ -346,7 +347,7 @@ const CharacterEditorNew: React.FC<{
 
     /* ── Handlers (same dispatches as the Classic editor) ── */
 
-    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop' | 'baseVideoTrimStart' | 'baseVideoTrimEnd' | 'textbox' | 'textboxThemeId' | 'defaultVoiceId' | 'phoneRingtoneAudioId' | 'textEffect' | 'dialogueTextColorMode' | 'dialogueTextColor' | 'typingBlip'>>) => {
+    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop' | 'baseVideoTrimStart' | 'baseVideoTrimEnd' | 'textbox' | 'textboxThemeId' | 'defaultVoiceId' | 'phoneRingtoneAudioId' | 'textEffect' | 'nameTextEffect' | 'dialogueTextColorMode' | 'dialogueTextColor' | 'typingBlip'>>) => {
         dispatch({ type: 'UPDATE_CHARACTER', payload: { characterId: activeCharacterId, updates } });
     };
     const updateTextbox = (patch: Partial<VNCharacterTextbox>) => {
@@ -509,6 +510,15 @@ const CharacterEditorNew: React.FC<{
     const renderPreview = () => (
         <div className="flex-1 relative overflow-hidden" style={{ background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)' }}>
             <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'repeating-conic-gradient(#fff 0% 25%, transparent 0% 50%)', backgroundSize: '16px 16px' }} />
+            {/* The sprite composes inside a strict 3:4 frame — THE character frame every other
+                surface uses (stage element, Pose Studio canvas, staging area). Percent boxes
+                are relative to this frame; letting them size against the raw panel (whose
+                aspect follows the window) made Pose Studio adjustments land visibly off here.
+                Sizing via container-query units: `h-full + max-w-full` silently BROKE the
+                ratio in narrow panels (width clamped, height didn't follow) — pieces then
+                letterboxed differently inside their own boxes and drifted apart. */}
+            <div className="absolute inset-0 flex items-center justify-center p-2" style={{ containerType: 'size' } as React.CSSProperties}>
+            <div className="relative" style={{ width: 'min(100cqw, 75cqh)', aspectRatio: '3 / 4', outline: '1px dashed rgba(148,163,184,0.15)' }}>
             {previewBaseArt.videoUrl ? (
                 <TrimmedVideo src={resolveFieldUrl(project.id, previewBaseArt.videoUrl) || undefined} autoPlay muted loop={previewBaseArt.loop} trimStart={previewBaseArt.trimStart} trimEnd={previewBaseArt.trimEnd} playsInline className="absolute inset-0 w-full h-full object-contain" />
             ) : previewBaseArt.imageUrl ? (
@@ -530,6 +540,8 @@ const CharacterEditorNew: React.FC<{
                     return null;
                 });
             })()}
+            </div>
+            </div>
             {!character.baseImageUrl && !character.baseVideoUrl && layersArray.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center" style={{ color: 'var(--text-muted)' }}>
@@ -901,6 +913,50 @@ const CharacterEditorNew: React.FC<{
                                 <input type="checkbox" checked={character.fontItalic || false} onChange={e => updateCharacter({ fontItalic: e.target.checked })} className="accent-[var(--accent-cyan)]" />
                                 {t('editor.italic')}
                             </label>
+
+                            {/* Text effects — dialogue-line default + name-box effect. */}
+                            <div className="mt-3">
+                                <h4 className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-secondary)' }}>{t('fx.title', 'Text effects')}</h4>
+                                <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>{t('fx.hint', 'Make their words or their name move. You can also wrap part of a name in tags like [wave]…[/wave] right in the name field.')}</p>
+                                {([
+                                    ['textEffect', t('fx.lines', 'Their lines (dialogue text)')],
+                                    ['nameTextEffect', t('fx.name', 'Their name (in the name box)')],
+                                ] as Array<['textEffect' | 'nameTextEffect', string]>).map(([field, label]) => {
+                                    const cur = character[field] as VNDialogueTextEffect | undefined;
+                                    const setEff = (eff?: VNDialogueTextEffect) => updateCharacter({ [field]: eff } as any);
+                                    return (
+                                        <div key={field} className="mb-2">
+                                            <FormField label={label}>
+                                                <Select value={cur?.type ?? 'none'} onChange={e => {
+                                                    const type = e.target.value;
+                                                    if (type === 'none') setEff(undefined);
+                                                    else setEff({ type: type as VNDialogueTextEffect['type'], speed: cur?.speed ?? 1, intensity: cur?.intensity ?? 1 });
+                                                }}>
+                                                    {(['none', 'shake', 'wave', 'rainbow', 'glitch', 'pulse', 'fade-in', 'bounce', 'typewriter-bounce'] as const).map(v => (
+                                                        <option key={v} value={v}>{t(`fx.opt.${v}`, { defaultValue: { none: 'None', shake: 'Shake', wave: 'Wave', rainbow: 'Rainbow', glitch: 'Glitch', pulse: 'Pulse', 'fade-in': 'Fade in', bounce: 'Bounce', 'typewriter-bounce': 'Typewriter bounce' }[v] })}</option>
+                                                    ))}
+                                                </Select>
+                                            </FormField>
+                                            {cur && (
+                                                <div className="grid grid-cols-2 gap-3 mt-1">
+                                                    <label className="block text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                                                        {t('fx.speed', 'Speed')} — {(cur.speed ?? 1).toFixed(1)}x
+                                                        <input type="range" min={0.1} max={5} step={0.1} value={cur.speed ?? 1}
+                                                            onChange={e => setEff({ ...cur, speed: parseFloat(e.target.value) })}
+                                                            className="w-full accent-[var(--accent-cyan)]" />
+                                                    </label>
+                                                    <label className="block text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                                                        {t('fx.strength', 'Strength')} — {(cur.intensity ?? 1).toFixed(1)}x
+                                                        <input type="range" min={0.1} max={3} step={0.1} value={cur.intensity ?? 1}
+                                                            onChange={e => setEff({ ...cur, intensity: parseFloat(e.target.value) })}
+                                                            className="w-full accent-[var(--accent-cyan)]" />
+                                                    </label>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         <hr style={{ borderColor: 'var(--border-subtle)' }} />

@@ -14,6 +14,30 @@ export interface GlossaryMatchSpan {
     style: 'color' | 'glow' | 'underline';
 }
 
+/** One character-name mention in the FULL line, carrying the mentioned character's look.
+ *  Display-only: no handlers, no advance interference — pure styling. */
+export interface MentionSpan {
+    start: number;
+    end: number;
+    /** The mentioned character's name color (absent = keep the text color). */
+    color?: string;
+    /** The mentioned character's dialogue font (already cssFontFamily-sanitized). */
+    fontFamily?: string;
+    bold?: boolean;
+    /** The mentioned character's NAME effect (their Name effect setting, else the first
+     *  inline tag in their name). Rendered via the effect-span channel, not this style —
+     *  the caller merges it into effectSpans; carried here so it compiles in one pass. */
+    effect?: { type: string; speed?: number; intensity?: number };
+}
+
+/** The mentioned character's look. Color resets any text-gradient fill (same trick as
+ *  revealHighlightStyle) so it shows through gradient-filled dialogue text. */
+const mentionStyle = (m: MentionSpan): React.CSSProperties => ({
+    ...(m.color ? { color: m.color, WebkitTextFillColor: m.color } as React.CSSProperties : {}),
+    ...(m.fontFamily ? { fontFamily: m.fontFamily } : {}),
+    ...(m.bold ? { fontWeight: 700 } : {}),
+});
+
 export interface AnimatedDialogueTextProps {
     /** The full text being displayed (already sliced by typewriter) */
     displayText: string;
@@ -33,13 +57,17 @@ export interface AnimatedDialogueTextProps {
     glossaryMatches?: GlossaryMatchSpan[] | null;
     /** Hover in/move/out over a term (entryId null = pointer left). Drives the tooltip. */
     onGlossaryHover?: (entryId: string | null, ev: React.MouseEvent) => void;
+    /** Character-name mentions over the FULL line (sorted, non-overlapping; already
+     *  glossary-subtracted by the caller). Unlike glossary terms, a mention CLAMPS to the
+     *  revealed slice, so the name takes its owner's look while it types. */
+    mentionSpans?: MentionSpan[] | null;
     /**
      * Per-word effects from inline tags (`[shake]NO[/shake]`), in the same clean-text
      * coordinates as the glossary/karaoke ranges. A char inside a span uses that span's effect;
      * everything else falls back to the line-level `textEffect`. Innermost span wins, so
      * `[wave]soft [shake]LOUD[/shake] soft[/wave]` shakes only the middle.
      */
-    effectSpans?: Array<{ start: number; end: number; effect: string; intensity?: number }> | null;
+    effectSpans?: Array<{ start: number; end: number; effect: string; intensity?: number; speed?: number }> | null;
 }
 
 /** Style applied to the word being revealed. Kept subtle enough to read at typewriter speed.
@@ -239,6 +267,7 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
     glossaryMatches,
     onGlossaryHover,
     effectSpans,
+    mentionSpans,
 }) => {
     // Inject keyframe styles once
     useMemo(() => {
@@ -248,18 +277,23 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
     // Glossary terms only light up once the typewriter has revealed them completely.
     const visibleGlossary = (glossaryMatches ?? []).filter(m => m.start < m.end && m.end <= displayText.length);
 
+    // Name mentions CLAMP instead — the name colors letter by letter as it types.
+    const visibleMentions = (mentionSpans ?? [])
+        .filter(m => m.start < m.end && m.start < displayText.length)
+        .map(m => (m.end <= displayText.length ? m : { ...m, end: displayText.length }));
+
     // Inline tags put effects on PART of a line, so a line with no whole-line effect still needs
     // the per-character path below. Resolve each char against the innermost covering span.
     const spans = effectSpans && effectSpans.length ? effectSpans : null;
     const effectForChar = (index: number): VNDialogueTextEffect | undefined => {
         if (spans) {
-            let winner: { start: number; end: number; effect: string; intensity?: number } | null = null;
+            let winner: { start: number; end: number; effect: string; intensity?: number; speed?: number } | null = null;
             for (const s of spans) {
                 if (index < s.start || index >= s.end) continue;
                 // Innermost = the one that started latest (ties broken by the shorter span).
                 if (!winner || s.start > winner.start || (s.start === winner.start && s.end < winner.end)) winner = s;
             }
-            if (winner) return { type: winner.effect as VNTextEffectType, ...(winner.intensity !== undefined ? { intensity: winner.intensity } : {}) };
+            if (winner) return { type: winner.effect as VNTextEffectType, ...(winner.intensity !== undefined ? { intensity: winner.intensity } : {}), ...(winner.speed !== undefined ? { speed: winner.speed } : {}) };
         }
         return textEffect;
     };
@@ -268,7 +302,7 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
     // and glossary match boundaries (a generalization of the old before/word/after split).
     if ((!textEffect || textEffect.type === 'none') && !spans) {
         const hlActive = !!(revealHighlight && revealHighlight.start < displayText.length);
-        if (!hlActive && visibleGlossary.length === 0) {
+        if (!hlActive && visibleGlossary.length === 0 && visibleMentions.length === 0) {
             return <span style={gradientStyle || undefined}>{displayText}</span>;
         }
         const hlStart = hlActive ? revealHighlight!.start : -1;
@@ -276,6 +310,7 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
         const bounds = new Set<number>([0, displayText.length]);
         if (hlActive) { bounds.add(hlStart); bounds.add(hlEnd); }
         for (const m of visibleGlossary) { bounds.add(m.start); bounds.add(m.end); }
+        for (const m of visibleMentions) { bounds.add(m.start); bounds.add(m.end); }
         const sorted = Array.from(bounds).sort((a, b) => a - b);
         const parts: React.ReactNode[] = [];
         for (let i = 0; i < sorted.length - 1; i++) {
@@ -283,12 +318,21 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
             if (s >= e) continue;
             const text = displayText.slice(s, e);
             const match = visibleGlossary.find(m => m.start <= s && m.end >= e);
+            const mention = visibleMentions.find(m => m.start <= s && m.end >= e);
             const inKaraoke = hlActive && s >= hlStart && e <= hlEnd;
             if (match) {
                 // Karaoke merged LAST so the reading highlight momentarily wins over the term look.
+                // (Mentions overlapping glossary were subtracted upstream — glossary wins.)
                 parts.push(
                     <span key={i} {...glossarySpanProps(match.entryId, onGlossaryHover)}
                         style={{ ...glossaryTermStyle(match), ...(inKaraoke ? revealHighlightStyle(revealHighlight!) : {}) }}>
+                        {text}
+                    </span>
+                );
+            } else if (mention) {
+                // Mention look below karaoke: the reading highlight passes over the name too.
+                parts.push(
+                    <span key={i} style={{ ...mentionStyle(mention), ...(inKaraoke ? revealHighlightStyle(revealHighlight!) : {}) }}>
                         {text}
                     </span>
                 );
@@ -345,6 +389,9 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
                             // wrapper's text-decoration, so it must sit on each char).
                             const glStyle = wordMatch && gi >= wordMatch.start && gi < wordMatch.end
                                 ? glossaryTermStyle(wordMatch) : undefined;
+                            // Name mention look per char (mentions can span words — "Lady Ann").
+                            const mnMatch = visibleMentions.find(m => gi >= m.start && gi < m.end);
+                            const mnStyle = mnMatch ? mentionStyle(mnMatch) : undefined;
                             return (
                                 <span
                                     key={ci}
@@ -356,6 +403,8 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
                                             backgroundClip: undefined,
                                             WebkitTextFillColor: undefined,
                                         } : {}),
+                                        // Precedence: base → mention → glossary → karaoke (last wins).
+                                        ...(mnStyle || {}),
                                         ...(glStyle || {}),
                                         // Karaoke merged LAST — the reading highlight wins while passing over.
                                         ...(hlStyle || {}),

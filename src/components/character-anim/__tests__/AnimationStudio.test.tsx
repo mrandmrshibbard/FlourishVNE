@@ -9,6 +9,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 
 const dispatch = vi.fn();
 vi.mock('../../../contexts/ProjectContext', () => ({ useProject: () => ({ dispatch }) }));
+// The Studio toasts on copy/paste; render outside the app shell needs the hook stubbed.
+vi.mock('../../../contexts/ToastContext', () => ({
+    useToast: () => ({ addToast: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
+}));
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
         t: (_k: string, d?: any, o?: any) => {

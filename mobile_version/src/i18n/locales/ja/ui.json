@@ -75,7 +75,8 @@
     "playCharacterAnimation": "キャラクターのアニメーションを再生",
     "setLanguage": "言語を切り替え",
     "setFullscreen": "全画面表示",
-    "closeScreen": "画面を閉じる"
+    "closeScreen": "画面を閉じる",
+    "hideImage": "画像を隠す（シーン内）"
   },
   "actionsList": {
     "actions": "アクション",
@@ -415,7 +416,14 @@
     "snapTip": "端・中央・他の要素にスマートにスナップします。ドラッグ中に Alt を押すと自由に配置できます。",
     "snap": "スナップ",
     "confirmBoxLabel": "ダイアログ",
-    "popOutProperties": "プロパティを別ウィンドウで開く"
+    "popOutProperties": "プロパティを別ウィンドウで開く",
+    "groupNameMentions": "キャラクター名の言及",
+    "nameMentionsHint": "セリフの中にキャラクターの名前が出てくると、そのキャラクター自身のスタイルで表示されます。ニックネームも対象です — いま名乗っている名前が光ります。",
+    "nameMentionsOn": "言及されたキャラクター名を装飾する",
+    "nameMentionsColor": "そのキャラの名前の色を使う",
+    "nameMentionsFont": "そのキャラのフォントを使う（設定されている場合）",
+    "nameMentionsBold": "名前を太字にする",
+    "nameMentionsGlossary": "名前が用語集の項目でもある場合は、用語集の見た目とツールチップが優先されます。"
   },
   "elementInspector": {
     "propsTitle": "プロパティ",
@@ -1218,7 +1226,12 @@
     "closeThisScreen": "このボタンがある画面",
     "groupVideos": "動画",
     "groupBackgrounds": "背景",
-    "groupImages": "画像"
+    "groupImages": "画像",
+    "imageToHide": "隠す画像",
+    "selectImage": "画像を選択…",
+    "unnamedImage": "名称未設定の画像",
+    "inScene": "ストーリー内",
+    "noPictures": "画像がまだありません。画面に画像を追加するか、シーンに「画像を表示」コマンドを追加してください。"
   },
   "effectStyle": {
     "label": "効果のスタイル",

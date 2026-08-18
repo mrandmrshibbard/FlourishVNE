@@ -153,7 +153,12 @@ export interface VNCharacterPose {
  *  art at times; there is nothing to interpolate between two drawings. */
 export interface VNAnimationTrack {
     layerId: VNID;
-    keys: Array<{ atMs: number; assetId: VNID | null }>;
+    /** Step frame keys: at `atMs` the layer shows `assetId` (null = hidden). `dx`/`dy` NUDGE
+     *  this frame into alignment (% of the character frame, same units as offsetX/offsetY,
+     *  summed with them) — a per-frame correction for art drawn at different canvas positions,
+     *  so a swap doesn't lurch. STEP like the frame itself, never interpolated. Ephemeral —
+     *  computed at render time, the layer's authored position is never written. */
+    keys: Array<{ atMs: number; assetId: VNID | null; dx?: number; dy?: number }>;
     /** Spin/Tilt keys: at `atMs` the layer is rotated `deg` degrees (clockwise, pivoting at the
      *  layer box's centre — the same pivot as the authored Pose Studio rotation, which this
      *  COMPOSES with rather than replaces). Unlike image keys these INTERPOLATE linearly between
@@ -162,6 +167,18 @@ export interface VNAnimationTrack {
      *  the layer/pose data: stop the animation and the layer is back at its authored transform.
      *  Additive-optional. */
     rotationKeys?: Array<{ atMs: number; deg: number }>;
+    /** Glide keys — TWEENED movement (unlike per-frame `dx`/`dy` nudges, which snap with
+     *  their frame): the layer slides smoothly between these offsets (% of the character
+     *  frame), interpolating linearly and wrapping across the loop point. Sums with the
+     *  track's offsetX/offsetY and any frame nudge. Ephemeral like every lane. */
+    moveKeys?: Array<{ atMs: number; dx: number; dy: number }>;
+    /** Squash & Stretch keys: at `atMs` the layer is scaled to `sx`×`sy` (1 = normal size;
+     *  they may DIFFER — non-uniform scale is the point: 1.2×0.8 = squashed, 0.8×1.2 =
+     *  stretched). Interpolates linearly between keys like rotationKeys, wrapping across the
+     *  loop point. Scales around the track's pivot (pivotX/pivotY — put the pivot at the feet
+     *  and a squash sinks INTO the ground like real squash-and-stretch). Ephemeral: computed
+     *  per frame, never written to the layer/pose data. Additive-optional. */
+    scaleKeys?: Array<{ atMs: number; sx: number; sy: number }>;
     /** Move the piece while THIS animation is active, in percent of the character frame.
      *  Ephemeral like the rotation — the layer's authored box/position is never written; the
      *  moment the animation stops the piece is back where the author put it. Additive-optional. */
@@ -184,6 +201,12 @@ export interface VNCharacterAnimation {
     /** Timeline length in ms. */
     durationMs: number;
     tracks: VNAnimationTrack[];
+    /** Whole-character motion keys — TWEENED position for the ENTIRE sprite (every layer,
+     *  including base-image-only characters), percent of the character frame (negative =
+     *  left/up). Same lerp rules as rotation/scale/glide keys (loop-seam interpolation).
+     *  Ephemeral at render time — the character's real stage position never changes.
+     *  Additive-optional; absent = no motion (existing projects byte-identical). */
+    motionKeys?: Array<{ atMs: number; dx: number; dy: number }>;
     /** Repeat from the start when the timeline ends (usual for 'always'). */
     loop?: boolean;
     /** When it plays: 'manual' (a command starts it — the default), 'always' (whenever the
@@ -222,6 +245,10 @@ export interface VNCharacter {
     animations?: Record<VNID, VNCharacterAnimation>;
     /** Default text effect for this character's dialogue */
     textEffect?: VNDialogueTextEffect;
+    /** Text effect for the NAME BOX (the speaker plate) — the whole name shakes/waves/etc.
+     *  Inline [wave]…[/wave] tags typed inside `name` also work (processed like dialogue
+     *  text, never shown literally). Additive-optional. */
+    nameTextEffect?: VNDialogueTextEffect;
     /** Default voice audio clip ID for this character (can be overridden per-line) */
     defaultVoiceId?: VNID | null;
     /** Typing sound: a short blip per revealed letter/word while this character's dialogue types

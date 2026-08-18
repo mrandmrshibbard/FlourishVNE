@@ -75,7 +75,8 @@
     "playCharacterAnimation": "Lire l'animation du personnage",
     "setLanguage": "Changer de langue",
     "setFullscreen": "Plein écran",
-    "closeScreen": "Fermer l’écran"
+    "closeScreen": "Fermer l’écran",
+    "hideImage": "Masquer l'image (dans la scène)"
   },
   "actionsList": {
     "actions": "Actions",
@@ -415,7 +416,14 @@
     "snapTip": "Aimantation intelligente aux bords, aux centres et aux autres éléments. Maintenez Alt en glissant pour placer librement.",
     "snap": "Aimantation",
     "confirmBoxLabel": "Boîte de dialogue",
-    "popOutProperties": "Ouvrir les propriétés dans leur propre fenêtre"
+    "popOutProperties": "Ouvrir les propriétés dans leur propre fenêtre",
+    "groupNameMentions": "Mentions de personnages",
+    "nameMentionsHint": "Quand le nom d’un personnage apparaît dans un dialogue, il s’affiche dans le style propre de ce personnage. Les surnoms comptent : c’est le nom que le personnage porte actuellement qui se met en valeur.",
+    "nameMentionsOn": "Styliser les noms de personnages mentionnés",
+    "nameMentionsColor": "Utiliser la couleur de leur nom",
+    "nameMentionsFont": "Utiliser leur police (s’ils en ont une)",
+    "nameMentionsBold": "Mettre le nom en gras",
+    "nameMentionsGlossary": "Si un nom est aussi un terme du Glossaire, le style et l’infobulle du Glossaire l’emportent."
   },
   "elementInspector": {
     "propsTitle": "Propriétés",
@@ -1218,7 +1226,12 @@
     "closeThisScreen": "L’écran sur lequel se trouve ce bouton",
     "groupVideos": "Vidéos",
     "groupBackgrounds": "Arrière-plans",
-    "groupImages": "Images"
+    "groupImages": "Images",
+    "imageToHide": "Image à masquer",
+    "selectImage": "Choisissez une image…",
+    "unnamedImage": "Image sans titre",
+    "inScene": "dans l'histoire",
+    "noPictures": "Aucune image pour l'instant — ajoutez une image à un écran, ou une commande Afficher l'image à une scène."
   },
   "effectStyle": {
     "label": "Style d'effet",

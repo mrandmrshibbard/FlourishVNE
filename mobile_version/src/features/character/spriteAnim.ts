@@ -67,6 +67,45 @@ export function applyAnimationFrame(
  * Returns a map layerId → degrees. The value COMPOSES with (appends to) the authored Pose
  * Studio rotation at the render site — it never replaces or writes it.
  */
+/** The one interpolation rule for value-keyed lanes (rotation, squash/stretch): linear
+ *  between keys; non-loop holds first before / last after; LOOPING lerps across the wrap
+ *  segment (last key → first key at t=duration) so cycles never snap. `keys` must be
+ *  non-empty; `t` must already be wrapped/clamped into [0, dur]. */
+function lerpKeysAt<K extends { atMs: number }>(
+    keys: K[],
+    dur: number,
+    t: number,
+    loop: boolean,
+    value: (k: K) => number,
+): number {
+    if (t <= keys[0].atMs) {
+        if (loop && keys.length > 1) {
+            // Before the first key in a loop: we're inside the wrap segment (last → first).
+            const last = keys[keys.length - 1];
+            const span = (dur - last.atMs) + keys[0].atMs;
+            return span <= 0 ? value(keys[0])
+                : value(last) + (value(keys[0]) - value(last)) * (((t - last.atMs) + dur) % dur) / span;
+        }
+        return value(keys[0]);
+    }
+    if (t >= keys[keys.length - 1].atMs) {
+        const last = keys[keys.length - 1];
+        if (loop && keys.length > 1) {
+            const span = (dur - last.atMs) + keys[0].atMs;
+            return span <= 0 ? value(keys[0]) : value(last) + (value(keys[0]) - value(last)) * ((t - last.atMs) / span);
+        }
+        return value(last);
+    }
+    for (let i = 0; i + 1 < keys.length; i++) {
+        const a = keys[i], b = keys[i + 1];
+        if (t >= a.atMs && t <= b.atMs) {
+            const span = b.atMs - a.atMs;
+            return span <= 0 ? value(b) : value(a) + (value(b) - value(a)) * ((t - a.atMs) / span);
+        }
+    }
+    return value(keys[0]);
+}
+
 export function rotationAt(anim: VNCharacterAnimation, tMs: number): Record<VNID, number> {
     const out: Record<VNID, number> = {};
     const dur = Math.max(1, anim.durationMs || 1);
@@ -74,38 +113,7 @@ export function rotationAt(anim: VNCharacterAnimation, tMs: number): Record<VNID
     for (const track of anim.tracks || []) {
         if (!track?.layerId || !track.rotationKeys?.length) continue;
         const keys = [...track.rotationKeys].sort((a, b) => a.atMs - b.atMs);
-        let deg: number;
-        if (t <= keys[0].atMs) {
-            if (anim.loop && keys.length > 1) {
-                // Before the first key in a loop: we're inside the wrap segment (last → first).
-                const last = keys[keys.length - 1];
-                const span = (dur - last.atMs) + keys[0].atMs;
-                deg = span <= 0 ? keys[0].deg
-                    : last.deg + ((last.deg === keys[0].deg) ? 0 : (keys[0].deg - last.deg) * (((t - last.atMs) + dur) % dur) / span);
-            } else {
-                deg = keys[0].deg;
-            }
-        } else if (t >= keys[keys.length - 1].atMs) {
-            const last = keys[keys.length - 1];
-            if (anim.loop && keys.length > 1) {
-                const span = (dur - last.atMs) + keys[0].atMs;
-                deg = span <= 0 ? keys[0].deg : last.deg + (keys[0].deg - last.deg) * ((t - last.atMs) / span);
-            } else {
-                deg = last.deg;
-            }
-        } else {
-            let deg2 = keys[0].deg;
-            for (let i = 0; i + 1 < keys.length; i++) {
-                const a = keys[i], b = keys[i + 1];
-                if (t >= a.atMs && t <= b.atMs) {
-                    const span = b.atMs - a.atMs;
-                    deg2 = span <= 0 ? b.deg : a.deg + (b.deg - a.deg) * ((t - a.atMs) / span);
-                    break;
-                }
-            }
-            deg = deg2;
-        }
-        out[track.layerId] = deg;
+        out[track.layerId] = lerpKeysAt(keys, dur, t, !!anim.loop, k => k.deg);
     }
     return out;
 }
@@ -116,36 +124,95 @@ export function rotationAt(anim: VNCharacterAnimation, tMs: number): Record<VNID
 export interface LayerAnimAdjust {
     /** Interpolated Spin/Tilt angle (degrees), absent when the track has no rotation keys. */
     deg?: number;
+    /** Interpolated Squash & Stretch multipliers (1 = normal), absent without scale keys.
+     *  They may differ — non-uniform scale IS the squash/stretch effect. */
+    sx?: number;
+    sy?: number;
     /** Move-while-animating offset, percent of the character frame. */
     dx: number;
     dy: number;
-    /** Rotation pivot, percent of the layer's own box (50/50 = centre). */
+    /** Rotation AND scale pivot, percent of the layer's own box (50/50 = centre). */
     pivotX: number;
     pivotY: number;
 }
 
 /**
- * Per-layer animated adjustments at time t — rotation (via rotationAt) plus each track's
- * move offset and pivot. A layer gets an entry only when its track actually adjusts
- * something (rotation keys or a non-zero offset), so untouched tracks cost nothing.
+ * Per-layer animated adjustments at time t — rotation (via rotationAt), squash/stretch,
+ * plus each track's move offset and pivot. A layer gets an entry only when its track
+ * actually adjusts something, so untouched tracks cost nothing.
  */
 export function layerAdjustAt(anim: VNCharacterAnimation, tMs: number): Record<VNID, LayerAnimAdjust> {
     const rot = rotationAt(anim, tMs);
+    const dur = Math.max(1, anim.durationMs || 1);
+    const t = anim.loop ? ((tMs % dur) + dur) % dur : Math.min(Math.max(0, tMs), dur);
     const out: Record<VNID, LayerAnimAdjust> = {};
     for (const track of anim.tracks || []) {
         if (!track?.layerId) continue;
         const deg = rot[track.layerId];
-        const dx = track.offsetX ?? 0;
-        const dy = track.offsetY ?? 0;
-        if (deg === undefined && dx === 0 && dy === 0) continue;
+        // The ACTIVE frame key's nudge rides the frame (STEP, like the frame itself) — the
+        // per-frame alignment correction. Same active-key rule as frameAssetAt: last key at
+        // or before t; before the first key there is no frame, hence no nudge.
+        let frameNudgeX = 0;
+        let frameNudgeY = 0;
+        if (track.keys?.length) {
+            let current: { atMs: number; dx?: number; dy?: number } | null = null;
+            for (const key of [...track.keys].sort((a, b) => a.atMs - b.atMs)) {
+                if (key.atMs <= t) current = key;
+                else break;
+            }
+            if (current) {
+                frameNudgeX = current.dx ?? 0;
+                frameNudgeY = current.dy ?? 0;
+            }
+        }
+        // Glide keys tween smoothly (same lerp as rotation/scale) and SUM with the static
+        // track offset and the active frame's step nudge.
+        let glideX = 0;
+        let glideY = 0;
+        if (track.moveKeys?.length) {
+            const keys = [...track.moveKeys].sort((a, b) => a.atMs - b.atMs);
+            glideX = lerpKeysAt(keys, dur, t, !!anim.loop, k => k.dx ?? 0);
+            glideY = lerpKeysAt(keys, dur, t, !!anim.loop, k => k.dy ?? 0);
+        }
+        const dx = (track.offsetX ?? 0) + frameNudgeX + glideX;
+        const dy = (track.offsetY ?? 0) + frameNudgeY + glideY;
+        let sx: number | undefined;
+        let sy: number | undefined;
+        if (track.scaleKeys?.length) {
+            const keys = [...track.scaleKeys].sort((a, b) => a.atMs - b.atMs);
+            sx = lerpKeysAt(keys, dur, t, !!anim.loop, k => k.sx ?? 1);
+            sy = lerpKeysAt(keys, dur, t, !!anim.loop, k => k.sy ?? 1);
+        }
+        if (deg === undefined && sx === undefined && dx === 0 && dy === 0) continue;
         out[track.layerId] = {
             ...(deg !== undefined ? { deg } : {}),
+            ...(sx !== undefined ? { sx, sy } : {}),
             dx, dy,
             pivotX: track.pivotX ?? 50,
             pivotY: track.pivotY ?? 50,
         };
     }
     return out;
+}
+
+/**
+ * Whole-character motion at time t — the Move whole character lane. Tweens the animation's
+ * `motionKeys` with the SAME lerp rules as rotation/scale/glide (hold-first / clamp-last
+ * non-loop; loop-seam interpolation). Percent of the character frame; applied by the render
+ * site as a translate on the whole sprite (every layer, base images included). Ephemeral —
+ * the character's real stage position never changes. Returns null when the animation has
+ * no motion keys.
+ */
+export function characterMotionAt(anim: VNCharacterAnimation, tMs: number): { dx: number; dy: number } | null {
+    const raw = anim.motionKeys;
+    if (!raw?.length) return null;
+    const keys = [...raw].sort((a, b) => a.atMs - b.atMs);
+    const dur = Math.max(1, anim.durationMs || 1);
+    const t = anim.loop ? ((tMs % dur) + dur) % dur : Math.min(Math.max(0, tMs), dur);
+    return {
+        dx: lerpKeysAt(keys, dur, t, !!anim.loop, k => k.dx ?? 0),
+        dy: lerpKeysAt(keys, dur, t, !!anim.loop, k => k.dy ?? 0),
+    };
 }
 
 /**

@@ -70,7 +70,9 @@
     "dayNightCycle": "Suivre le cycle",
     "dayNightFixed": "Heure fixe",
     "dayNightOff": "Aucune colorisation",
-    "dayNightFixedHour": "Heure fixe (0–24)"
+    "dayNightFixedHour": "Heure fixe (0–24)",
+    "fadeColor": "Couleur du fondu",
+    "fadeColorHint": "L’écran passe par cette couleur. Le noir est la coupe classique ; le blanc est doux et onirique — avec toute autre couleur, la scène réapparaît aussi depuis celle-ci."
   },
   "expandCommands": "Afficher les commandes",
   "collapseCommands": "Masquer les commandes",

@@ -132,7 +132,7 @@
     "color": "顏色",
     "animation": "動畫",
     "letStoryContinue": "讓劇情繼續推進",
-    "letStoryContinueHint": "下一條指令立即開始——很適合讓角色在對話逐字顯示時淡入。"
+    "letStoryContinueHint": "下一條命令會立即開始——非常適合讓角色在對話打字時淡入。要讓多條命令同時發生（比如三張圖片一起消失），請在除最後一條以外的每條命令上開啟此項。"
   },
   "text": {
     "text": "文字",
@@ -297,7 +297,8 @@
     "allSounds": "所有音效",
     "fadeOutSec": "淡出（秒）",
     "fadeOutHint": "0 = 立即停止",
-    "shaping": "音效調整"
+    "shaping": "音效調整",
+    "crossfadeHint": "設定了淡入淡出後，切換歌曲會交叉淡化——舊歌淡出的同時新歌淡入，不會生硬切斷。"
   },
   "movie": {
     "video": "影片",
@@ -338,7 +339,9 @@
   "jump": {
     "targetScene": "目標場景",
     "transition": "場景轉場",
-    "transitionHint": "僅用於本次跳轉——覆蓋「場景設定」中的退出轉場。"
+    "transitionHint": "僅用於本次跳轉——覆蓋「場景設定」中的退出轉場。",
+    "fadeColor": "淡化顏色",
+    "fadeColorHint": "僅此跳轉——畫面通過此顏色淡化，使用黑色以外的顏色時場景還會從該顏色淡入。"
   },
   "wait": {
     "waitMode": "等待模式",
@@ -354,7 +357,8 @@
     "removeItem": "移除物件",
     "untilCondition": "直到條件成立（即時判斷）",
     "conditionHint": "一旦滿足即刻繼續（持續檢測）。",
-    "quantity": "所需數量"
+    "quantity": "所需數量",
+    "conditionEmptyWarning": "請至少新增一個條件——沒有條件時，此等待會被立即略過。"
   },
   "screen": {
     "intensity": "強度：{{value}}",
@@ -1035,5 +1039,9 @@
   },
   "screenFx": {
     "density": "濃度"
+  },
+  "flow": {
+    "autoSaveSlot": "存檔槽",
+    "autoSaveHint": "在此處靜默保存遊戲——沒有選單，故事繼續進行。0號槽是特殊的「繼續」槽：標題畫面的「繼續」按鈕會讀取它。"
   }
 }

@@ -12,6 +12,8 @@ import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import { VNID } from '../types';
 import { VNCharacter, VNCharacterExpression, VNCharacterLayer, VNLayerAsset, VNCharacterTextbox } from '../features/character/types';
+import type { VNDialogueTextEffect } from '../features/scene/types';
+import { layerBoxStyle, layerOrderForPose, poseHiddenLayerIds, resolveLayerBox } from '../features/character/layout';
 import { fileToBase64 } from '../utils/file';
 import { ingestUpload, resolveFieldUrl } from '../utils/assetStore';
 import { PlusIcon, TrashIcon, UploadIcon, PencilIcon } from './icons';
@@ -273,7 +275,7 @@ const CharacterEditorClassic: React.FC<{
 
     /* ── Handlers ── */
 
-    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop' | 'baseVideoTrimStart' | 'baseVideoTrimEnd' | 'textbox' | 'textboxThemeId' | 'defaultVoiceId' | 'phoneRingtoneAudioId' | 'textEffect' | 'dialogueTextColorMode' | 'dialogueTextColor' | 'typingBlip'>>) => {
+    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop' | 'baseVideoTrimStart' | 'baseVideoTrimEnd' | 'textbox' | 'textboxThemeId' | 'defaultVoiceId' | 'phoneRingtoneAudioId' | 'textEffect' | 'nameTextEffect' | 'dialogueTextColorMode' | 'dialogueTextColor' | 'typingBlip'>>) => {
         dispatch({ type: 'UPDATE_CHARACTER', payload: { characterId: activeCharacterId, updates } });
     };
 
@@ -434,7 +436,13 @@ const CharacterEditorClassic: React.FC<{
                     <div className="flex-1 relative overflow-hidden" style={{ background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)' }}>
                         {/* Subtle checkerboard to indicate transparency */}
                         <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'repeating-conic-gradient(#fff 0% 25%, transparent 0% 50%)', backgroundSize: '16px 16px' }} />
-                        
+
+                        {/* The sprite composes inside a strict 3:4 frame through the SHARED layout
+                            resolvers (boxes, stacking order, hidden layers) — the same contract as
+                            the stage / Pose Studio / New editor. Composing against the raw panel
+                            with no boxes made Pose Studio adjustments look wrong here. */}
+                        <div className="absolute inset-0 flex items-center justify-center p-2" style={{ containerType: 'size' } as React.CSSProperties}>
+                        <div className="relative" style={{ width: 'min(100cqw, 75cqh)', aspectRatio: '3 / 4', outline: '1px dashed rgba(148,163,184,0.15)' }}>
                         {/* Base Image */}
                         {character.baseVideoUrl ? (
                             <TrimmedVideo src={resolveFieldUrl(project.id, character.baseVideoUrl) || undefined} autoPlay muted loop={character.baseVideoLoop} trimStart={(character as any).baseVideoTrimStart} trimEnd={(character as any).baseVideoTrimEnd} playsInline className="absolute inset-0 w-full h-full object-contain" />
@@ -442,19 +450,26 @@ const CharacterEditorClassic: React.FC<{
                             <img src={resolveFieldUrl(project.id, character.baseImageUrl) || undefined} alt="Base" className="absolute inset-0 w-full h-full object-contain" />
                         ) : null}
 
-                        {/* Expression Layers */}
-                        {selectedExpression && layersArray.map((layer: VNCharacterLayer) => {
-                            const assetId = selectedExpression.layerConfiguration[layer.id];
-                            if (!assetId) return null;
-                            const asset = layer.assets[assetId];
-                            if (!asset) return null;
-                            if (asset.videoUrl) {
-                                return <video key={layer.id} src={resolveFieldUrl(project.id, asset.videoUrl) || undefined} autoPlay muted loop={asset.loop} playsInline className="absolute inset-0 w-full h-full object-contain" />;
-                            } else if (asset.imageUrl) {
-                                return <img key={layer.id} src={resolveFieldUrl(project.id, asset.imageUrl) || undefined} alt={asset.name} className="absolute inset-0 w-full h-full object-contain" />;
-                            }
-                            return null;
-                        })}
+                        {/* Expression Layers — shared resolvers: order + hidden + boxes */}
+                        {selectedExpression && (() => {
+                            const hidden = poseHiddenLayerIds(character, undefined);
+                            return layerOrderForPose(character, undefined).map((layer: VNCharacterLayer, stackIdx: number) => {
+                                if (hidden.has(layer.id)) return null;
+                                const assetId = selectedExpression.layerConfiguration[layer.id];
+                                if (!assetId) return null;
+                                const asset = layer.assets[assetId];
+                                if (!asset) return null;
+                                const boxStyle = { zIndex: stackIdx + 1, ...layerBoxStyle(resolveLayerBox(layer, asset, undefined)) };
+                                if (asset.videoUrl) {
+                                    return <video key={layer.id} src={resolveFieldUrl(project.id, asset.videoUrl) || undefined} autoPlay muted loop={asset.loop} playsInline className="absolute inset-0 w-full h-full object-contain" style={boxStyle} />;
+                                } else if (asset.imageUrl) {
+                                    return <img key={layer.id} src={resolveFieldUrl(project.id, asset.imageUrl) || undefined} alt={asset.name} className="absolute inset-0 w-full h-full object-contain" style={boxStyle} />;
+                                }
+                                return null;
+                            });
+                        })()}
+                        </div>
+                        </div>
 
                         {/* Empty state */}
                         {!character.baseImageUrl && !character.baseVideoUrl && layersArray.length === 0 && (
@@ -780,6 +795,50 @@ const CharacterEditorClassic: React.FC<{
                         />
                         {t('editor.italic')}
                     </label>
+
+                    {/* Text effects — dialogue-line default + name-box effect (twin of CharacterEditorNew). */}
+                    <div className="mt-3">
+                        <h4 className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-secondary)' }}>{t('fx.title', 'Text effects')}</h4>
+                        <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>{t('fx.hint', 'Make their words or their name move. You can also wrap part of a name in tags like [wave]…[/wave] right in the name field.')}</p>
+                        {([
+                            ['textEffect', t('fx.lines', 'Their lines (dialogue text)')],
+                            ['nameTextEffect', t('fx.name', 'Their name (in the name box)')],
+                        ] as Array<['textEffect' | 'nameTextEffect', string]>).map(([field, label]) => {
+                            const cur = character[field] as VNDialogueTextEffect | undefined;
+                            const setEff = (eff?: VNDialogueTextEffect) => updateCharacter({ [field]: eff } as any);
+                            return (
+                                <div key={field} className="mb-2">
+                                    <FormField label={label}>
+                                        <Select value={cur?.type ?? 'none'} onChange={e => {
+                                            const type = e.target.value;
+                                            if (type === 'none') setEff(undefined);
+                                            else setEff({ type: type as VNDialogueTextEffect['type'], speed: cur?.speed ?? 1, intensity: cur?.intensity ?? 1 });
+                                        }}>
+                                            {(['none', 'shake', 'wave', 'rainbow', 'glitch', 'pulse', 'fade-in', 'bounce', 'typewriter-bounce'] as const).map(v => (
+                                                <option key={v} value={v}>{t(`fx.opt.${v}`, { defaultValue: { none: 'None', shake: 'Shake', wave: 'Wave', rainbow: 'Rainbow', glitch: 'Glitch', pulse: 'Pulse', 'fade-in': 'Fade in', bounce: 'Bounce', 'typewriter-bounce': 'Typewriter bounce' }[v] })}</option>
+                                            ))}
+                                        </Select>
+                                    </FormField>
+                                    {cur && (
+                                        <div className="grid grid-cols-2 gap-3 mt-1">
+                                            <label className="block text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                                                {t('fx.speed', 'Speed')} — {(cur.speed ?? 1).toFixed(1)}x
+                                                <input type="range" min={0.1} max={5} step={0.1} value={cur.speed ?? 1}
+                                                    onChange={e => setEff({ ...cur, speed: parseFloat(e.target.value) })}
+                                                    className="w-full accent-[var(--accent-cyan)]" />
+                                            </label>
+                                            <label className="block text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                                                {t('fx.strength', 'Strength')} — {(cur.intensity ?? 1).toFixed(1)}x
+                                                <input type="range" min={0.1} max={3} step={0.1} value={cur.intensity ?? 1}
+                                                    onChange={e => setEff({ ...cur, intensity: parseFloat(e.target.value) })}
+                                                    className="w-full accent-[var(--accent-cyan)]" />
+                                            </label>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 <hr style={{ borderColor: 'var(--border-subtle)' }} />

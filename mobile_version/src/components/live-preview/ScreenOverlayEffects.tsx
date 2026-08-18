@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   clamp01,
   normalizeOverlayEffects,
@@ -375,7 +375,7 @@ export const LightsLayer: React.FC<{ lights: VNScreenLight[]; stageW: number; st
 /** Enhanced (WebGL) variant of the screen-attached flashlight: same params, shader-drawn
  *  darkness + dithered hole + warm rim; mouse rides a ref (no repaints). Only mounted when
  *  the module probe says WebGL exists, so no fallback children are needed here. */
-const EnhancedFlashlightOverlay: React.FC<{ effect: VNScreenOverlayEffect; width: number; height: number }> = ({ effect, width, height }) => {
+const EnhancedFlashlightOverlay: React.FC<{ effect: VNScreenOverlayEffect; width: number; height: number; onFallback?: () => void }> = ({ effect, width, height, onFallback }) => {
     const mouseRef = useRef<{ x: number; y: number } | null>(null);
     const hostRef = useRef<HTMLDivElement | null>(null);
     useEffect(() => {
@@ -398,6 +398,7 @@ const EnhancedFlashlightOverlay: React.FC<{ effect: VNScreenOverlayEffect; width
         <div ref={hostRef} className="absolute inset-0">
             <GlFxCanvas
                 kind="flashlight"
+                onFallback={onFallback}
                 width={width}
                 height={height}
                 getParams={() => {
@@ -491,6 +492,25 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
   const fireworksCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const minDim = Math.min(safeWidth, safeHeight);
 
+  /* Bumped whenever an Enhanced effect gives up on WebGL. Every classic simulation below lists
+   * it as a dependency, so the sims re-attach to the canvases that GlFxCanvas has just revealed
+   * as its fallback children. Without this the sims — which attach in effects keyed on their own
+   * params — would never run for a LATE failover, which is why the enhanced branches used to be
+   * gated on a mount-time probe alone (and rendered nothing at all when that probe was wrong). */
+  const [fxGeneration, setFxGeneration] = useState(0);
+
+  /* Gate-level failover. `glDead` records which effect kinds have given up on WebGL this mount,
+   * so `useGl(...)` flips that effect back to its Classic branch — which is how the effects whose
+   * Classic markup can't be nested inside GlFxCanvas (scanlines, beams, lightning, flashlight)
+   * still get a fallback. Nesting + gating are belt-and-braces: nesting covers the frame before
+   * the parent re-renders, the gate covers everything after. */
+  const [glDead, setGlDead] = useState<Record<string, boolean>>({});
+  const markGlDead = useCallback((key: string) => {
+    setGlDead(m => (m[key] ? m : { ...m, [key]: true }));
+    setFxGeneration(n => n + 1);
+  }, []);
+  const useGl = (key: string, style?: string) => isEnhanced(style) && webglLikelyAvailable() && !glDead[key];
+
   // Fog — thick, low, slow horizontal banks (light grey).
   useEffect(() => {
     const intensity = clamp01(fog?.intensity ?? 0);
@@ -504,7 +524,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
       intensity, color, blobCount: Math.round(16 * densityFog), sizeMin: minDim * 0.28, sizeMax: minDim * 0.55,
       vx: 16, vy: 0, vRand: 10, baseOpacity: 0.5, swirl: 6, speedMul: speed,
     });
-  }, [fog?.intensity, fog?.color, fog?.params?.speed, fog?.params?.particleDensity, safeWidth, safeHeight, minDim]);
+  }, [fog?.intensity, fog?.color, fog?.params?.speed, fog?.params?.particleDensity, safeWidth, safeHeight, minDim, fxGeneration]);
 
   // Haze — a faint, slow, near-uniform veil (warm/neutral tint).
   useEffect(() => {
@@ -519,7 +539,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
       intensity, color, blobCount: Math.round(10 * densityHaze), sizeMin: minDim * 0.45, sizeMax: minDim * 0.8,
       vx: 7, vy: 0, vRand: 4, baseOpacity: 0.22, swirl: 3, speedMul: speed,
     });
-  }, [haze?.intensity, haze?.color, haze?.params?.speed, haze?.params?.particleDensity, safeWidth, safeHeight, minDim]);
+  }, [haze?.intensity, haze?.color, haze?.params?.speed, haze?.params?.particleDensity, safeWidth, safeHeight, minDim, fxGeneration]);
 
   // Smoke — darker, rising, swirling wisps.
   useEffect(() => {
@@ -534,7 +554,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
       intensity, color, blobCount: Math.round(14 * densitySmoke), sizeMin: minDim * 0.18, sizeMax: minDim * 0.42,
       vx: 6, vy: -26, vRand: 14, baseOpacity: 0.42, swirl: 16, speedMul: speed,
     });
-  }, [smoke?.intensity, smoke?.color, smoke?.params?.speed, smoke?.params?.particleDensity, safeWidth, safeHeight, minDim]);
+  }, [smoke?.intensity, smoke?.color, smoke?.params?.speed, smoke?.params?.particleDensity, safeWidth, safeHeight, minDim, fxGeneration]);
 
   // Rain effect
   useEffect(() => {
@@ -627,7 +647,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [rain?.intensity, rain?.color, rain?.params?.windStrength, rain?.params?.dropLength, rain?.params?.speed, safeWidth, safeHeight]);
+  }, [rain?.intensity, rain?.color, rain?.params?.windStrength, rain?.params?.dropLength, rain?.params?.speed, safeWidth, safeHeight, fxGeneration]);
 
   // Snow/Ash effect
   useEffect(() => {
@@ -723,7 +743,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [snowAsh?.intensity, snowAsh?.variant, snowAsh?.color, snowAsh?.params?.particleSize, snowAsh?.params?.windStrength, snowAsh?.params?.speed, safeWidth, safeHeight]);
+  }, [snowAsh?.intensity, snowAsh?.variant, snowAsh?.color, snowAsh?.params?.particleSize, snowAsh?.params?.windStrength, snowAsh?.params?.speed, safeWidth, safeHeight, fxGeneration]);
 
   // Dynamic Sunbeams - soft undulating blanket of light
   useEffect(() => {
@@ -832,7 +852,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [sunbeams?.intensity, sunbeams?.color, sunbeams?.params?.speed, sunbeams?.params?.spread, safeWidth, safeHeight]);
+  }, [sunbeams?.intensity, sunbeams?.color, sunbeams?.params?.speed, sunbeams?.params?.spread, safeWidth, safeHeight, fxGeneration]);
 
   // Dynamic Shimmer - organic light waves + floating particles
   useEffect(() => {
@@ -958,7 +978,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [shimmer?.intensity, shimmer?.color, shimmer?.params?.speed, shimmer?.params?.particleDensity, shimmer?.params?.shimmerSide, shimmer?.params?.shimmerDirection, shimmer?.params?.shimmerParticlesOnly, safeWidth, safeHeight]);
+  }, [shimmer?.intensity, shimmer?.color, shimmer?.params?.speed, shimmer?.params?.particleDensity, shimmer?.params?.shimmerSide, shimmer?.params?.shimmerDirection, shimmer?.params?.shimmerParticlesOnly, safeWidth, safeHeight, fxGeneration]);
 
   // Continuous fireworks show (the persistent overlay variant; the one-shot burst is its own command).
   useEffect(() => {
@@ -970,7 +990,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
       speedMul: 0.5 + ep(fireworks.params, 'speed', 0.5) * 1.6,
       continuous: true,
     });
-  }, [fireworks?.intensity, fireworks?.color, fireworks?.params?.speed, safeWidth, safeHeight]);
+  }, [fireworks?.intensity, fireworks?.color, fireworks?.params?.speed, safeWidth, safeHeight, fxGeneration]);
 
   const scanlinesOpacity = clamp01(scanlines?.intensity ?? 0) * 0.65;
   const chromaOpacity = clamp01(chroma?.intensity ?? 0);
@@ -1011,8 +1031,8 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
       {/* CRT Scanlines. Enhanced = scanline mask + RGB aperture grille + rolling refresh
           bar + vignette + mains flicker — a real tube, not just stripes. */}
       {scanlinesOpacity > 0 && (
-        (scanlines && isEnhanced(scanlines.effectStyle) && webglLikelyAvailable()) ? (
-          <GlFxCanvas kind="crt" width={safeWidth} height={safeHeight}
+        (scanlines && useGl('crt', scanlines.effectStyle)) ? (
+          <GlFxCanvas kind="crt" width={safeWidth} height={safeHeight} onFallback={() => markGlDead('crt')}
             getParams={() => ({ kind: 'crt', intensity: clamp01(scanlines.intensity), lineSpacing: ep(scanlines.params, 'lineSpacing'), speed: ep(scanlines.params, 'speed') })} />
         ) : (
           <div
@@ -1095,9 +1115,11 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
           rays. Same probe-at-mount rule as atmosphere: the classic sims attach in effects that
           would not re-run after a late fallback. */}
       {sunbeams && clamp01(sunbeams.intensity) > 0 && (
-        (isEnhanced(sunbeams.effectStyle) && webglLikelyAvailable()) ? (
-          <GlFxCanvas kind="sunbeams" width={safeWidth} height={safeHeight} style={{ mixBlendMode: sunbeamsBlend }}
-            getParams={() => ({ kind: 'sunbeams', intensity: clamp01(sunbeams.intensity), color: sunbeams.color, speed: ep(sunbeams.params, 'speed'), spread: ep(sunbeams.params, 'spread') })} />
+        useGl('sunbeams', sunbeams.effectStyle) ? (
+          <GlFxCanvas kind="sunbeams" width={safeWidth} height={safeHeight} style={{ mixBlendMode: sunbeamsBlend }} onFallback={() => markGlDead('sunbeams')}
+            getParams={() => ({ kind: 'sunbeams', intensity: clamp01(sunbeams.intensity), color: sunbeams.color, speed: ep(sunbeams.params, 'speed'), spread: ep(sunbeams.params, 'spread') })}>
+            <canvas ref={sunbeamsCanvasRef} className="vnfx-canvas" style={{ mixBlendMode: sunbeamsBlend }} aria-hidden />
+          </GlFxCanvas>
         ) : (
           <canvas
             ref={sunbeamsCanvasRef}
@@ -1110,14 +1132,16 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
       {/* Shimmer - canvas-based with configurable blend mode. Enhanced = light curtains + motes. */}
       {shimmer && clamp01(shimmer.intensity) > 0 && (
-        (isEnhanced(shimmer.effectStyle) && webglLikelyAvailable()) ? (
-          <GlFxCanvas kind="shimmer" width={safeWidth} height={safeHeight} style={{ mixBlendMode: shimmerBlend }}
+        useGl('shimmer', shimmer.effectStyle) ? (
+          <GlFxCanvas kind="shimmer" width={safeWidth} height={safeHeight} style={{ mixBlendMode: shimmerBlend }} onFallback={() => markGlDead('shimmer')}
             getParams={() => ({
               kind: 'shimmer', intensity: clamp01(shimmer.intensity), color: shimmer.color,
               speed: ep(shimmer.params, 'speed'), density: ep(shimmer.params, 'particleDensity'),
               side: shimmer.params?.shimmerSide ?? 'full', direction: shimmer.params?.shimmerDirection ?? 'up',
               particlesOnly: !!shimmer.params?.shimmerParticlesOnly,
-            })} />
+            })}>
+            <canvas ref={shimmerCanvasRef} className="vnfx-canvas" style={{ mixBlendMode: shimmerBlend }} aria-hidden />
+          </GlFxCanvas>
         ) : (
           <canvas
             ref={shimmerCanvasRef}
@@ -1130,9 +1154,11 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
       {/* Rain. Enhanced = three parallax streak layers. */}
       {rain && clamp01(rain.intensity) > 0 && (
-        (isEnhanced(rain.effectStyle) && webglLikelyAvailable()) ? (
-          <GlFxCanvas kind="rain" width={safeWidth} height={safeHeight}
-            getParams={() => ({ kind: 'rain', intensity: clamp01(rain.intensity), color: rain.color, speed: ep(rain.params, 'speed'), wind: ep(rain.params, 'windStrength'), dropLength: ep(rain.params, 'dropLength') })} />
+        useGl('rain', rain.effectStyle) ? (
+          <GlFxCanvas kind="rain" width={safeWidth} height={safeHeight} onFallback={() => markGlDead('rain')}
+            getParams={() => ({ kind: 'rain', intensity: clamp01(rain.intensity), color: rain.color, speed: ep(rain.params, 'speed'), wind: ep(rain.params, 'windStrength'), dropLength: ep(rain.params, 'dropLength') })}>
+            <canvas ref={rainCanvasRef} className="vnfx-canvas" aria-hidden />
+          </GlFxCanvas>
         ) : (
           <canvas
             ref={rainCanvasRef}
@@ -1144,9 +1170,11 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
       {/* Snow / Ash. Enhanced = soft parallax flakes with wobble + twinkle. */}
       {snowAsh && clamp01(snowAsh.intensity) > 0 && (
-        (isEnhanced(snowAsh.effectStyle) && webglLikelyAvailable()) ? (
-          <GlFxCanvas kind="snow" width={safeWidth} height={safeHeight}
-            getParams={() => ({ kind: 'snow', variant: snowAsh.variant === 'ash' ? 'ash' : 'snow', intensity: clamp01(snowAsh.intensity), color: snowAsh.color, speed: ep(snowAsh.params, 'speed'), wind: ep(snowAsh.params, 'windStrength'), particleSize: ep(snowAsh.params, 'particleSize') })} />
+        useGl('snow', snowAsh.effectStyle) ? (
+          <GlFxCanvas kind="snow" width={safeWidth} height={safeHeight} onFallback={() => markGlDead('snow')}
+            getParams={() => ({ kind: 'snow', variant: snowAsh.variant === 'ash' ? 'ash' : 'snow', intensity: clamp01(snowAsh.intensity), color: snowAsh.color, speed: ep(snowAsh.params, 'speed'), wind: ep(snowAsh.params, 'windStrength'), particleSize: ep(snowAsh.params, 'particleSize') })}>
+            <canvas ref={snowCanvasRef} className="vnfx-canvas" aria-hidden />
+          </GlFxCanvas>
         ) : (
           <canvas
             ref={snowCanvasRef}
@@ -1161,10 +1189,12 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
           the classic cloud sims attach to their canvases in effects that would not re-run
           after a late fallback — the probe guarantees the classic canvas + sim mount together. */}
       {haze && clamp01(haze.intensity) > 0 && (
-        (isEnhanced(haze.effectStyle) && webglLikelyAvailable()) ? (
-          <GlFxCanvas kind="atmosphere" width={safeWidth} height={safeHeight}
+        useGl('atmosphere', haze.effectStyle) ? (
+          <GlFxCanvas kind="atmosphere" width={safeWidth} height={safeHeight} onFallback={() => markGlDead('atmosphere')}
             style={haze.params?.blendMode && haze.params.blendMode !== 'normal' ? { mixBlendMode: haze.params.blendMode } : undefined}
-            getParams={() => ({ kind: 'atmosphere', type: 'haze', intensity: clamp01(haze.intensity), color: haze.color, speed: ep(haze.params, 'speed', 1), wind: ep(haze.params, 'windStrength'), density: ep(haze.params, 'particleDensity') })} />
+            getParams={() => ({ kind: 'atmosphere', type: 'haze', intensity: clamp01(haze.intensity), color: haze.color, speed: ep(haze.params, 'speed', 1), wind: ep(haze.params, 'windStrength'), density: ep(haze.params, 'particleDensity') })}>
+            <canvas ref={hazeCanvasRef} className="vnfx-canvas" aria-hidden />
+          </GlFxCanvas>
         ) : (
           <canvas ref={hazeCanvasRef} className="vnfx-canvas" aria-hidden />
         )
@@ -1172,10 +1202,12 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
       {/* Fog */}
       {fog && clamp01(fog.intensity) > 0 && (
-        (isEnhanced(fog.effectStyle) && webglLikelyAvailable()) ? (
-          <GlFxCanvas kind="atmosphere" width={safeWidth} height={safeHeight}
+        useGl('atmosphere', fog.effectStyle) ? (
+          <GlFxCanvas kind="atmosphere" width={safeWidth} height={safeHeight} onFallback={() => markGlDead('atmosphere')}
             style={fog.params?.blendMode && fog.params.blendMode !== 'normal' ? { mixBlendMode: fog.params.blendMode } : undefined}
-            getParams={() => ({ kind: 'atmosphere', type: 'fog', intensity: clamp01(fog.intensity), color: fog.color, speed: ep(fog.params, 'speed', 1), wind: ep(fog.params, 'windStrength'), density: ep(fog.params, 'particleDensity') })} />
+            getParams={() => ({ kind: 'atmosphere', type: 'fog', intensity: clamp01(fog.intensity), color: fog.color, speed: ep(fog.params, 'speed', 1), wind: ep(fog.params, 'windStrength'), density: ep(fog.params, 'particleDensity') })}>
+            <canvas ref={fogCanvasRef} className="vnfx-canvas" aria-hidden />
+          </GlFxCanvas>
         ) : (
           <canvas ref={fogCanvasRef} className="vnfx-canvas" aria-hidden />
         )
@@ -1183,10 +1215,12 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
       {/* Smoke */}
       {smoke && clamp01(smoke.intensity) > 0 && (
-        (isEnhanced(smoke.effectStyle) && webglLikelyAvailable()) ? (
-          <GlFxCanvas kind="atmosphere" width={safeWidth} height={safeHeight}
+        useGl('atmosphere', smoke.effectStyle) ? (
+          <GlFxCanvas kind="atmosphere" width={safeWidth} height={safeHeight} onFallback={() => markGlDead('atmosphere')}
             style={smoke.params?.blendMode && smoke.params.blendMode !== 'normal' ? { mixBlendMode: smoke.params.blendMode } : undefined}
-            getParams={() => ({ kind: 'atmosphere', type: 'smoke', intensity: clamp01(smoke.intensity), color: smoke.color, speed: ep(smoke.params, 'speed', 1), wind: ep(smoke.params, 'windStrength'), density: ep(smoke.params, 'particleDensity') })} />
+            getParams={() => ({ kind: 'atmosphere', type: 'smoke', intensity: clamp01(smoke.intensity), color: smoke.color, speed: ep(smoke.params, 'speed', 1), wind: ep(smoke.params, 'windStrength'), density: ep(smoke.params, 'particleDensity') })}>
+            <canvas ref={smokeCanvasRef} className="vnfx-canvas" aria-hidden />
+          </GlFxCanvas>
         ) : (
           <canvas ref={smokeCanvasRef} className="vnfx-canvas" aria-hidden />
         )
@@ -1195,9 +1229,11 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
       {/* Fireworks (continuous show) — additive glow. Enhanced = procedural bursts with
           gravity droop, rising rockets, trails, and sparkle. */}
       {fireworks && clamp01(fireworks.intensity) > 0 && (
-        (isEnhanced(fireworks.effectStyle) && webglLikelyAvailable()) ? (
-          <GlFxCanvas kind="fireworks" width={safeWidth} height={safeHeight} style={{ mixBlendMode: 'screen' }}
-            getParams={() => ({ kind: 'fireworks', intensity: clamp01(fireworks.intensity), color: fireworks.color, speed: ep(fireworks.params, 'speed') })} />
+        useGl('fireworks', fireworks.effectStyle) ? (
+          <GlFxCanvas kind="fireworks" width={safeWidth} height={safeHeight} style={{ mixBlendMode: 'screen' }} onFallback={() => markGlDead('fireworks')}
+            getParams={() => ({ kind: 'fireworks', intensity: clamp01(fireworks.intensity), color: fireworks.color, speed: ep(fireworks.params, 'speed') })}>
+            <canvas ref={fireworksCanvasRef} className="vnfx-canvas" style={{ mixBlendMode: 'screen' }} aria-hidden />
+          </GlFxCanvas>
         ) : (
           <canvas ref={fireworksCanvasRef} className="vnfx-canvas" style={{ mixBlendMode: 'screen' }} aria-hidden />
         )
@@ -1210,11 +1246,11 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
         const darkness = clamp01(spotlight.intensity);
         const beams = spotlight.params?.beams ?? [];
         const cl = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, isNaN(v) ? lo : v));
-        if (isEnhanced(spotlight.effectStyle) && webglLikelyAvailable()) {
+        if (useGl('beams', spotlight.effectStyle)) {
           return (
             <div className="absolute inset-0 overflow-hidden">
               <div className="absolute inset-0" style={{ background: `rgba(0,0,0,${darkness})` }} />
-              <GlFxCanvas kind="beams" width={safeWidth} height={safeHeight} style={{ mixBlendMode: 'screen' }}
+              <GlFxCanvas kind="beams" width={safeWidth} height={safeHeight} style={{ mixBlendMode: 'screen' }} onFallback={() => markGlDead('beams')}
                 getParams={() => ({
                   kind: 'beams', stageW: safeWidth, stageH: safeHeight,
                   beams: (spotlight.params?.beams ?? []).map(bm => ({
@@ -1254,8 +1290,8 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
         const scaled = (lightsFx.params?.lights ?? []).map(l => ({ ...l, brightness: (l.brightness ?? 1) * clamp01(lightsFx.intensity) }));
         return (
           <div className="absolute inset-0 overflow-hidden">
-            {(isEnhanced(lightsFx.effectStyle) && webglLikelyAvailable()) ? (
-              <GlFxCanvas kind="lights" width={safeWidth} height={safeHeight} style={{ mixBlendMode: 'screen' }}
+            {useGl('lights', lightsFx.effectStyle) ? (
+              <GlFxCanvas kind="lights" width={safeWidth} height={safeHeight} style={{ mixBlendMode: 'screen' }} onFallback={() => markGlDead('lights')}
                 getParams={() => ({ kind: 'lights', lights: scaled, stageW: safeWidth, stageH: safeHeight })}>
                 <LightsLayer lights={scaled} stageW={safeWidth} stageH={safeHeight} />
               </GlFxCanvas>
@@ -1272,9 +1308,9 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
           LivePreview's style block, so the effect is self-contained wherever this renders. */}
       {lightning && clamp01(lightning.intensity) > 0 && (() => {
         // Enhanced = the same storm cadence plus a real procedural bolt with branches.
-        if (isEnhanced(lightning.effectStyle) && webglLikelyAvailable()) {
+        if (useGl('lightning', lightning.effectStyle)) {
           return (
-            <GlFxCanvas kind="lightning" width={safeWidth} height={safeHeight} style={{ mixBlendMode: 'screen' }}
+            <GlFxCanvas kind="lightning" width={safeWidth} height={safeHeight} style={{ mixBlendMode: 'screen' }} onFallback={() => markGlDead('lightning')}
               getParams={() => ({ kind: 'lightning', intensity: clamp01(lightning.intensity), color: lightning.color, speed: ep(lightning.params, 'speed') })} />
           );
         }
@@ -1303,8 +1339,8 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
       {/* Flashlight — mouse-following darkness with a lit circle at the cursor. Above everything
           so the darkness swallows the other effects too, exactly like the scene version. */}
       {flashlight && clamp01(flashlight.intensity) > 0 && (
-        (isEnhanced(flashlight.effectStyle) && webglLikelyAvailable())
-          ? <EnhancedFlashlightOverlay effect={flashlight} width={safeWidth} height={safeHeight} />
+        useGl('flashlight', flashlight.effectStyle)
+          ? <EnhancedFlashlightOverlay effect={flashlight} width={safeWidth} height={safeHeight} onFallback={() => markGlDead('flashlight')} />
           : <FlashlightOverlay effect={flashlight} minDim={minDim} />
       )}
 

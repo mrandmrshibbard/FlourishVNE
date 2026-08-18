@@ -21,7 +21,7 @@ const MENU_ACTION_TYPES: UIActionType[] = [
     UIActionType.QuitToTitle, UIActionType.ExitGame, UIActionType.JumpToScene, UIActionType.JumpToLabel,
     UIActionType.SetVariable, UIActionType.ResetVariable, UIActionType.PlaySound, UIActionType.StopSound, UIActionType.PlayMusic, UIActionType.StopMusic, UIActionType.PlayVideo, UIActionType.CycleLayerAsset, UIActionType.ToggleScreen, UIActionType.CloseScreen, UIActionType.OpenURL, UIActionType.SetLanguage, UIActionType.SetFullscreen,
     UIActionType.ChangePose, UIActionType.ChangeCharacter, UIActionType.PlayCharacterAnimation, UIActionType.PlayAnimation,
-    UIActionType.ShowElement, UIActionType.HideElement,
+    UIActionType.ShowElement, UIActionType.HideElement, UIActionType.HideImage,
     UIActionType.CallCommonEvent,
     UIActionType.GiveItem, UIActionType.UseItem, UIActionType.DestroyItem, UIActionType.UseSelectedItem, UIActionType.RestockCollection,
     UIActionType.BuyItem, UIActionType.SellItem, UIActionType.BuySelectedItem, UIActionType.SellSelectedItem,

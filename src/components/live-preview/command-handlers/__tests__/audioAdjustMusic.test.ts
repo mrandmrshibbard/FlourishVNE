@@ -62,3 +62,40 @@ describe('handlePlayMusic + audioAdjust', () => {
         expect(audio.preservesPitch).toBe(false);   // tape-style by default
     });
 });
+
+describe('handlePlayMusic — crossfade (fade set + different track playing)', () => {
+    const playingAudio = (): any => ({
+        ...fakeAudio(), paused: false, src: 'data:audio/wav;base64,OLD',
+        currentTime: 12, volume: 0.7, loop: true, playbackRate: 1.25, preservesPitch: false,
+    });
+
+    it('moves the outgoing song onto a fading clone carrying volume/loop/rate/pitch-mode', () => {
+        const clone: any = {
+            loop: false, volume: 1, playbackRate: 1, preservesPitch: true, readyState: 0, src: '',
+            addEventListener: vi.fn(), play: vi.fn(() => Promise.resolve()), pause: vi.fn(),
+        };
+        // Constructor mock must be a REAL function — `new` on an arrow impl throws.
+        const AudioSpy = vi.fn(function (this: any) { return clone; });
+        vi.stubGlobal('Audio', AudioSpy);
+        handlePlayMusic(cmd({ fadeDuration: 2 }), makeCtx(playingAudio()));
+        expect(AudioSpy).toHaveBeenCalledWith('data:audio/wav;base64,OLD');
+        expect(clone.volume).toBe(0.7);
+        expect(clone.loop).toBe(true);
+        expect(clone.playbackRate).toBe(1.25);
+        expect(clone.preservesPitch).toBe(false);
+        // Metadata not ready in the fake — playback is armed via loadedmetadata, once.
+        expect(clone.addEventListener).toHaveBeenCalledWith('loadedmetadata', expect.any(Function), { once: true });
+        vi.unstubAllGlobals();
+    });
+
+    it('creates NO clone without a fade, when nothing is playing, or on the same track', () => {
+        const AudioSpy = vi.fn(function (this: any) { return { addEventListener: vi.fn() }; });
+        vi.stubGlobal('Audio', AudioSpy);
+        handlePlayMusic(cmd({ fadeDuration: 0 }), makeCtx(playingAudio()));      // no fade
+        handlePlayMusic(cmd({ fadeDuration: 2 }), makeCtx(fakeAudio()));         // paused/empty
+        const same = playingAudio(); same.src = 'data:audio/wav;base64,AAAA';    // same track
+        handlePlayMusic(cmd({ fadeDuration: 2 }), makeCtx(same));
+        expect(AudioSpy).not.toHaveBeenCalled();
+        vi.unstubAllGlobals();
+    });
+});

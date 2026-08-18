@@ -3,8 +3,10 @@
  * the jsdom fallback (null WebGL context → Classic children render).
  */
 import React from 'react';
+import fs from 'fs';
+import path from 'path';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import {
     isEnhanced, commandHasEnhancedStyle, ENHANCED_OVERLAY_TYPES,
     lightsToUniforms, lightBatches, beamsToUniforms, flashlightToUniforms, atmosphereConfig,
@@ -170,7 +172,9 @@ describe('GlFxCanvas fallback (jsdom has no WebGL)', () => {
         expect(screen.getByTestId('classic-fallback')).toBeTruthy();
         expect(document.querySelector('canvas')).toBeNull();
     });
-    it('with zero size it renders an inert canvas and no fallback (waits for a measured stage)', () => {
+    it('at zero size it waits for a measured stage: inert canvas, Classic not yet needed', () => {
+        // NOT a statement that "no fallback" is correct in general — the effect simply hasn't
+        // tried WebGL yet. Every real failure path must fall back (see the lifecycle suite).
         render(
             <GlFxCanvas kind="lights" width={0} height={0} getParams={() => ({ kind: 'lights', lights: [], stageW: 0, stageH: 0 })}>
                 <div data-testid="classic-fallback">classic</div>
@@ -178,5 +182,94 @@ describe('GlFxCanvas fallback (jsdom has no WebGL)', () => {
         );
         expect(document.querySelector('canvas')).toBeTruthy();
         expect(screen.queryByTestId('classic-fallback')).toBeNull();
+    });
+});
+
+/**
+ * Lifecycle — the regression that silently disabled EVERY Enhanced effect: the GL context
+ * used to be re-created on each width/height change, and its teardown called loseContext(),
+ * which cannot be undone on the same canvas. Overlays mount at a placeholder size and flip to
+ * the measured one within ~100ms, so the context died on startup, every time.
+ * jsdom has no WebGL, so these tests install a fake context.
+ */
+describe('GlFxCanvas GL lifecycle', () => {
+    const installFakeGl = () => {
+        const loseContext = vi.fn();
+        const gl: any = {
+            isContextLost: () => false,
+            getExtension: (n: string) => (n === 'WEBGL_lose_context' ? { loseContext } : null),
+            getParameter: () => 64,
+            createShader: () => ({}), shaderSource: vi.fn(), compileShader: vi.fn(),
+            getShaderParameter: () => true, deleteShader: vi.fn(),
+            createProgram: () => ({}), attachShader: vi.fn(), linkProgram: vi.fn(),
+            getProgramParameter: () => true, deleteProgram: vi.fn(), useProgram: vi.fn(),
+            createBuffer: () => ({}), bindBuffer: vi.fn(), bufferData: vi.fn(),
+            getAttribLocation: () => 0, enableVertexAttribArray: vi.fn(), vertexAttribPointer: vi.fn(),
+            getUniformLocation: () => ({}),
+            uniform1f: vi.fn(), uniform2f: vi.fn(), uniform3f: vi.fn(), uniform4f: vi.fn(),
+            uniform1i: vi.fn(), uniform4fv: vi.fn(), uniform2fv: vi.fn(), uniform3fv: vi.fn(),
+            viewport: vi.fn(), clearColor: vi.fn(), clear: vi.fn(), enable: vi.fn(),
+            blendFunc: vi.fn(), drawArrays: vi.fn(),
+            COLOR_BUFFER_BIT: 1, BLEND: 1, ARRAY_BUFFER: 1, STATIC_DRAW: 1, FLOAT: 1,
+            TRIANGLES: 1, VERTEX_SHADER: 1, FRAGMENT_SHADER: 1, COMPILE_STATUS: 1, LINK_STATUS: 1,
+            ONE: 1, ONE_MINUS_SRC_ALPHA: 1, SRC_ALPHA: 1, MAX_FRAGMENT_UNIFORM_VECTORS: 1,
+        };
+        const spy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext')
+            .mockImplementation(((type: string) => (type === 'webgl' || type === 'experimental-webgl' ? gl : null)) as any);
+        return { gl, loseContext, restore: () => spy.mockRestore() };
+    };
+
+    it('SURVIVES resizes: the context is never destroyed and Classic never takes over', () => {
+        const { loseContext, restore } = installFakeGl();
+        try {
+            const params = () => ({ kind: 'rain' as const, intensity: 0.5 });
+            const { rerender } = render(
+                <GlFxCanvas kind="rain" width={1280} height={720} getParams={params}>
+                    <div data-testid="classic-fallback">classic</div>
+                </GlFxCanvas>
+            );
+            expect(document.querySelector('canvas')).toBeTruthy();
+            // The exact startup sequence: placeholder size → measured size → a later resize.
+            rerender(
+                <GlFxCanvas kind="rain" width={1920} height={1080} getParams={params}>
+                    <div data-testid="classic-fallback">classic</div>
+                </GlFxCanvas>
+            );
+            rerender(
+                <GlFxCanvas kind="rain" width={800} height={600} getParams={params}>
+                    <div data-testid="classic-fallback">classic</div>
+                </GlFxCanvas>
+            );
+            expect(loseContext).not.toHaveBeenCalled();
+            expect(screen.queryByTestId('classic-fallback')).toBeNull();
+            expect(document.querySelector('canvas')).toBeTruthy();
+        } finally { restore(); }
+    });
+
+    /* The original bug shipped because 12 of 16 Enhanced branches had no Classic counterpart,
+     * so any WebGL failure rendered nothing at all. Every Enhanced branch must be reachable
+     * back to Classic — via the failover gate, or by nesting the Classic markup as children. */
+    it('every Enhanced screen-FX branch has a Classic failover', () => {
+        const src = fs.readFileSync(path.join(__dirname, '..', '..', 'ScreenOverlayEffects.tsx'), 'utf8');
+        const gates = (src.match(/useGl\('/g) || []).length;
+        const marks = (src.match(/markGlDead\('/g) || []).length;
+        expect(gates).toBeGreaterThan(10);
+        expect(marks).toBe(gates);                       // one failover per gate
+        // No branch may test WebGL directly any more — that path can't fall back.
+        expect(src).not.toMatch(/isEnhanced\([a-zA-Z]+\.effectStyle\)\s*&&\s*webglLikelyAvailable\(\)/);
+    });
+
+    it('a lost context falls over to Classic instead of leaving a blank canvas', () => {
+        const { restore } = installFakeGl();
+        try {
+            render(
+                <GlFxCanvas kind="rain" width={1280} height={720} getParams={() => ({ kind: 'rain', intensity: 0.5 })}>
+                    <div data-testid="classic-fallback">classic</div>
+                </GlFxCanvas>
+            );
+            const canvas = document.querySelector('canvas')!;
+            act(() => { canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true })); });
+            expect(screen.getByTestId('classic-fallback')).toBeTruthy();
+        } finally { restore(); }
     });
 });

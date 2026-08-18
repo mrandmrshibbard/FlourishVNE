@@ -247,6 +247,19 @@ export interface VNProjectUI {
     /** On voiced lines, pace the typewriter so the reveal finishes together with the clip
      *  (per-line textSpeed overrides still win). Off by default. */
     voicePacedText?: boolean;
+    /** Character name mentions: when a character's name appears INSIDE a dialogue line, show
+     *  it in that character's own identity (their name color and/or their font) — like
+     *  speak-in-color, but for mentions. Matches each character's CURRENT display name
+     *  ({Nickname} tokens resolve live). Off by default; all additive-optional. */
+    dialogueNameMentions?: {
+        enabled?: boolean;
+        /** Tint the mentioned name in that character's name color (default ON when enabled). */
+        useColor?: boolean;
+        /** Render the mentioned name in that character's dialogue font (default ON when enabled). */
+        useFont?: boolean;
+        /** Also bold the mentioned name (default off). */
+        bold?: boolean;
+    };
     /** Auto-pauses at punctuation while dialogue types — a small hold after commas, a longer one
      *  after sentence ends, longest after "…" — so dialogue reads naturally without hand-typed
      *  [pause] codes. ABSENT = off (today's behavior). Skipped on voice-paced lines (the clip

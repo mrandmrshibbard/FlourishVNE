@@ -24,6 +24,12 @@ export interface RuntimeCommandHelpers {
 export interface CommandContext {
     project: VNProject;
     playerState: PlayerState;
+    /** Resolve a jump target through the destination scene's own conditions, walking on to its
+     *  `fallbackSceneId` when they fail. The end-of-scene fall-through and choice-driven jumps
+     *  always did this; the Jump COMMAND did not, so a conditioned scene played even when its
+     *  conditions said no and the author's fallback never fired. Optional so older callers that
+     *  build a context without it keep working (they get the raw target, as before). */
+    navigateToScene?: (targetSceneId: VNID, variables: PlayerState['variables']) => VNID;
     assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
     getAssetMetadata: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => { isVideo: boolean; loop: boolean };
     musicAudioRef: React.RefObject<HTMLAudioElement>;
@@ -84,6 +90,20 @@ export interface CommandResult {
         currentCommands?: any[];
         commandStack?: any[];
     };
+    /** Variable ids this command DELIBERATELY wrote.
+     *
+     *  UI actions (hot-spots, screen buttons) park their variable writes in a separate buffer and
+     *  mark the id "dirty"; every runtime read then prefers the buffer over the game value. The
+     *  dirty mark was only ever cleared wholesale, so a hot-spot write shadowed that variable for
+     *  the rest of the scene: a later Set Variable command wrote the real store, the merged view
+     *  kept returning the hot-spot's value, and anything reading it (a Wait condition, a command's
+     *  conditions) saw the stale one.
+     *
+     *  Listing the ids explicitly matters — `updates.variables` carries the WHOLE map, so clearing
+     *  by diff would both miss this case (the value is already correct in the game store) and wipe
+     *  a genuinely uncommitted screen edit, e.g. a half-finished name entry or dress-up choice.
+     *  Runtime-only: never serialized, so no save/load impact. */
+    writtenVariableIds?: VNID[];
     /** A FUNCTIONAL stage-state delta applied against the LATEST state (not the handler's
      *  closure snapshot). Use this for add/remove on stage collections (characters, overlays)
      *  so that stacked/`runAsync` commands compose instead of clobbering each other: e.g. four

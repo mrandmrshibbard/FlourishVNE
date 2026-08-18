@@ -75,7 +75,7 @@ const LetStoryContinueCheckbox: React.FC<{ cmd: any; updateCommand: UpdateComman
             <input type="checkbox" checked={!!cmd.modifiers?.runAsync} onChange={e => updateCommand(writeRunAsync(cmd, e.target.checked))} className="w-4 h-4" />
             <span className="text-xs text-[var(--text-secondary)]">{t('shared.letStoryContinue', 'Let the story continue')}</span>
         </label>
-        <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('shared.letStoryContinueHint', 'The next command starts right away — great for a character fading in while dialogue types.')}</p>
+        <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('shared.letStoryContinueHint', 'The next command starts right away — great for a character fading in while dialogue types. To make several commands happen TOGETHER (like three images hiding at once), turn this on for each of them except the last one.')}</p>
     </div>
 );
 
@@ -400,6 +400,12 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
                 <SceneTransitionSelect value={c.transition} customTransitions={project.customTransitions} onChange={v => updateCommand({ transition: v } as any)} />
             </FormField>
             <p className="text-[10px] text-[var(--text-muted)]">{t('jump.transitionHint', "Just for this jump — overrides the scene's exit transition from Scene Settings.")}</p>
+            {c.transition !== 'instant' && !(c.transition || '').startsWith('custom:') && (
+                <FormField label={t('jump.fadeColor', 'Fade color')}>
+                    <ColorInput value={c.transitionColor || '#000000'} onChange={val => updateCommand({ transitionColor: (!val || val.toLowerCase() === '#000000') ? undefined : val } as any)} />
+                    <p className="text-[10px] text-[var(--text-muted)] mt-1">{t('jump.fadeColorHint', 'Just for this jump — the screen fades through this color, and with any color but black it also fades back in from it.')}</p>
+                </FormField>
+            )}
         </>;
     }
     if (command.type === CommandType.Wait) {
@@ -421,6 +427,14 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
             {c.waitForCondition && (
                 <div className="pl-2 border-l-2 border-[var(--accent-lavender)]/40 space-y-2">
                     <p className="text-[10px] text-[var(--text-muted)]">{t('wait.conditionHint', 'Advances as soon as these are met (checked continuously).')}</p>
+                    {/* An empty list counts as "already true" everywhere in the engine, so a Wait
+                        with no condition rows silently does nothing at all. Say so plainly rather
+                        than letting the author discover it in play. */}
+                    {(!c.waitConditions || c.waitConditions.length === 0) && (
+                        <p className="text-[10px] text-amber-400">
+                            {t('wait.conditionEmptyWarning', 'Add at least one condition — with none set, this Wait is skipped instantly.')}
+                        </p>
+                    )}
                     <ConditionsEditor conditions={c.waitConditions || []} project={project} onChange={(cs) => updateCommand({ waitConditions: cs } as any)} />
                 </div>
             )}
@@ -1362,6 +1376,7 @@ const AudioCmdGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand; u
                 {trackPicker}
                 {volume}
                 <FormField label={t('audio.fadeDurationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.fadeDuration} onChange={e => updateCommand({ fadeDuration: parseFloat(e.target.value) || 0 } as any)} /></FormField>
+                <p className="text-[10px] text-[var(--text-muted)]">{t('audio.crossfadeHint', 'With a fade set, switching songs crossfades — the old song fades out while the new one fades in, no hard cut.')}</p>
                 <label className="flex items-center gap-1 text-xs text-[var(--text-secondary)] cursor-pointer"><input type="checkbox" checked={cmd.loop} onChange={e => updateCommand({ loop: e.target.checked } as any)} /> {t('audio.loop')}</label>
                 {soundShaping(false)}
             </>;
@@ -1532,6 +1547,14 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
             </>;
         case CommandType.ResetScreenEffects:
             return <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 } as any)} /></FormField>;
+        case CommandType.AutoSave:
+            return <>
+                <FormField label={t('flow.autoSaveSlot', 'Save slot')}>
+                    <TextInput type="number" min="0" step="1" value={(cmd as any).slotNumber ?? 0}
+                        onChange={e => { const n = parseInt(e.target.value, 10); updateCommand({ slotNumber: Number.isFinite(n) && n >= 0 ? n : 0 } as any); }} />
+                </FormField>
+                <p className="text-[10px] text-[var(--text-muted)]">{t('flow.autoSaveHint', 'Saves the game silently at this point — no menu, the story keeps going. Slot 0 is the special Continue slot: the title screen’s Continue button loads it.')}</p>
+            </>;
         case CommandType.FlashScreen:
             return <>
                 <FormField label={t('screen.flashColor')}>
@@ -3010,7 +3033,7 @@ const MoveCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; update
                 <input type="checkbox" checked={cmd.waitForCompletion === false} onChange={e => updateCommand({ waitForCompletion: e.target.checked ? false : undefined } as any)} className="w-4 h-4" />
                 <span className="text-xs text-[var(--text-secondary)]">{t('shared.letStoryContinue', 'Let the story continue')}</span>
             </label>
-            <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('shared.letStoryContinueHint', 'The next command starts right away — great for a character fading in while dialogue types.')}</p>
+            <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('shared.letStoryContinueHint', 'The next command starts right away — great for a character fading in while dialogue types. To make several commands happen TOGETHER (like three images hiding at once), turn this on for each of them except the last one.')}</p>
         </div>
 
         {/* Optional extras — leave blank to keep unchanged. */}
@@ -3617,6 +3640,7 @@ export function summarizeGroup(groupId: InspectorGroupId, command: VNCommand, pr
             case CommandType.PanZoomScreen: return `${c.zoom}x @ ${c.panX},${c.panY}`;
             case CommandType.ResetScreenEffects: return `${c.duration}s`;
             case CommandType.FlashScreen: return c.color || '';
+            case CommandType.AutoSave: return (c.slotNumber ?? 0) === 0 ? 'Continue slot' : `slot ${c.slotNumber}`;
             case CommandType.Lightning: return `${c.flashes ?? 2}× flash${c.thunderSfxId ? ' + thunder' : ''}`;
             case CommandType.Fireworks: return `${c.bursts ?? 3} burst${(c.bursts ?? 3) === 1 ? '' : 's'}${c.sfxId ? ' + boom' : ''}`;
             case CommandType.PlaceLights: return `${(c.lights || []).length} light${(c.lights || []).length === 1 ? '' : 's'}`;

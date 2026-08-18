@@ -124,6 +124,48 @@ const ActionFields: React.FC<{
                 </optgroup>)}
             </>)));
         }
+        case UIActionType.HideImage: {
+            /* PICTURES ONLY. "Hide Element" lists every element on every screen, so finding the one
+             * picture you meant is a hunt — that's the whole point of this action. Screens list only
+             * their picture elements; scenes list the pictures the story itself put up (Show Image),
+             * so one action covers "hide that picture" wherever the picture lives. */
+            const screenPictures = Object.values(project.uiScreens).map((s: VNUIScreen) => ({
+                id: s.id,
+                name: s.name,
+                pictures: Object.values(s.elements || {})
+                    .filter((el: any) => el.type === 'Image' || el.type === 'draggableImageElement')
+                    .map((el: any) => ({ id: el.id as VNID, name: (el.name || el.type) as string })),
+            })).filter(g => g.pictures.length > 0);
+            const scenePictures = Object.values(project.scenes as any).map((sc: any) => ({
+                id: sc.id,
+                name: sc.name,
+                pictures: (sc.commands || [])
+                    .filter((cc: any) => cc.type === 'ShowImage')
+                    .map((cc: any) => ({
+                        id: cc.id as VNID,
+                        name: (project.images as any)[cc.imageId]?.name
+                            || (project.backgrounds as any)[cc.imageId]?.name
+                            || t('actionEditor.unnamedImage', 'Untitled image'),
+                    })),
+            })).filter((g: any) => g.pictures.length > 0);
+            const hasAny = screenPictures.length > 0 || scenePictures.length > 0;
+            return group('sky', <>
+                {field(t('actionEditor.imageToHide', 'Picture to hide'), sel(a.targetCommandId || '', v => set({ targetCommandId: v }), <>
+                    <option value="">{t('actionEditor.selectImage', 'Select a picture…')}</option>
+                    {screenPictures.map(g => <optgroup key={`scr-${g.id}`} label={g.name}>
+                        {g.pictures.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </optgroup>)}
+                    {scenePictures.map((g: any) => <optgroup key={`scn-${g.id}`} label={`${g.name} — ${t('actionEditor.inScene', 'in the story')}`}>
+                        {g.pictures.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </optgroup>)}
+                </>))}
+                {!hasAny && (
+                    <p className="text-[10px] text-[var(--text-muted)]">
+                        {t('actionEditor.noPictures', 'No pictures yet — add a picture to a screen, or a Show Image command to a scene.')}
+                    </p>
+                )}
+            </>);
+        }
         case UIActionType.JumpToScene:
             return group('sky', <>
                 {field(t('actionEditor.targetScene', 'Target scene'), sel(a.targetSceneId || '', v => set({ targetSceneId: v }), <>

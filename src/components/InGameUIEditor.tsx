@@ -22,6 +22,7 @@ import { isManagerWindow, isMultiWindowSupported, openManagerWindow, syncInGameS
 import FontEditor, { defaultFontSettings } from './ui/FontEditor';
 import { useTranslation } from 'react-i18next';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
+import ChoiceButtonsView from './choice/ChoiceButtonsView';
 import { GradientText } from './ui/GradientText';
 import ResizableDraggable from './menu-editor/ResizableDraggable';
 import CanvasSnapGuides from './menu-editor/CanvasSnapGuides';
@@ -344,6 +345,9 @@ const DialogueBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({
                     backgroundColor: bgColor,
                     border: '1px solid rgba(148,163,184,0.25)',
                     boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
+                    // Runtime parity: the default look is frosted in-game (LivePreview blurs 8px).
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
                 }),
                 ...(bgUrl
                     ? { ...buildImageBackgroundStyle(bgUrl, sizeMode, slice), backgroundColor: bgColor,
@@ -351,6 +355,9 @@ const DialogueBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({
                     : { padding: `calc(var(--font-scale,1) * ${padding}px)` }),
             }}>
                 {!testPlaying && bgVideoUrl && <TrimmedVideo key={`dlg-${bgVideoUrl}-${vReload}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={bgVideoUrl} autoPlay loop muted playsInline trimStart={bgMedia.trimStart} trimEnd={bgMedia.trimEnd} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} />}
+                {/* Runtime parity: plain positioned block (no flex column / full height), full-
+                    opacity text, the text GRADIENT applied, wordBreak normal — the preview and
+                    test play must be the same picture. */}
                 <div style={{
                     position: 'relative', zIndex: 1,
                     padding: sizeMode === 'nine-slice' && bgUrl ? `calc(var(--font-scale,1) * ${padding}px)` : undefined,
@@ -358,13 +365,9 @@ const DialogueBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({
                     paddingBottom: textPadBot ? `calc(var(--font-scale,1) * ${textPadBot}px)` : undefined,
                     paddingLeft: textPadLeft ? `calc(var(--font-scale,1) * ${textPadLeft}px)` : undefined,
                     paddingRight: textPadRight ? `calc(var(--font-scale,1) * ${textPadRight}px)` : undefined,
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'flex-start',
                 }}>
-                    <p style={fontToStyle(ui.dialogueTextFont)} className="leading-relaxed opacity-80">
-                        {t('inGameUi.sampleDialogue')}
+                    <p style={{ ...fontToStyle(ui.dialogueTextFont), wordBreak: 'normal' }} className="leading-relaxed">
+                        <GradientText style={extractTextGradientStyle(ui.dialogueTextFont)}>{t('inGameUi.sampleDialogue')}</GradientText>
                     </p>
                 </div>
             </div>
@@ -379,10 +382,12 @@ const NameBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui,
     const pad = ui.nameboxPadding ?? 8;
     const hPad = ui.nameboxHorizontalPadding ?? 14;
 
-    const bgImgId = ui.nameboxImage?.id;
-    const bgUrl = bgImgId
-        ? ((project.images as any)[bgImgId]?.imageUrl || (project.backgrounds as any)[bgImgId]?.imageUrl)
-        : null;
+    // resolveFieldUrl-aware (file-backed refs) via chromeBgMedia, like the runtime.
+    const bgUrl = chromeBgMedia(ui.nameboxImage, project).imageUrl;
+    // Runtime parity: the default outline is suppressed when the DIALOGUE box has custom
+    // art too, not just when the namebox itself does (LivePreview's hasCustomImage rule).
+    const dlgMedia = chromeBgMedia(ui.dialogueBoxImage, project);
+    const dialogueHasArt = !!(dlgMedia.imageUrl || dlgMedia.videoUrl || ui.dialogueBoxBorderImage?.id);
 
     const nameAlign = ui.dialogueNameFont?.align || 'left';
     const justifyMap = { left: 'flex-start', center: 'center', right: 'flex-end' } as const;
@@ -396,73 +401,44 @@ const NameBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui,
                 ? buildImageBackgroundStyle(bgUrl, ui.nameboxSizeMode ?? 'stretch')
                 : {
                     backgroundColor: bgColor,
-                    border: '1px solid rgba(148,163,184,0.35)',
+                    ...(dialogueHasArt ? {} : {
+                        border: '1px solid rgba(148,163,184,0.35)',
+                        // Runtime parity: frosted default look (LivePreview blurs 6px).
+                        backdropFilter: 'blur(6px)',
+                        WebkitBackdropFilter: 'blur(6px)',
+                    }),
                 }),
         }}>
-            <span style={fontToStyle(ui.dialogueNameFont)} className="opacity-90">
+            <span style={{ ...fontToStyle(ui.dialogueNameFont), lineHeight: 1.3 }}>
                 <GradientText style={extractTextGradientStyle(ui.dialogueNameFont)}>{t('inGameUi.characterName')}</GradientText>
             </span>
         </div>
     );
 };
 
+// The choice band renders through THE shared engine renderer (components/choice/) with three
+// sample options — the preview physically cannot drift from gameplay. `fillParent` makes the
+// stack fill the canvas box (the ResizableDraggable owns position); test-play video handling
+// comes from the shared component's suppressVideo/videoNonce props.
 const ChoiceButtonsPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
     const { t } = useTranslation('ui');
     const vReload = useVideoReloadNonce();
     const testPlaying = useTestPlayActive();
-    const bgColor = hexToRgba(ui.choiceButtonColor ?? '#1e293b', ui.choiceButtonOpacity ?? 90);
-    const br = ui.choiceButtonBorderRadius ?? 8;
-    const pad = ui.choiceButtonPadding ?? 16;
-    const slice = ui.choiceButtonSlice ?? 15;
-    const sizeMode = ui.choiceButtonSizeMode ?? 'stretch';
-
-    const bgMedia = chromeBgMedia(ui.choiceButtonImage, project);
-    const bgUrl = bgMedia.imageUrl;
-    const bgVideoUrl = bgMedia.videoUrl;
-
-    const borderImgId = (ui as any).choiceButtonBorderImage?.id;
-    const borderUrl = borderImgId
-        ? ((project.images as any)[borderImgId]?.imageUrl || (project.backgrounds as any)[borderImgId]?.imageUrl)
-        : null;
-    const borderPadding = (ui as any).choiceBorderPadding ?? 8;
-    const hasCustomImage = bgUrl || bgVideoUrl || borderUrl;
-
-    // Mirrors the engine's renderButton + vertical layout exactly (full-width buttons in the
-    // configured rect, horizontal padding doubled, fixed height when set, frosted default look,
-    // full-opacity text, 12px gaps) — the preview and test play must be the same picture.
+    const sampleOptions = ['A', 'B', 'C'].map((label, i) => ({
+        id: `sample-choice-${i}`,
+        text: `${t('inGameUi.sampleChoice')} ${label}`,
+        actions: [],
+    })) as any[];
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center" style={{ gap: 'calc(var(--font-scale,1) * 12px)' }}>
-            {['A', 'B', 'C'].map(label => (
-                <div key={label} className="w-full"
-                     style={borderUrl
-                         ? { ...buildImageBackgroundStyle(borderUrl, sizeMode, slice), padding: `calc(var(--font-scale,1) * ${borderPadding}px)`, borderRadius: `calc(var(--font-scale,1) * ${br}px)` }
-                         : {}}>
-                    <div className="w-full flex flex-col items-center justify-center" style={{
-                        position: 'relative', overflow: 'hidden',
-                        textAlign: (ui.choiceTextFont?.align || 'center') as any,
-                        borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
-                        padding: `calc(var(--font-scale,1) * ${pad}px) calc(var(--font-scale,1) * ${pad * 2}px)`,
-                        ...(ui.choiceButtonHeight ? { height: `calc(var(--font-scale,1) * ${ui.choiceButtonHeight}px)` } : {}),
-                        ...(bgUrl
-                            ? { ...buildImageBackgroundStyle(bgUrl, sizeMode, slice), backgroundColor: bgColor }
-                            : !hasCustomImage
-                                ? {
-                                    backgroundColor: bgColor,
-                                    border: '1px solid rgba(148,163,184,0.3)',
-                                    boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
-                                    backdropFilter: 'blur(6px)',
-                                    WebkitBackdropFilter: 'blur(6px)',
-                                  }
-                                : {}),
-                    }}>
-                        {!testPlaying && bgVideoUrl && <TrimmedVideo key={`cho-${label}-${bgVideoUrl}-${vReload}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={bgVideoUrl} autoPlay loop muted playsInline trimStart={bgMedia.trimStart} trimEnd={bgMedia.trimEnd} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} />}
-                        <span style={{ ...fontToStyle(ui.choiceTextFont), position: 'relative', zIndex: 1 }}>
-                            <GradientText style={extractTextGradientStyle(ui.choiceTextFont)}>{`${t('inGameUi.sampleChoice')} ${label}`}</GradientText>
-                        </span>
-                    </div>
-                </div>
-            ))}
-        </div>
+        <ChoiceButtonsView
+            project={project}
+            projectUI={ui}
+            options={sampleOptions}
+            interactive={false}
+            suppressVideo={testPlaying}
+            videoNonce={vReload}
+            fillParent
+        />
     );
 };
 
@@ -1407,6 +1383,45 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         </label>
                         <p className="text-[10px] text-[var(--text-muted)] mt-1">{t('inGameUi.voicePacedTextHint', 'Only affects voiced lines; a per-line Text Speed override still wins.')}</p>
                     </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection title={t('inGameUi.groupNameMentions', 'Character name mentions')}>
+                    <p className="text-[10px] text-[var(--text-muted)] mb-2">{t('inGameUi.nameMentionsHint', 'When a character’s name is mentioned inside dialogue, show the name in that character’s own style. Nicknames count — the name a character currently goes by is the one that lights up.')}</p>
+                    {(() => {
+                        const nm = ui.dialogueNameMentions || {};
+                        const patch = (p: any) => onUpdate({ dialogueNameMentions: { ...nm, ...p } });
+                        return <>
+                            <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                                <input type="checkbox" checked={nm.enabled ?? false}
+                                    onChange={e => {
+                                        // Off with nothing customized → drop the key entirely (byte-identity).
+                                        if (!e.target.checked && nm.useColor === undefined && nm.useFont === undefined && !nm.bold) {
+                                            onUpdate({ dialogueNameMentions: undefined });
+                                        } else {
+                                            patch({ enabled: e.target.checked });
+                                        }
+                                    }} className="cursor-pointer" />
+                                {t('inGameUi.nameMentionsOn', 'Style mentioned character names')}
+                            </label>
+                            {nm.enabled && (
+                                <div className="space-y-1.5 mt-2">
+                                    <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                                        <input type="checkbox" checked={nm.useColor !== false} onChange={e => patch({ useColor: e.target.checked ? undefined : false })} className="cursor-pointer" />
+                                        {t('inGameUi.nameMentionsColor', 'Use their name color')}
+                                    </label>
+                                    <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                                        <input type="checkbox" checked={nm.useFont !== false} onChange={e => patch({ useFont: e.target.checked ? undefined : false })} className="cursor-pointer" />
+                                        {t('inGameUi.nameMentionsFont', 'Use their font (when they have one)')}
+                                    </label>
+                                    <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                                        <input type="checkbox" checked={nm.bold ?? false} onChange={e => patch({ bold: e.target.checked || undefined })} className="cursor-pointer" />
+                                        {t('inGameUi.nameMentionsBold', 'Make the name bold')}
+                                    </label>
+                                    <p className="text-[10px] text-[var(--text-muted)]">{t('inGameUi.nameMentionsGlossary', 'If a name is also a Glossary term, the Glossary look and tooltip win.')}</p>
+                                </div>
+                            )}
+                        </>;
+                    })()}
                 </CollapsibleSection>
 
                 <CollapsibleSection title={t('inGameUi.groupReactiveStates', 'Reactive states')}>

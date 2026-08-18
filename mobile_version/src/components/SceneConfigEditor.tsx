@@ -4,7 +4,7 @@ import { useProject } from '../contexts/ProjectContext';
 import { VNID } from '../types';
 import { VNScene } from '../features/scene/types';
 import Panel from './ui/Panel';
-import { FormField, Select, TextInput, RangeInput } from './ui/Form';
+import { FormField, Select, TextInput, RangeInput, ColorInput } from './ui/Form';
 import ConditionsEditor from './ui/ConditionsEditor';
 
 const SceneConfigEditor: React.FC<{
@@ -24,7 +24,7 @@ const SceneConfigEditor: React.FC<{
         );
     }
 
-    const updateScene = (updates: Partial<Pick<VNScene, 'conditions' | 'fallbackSceneId' | 'outTransition' | 'outTransitionDuration' | 'parallax' | 'dayNight'>>) => {
+    const updateScene = (updates: Partial<Pick<VNScene, 'conditions' | 'fallbackSceneId' | 'outTransition' | 'outTransitionDuration' | 'outTransitionColor' | 'parallax' | 'dayNight'>>) => {
         dispatch({ type: 'UPDATE_SCENE_CONFIG', payload: { sceneId: activeSceneId, updates } });
     };
     const px = activeScene.parallax;
@@ -63,6 +63,15 @@ const SceneConfigEditor: React.FC<{
                             <p className="text-[10px] text-[var(--text-secondary)] mb-2">
                                 {t('config.customTransitionHint', 'This plays your closing animation, switches the scene while the screen is covered, then plays your opening animation. Timing comes from the transition itself (set it up under In-Game UI → Scene Transitions).')}
                             </p>
+                        )}
+                        {(activeScene.outTransition || 'fade') !== 'instant' && !(activeScene.outTransition || '').startsWith('custom:') && (
+                            <FormField label={t('config.fadeColor', 'Fade color')}>
+                                <ColorInput
+                                    value={activeScene.outTransitionColor || '#000000'}
+                                    onChange={val => updateScene({ outTransitionColor: (!val || val.toLowerCase() === '#000000') ? undefined : val })}
+                                />
+                                <p className="text-[10px] text-[var(--text-secondary)] mt-1">{t('config.fadeColorHint', 'The screen fades through this color. Black is the classic cut; white feels soft and dreamy — with any other color, the scene also fades back in from it.')}</p>
+                            </FormField>
                         )}
                         {(activeScene.outTransition || 'fade') !== 'instant' && !(activeScene.outTransition || '').startsWith('custom:') && (
                             <FormField label={t('config.duration')}>

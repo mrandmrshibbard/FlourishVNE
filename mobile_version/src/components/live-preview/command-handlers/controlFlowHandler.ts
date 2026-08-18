@@ -1,6 +1,83 @@
 import { JumpCommand, JumpToLabelCommand, LabelCommand, BranchElseIfCommand, BranchElseCommand, BranchEndCommand } from '../../../features/scene/types';
 import { CommandType } from '../../../features/scene/types';
 import { CommandContext, CommandResult } from './types';
+import { PlayerState } from '../types/gameState';
+
+/**
+ * The stage a scene starts with — EVERY key `StageState` carries.
+ *
+ * `applyResult` MERGES `updates.stageState` over the live stage, so any key omitted here
+ * SURVIVES the jump. That is exactly how the previous scene's particles, placed lights,
+ * hot-spots, background colour/video flags, conditional background layers and parallax
+ * planes kept rendering in the scene you jumped to (a conditional layer even beat the new
+ * `backgroundUrl: null`, so the old background simply stayed on screen).
+ * If you add a key to StageState, add it here too.
+ */
+export function freshSceneStage(): PlayerState['stageState'] {
+  return {
+    backgroundUrl: null,
+    backgroundIsVideo: undefined,
+    backgroundLoop: undefined,
+    backgroundTrimStart: undefined,
+    backgroundTrimEnd: undefined,
+    backgroundColor: undefined,
+    backgroundParallaxDepth: undefined,
+    backgroundLayer: undefined,
+    backgroundLayers: undefined,
+    backgroundStack: undefined,
+    characters: {},
+    textOverlays: [],
+    imageOverlays: [],
+    buttonOverlays: [],
+    movieOverlays: [],
+    hotSpotOverlays: [],
+    lights: [],
+    lightsAbove: undefined,
+    lightsBrightnessVariableId: undefined,
+    lightsStyle: undefined,
+    particleEffects: {},
+    screen: {
+      shake: { active: false, intensity: 0 },
+      tint: 'transparent',
+      tintOpacity: undefined,
+      tintOpacityVariableId: undefined,
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      transitionDuration: 0.5,
+      overlayEffects: [],
+    },
+  };
+}
+
+/** The UI state a scene starts with. Same merge rule as `freshSceneStage` — an omitted key
+ *  survives, which is how a full-screen Map or Mini-Game overlay stayed mounted over the
+ *  scene you jumped to while the new scene ran invisibly underneath it. */
+export function freshSceneUiState(): Partial<PlayerState['uiState']> {
+  return {
+    dialogue: null,
+    choices: null,
+    textInput: null,
+    movieUrl: null,
+    movieLoop: false,
+    movieBlockInput: undefined,
+    movieExiting: undefined,
+    movieTrimStart: undefined,
+    movieTrimEnd: undefined,
+    mapOverlay: null,
+    miniGameOverlay: null,
+    isSkipping: false,
+    isWaitingForInput: false,
+    isTransitioning: false,
+    transitionElement: null,
+    flash: null,
+    showHistory: false,
+    screenSceneId: null,
+    choiceLayout: undefined,
+    choiceTimeLimit: undefined,
+    choiceShowTimer: undefined,
+  };
+}
 
 /**
  * Handles jumping to a different scene
@@ -9,9 +86,12 @@ import { CommandContext, CommandResult } from './types';
 export function handleJump(command: JumpCommand, context: CommandContext): CommandResult {
   const { project, playerState } = context;
   
-  // navigateToScene needs to be passed through context
-  // For now, directly handle the scene switch
-  const actualSceneId = command.targetSceneId; // TODO: Add navigateToScene to context
+  /* Route through the destination scene's own conditions (and its fallback) exactly like the
+   * end-of-scene fall-through and choice-driven jumps do. Without this a Jump command played a
+   * conditioned scene even when its conditions failed, and the author's fallback never ran. */
+  const actualSceneId = context.navigateToScene
+    ? context.navigateToScene(command.targetSceneId, context.runtimeVariables ?? playerState.variables)
+    : command.targetSceneId;
   const newScene = project.scenes[actualSceneId];
   
   if (!newScene) {
@@ -26,37 +106,11 @@ export function handleJump(command: JumpCommand, context: CommandContext): Comma
       currentCommands: newScene.commands,
       currentIndex: 0,
       commandStack: [],
-      // Clear stage state for new scene
-      stageState: {
-        backgroundUrl: null,
-        characters: {},
-        textOverlays: [],
-        imageOverlays: [],
-        buttonOverlays: [],
-        movieOverlays: [],
-        screen: {
-          shake: { active: false, intensity: 0 },
-          tint: 'transparent',
-          zoom: 1,
-          panX: 0,
-          panY: 0,
-          transitionDuration: 0.5,
-          overlayEffects: []
-        }
-      },
-      // Clear UI state
-      uiState: {
-        dialogue: null,
-        choices: null,
-        textInput: null,
-        movieUrl: null,
-        isWaitingForInput: false,
-        isTransitioning: false,
-        transitionElement: null,
-        flash: null,
-        showHistory: false,
-        screenSceneId: null
-      }
+      // The music element is faded+paused by the scene transition, but leaving audioId/isPlaying
+      // set lets the reactive music sync restart the OLD track in the new scene.
+      musicState: { audioId: null, isPlaying: false, loop: false, currentTime: 0 },
+      stageState: freshSceneStage(),
+      uiState: freshSceneUiState(),
     },
   };
 }
@@ -104,36 +158,9 @@ export function handleJumpToLabel(
         currentIndex: idx,
         commandStack: [],
         musicState: { audioId: null, isPlaying: false, loop: false, currentTime: 0 },
-        // Clear stage state for the new scene (mirrors handleJump).
-        stageState: {
-          backgroundUrl: null,
-          characters: {},
-          textOverlays: [],
-          imageOverlays: [],
-          buttonOverlays: [],
-          movieOverlays: [],
-          screen: {
-            shake: { active: false, intensity: 0 },
-            tint: 'transparent',
-            zoom: 1,
-            panX: 0,
-            panY: 0,
-            transitionDuration: 0.5,
-            overlayEffects: []
-          }
-        },
-        uiState: {
-          dialogue: null,
-          choices: null,
-          textInput: null,
-          movieUrl: null,
-          isWaitingForInput: false,
-          isTransitioning: false,
-          transitionElement: null,
-          flash: null,
-          showHistory: false,
-          screenSceneId: null
-        }
+        // Same complete reset as handleJump — see freshSceneStage's note on the merge rule.
+        stageState: freshSceneStage(),
+        uiState: freshSceneUiState(),
       },
     };
   }

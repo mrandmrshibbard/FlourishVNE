@@ -73,7 +73,9 @@
     "dayNightCycle": "Seguir o ciclo",
     "dayNightFixed": "Horário fixo",
     "dayNightOff": "Sem coloração",
-    "dayNightFixedHour": "Hora fixa (0–24)"
+    "dayNightFixedHour": "Hora fixa (0–24)",
+    "fadeColor": "Cor do esmaecimento",
+    "fadeColorHint": "A tela esmaece através desta cor. Preto é o corte clássico; branco é suave e sonhador — com qualquer outra cor, a cena também reaparece a partir dela."
   },
   "flowMap": {
     "title": "Mapa da história",

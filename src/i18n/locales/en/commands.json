@@ -49,7 +49,7 @@
     "TintScreen": "Tint Screen",
     "PanZoomScreen": "Pan Zoom Screen",
     "FlashScreen": "Flash Screen",
-    "SetScreenOverlayEffect": "Set Screen Overlay Effect",
+    "SetScreenOverlayEffect": "Set Screen Effect",
     "ResetScreenEffects": "Reset Screen Effects",
     "SpawnParticles": "Spawn Particles",
     "StopParticles": "Stop Particles",

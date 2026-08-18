@@ -72,6 +72,7 @@ export enum CommandType {
     PanZoomScreen = 'PanZoomScreen',
     ResetScreenEffects = 'ResetScreenEffects',
     FlashScreen = 'FlashScreen',
+    AutoSave = 'AutoSave',
     SetScreenOverlayEffect = 'SetScreenOverlayEffect',
     ShowScreen = 'ShowScreen',
     HideScreen = 'HideScreen',
@@ -538,6 +539,8 @@ export interface JumpCommand extends BaseCommand {
     /** Optional override for the leaving scene's exit transition — just for this jump.
      *  Unset = use the scene's own Scene Settings choice. Additive-optional. */
     transition?: VNSceneTransitionType;
+    /** Fade color override for this jump (beats the scene's outTransitionColor). Additive. */
+    transitionColor?: string;
 }
 
 export interface LabelCommand extends BaseCommand {
@@ -687,6 +690,15 @@ export interface ResetScreenEffectsCommand extends BaseCommand {
     type: CommandType.ResetScreenEffects;
     duration: number; // in seconds
 }
+/** Silent automatic save — writes the full game state to a slot without any UI, so authors
+ *  can checkpoint at chapter breaks / hub entries. Slot 0 is the "Continue" slot (the same
+ *  one Quit-to-Title writes), so autosaving there feeds the title screen's Continue button. */
+export interface AutoSaveCommand extends BaseCommand {
+    type: CommandType.AutoSave;
+    /** Save slot to write (default 0 = the Continue slot). */
+    slotNumber?: number;
+}
+
 export interface FlashScreenCommand extends BaseCommand {
     type: CommandType.FlashScreen;
     color: string;
@@ -1407,7 +1419,7 @@ export type VNCommand =
     | ChoiceCommand | BranchStartCommand | BranchElseIfCommand | BranchElseCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
   | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | StopMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand
-    | FlashScreenCommand | LightningCommand | FlashlightCommand | SpotlightCommand | FireworksCommand | PlaceLightsCommand | ClearLightsCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | HideScreenCommand | ShowTextCommand | ShowImageCommand
+    | FlashScreenCommand | AutoSaveCommand | LightningCommand | FlashlightCommand | SpotlightCommand | FireworksCommand | PlaceLightsCommand | ClearLightsCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | HideScreenCommand | ShowTextCommand | ShowImageCommand
   | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | ShowItemCommand | CreditRollCommand | GroupCommand | RunScriptCommand
   | SpawnParticlesCommand | StopParticlesCommand | CallCommonEventCommand
   | ShowHotSpotCommand | HideHotSpotCommand
@@ -1648,6 +1660,9 @@ export interface VNScene {
     conditions?: VNCondition[];     // Scene-level conditions (gate access)
     fallbackSceneId?: VNID;         // Jump here if conditions fail
     outTransition?: VNSceneTransitionType; // How this scene exits
+    /** The color the exit fade passes through (default black). White = the classic dreamy
+     *  fade; any CSS color works. Builtin transitions only. Additive-optional. */
+    outTransitionColor?: string;
     outTransitionDuration?: number;  // Exit transition duration in seconds (default 0.5; custom transitions time themselves)
     /** Optional parallax for this scene's stage (off by default). */
     parallax?: VNParallaxSettings;

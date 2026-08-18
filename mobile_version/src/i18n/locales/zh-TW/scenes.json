@@ -70,7 +70,9 @@
     "dayNightCycle": "跟隨循環",
     "dayNightFixed": "固定時刻",
     "dayNightOff": "不調色",
-    "dayNightFixedHour": "固定小時（0–24）"
+    "dayNightFixedHour": "固定小時（0–24）",
+    "fadeColor": "淡化顏色",
+    "fadeColorHint": "畫面通過此顏色淡化。黑色是經典切換；白色柔和夢幻——使用黑色以外的顏色時，場景還會從該顏色淡入。"
   },
   "expandCommands": "顯示指令",
   "collapseCommands": "隱藏指令",

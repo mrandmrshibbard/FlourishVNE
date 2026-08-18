@@ -134,25 +134,55 @@ const GlFxCanvas: React.FC<{
     style?: React.CSSProperties;
     /** The Classic rendering — shown whenever the shaders can't run. */
     children?: React.ReactNode;
-}> = ({ kind, getParams, width, height, className, style, children }) => {
+    /** Fired once when this effect gives up on WebGL, so the host can re-arm its Classic sims. */
+    onFallback?: () => void;
+}> = ({ kind, getParams, width, height, className, style, children, onFallback }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const paramsRef = useRef(getParams);
     paramsRef.current = getParams;
+    /* The draw loop reads the live size through a ref, and size is NOT an effect dependency.
+     * It used to be — and because the teardown called loseContext(), the FIRST resize after mount
+     * permanently killed the context (getContext then hands back the same dead object, so the
+     * null-guard misses and the shader compile fails). Overlays mount at a placeholder size and
+     * flip to the measured one within ~100ms, so every Enhanced effect died on startup.
+     * Resizing is now just sizeCanvas + viewport inside frame(). */
+    const sizeRef = useRef({ width, height });
+    sizeRef.current = { width, height };
+    const glRef = useRef<WebGLRenderingContext | null>(null);
     const [failed, setFailed] = useState(false);
+    const failOver = (reason: string) => {
+        // eslint-disable-next-line no-console
+        console.warn(`[glFx] Enhanced effect "${kind}" fell back to Classic: ${reason}`);
+        setFailed(true);
+    };
+
+    // Only the ARRIVAL of a real size may (re)create the context — not every size change.
+    const hasSize = width > 0 && height > 0;
+
+    /* True unmount only: hand the context slot back (browsers cap live WebGL contexts ~16).
+     * Deliberately its own effect so no dependency change can ever destroy a live context. */
+    useEffect(() => () => {
+        try { glRef.current?.getExtension('WEBGL_lose_context')?.loseContext(); } catch { /* already gone */ }
+        glRef.current = null;
+    }, []);
 
     useEffect(() => {
         if (failed) return;
         const canvas = canvasRef.current;
         // 0×0 first frames (useStageSize starts empty) — wait for a real size (FireworksBurst rule).
-        if (!canvas || width <= 0 || height <= 0) return;
+        if (!canvas || !hasSize) return;
 
         const gl = createGlContext(canvas);
-        if (!gl) { setFailed(true); return; }
+        if (!gl) { failOver('no WebGL context'); return; }
+        if (gl.isContextLost()) { failOver('WebGL context is lost'); return; }
+        glRef.current = gl;
+        // Queried BEFORE compiling: the lights shader sizes its uniform arrays from this, so
+        // asking afterwards could never prevent the link failure it exists to guard against.
+        const maxVectors = (gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) as number) || 64;
         const prog = compileProgram(gl, QUAD_VS, FS_BY_KIND[kind]);
-        if (!prog) { setFailed(true); return; }
+        if (!prog) { failOver('shader compile/link failed'); return; }
         const bindQuad = makeQuad(gl, prog);
         const loc = (name: string) => gl.getUniformLocation(prog, name);
-        const maxVectors = (gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) as number) || 64;
 
         let raf = 0;
         let disposed = false;
@@ -161,7 +191,7 @@ const GlFxCanvas: React.FC<{
 
         const frame = () => {
             if (disposed || lost) return;
-            const { w, h, dpr } = sizeCanvas(canvas, width, height);
+            const { w, h, dpr } = sizeCanvas(canvas, sizeRef.current.width, sizeRef.current.height);
             gl.viewport(0, 0, w, h);
             gl.clearColor(0, 0, 0, 0);
             gl.clear(gl.COLOR_BUFFER_BIT);
@@ -314,7 +344,14 @@ const GlFxCanvas: React.FC<{
             raf = requestAnimationFrame(frame);
         };
 
-        const onLost = (e: Event) => { e.preventDefault(); lost = true; cancelAnimationFrame(raf); };
+        const onLost = (e: Event) => {
+            e.preventDefault();
+            lost = true;
+            cancelAnimationFrame(raf);
+            // Hand over to Classic immediately — a lost context that is never restored used to
+            // leave a permanently blank canvas with no fallback.
+            failOver('WebGL context lost');
+        };
         const onRestored = () => {
             // A restore invalidates all GL objects — simplest correct handling is to fail over
             // to Classic; the next mount (scene change / toggle) tries WebGL again.
@@ -329,13 +366,20 @@ const GlFxCanvas: React.FC<{
             cancelAnimationFrame(raf);
             canvas.removeEventListener('webglcontextlost', onLost);
             canvas.removeEventListener('webglcontextrestored', onRestored);
-            try { gl.getExtension('WEBGL_lose_context')?.loseContext(); } catch { /* already gone */ }
+            /* Free what we allocated, but NEVER loseContext() here: this cleanup also runs on a
+             * plain dependency change, and a lost context can't be revived on the same canvas.
+             * The context itself is released by the unmount-only effect above. */
+            try { gl.deleteProgram(prog); } catch { /* context already gone */ }
         };
-    }, [kind, width, height, failed]);
+    }, [kind, hasSize, failed]);
+
+    // Tell the host once, so it can re-arm the Classic simulations it owns.
+    useEffect(() => { if (failed) onFallback?.(); }, [failed]);
 
     if (failed) return <>{children}</>;
     return (
         <canvas
+            key={kind}
             ref={canvasRef}
             aria-hidden
             className={className || 'vnfx-canvas'}

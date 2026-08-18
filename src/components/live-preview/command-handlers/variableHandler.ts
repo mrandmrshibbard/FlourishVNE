@@ -34,7 +34,11 @@ export const handleSetVariable = (
         };
     }
     
-    const currentVal = playerState.variables[command.variableId];
+    /* The target's own current value must come from the SAME view its operands do
+     * (`resolveSetVariableValue` reads `context.runtimeVariables ?? playerState.variables`).
+     * Reading the raw store here meant `x += 1` could compute from one value while its operands
+     * saw another. Identical when nothing is shadowed, so untouched projects are unaffected. */
+    const currentVal = (context.runtimeVariables ?? playerState.variables)[command.variableId];
     const originalOperator = command.operator;
     const { effectiveOperator, wasCoerced } = normalizeSetVariableOperatorByType(
         variable.type, 
@@ -66,6 +70,8 @@ export const handleSetVariable = (
     
     return {
         advance: true, // Auto-advance for variable commands
+        // Clears any stale UI-buffer shadow on this variable — see CommandResult.writtenVariableIds.
+        writtenVariableIds: [command.variableId],
         updates: {
             variables: {
                 ...playerState.variables,

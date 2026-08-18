@@ -14,6 +14,7 @@ import { setVariableDefinitions } from './live-preview/systems/conditionEvaluato
 import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform, loadFontOnce, cssFontFamily } from '../utils/styleUtils';
 import TrimmedVideo from './ui/TrimmedVideo';
 import { resolveVideoTrim } from '../utils/videoTrim';
+import ChoiceButtonsView from './choice/ChoiceButtonsView';
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject, CGGalleryEntry } from '../types/project';
 import { applyGameLanguage, detectStartLanguage, shouldShowLanguageScreen } from '../features/localization/applyGameLanguage';
@@ -47,7 +48,7 @@ import {
     VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand, SetCharacterPoseCommand, DialogueCommand,
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand,
     PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
-    FlashScreenCommand, LightningCommand, FlashlightCommand, SpotlightCommand, FireworksCommand, PlaceLightsCommand, VNLight, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
+    FlashScreenCommand, AutoSaveCommand, LightningCommand, FlashlightCommand, SpotlightCommand, FireworksCommand, PlaceLightsCommand, VNLight, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
     ShowPhoneCommand, HidePhoneCommand, ShowPhoneTextCommand, HidePhoneTextCommand,
     PhoneIncomingTextCommand, PhoneIncomingCallCommand, StartPhoneCallCommand, ShowMapCommand, ShowMiniGameCommand, PhoneNotifyCommand, PhoneReply, PhoneFollowUp, PhoneCallConversation, PhoneConversationEntry,
     ShowButtonCommand, HideButtonCommand, ShowItemCommand, BranchStartCommand, BranchElseIfCommand, BranchElseCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
@@ -72,6 +73,7 @@ import { buildCursorValue, buildSlotValue, collectCursorAssetRefs, resolveCursor
 import { AnimatedDialogueText, useRainbowTick } from './live-preview/AnimatedDialogueText';
 import { GlossaryTooltip } from './live-preview/GlossaryTooltip';
 import { compileGlossary } from '../utils/glossaryMatcher';
+import { compileNameMentions, subtractOverlaps, mentionEffectOf } from '../utils/nameMentions';
 import { analyzeVoiceWordStarts } from './live-preview/voiceWordTiming';
 import {
     normalizeSetVariableOperator as normalizeOperator,
@@ -316,6 +318,41 @@ function loadPersistentVariables(projectId: string): Record<string, string | num
     }
 }
 
+/* ── Player game settings persistence ─────────────────────────────────────────────────────
+ * Volumes / text speed / auto-advance are preferences about the PLAYER, not the story —
+ * same reasoning as persistent variables and language: they must survive Quit to Title,
+ * New Game, and app restarts. Stored per project. `fullscreen` is deliberately NOT
+ * persisted: requestFullscreen needs a user gesture, so a restored "on" could never be
+ * honored on boot and the settings checkbox would lie. */
+function getGameSettingsKey(projectId: string): string {
+    return `vn-game-settings-${projectId}`;
+}
+
+function loadStoredGameSettings(projectId: string): Partial<GameSettings> {
+    try {
+        const raw = localStorage.getItem(getGameSettingsKey(projectId));
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return {};
+        delete (parsed as any).fullscreen;
+        return parsed as Partial<GameSettings>;
+    } catch {
+        return {};
+    }
+}
+
+function saveStoredGameSettings(projectId: string, settings: GameSettings): void {
+    try {
+        const { fullscreen: _skip, ...rest } = settings as GameSettings & { fullscreen?: boolean };
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.storage) {
+            (window as any).electronAPI.storage.setItem(getGameSettingsKey(projectId), rest);
+        }
+        localStorage.setItem(getGameSettingsKey(projectId), JSON.stringify(rest));
+    } catch (e) {
+        console.error('Failed to save game settings:', e);
+    }
+}
+
 /** Save a single persistent variable to storage */
 function savePersistentVariables(projectId: string, vars: Record<string, string | number | boolean>): void {
     try {
@@ -482,6 +519,8 @@ import {
     handleTweenElement,
     handleMoveCharacter,
 } from './live-preview/command-handlers';
+import { freshSceneStage, freshSceneUiState } from './live-preview/command-handlers/controlFlowHandler';
+import { resolveCloseTarget, type UIActionOpts } from './live-preview/runtime/closeScreenTarget';
 import { handleItemCommand, handleRestockCollectionCommand, handleBuyItemCommand, handleSellItemCommand } from './live-preview/command-handlers/itemCommandHandler';
 import { computeCollectionRestock } from '../features/items/restock';
 import { computeBuy, computeSell, tradePrice } from '../features/items/trade';
@@ -525,7 +564,7 @@ import { processDialogueText, stripDialogueTextCodes, walkToAppendGroupHead, sma
 import { resolveRewind } from './live-preview/rewind';
 import { playBlip, prepareBlipBuffer, blipIndicesFor } from './live-preview/letterBlips';
 import { noteSpeechReveal, clearSpeech, isSpeakingNow } from './live-preview/speechState';
-import { frameAssetAt, applyAnimationFrame, animationFrameUrls, autoAnimationsOf, layerAdjustAt, LayerAnimAdjust } from '../features/character/spriteAnim';
+import { frameAssetAt, applyAnimationFrame, animationFrameUrls, autoAnimationsOf, layerAdjustAt, characterMotionAt, LayerAnimAdjust } from '../features/character/spriteAnim';
 import { buildCharacterMedia, boxFieldsForStage, buildPoseStagePatch, buildAnimationStagePatch, buildCharacterSwapStagePatch } from './live-preview/command-handlers/characterHandler';
 
 const defaultSettings: GameSettings = {
@@ -755,7 +794,7 @@ const FF_VISUAL_TYPES = new Set<CommandType>([
 
 const ButtonOverlayElement: React.FC<{
     overlay: ButtonOverlay;
-    onAction: (action: VNUIAction) => void;
+    onAction: (action: VNUIAction, opts?: UIActionOpts) => void;
     playSound: (soundId: VNID | null) => void;
     onAdvance?: () => void;
     onCommitVariables?: () => void;
@@ -1228,7 +1267,7 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
  *  and (for drag-drop) a registry-published drop target reachable from any surface. */
 const HotSpotOverlayElement: React.FC<{
     overlay: HotSpotOverlay;
-    onAction: (action: VNUIAction) => void;
+    onAction: (action: VNUIAction, opts?: UIActionOpts) => void;
     onAdvance?: () => void;
     evaluateConditions: (conditions: VNCondition[] | undefined, vars: Record<VNID, string | number | boolean>) => boolean;
     variables: Record<VNID, string | number | boolean>;
@@ -1430,6 +1469,21 @@ function buildImageBackgroundStyle(url: string, sizeMode: string, slicePx?: numb
  *  remain consistent regardless of actual container size. */
 const scalePx = (n: number) => `calc(var(--font-scale,1) * ${n}px)`;
 
+/* Backgrounds sit BELOW the whole authorable layer range.
+ *
+ * They used to default to z-index 0 — the same level as an element with no layer set — so the
+ * moment an author sent something backward ("⤓ Back" produces layer −1 on an all-default
+ * screen) it slid under the background and vanished. Nothing was filtering or clamping the
+ * value; the element was drawn, then painted over.
+ *
+ * Defaulting them far below leaves every layer ≥ 0 in exactly the order it has today (an
+ * element at 0 already beat a background at 0), while making negative layers usable. An
+ * author who explicitly set a background layer keeps that value — that's a deliberate
+ * "background above some elements" choice and must not be overridden. */
+const DEFAULT_BACKGROUND_LAYER = -1000;
+/** The stage's flat backdrop colour paints below even the background art. */
+const STAGE_BACKDROP_LAYER = DEFAULT_BACKGROUND_LAYER - 1;
+
 // --- Player UI Components ---
 // Crossfades an <img> when its `src` changes — used for appearance-state image swaps so a reactive
 // picture change eases instead of snapping. transitionMs falsy → instant. The new image is layered
@@ -1575,6 +1629,50 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
         setGlossaryHover(entryId ? { entryId, x: ev.clientX, y: ev.clientY } : null);
     }, []);
     const glossaryHoverEntry = glossaryHover ? project.glossary?.entries[glossaryHover.entryId] : undefined;
+
+    // ── Character name mentions: names inside the line take their owner's look ──
+    // Needles are RESOLVED display names, so the compile depends on variables ({Nickname}
+    // tokens rename live); resolveCharacterDisplayName's token-free fast path keeps the
+    // recompile cheap. Matches memo per full line, like the glossary above.
+    const mentionsCfg = projectUI.dialogueNameMentions;
+    const compiledMentions = useMemo(
+        () => (mentionsCfg?.enabled ? compileNameMentions(project.characters, variables, project) : null),
+        [mentionsCfg?.enabled, project.characters, variables, project]
+    );
+    const mentionSpans = useMemo(() => {
+        if (!compiledMentions || !mentionsCfg?.enabled) return null;
+        let found = compiledMentions.findMatches(interpolatedText);
+        if (!found.length) return null;
+        // Glossary wins on overlap: tooltips are functional, mention styling is decoration.
+        if (glossaryMatches?.length) found = subtractOverlaps(found, glossaryMatches);
+        if (!found.length) return null;
+        const useColor = mentionsCfg.useColor !== false;   // default ON when enabled
+        const useFont = mentionsCfg.useFont !== false;     // default ON when enabled
+        return found.map(m => {
+            const mentioned = project.characters[m.id];
+            // The mention also carries the character's NAME effect (Name effect setting,
+            // else the first inline tag in their name) — the name's look follows the
+            // mention into dialogue, exactly like color and font do.
+            const eff = mentionEffectOf(mentioned);
+            return {
+                start: m.start,
+                end: m.end,
+                ...(useColor && mentioned?.color ? { color: mentioned.color } : {}),
+                ...(useFont && mentioned?.fontFamily ? { fontFamily: cssFontFamily(mentioned.fontFamily) } : {}),
+                ...(mentionsCfg.bold ? { bold: true } : {}),
+                ...(eff ? { effect: eff } : {}),
+            };
+        });
+    }, [compiledMentions, mentionsCfg, interpolatedText, glossaryMatches, project.characters]);
+
+    // Mention effects ride the effect-span channel (the same one inline [tags] use), so
+    // the per-character animation machinery needs no new path. mentionSpans is NULL when
+    // mentions are off or the line mentions nobody — guard, or every plain line crashes.
+    const mentionFxSpans = useMemo(() =>
+        (mentionSpans || [])
+            .filter(m => m.effect)
+            .map(m => ({ start: m.start, end: m.end, effect: m.effect!.type, ...(m.effect!.intensity !== undefined ? { intensity: m.effect!.intensity } : {}), ...(m.effect!.speed !== undefined ? { speed: m.effect!.speed } : {}) })),
+    [mentionSpans]);
 
     // ── Voice-paced text: fit the reveal to the clip's length ──
     // Poll the shared voice element briefly for its duration (metadata lands within ~1 tick for
@@ -1867,6 +1965,19 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     // Empty names hide the box too — a {Nickname} that resolves to nothing plays narrator-style.
     const showNamebox = !!dialogue.characterName?.trim() && dialogue.characterName !== 'Narrator' && !reactiveState?.hideNamebox;
 
+    // Rainbow needs its own re-render tick anywhere the text sits still: the name box is
+    // static, and body text stops re-rendering once the typewriter finishes — without this
+    // a rainbow name/mention/span would freeze on its first colors.
+    useRainbowTick(
+        (showNamebox && (
+            dialogue.nameTextEffect?.type === 'rainbow'
+            || !!dialogue.nameEffectSpans?.some(s => s.effect === 'rainbow')
+        ))
+        || dialogue.textEffect?.type === 'rainbow'
+        || inlineEffectSpans.some(s => s.effect === 'rainbow')
+        || mentionFxSpans.some(s => s.effect === 'rainbow')
+    );
+
     // Namebox style: uses name font (character override, else global) with character colour override
     const nameFont = charTb?.dialogueNameFont ?? projectUI.dialogueNameFont;
     const nameStyle: React.CSSProperties = {
@@ -1946,7 +2057,19 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                         }),
                     }}>
                         <span style={{...nameStyle, lineHeight: 1.3}}>
-                            <span style={extractTextGradientStyle(nameFont) || undefined}>{dialogue.characterName}</span>
+                            {(dialogue.nameTextEffect || dialogue.nameEffectSpans?.length) ? (
+                                // Name-box text effects: the same renderer as the dialogue body
+                                // (whole-name effect + inline [tag] spans; name always fully
+                                // revealed). The no-effect path below stays byte-identical.
+                                <AnimatedDialogueText
+                                    displayText={dialogue.characterName}
+                                    textEffect={dialogue.nameTextEffect}
+                                    effectSpans={dialogue.nameEffectSpans}
+                                    gradientStyle={extractTextGradientStyle(nameFont) || undefined}
+                                />
+                            ) : (
+                                <span style={extractTextGradientStyle(nameFont) || undefined}>{dialogue.characterName}</span>
+                            )}
                         </span>
                     </div>
                 </div>
@@ -2021,7 +2144,8 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                                 revealHighlight={revealHighlight}
                                 glossaryMatches={glossaryMatches}
                                 onGlossaryHover={handleGlossaryHover}
-                                effectSpans={inlineEffectSpans}
+                                effectSpans={mentionFxSpans.length ? [...inlineEffectSpans, ...mentionFxSpans] : inlineEffectSpans}
+                                mentionSpans={mentionSpans}
                             />
                             {!hasFinished && (
                                 <span style={{ 
@@ -2091,222 +2215,25 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     );
 };
 
-const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: (choice: ChoiceOption) => void, variables: Record<VNID, string | number | boolean>, project: VNProject, layout?: 'vertical' | 'horizontal' | 'free', timeLimit?: number, showTimer?: boolean, onTimeout?: () => void, uiPalette?: Record<string, string> | null }> = ({ choices, projectUI, onSelect, variables, project, layout, timeLimit, showTimer, onTimeout, uiPalette }) => {
-    const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+// THE choice renderer moved to components/choice/ChoiceButtonsView.tsx — ONE implementation
+// shared by the engine (here), the StagingArea canvas, and the In-Game UI editor preview.
+// This wrapper only adapts the historical prop names. Do NOT reintroduce local rendering.
+const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: (choice: ChoiceOption) => void, variables: Record<VNID, string | number | boolean>, project: VNProject, layout?: 'vertical' | 'horizontal' | 'free', timeLimit?: number, showTimer?: boolean, onTimeout?: () => void, uiPalette?: Record<string, string> | null }> = ({ choices, projectUI, onSelect, variables, project, layout, timeLimit, showTimer, onTimeout, uiPalette }) => (
+    <ChoiceButtonsView
+        project={project}
+        projectUI={projectUI}
+        options={choices}
+        variables={variables}
+        layout={layout}
+        uiPalette={uiPalette}
+        interactive
+        onSelect={onSelect}
+        timeLimit={timeLimit}
+        showTimer={showTimer}
+        onTimeout={onTimeout}
+    />
+);
 
-    // Time-limited choice: count down while shown; fire onTimeout once at 0. The shrinking bar reads
-    // `remaining`. Restarts when the choice set or the limit changes (a new Choice command).
-    const [remaining, setRemaining] = useState<number>(timeLimit ?? 0);
-    useEffect(() => {
-        if (!timeLimit || timeLimit <= 0) return;
-        setRemaining(timeLimit);
-        const start = performance.now();
-        let raf = 0;
-        let fired = false;
-        const tick = () => {
-            const left = Math.max(0, timeLimit - (performance.now() - start) / 1000);
-            setRemaining(left);
-            if (left <= 0) { if (!fired) { fired = true; onTimeout?.(); } return; }
-            raf = requestAnimationFrame(tick);
-        };
-        raf = requestAnimationFrame(tick);
-        return () => cancelAnimationFrame(raf);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [timeLimit, choices]);
-    const showCountdown = !!(timeLimit && timeLimit > 0 && showTimer);
-    const countdownFrac = timeLimit && timeLimit > 0 ? Math.max(0, Math.min(1, remaining / timeLimit)) : 0;
-    const countdownOverlay = showCountdown ? (
-        <div className="absolute inset-0 z-40 pointer-events-none">
-            <div className="absolute left-1/2 -translate-x-1/2" style={{ top: '3%', width: '40%', height: scalePx(8), background: 'rgba(0,0,0,0.45)', borderRadius: 999, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>
-                <div style={{ height: '100%', width: `${countdownFrac * 100}%`, background: projectUI.choiceHoverColor || '#6B4C9A', transition: 'width 0.12s linear' }} />
-            </div>
-        </div>
-    ) : null;
-
-    // Resolve choice button image/video URL
-    const choiceButtonUrl = projectUI.choiceButtonImage
-        ? resolveFieldUrl(project.id, projectUI.choiceButtonImage.type === 'video'
-            ? (project.videos[projectUI.choiceButtonImage.id]?.videoUrl || (project.images[projectUI.choiceButtonImage.id] as any)?.videoUrl || (project.backgrounds[projectUI.choiceButtonImage.id] as any)?.videoUrl)
-            : (project.images[projectUI.choiceButtonImage.id]?.imageUrl || project.backgrounds[projectUI.choiceButtonImage.id]?.imageUrl)
-          )
-        : null;
-    const isChoiceButtonVideo = projectUI.choiceButtonImage?.type === 'video';
-
-    // Resolve choice button border image URL
-    const choiceBorderUrl = projectUI.choiceButtonBorderImage
-        ? resolveFieldUrl(project.id, project.images[projectUI.choiceButtonBorderImage.id]?.imageUrl || project.backgrounds[projectUI.choiceButtonBorderImage.id]?.imageUrl)
-        : null;
-    const choiceBorderPadding = projectUI.choiceBorderPadding ?? 8;
-
-    // Choice button layout settings
-    const choiceWidth = projectUI.choiceButtonWidth || 0;
-    const choiceHeight = projectUI.choiceButtonHeight || 0;
-    const choicePadding = projectUI.choiceButtonPadding ?? 16;
-
-    // New appearance settings
-    const choiceSizeMode = projectUI.choiceButtonSizeMode ?? 'stretch';
-    const choiceSlice = projectUI.choiceButtonSlice ?? 15;
-    // Palette→UI: a won coloring mini game's captured colors outrank the authored global
-    // style; explicit per-option colors (choice.backgroundColor/textColor) still win.
-    const choiceColor = uiPalette?.choiceBg ?? projectUI.choiceButtonColor ?? '#1e293b';
-    const choiceOpacity = projectUI.choiceButtonOpacity ?? 90;
-    const choiceBorderRadius = projectUI.choiceButtonBorderRadius ?? 8;
-    const choiceHoverColor = projectUI.choiceHoverColor ?? '#334155';
-
-    // Resolve hover image
-    const choiceHoverUrl = projectUI.choiceHoverImage
-        ? resolveFieldUrl(project.id, project.images[projectUI.choiceHoverImage.id]?.imageUrl || project.backgrounds[projectUI.choiceHoverImage.id]?.imageUrl)
-        : null;
-
-    const hasCustomChoiceImage = choiceButtonUrl || choiceBorderUrl;
-    const choiceBgColor = hexToRgba(choiceColor, choiceOpacity);
-    const choiceHoverBgColor = hexToRgba(choiceHoverColor, choiceOpacity);
-
-    /* ── Percentage-based layout rect (matching InGameUIEditor) ── */
-    const gameW = project.gameResolution?.width || 1920;
-    const gameH = project.gameResolution?.height || 1080;
-    const choiceWPct = choiceWidth ? (choiceWidth * 100 / gameW) : 30;
-    const choiceHPct = choiceHeight ? (choiceHeight * 100 / gameH) : 25;
-    const choiceXPct = projectUI.choiceButtonX ?? (50 - choiceWPct / 2);
-    const choiceYPct = projectUI.choiceButtonY ?? 35;
-
-    // Resolve a per-option art asset (image/video) to a URL.
-    const resolveChoiceImg = (a?: { type: 'image' | 'video'; id: VNID } | null): string | null => {
-        if (!a) return null;
-        return resolveFieldUrl(project.id, a.type === 'video'
-            ? (project.videos[a.id]?.videoUrl || (project.backgrounds[a.id] as any)?.videoUrl || (project.images[a.id] as any)?.videoUrl || null)
-            : (project.images[a.id]?.imageUrl || project.backgrounds[a.id]?.imageUrl || null));
-    };
-
-    // Render one choice button. Per-option overrides (art / colors / fontSize / radius) fall back to
-    // the global project.ui.choice* style, so with no overrides this is identical to the classic look.
-    // `fill` = the button should fill its wrapper's height (used by the free/positioned layout).
-    const renderButton = (choice: ChoiceOption, index: number, fill: boolean) => {
-        const interpolatedText = interpolateVariables(choice.text, variables, project);
-        const isHovered = hoveredIndex === index;
-        const optImg = resolveChoiceImg(choice.image);
-        const optHoverImg = resolveChoiceImg(choice.hoverImage);
-        const baseImg = optImg ?? choiceButtonUrl;
-        const baseIsVideo = optImg ? choice.image?.type === 'video' : isChoiceButtonVideo;
-        const baseTrimRef: any = optImg ? choice.image : projectUI.choiceButtonImage;
-        const baseTrimAsset: any = baseTrimRef?.id ? ((project.videos as any)[baseTrimRef.id] || (project.images as any)[baseTrimRef.id] || (project.backgrounds as any)[baseTrimRef.id]) : undefined;
-        const baseTrim = resolveVideoTrim(baseTrimRef, baseTrimAsset); // per-use ref trim wins; else asset default
-        const hoverImg = optHoverImg ?? choiceHoverUrl;
-        const activeButtonUrl = (isHovered && hoverImg) ? hoverImg : baseImg;
-        const optBg = choice.backgroundColor ? hexToRgba(choice.backgroundColor, choiceOpacity) : choiceBgColor;
-        const optHoverBg = choice.hoverBackgroundColor ? hexToRgba(choice.hoverBackgroundColor, choiceOpacity) : choiceHoverBgColor;
-        const optRadius = choice.borderRadius ?? choiceBorderRadius;
-        const hasImg = !!(baseImg || choiceBorderUrl);
-        return (
-            <button
-                onClick={() => onSelect(choice)}
-                onMouseEnter={() => setHoveredIndex(index)}
-                onMouseLeave={() => setHoveredIndex(null)}
-                className="relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]"
-                style={{
-                    borderRadius: scalePx(optRadius),
-                    ...(fill ? { height: '100%' } : {}),
-                    ...(activeButtonUrl && !baseIsVideo
-                        ? {
-                            ...buildImageBackgroundStyle(activeButtonUrl, choiceSizeMode, choiceSlice),
-                            backgroundColor: isHovered ? optHoverBg : optBg,
-                          }
-                        : !hasImg
-                            ? {
-                                backgroundColor: isHovered ? optHoverBg : optBg,
-                                border: uiPalette?.choiceBorder ? `2px solid ${uiPalette.choiceBorder}` : '1px solid rgba(148,163,184,0.3)',
-                                boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
-                                backdropFilter: 'blur(6px)',
-                                WebkitBackdropFilter: 'blur(6px)',
-                              }
-                            : { backgroundColor: isHovered ? optHoverBg : 'transparent' }),
-                    padding: `${scalePx(choicePadding)} ${scalePx(choicePadding * 2)}`,
-                    ...(!fill && choiceHeight ? { height: scalePx(choiceHeight) } : {}),
-                    ...fontSettingsToStyle(projectUI.choiceTextFont),
-                    ...(uiPalette?.choiceText ? { color: uiPalette.choiceText } : {}),
-                    ...(choice.fontSize ? { fontSize: scalePx(choice.fontSize) } : {}),
-                    ...(choice.textColor ? { color: choice.textColor } : {}),
-                    textAlign: (projectUI.choiceTextFont?.align || 'center') as any,
-                    wordBreak: 'normal' as const,
-                    overflowWrap: 'break-word' as const,
-                    cursor: (projectUI as any)?.cursors?.choices === 'arrow' ? 'var(--vn-cursor-normal, default)' : 'var(--vn-cursor-hand, pointer)',
-                }}
-            >
-                {baseIsVideo && baseImg && (
-                    <TrimmedVideo src={baseImg} autoPlay loop muted trimStart={baseTrim.start} trimEnd={baseTrim.end} className="absolute inset-0 w-full h-full -z-10" style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(optRadius) }} />
-                )}
-                <span className="relative z-10" style={{ ...(extractTextGradientStyle(projectUI.choiceTextFont) || {}), ...(uiPalette?.choiceText && !choice.textColor ? { color: uiPalette.choiceText, background: 'none', WebkitTextFillColor: uiPalette.choiceText } : {}), ...(choice.textColor ? { color: choice.textColor } : {}) }}>{interpolatedText}</span>
-            </button>
-        );
-    };
-
-    const choiceKeyframes = (
-        <style>{`
-            @keyframes vnChoiceOverlayIn { from { opacity: 0; } to { opacity: 1; } }
-            @keyframes vnChoiceSlideIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-        `}</style>
-    );
-
-    // ── Free layout: each option positioned/sized by its own x/y/width/height ──
-    if (layout === 'free') {
-        return (
-            <>
-            {countdownOverlay}
-            <div className="absolute inset-0 z-30" style={{ pointerEvents: 'none', animation: 'vnChoiceOverlayIn 0.3s ease-out' }}>
-                {choices.map((choice, index) => {
-                    const bx = choice.x ?? (34 + index * 2);
-                    const by = choice.y ?? (40 + index * 12);
-                    const bw = choice.width ?? 25;
-                    const bh = choice.height ?? 9;
-                    return (
-                        <div key={index} style={{
-                            position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: 'auto',
-                            animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
-                            ...(choiceBorderUrl ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: scalePx(choiceBorderPadding), borderRadius: scalePx(choiceBorderRadius) } : {}),
-                        }}>
-                            {renderButton(choice, index, true)}
-                        </div>
-                    );
-                })}
-                {choiceKeyframes}
-            </div>
-            </>
-        );
-    }
-
-    // ── Vertical (default) or Horizontal stack ──
-    const horizontal = layout === 'horizontal';
-    return (
-        <>
-        {countdownOverlay}
-        <div className={`absolute z-30 flex ${horizontal ? 'flex-row flex-wrap gap-3' : 'flex-col'} items-center justify-center`}
-             style={{
-                 left: `${choiceXPct}%`,
-                 top: `${choiceYPct}%`,
-                 width: `${choiceWPct}%`,
-                 height: `${choiceHPct}%`,
-                 animation: 'vnChoiceOverlayIn 0.3s ease-out',
-             }}>
-            {choices.map((choice, index) => (
-                <div
-                    key={index}
-                    className={horizontal ? '' : 'mb-3'}
-                    style={{
-                        animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
-                        ...(horizontal ? {} : { width: '100%' }),
-                        ...(choiceBorderUrl
-                            ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: scalePx(choiceBorderPadding), borderRadius: scalePx(choiceBorderRadius) }
-                            : {})
-                    }}
-                >
-                    {renderButton(choice, index, false)}
-                </div>
-            ))}
-            {choiceKeyframes}
-        </div>
-        </>
-    );
-};
 
 const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], onSubmit: (value: string) => void, variables: Record<VNID, string | number | boolean>, project: VNProject, projectUI?: any }> = ({ textInput, onSubmit, variables, project, projectUI }) => {
     const [inputValue, setInputValue] = useState('');
@@ -2470,7 +2397,7 @@ const SaveSlotGridComponent: React.FC<{
     gameSaves: Record<number, GameStateSave>;
     /** Storage writes have failed: saves are memory-only and vanish on quit. The player MUST see this. */
     storageBroken?: boolean;
-    onAction: (action: VNUIAction) => void;
+    onAction: (action: VNUIAction, opts?: UIActionOpts) => void;
     assetResolver?: (id: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
 }> = ({ element, style, isSaveMode, gameSaves, storageBroken, onAction, assetResolver }) => {
     const [currentPage, setCurrentPage] = useState(0);
@@ -3718,7 +3645,7 @@ const InventoryGridElement: React.FC<{
     variables: Record<VNID, string | number | boolean>;
     project: VNProject;
     assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
-    onAction: (action: VNUIAction) => void;
+    onAction: (action: VNUIAction, opts?: UIActionOpts) => void;
     onCommitVariables?: () => void;
     inventorySlots?: (VNID | null)[];
     onReorderSlots?: (slots: (VNID | null)[]) => void;
@@ -4375,7 +4302,7 @@ const HotZonedraggableImageElementRenderer: React.FC<{
 // --- Hot Zone Runtime Renderer ---
 const InteractiveRuntime: React.FC<{
     screen: VNUIScreen;
-    onAction: (action: VNUIAction) => void;
+    onAction: (action: VNUIAction, opts?: UIActionOpts) => void;
     variables: Record<VNID, string | number | boolean>;
     onVariableChange?: (variableId: VNID, value: string | number | boolean) => void;
     evaluateConditions: (conditions: VNCondition[] | undefined, vars: Record<VNID, string | number | boolean>) => boolean;
@@ -4627,6 +4554,13 @@ const InteractiveRuntime: React.FC<{
                             // A box border can't follow a clip-path — the filled shape alone is the visual.
                             border: spot.visible && !polyClip ? `2px dashed ${spot.highlightColor || 'rgba(59, 130, 246, 0.5)'}` : 'none',
                             opacity: spot.visible ? (spot.visibleOpacity ?? 1) : undefined,
+                            /* Respect the hot spot's LAYER — but only when the author set one.
+                             * Screen hot spots had no z-index at all, so they always landed
+                             * beneath every element with a layer ≥ 1 and could never be raised;
+                             * with negative layers broken too, there was no way to put a hot spot
+                             * above artwork. Same formula the sibling interactive elements use.
+                             * The `!= null` guard keeps unset spots exactly where they are. */
+                            zIndex: (spot as any).layer != null ? (1 + (spot as any).layer * 100) : undefined,
                             pointerEvents: spot.trigger === 'drag-drop' ? 'none' : 'auto',
                             /* Rotation/flip. For click/hover spots this also rotates the HIT AREA
                              * for free — the handlers sit on this transformed div. Drag-drop spots
@@ -4760,7 +4694,7 @@ const InteractiveRuntime: React.FC<{
 // --- UI Screen Renderer (for menus) ---
 const UIScreenRenderer: React.FC<{
     screenId: VNID;
-    onAction: (action: VNUIAction) => void;
+    onAction: (action: VNUIAction, opts?: UIActionOpts) => void;
     settings: GameSettings;
     onSettingsChange: (key: keyof GameSettings, value: any) => void;
     assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
@@ -4789,7 +4723,13 @@ const UIScreenRenderer: React.FC<{
     pickedItemElementIds?: ReadonlySet<VNID>;
     /** Pickup-mode Item element clicked: give the item + record the take (when `once`). */
     onItemPickup?: (elementId: VNID, itemId: VNID, quantity: number, once: boolean) => void;
-}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, inertBeneath = false, evaluateConditions, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, elementVisibility, saveStorageBroken, pickedItemElementIds, onItemPickup }) => {
+}> = React.memo(({ screenId, onAction: onActionProp, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, inertBeneath = false, evaluateConditions, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, elementVisibility, saveStorageBroken, pickedItemElementIds, onItemPickup }) => {
+    /* Every action fired from THIS screen carries its screen id, so 'Close Screen → the screen
+     * this button is on' resolves to this screen instead of whatever happens to be topmost. */
+    const onAction = React.useCallback(
+        (a: VNUIAction, o?: UIActionOpts) => onActionProp(a, { ...o, ownerScreenId: screenId }),
+        [onActionProp, screenId]
+    );
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
     const backgroundVideoRef = React.useRef<HTMLVideoElement>(null);
@@ -4977,8 +4917,8 @@ const UIScreenRenderer: React.FC<{
     };
 
     const getBackgroundElement = () => <>
-        {buildBgPlane(screen.background, screen.backgroundParallaxDepth ?? 0, screen.backgroundLayer ?? 0, 'main-bg', backgroundVideoRef, screen.backgroundTransition, screen.backgroundTransitionDuration)}
-        {(screen.additionalBackgrounds || []).map(b => buildBgPlane(b.background, b.parallaxDepth ?? 0, b.layer ?? 0, b.id, undefined, b.transition, b.transitionDuration))}
+        {buildBgPlane(screen.background, screen.backgroundParallaxDepth ?? 0, screen.backgroundLayer ?? DEFAULT_BACKGROUND_LAYER, 'main-bg', backgroundVideoRef, screen.backgroundTransition, screen.backgroundTransitionDuration)}
+        {(screen.additionalBackgrounds || []).map(b => buildBgPlane(b.background, b.parallaxDepth ?? 0, b.layer ?? DEFAULT_BACKGROUND_LAYER, b.id, undefined, b.transition, b.transitionDuration))}
     </>;
     
     // Last-seen meter values (per element id) so a Meter can detect up/down changes and play a
@@ -7268,6 +7208,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [confirmDialog, setConfirmDialog] = useState<{ type: 'quit' | 'newGame' | 'eraseSave'; pendingAction: VNUIAction } | null>(null);
     // Track scene exit transition (type, duration, and active state)
     const [sceneTransitionFading, setSceneTransitionFading] = useState(false);
+    // Fade color (null = classic black) + phase. Colored fades get a REVEAL half after the
+    // swap (cover → swap → fade back out) — the whole point of a white fade; default black
+    // keeps the original cover-then-cut behavior exactly.
+    const [sceneTransitionColor, setSceneTransitionColor] = useState<string | null>(null);
+    const [sceneTransitionPhase, setSceneTransitionPhase] = useState<'closing' | 'opening'>('closing');
     const [sceneTransitionType, setSceneTransitionType] = useState<'fade' | 'dissolve' | 'iris-out' | 'wipe-right' | 'slide-left' | 'instant'>('fade');
     const [sceneTransitionDuration, setSceneTransitionDuration] = useState(0.5);
     // Author-made custom scene transition currently playing: the closing animation covers the old
@@ -7287,12 +7232,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [gameStartFade, setGameStartFade] = useState<'none' | 'toBlack' | 'fromBlack'>('none');
     const [settings, setSettings] = useState<GameSettings>(() => {
         const projectDefaults = project.ui?.defaultGameSettings;
-        if (projectDefaults) {
-            // Merge with defaults to fill any missing fields (e.g. ambientVolume for older projects)
-            return { ...defaultSettings, ...projectDefaults };
-        }
-        return { ...defaultSettings };
+        // Layering: engine defaults ← author defaults ← the PLAYER's stored choices.
+        // Stored settings win — a player who set their volumes shouldn't lose them on relaunch.
+        return { ...defaultSettings, ...(projectDefaults || {}), ...loadStoredGameSettings(project.id) };
     });
+    // Persist the player's settings whenever they change (debounced — sliders fire per tick).
+    const settingsPersistTimerRef = useRef<number | null>(null);
+    useEffect(() => {
+        if (settingsPersistTimerRef.current) window.clearTimeout(settingsPersistTimerRef.current);
+        settingsPersistTimerRef.current = window.setTimeout(() => {
+            saveStoredGameSettings(project.id, settings);
+        }, 300);
+        return () => { if (settingsPersistTimerRef.current) window.clearTimeout(settingsPersistTimerRef.current); };
+    }, [settings, project.id]);
     /* ── Full screen ──────────────────────────────────────────────────────────────────────
      * Drives the real browser/Electron full-screen state from `settings.fullscreen`, and — just
      * as importantly — follows it BACK. A player can leave full screen with F11 or Escape without
@@ -7392,9 +7344,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
      * missed one would leave the ref stale, and a LATER open of the same screen would then advance
      * the story on close when it shouldn't. */
     useEffect(() => {
+        // BOTH stacks: Show Screen parks unconditionally but pushes to screenStack when the game
+        // isn't in 'playing' mode, so watching hudStack alone cleared the marker while the story
+        // was still genuinely parked — and the close then failed to step past it.
         const parked = parkedOnScreenIdRef.current;
-        if (parked && !hudStack.includes(parked)) parkedOnScreenIdRef.current = null;
-    }, [hudStack]);
+        if (parked && !hudStack.includes(parked) && !screenStack.includes(parked)) parkedOnScreenIdRef.current = null;
+    }, [hudStack, screenStack]);
     // Project ref for the plugin runtime bridge (variable name→id resolution).
     const projectRef = useRef(project);
     projectRef.current = project;
@@ -8432,7 +8387,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             });
             setScreenStack([]);
             setHudStack([]);
-            setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
+            sceneChangePendingRef.current = false; setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
             customTransitionTimeoutsRef.current.forEach(t => window.clearTimeout(t)); customTransitionTimeoutsRef.current = []; setCustomTransition(null); setActionMovie(null); // cancel any in-flight custom scene transition (and its pending scene swap) + action-played video
             clearTimersForGameBoundary(); fastForwardTargetRef.current = null; backwardReplayRef.current = null; // stop background timers (except keep-across-games ones) / hot-reload fast-forward / rewind-replay window from a prior session
             setIsJustLoaded(true);
@@ -8566,7 +8521,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         });
         setScreenStack([]);
         setHudStack([]);
-        setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
+        sceneChangePendingRef.current = false; setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
             customTransitionTimeoutsRef.current.forEach(t => window.clearTimeout(t)); customTransitionTimeoutsRef.current = []; setCustomTransition(null); setActionMovie(null); // cancel any in-flight custom scene transition (and its pending scene swap) + action-played video
         clearTimersForGameBoundary(); fastForwardTargetRef.current = null; backwardReplayRef.current = null; // stop background timers (except keep-across-games ones) / hot-reload fast-forward / rewind-replay window from a prior session
         // "Play from here": fast-forward the scene's visual setup up to the chosen command
@@ -8642,7 +8597,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             });
             setScreenStack([]);
             setHudStack([]);
-            setClosingScreens(new Set());
+            sceneChangePendingRef.current = false; setClosingScreens(new Set());
             customTransitionTimeoutsRef.current.forEach(t => window.clearTimeout(t)); customTransitionTimeoutsRef.current = []; setCustomTransition(null); setActionMovie(null); // cancel any in-flight custom scene transition + action-played video
             timersRef.current.clear();
             blockingTimerRef.current = null;
@@ -9051,16 +9006,26 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         sfxBufferCacheRef.current.clear();
     }, []);
 
-    const startSceneExitTransition = useCallback((currentSceneId: string, executeChange: () => void, override?: string) => {
+    const startSceneExitTransition = useCallback((currentSceneId: string, executeChange: () => void, override?: string, overrideColor?: string | null) => {
         // The old scene's sound effects (and dialogue voice) must not follow us into the next
         // scene. EVERY scene change funnels through here — implicit end-of-scene fall-through,
         // the Jump command, choice/hotspot jumps, and UI-action jumps — so one cleanup at the
         // moment the scene actually swaps covers them all (sounds keep playing over the close
         // half of the transition, then stop with the old scene). Music is deliberately
         // untouched: cross-scene music continuity is a feature.
-        const applyChange = () => { stopAllSfx(); executeChange(); };
+        /* One scene change at a time. A Jump used as a scene's LAST command schedules its own
+         * swap and then the end-of-scene fall-through schedules a SECOND one a frame later —
+         * aimed at the next scene in project order, not the jump target — which landed after the
+         * jump and blanked the scene we had just arrived in. Whoever asked first wins; the loser
+         * is dropped. Cleared in applyChange so the next genuine change is free to run. */
+        if (sceneChangePendingRef.current) {
+            runtimeDebugLog('[Scene] Ignoring a second scene change while one is already pending');
+            return;
+        }
+        sceneChangePendingRef.current = true;
+        const applyChange = () => { sceneChangePendingRef.current = false; stopAllSfx(); executeChange(); };
         const currentScene = project.scenes[currentSceneId];
-        const resolved = resolveSceneTransition(override, currentScene, project.customTransitions);
+        const resolved = resolveSceneTransition(override, currentScene, project.customTransitions, overrideColor);
         const shouldFade = hasRenderedSceneRef.current;
 
         if (resolved.kind === 'instant' || !shouldFade) {
@@ -9139,11 +9104,23 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
         setSceneTransitionType(transType);
         setSceneTransitionDuration(duration);
+        setSceneTransitionColor(resolved.color ?? null);
+        setSceneTransitionPhase('closing');
         setSceneTransitionFading(true);
 
         setTimeout(() => {
             applyChange();
-            setSceneTransitionFading(false);
+            if (resolved.color) {
+                // Colored fades reveal: keep the cover mounted and fade it back out — a white
+                // fade that hard-cut on the swap would read as a flash, not a fade.
+                setSceneTransitionPhase('opening');
+                setTimeout(() => {
+                    setSceneTransitionFading(false);
+                    setSceneTransitionPhase('closing');
+                }, duration * 1000);
+            } else {
+                setSceneTransitionFading(false);
+            }
         }, duration * 1000);
     }, [project.scenes, project.customTransitions, assetResolver, settings.sfxVolume, stopAllSfx]);
 
@@ -9629,6 +9606,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const mergeRot = (anim: any, tMs: number) => {
                     const r = layerAdjustAt(anim, tMs);
                     for (const lid of Object.keys(r)) rot[lid] = r[lid];
+                    // Whole-character motion rides the same record under a reserved key
+                    // (real layer ids never start with '__') — the render site translates
+                    // the whole sprite by it; the change-epsilon gate below covers it free.
+                    const m = characterMotionAt(anim, tMs);
+                    if (m) rot['__char'] = { dx: m.dx, dy: m.dy, pivotX: 50, pivotY: 50 };
                 };
                 for (const anim of anims) {
                     const key = `${char.charId}:${anim.id}`;
@@ -9685,6 +9667,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             const a = v[lk], b = pv[lk];
                             if (!b
                                 || Math.abs((a.deg ?? 0) - (b.deg ?? 0)) > 0.05
+                                || Math.abs((a.sx ?? 1) - (b.sx ?? 1)) > 0.005
+                                || Math.abs((a.sy ?? 1) - (b.sy ?? 1)) > 0.005
                                 || Math.abs(a.dx - b.dx) > 0.05 || Math.abs(a.dy - b.dy) > 0.05
                                 || a.pivotX !== b.pivotX || a.pivotY !== b.pivotY) { changed = true; break outer; }
                         }
@@ -10096,6 +10080,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // Tracks the scene id for which 'auto' common events have already been injected,
     // so they run once per scene entry (re-entry after visiting another scene re-runs).
     const autoRanSceneRef = useRef<VNID | null>(null);
+    /** True between "a scene change was requested" and "it landed" — see startSceneExitTransition. */
+    const sceneChangePendingRef = useRef(false);
     const runLifecycleScripts = useCallback(async (trigger: 'onSceneEnter' | 'onSceneExit', sceneId: VNID) => {
         const scripts = (Object.values(project.scripts || {}) as VNScript[]).filter(s => s.enabled && s.trigger === trigger);
         if (scripts.length === 0) return;
@@ -10427,7 +10413,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // Injected here (top of the command loop, before reading the next command) so there is
         // no race with the scene's command 0. Guarded to the top scene level (empty stack) and
         // to once per scene entry. Re-entering a scene after visiting another one re-runs them.
-        if (playerState.currentIndex === 0 && playerState.commandStack.length === 0 && autoRanSceneRef.current !== playerState.currentSceneId) {
+        /* Deliberately NOT gated on `currentIndex === 0`: arriving via a cross-scene Jump To Label
+         * lands on the label's index, and a loaded save or a rewind lands wherever the player was —
+         * so requiring index 0 meant a scene's auto events simply never ran on those arrivals.
+         * `autoRanSceneRef` alone is the correct guard (once per scene entry), and returning to the
+         * scene you're already in still won't re-run them. */
+        if (playerState.commandStack.length === 0 && autoRanSceneRef.current !== playerState.currentSceneId) {
             autoRanSceneRef.current = playerState.currentSceneId;
             const autoVars = getRuntimeVariables();
             const isTruthy = (v: unknown) => !(v === undefined || v === null || v === false || v === 0 || v === '' || v === 'false');
@@ -10437,8 +10428,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             if (autoCmds.length > 0) {
                 updatePlayerState(p => {
                     if (!p) return null;
-                    // Push the scene to return to (at index 0) and run the auto commands first.
-                    const newStack = [...p.commandStack, { sceneId: p.currentSceneId, commands: p.currentCommands, index: 0 }];
+                    /* Return to WHERE WE ARE, not index 0 — with the index-0 requirement gone this
+                     * can fire mid-scene (label/load/rewind arrivals), and hard-coding 0 would
+                     * restart the scene from the top after the auto events finished. */
+                    const newStack = [...p.commandStack, { sceneId: p.currentSceneId, commands: p.currentCommands, index: p.currentIndex }];
                     return { ...p, commandStack: newStack, currentCommands: autoCmds, currentIndex: 0 };
                 });
                 return;
@@ -10676,8 +10669,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
         }
 
+        // Stamped at creation: `advance` carries an ABSOLUTE index into THIS scene's command
+        // list, so once the scene changes it must never fire (see CommandScheduler.isStaleEpoch).
+        const advanceEpoch = scheduler.currentEpoch();
         const advance = () => {
             runtimeDebugLog('[DEBUG advance()] Called from command:', command.type, 'Current index:', cmdIndex);
+            if (scheduler.isStaleEpoch(advanceEpoch)) {
+                runtimeDebugLog('[DEBUG advance()] Skipping - scene changed since this command started');
+                return;
+            }
             // Guard: Don't advance if we've already moved past this command
             if (scheduler.alreadyAdvancedPast(cmdIndex)) {
                 const last = scheduler.getLastProcessed();
@@ -10713,42 +10713,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         
                         if (nextScene) {
                             startSceneExitTransition(playerState.currentSceneId, () => {
+                                /* This arm used to swap scenes without resetting the scheduler or
+                                 * cancelling anything: leftover timers kept firing into the new
+                                 * scene and stale advance() closures moved it to an old-scene
+                                 * index. reset() also bumps the epoch, which voids them. */
+                                activeEffectTimeoutsRef.current.forEach(t => clearTimeout(t));
+                                activeEffectTimeoutsRef.current = [];
+                                scheduler.reset();
                                 updatePlayerState(p => p ? {
                                     ...p,
                                     currentSceneId: nextSceneId,
                                     currentCommands: nextScene.commands,
                                     currentIndex: 0,
-                                    stageState: {
-                                        backgroundUrl: null,
-                                        characters: {},
-                                        textOverlays: [],
-                                        imageOverlays: [],
-                                        buttonOverlays: [],
-                                        movieOverlays: [],
-                                        screen: {
-                                            shake: { active: false, intensity: 0 },
-                                            tint: 'transparent',
-                                            zoom: 1,
-                                            panX: 0,
-                                            panY: 0,
-                                            transitionDuration: 0.5,
-                                            overlayEffects: []
-                                        },
-                                        particleEffects: {}
-                                    },
-                                    uiState: {
-                                        dialogue: null,
-                                        choices: null,
-                                        textInput: null,
-                                        movieUrl: null,
-                                        movieLoop: false,
-                                        isWaitingForInput: false,
-                                        isTransitioning: false,
-                                        transitionElement: null,
-                                        flash: null,
-                                        showHistory: false,
-                                        screenSceneId: null
-                                    }
+                                    stageState: freshSceneStage(),
+                                    uiState: { ...p.uiState, ...freshSceneUiState() },
                                 } : null);
                             });
                             return;
@@ -10777,13 +10755,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
         };
 
-        // Check if this command should run asynchronously (in parallel with subsequent commands)
-        const shouldRunAsync = command.modifiers?.runAsync === true;
+        // Check if this command should run asynchronously (in parallel with subsequent commands).
+        // STACKED commands are the editor's visual promise of simultaneity — commands sharing a
+        // line MUST run together, order-independent, regardless of each member's "Let the story
+        // continue" checkbox (stacking sets it, but a later uncheck used to silently break the
+        // stack: one piece faded before/after the others). A command chains into the next
+        // whenever they share a stackId; the checkbox alone still works for unstacked commands.
+        const sharesStackWithNext = !!command.modifiers?.stackId
+            && playerState.currentCommands[cmdIndex + 1]?.modifiers?.stackId === command.modifiers.stackId;
+        const shouldRunAsync = command.modifiers?.runAsync === true || sharesStackWithNext;
         
         // Build CommandContext for handlers
         const commandContext: CommandContext = {
             project,
             playerState,
+            navigateToScene,
             assetResolver,
             getAssetMetadata,
             musicAudioRef,
@@ -11073,6 +11059,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const applyResult = (result: CommandResult) => {
                 const variableStore = variableStoreRef.current;
                 const previousSceneId = playerState?.currentSceneId;
+                /* A command that deliberately writes a variable outranks any uncommitted UI-buffer
+                 * value for it. Without this the buffer wins forever: a hot-spot's Set Variable
+                 * shadowed that variable for the rest of the scene, so a later Set Variable command
+                 * appeared to work (the game store did change) while every read — Wait conditions,
+                 * command conditions, the merged snapshot — kept returning the hot-spot's value.
+                 * Scoped to the ids the command names, so an in-progress screen edit is untouched. */
+                for (const id of result.writtenVariableIds ?? []) {
+                    uiDirtyVariableIdsRef.current.delete(id);
+                }
                 if (result.updates?.variables && variableStore) {
                     const writes = Object.entries(result.updates.variables).map(([variableId, value]) => ({
                         variableId,
@@ -11150,6 +11145,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         activeShakeRef.current = null;
                         scheduler.reset();
                         variableStoreRef.current = null;
+                        /* Commit-then-clear the UI variable buffer, exactly like the Jump/Label
+                         * ACTIONS already do. Left set, a hot-spot's write keeps shadowing the
+                         * game value in the new scene (mergeDirtyUiVariables always prefers the
+                         * buffer), so a Set Variable there appears to work and is then reverted —
+                         * and commands whose conditions test that variable get skipped. */
+                        commitUiVariablesToPlayerState();
                         // If a script was awaiting input when the scene changed, release it so it can't hang.
                         if (scriptInputResolverRef.current) { const r = scriptInputResolverRef.current; scriptInputResolverRef.current = null; r.resolve(undefined); }
                     }
@@ -11343,6 +11344,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 }
                 case CommandType.Jump: {
+                    /* The swap is DEFERRED behind the exit transition, so `applyResult` (which
+                     * sets instantAdvance = false) runs ~500ms after this switch returns — long
+                     * after the `else if (instantAdvance)` below already read it as `true` and
+                     * advanced. The old scene then kept executing its remaining commands for the
+                     * whole fade, in full view (the cover fades IN from transparent): dialogue
+                     * appeared, characters walked on, sounds fired. Claim the advance up front. */
+                    instantAdvance = false;
                     // Stop skip-forward on scene change
                     if (playerState.uiState.isSkipping) {
                         updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
@@ -11350,7 +11358,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     startSceneExitTransition(playerState.currentSceneId, () => {
                         const result = handleJump(command as JumpCommand, commandContext);
                         applyResult(result);
-                    }, (command as JumpCommand).transition);
+                    }, (command as JumpCommand).transition, (command as JumpCommand).transitionColor);
                     break;
                 }
                 case CommandType.PlayMusic: {
@@ -11476,6 +11484,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     // variable via executeUIAction (which parks the value in uiVariables until a merge)
                     // releases the wait — the rest of the live engine reads the same merged view.
                     if (cmd.waitForCondition) {
+                        // An empty list evaluates as TRUE (engine-wide rule), so such a Wait
+                        // advances instantly. Flag it while authoring instead of silently.
+                        if (!cmd.waitConditions || cmd.waitConditions.length === 0) {
+                            devNotify('A Wait is set to "until a condition is true" but has no conditions — it will not wait.', 'warning');
+                        }
                         const conditionMet = (): boolean =>
                             evaluateConditions(cmd.waitConditions, mergeDirtyUiVariables(playerStateRef.current?.variables ?? {}));
                         if (conditionMet()) {
@@ -11613,8 +11626,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         window.addEventListener('keydown', keyHandler, true);
                         window.addEventListener('click', clickHandler, true);
                     } else {
-                        // No user input allowed, just wait for duration
-                        setTimeout(() => advance(), durationMs);
+                        // No user input allowed, just wait for duration. REGISTERED: a bare handle
+                        // here outlived scene changes and fired advance() into the next scene.
+                        const waitTid = window.setTimeout(() => advance(), durationMs);
+                        activeEffectTimeoutsRef.current.push(waitTid);
                     }
                     break;
                 }
@@ -11653,6 +11668,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const cmd = command as ResetScreenEffectsCommand;
                     setLightningStorm(null); // a continuous storm counts as a screen effect — reset ends it
                     updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: 'transparent', tintOpacity: 100, tintOpacityVariableId: null, zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] }}} : null);
+                    break;
+                }
+                case CommandType.AutoSave: {
+                    // Silent checkpoint — no UI, no pause; the story just keeps going. Slot 0 is
+                    // the Continue slot, so the title screen's Continue picks this up.
+                    const cmd = command as AutoSaveCommand;
+                    try { saveGame(cmd.slotNumber ?? 0); } catch (e) { console.warn('AutoSave failed:', e); }
                     break;
                 }
                 case CommandType.FlashScreen: {
@@ -12674,11 +12696,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         variableStoreRef.current = null;
     }, [project.scenes, devNotify]);
 
+    /* opts.ownerScreenId: which UI screen the button that fired this action lives on. Screens
+     * pass it automatically (UIScreenRenderer wraps onAction), so "Close Screen → the screen this
+     * button is on" can mean exactly that. Absent for scene hot-spots, stage buttons, timers and
+     * plugin-driven actions — those keep the old "topmost screen" behavior. */
     // opts.resumeAtCurrent (CallCommonEvent only): the caller has ALREADY advanced currentIndex
     // to the next un-run command (choice selection does this before running its actions), so the
     // common event must return to currentIndex itself, not currentIndex + 1 — otherwise the
     // command immediately after the choice is skipped.
-    const handleUIAction = (action: VNUIAction, opts?: { resumeAtCurrent?: boolean }) => {
+    const handleUIAction = (action: VNUIAction, opts?: UIActionOpts) => {
         runtimeDebugLog('handleUIAction called with:', action.type, action);
 
         // Per-action conditions: skip this action if its conditions aren't currently met.
@@ -12725,6 +12751,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
      * the command and the screen reopens. If nothing is parked on it, the story is somewhere else
      * entirely and must not be touched (that's how a Wait command got skipped).
      */
+    /* Flag a screen as closing so its out-animation plays, and ALWAYS schedule the un-flag.
+     * Unpaired adds leak: the id stays in `closingScreens` for the rest of the session, so the
+     * next time that screen opens it mounts already playing its exit animation — invisible, but
+     * still swallowing clicks. Use this instead of a bare setClosingScreens(add). */
+    const markScreenClosing = useCallback((screenId: VNID, durationMs: number) => {
+        setClosingScreens(prev => new Set(prev).add(screenId));
+        window.setTimeout(() => {
+            setClosingScreens(prev => { const next = new Set(prev); next.delete(screenId); return next; });
+        }, durationMs + 50);
+    }, []);
+
     const closeOpenScreen = (targetId: VNID, executeAction: (a: VNUIAction) => void): boolean => {
         const openInHud = hudStackRef.current.includes(targetId);
         const openInScreens = screenStackRef.current.includes(targetId);
@@ -12733,7 +12770,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const cs = project.uiScreens[targetId];
         const b = cs?.onCloseBehavior || 'default';
         const parkedOnThisScreen = parkedOnScreenIdRef.current === targetId;
-        const advanceOnClose = b === 'advance' || (b === 'default' && parkedOnThisScreen);
+        /* Stepping past the parked Show Screen is MECHANICAL, not a policy choice: the story is
+         * sitting ON that command, so leaving it there means the loop either re-runs it (the
+         * screen pops straight back — an inescapable toggle) or the scheduler vetoes the re-run
+         * and the story freezes there forever, which also swallows the engine's own advance to
+         * the next scene. 'resume' and 'runActions' used to land in exactly that trap. */
+        const advanceOnClose = parkedOnThisScreen || b === 'advance';
         if (parkedOnThisScreen) parkedOnScreenIdRef.current = null;
 
         /* Commit what the player set on the closing overlay (name, appearance…) — and advance in
@@ -12753,14 +12795,31 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         });
         uiDirtyVariableIdsRef.current.clear();
 
-        if (openInHud) setHudStack(s => s.filter(id => id !== targetId));
-        if (openInScreens) setScreenStack(s => s.filter(id => id !== targetId));
+        /* Play the screen's exit transition, like Return To Game / Return To Previous Screen
+         * already do — Close Screen used to yank it out of the stacks instantly, so authored
+         * out-animations never ran. The ADVANCE above stays atomic in its flushSync (splitting
+         * them lets a render happen where the screen is gone but the command hasn't moved, which
+         * re-runs Show Screen and flashes the screen back); only the teardown is deferred. The
+         * screen stays in the stack meanwhile, which already blocks the command loop, so the
+         * story resumes exactly when the animation finishes. */
+        const transOut = (cs as any)?.transitionOut;
+        const transDur = (cs as any)?.transitionOutDuration ?? (cs as any)?.transitionDuration ?? 300;
+        const dropFromStacks = () => {
+            if (openInHud) setHudStack(s => s.filter(id => id !== targetId));
+            if (openInScreens) setScreenStack(s => s.filter(id => id !== targetId));
+        };
+        if (transOut && transOut !== 'none' && transDur > 0) {
+            markScreenClosing(targetId, transDur);
+            window.setTimeout(dropFromStacks, transDur);
+        } else {
+            dropFromStacks();
+        }
 
         if (!advanceOnClose && b === 'runActions') (cs?.onCloseActions || []).forEach(a => executeAction(a));
         return true;
     };
 
-    const executeUIAction = (action: VNUIAction, opts?: { resumeAtCurrent?: boolean }) => {
+    const executeUIAction = (action: VNUIAction, opts?: UIActionOpts) => {
         if (action.type === UIActionType.StartNewGame) {
             // Always start fresh — `startNewGame` rebuilds playerState and clears every screen/HUD
             // stack, so it works from the title OR from an in-game menu (a menu opened over a running
@@ -12858,6 +12917,29 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             if (targetId) {
                 const visible = action.type === UIActionType.ShowElement;
                 setElementVisibility(prev => (prev[targetId] === visible ? prev : { ...prev, [targetId]: visible }));
+            }
+        } else if (action.type === UIActionType.HideImage) {
+            /* One "hide that picture" for both homes: a picture element on a screen, or a picture
+             * the story put up with Show Image. The id tells us which — screen elements are keyed
+             * by element id, scene pictures by their Show Image command id, and the two never
+             * collide. Screen pictures reuse the ShowElement/HideElement visibility override so
+             * they fade with the element's own transition. */
+            const targetId = (action as any).targetCommandId as VNID | undefined;
+            if (targetId) {
+                const isScreenPicture = Object.values(project.uiScreens).some((s: any) => s?.elements?.[targetId]);
+                if (isScreenPicture) {
+                    setElementVisibility(prev => (prev[targetId] === false ? prev : { ...prev, [targetId]: false }));
+                } else {
+                    /* Filter INSIDE the updater against the latest stage — building the list from
+                     * a closure lets two hides fired together clobber each other. */
+                    updatePlayerState(p => p ? {
+                        ...p,
+                        stageState: {
+                            ...p.stageState,
+                            imageOverlays: (p.stageState.imageOverlays || []).filter(o => o.id !== targetId),
+                        },
+                    } : null);
+                }
             }
         } else if (action.type === UIActionType.SaveSlotsNextPage || action.type === UIActionType.SaveSlotsPrevPage) {
             // Custom Next/Previous page buttons for the save/load slot grid. Delivered via a DOM
@@ -13176,7 +13258,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 // the pause menu, which marks the pause screen as closing for its exit animation —
                 // if that flag survived, the pause screen would render mid-fade-out (→ blank/black)
                 // the next time it's opened in a new game / loaded save.
-                setClosingScreens(new Set());
+                sceneChangePendingRef.current = false; setClosingScreens(new Set());
                 customTransitionTimeoutsRef.current.forEach(t => window.clearTimeout(t)); customTransitionTimeoutsRef.current = []; setCustomTransition(null); setActionMovie(null); // a leftover curtain overlay / video would black out the title/menus
             };
 
@@ -13475,21 +13557,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
             // Mark topmost screens as closing so their transitionOut plays while the scene transition runs
             const jumpClosingIds: VNID[] = [];
-            const topScreenForJump = screenStack.length > 0 ? screenStack[screenStack.length - 1] : null;
-            const topHudForJump = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+            // Refs, not closures — a close earlier in the same click leaves the closures stale.
+            const topScreenForJump = screenStackRef.current.length > 0 ? screenStackRef.current[screenStackRef.current.length - 1] : null;
+            const topHudForJump = hudStackRef.current.length > 0 ? hudStackRef.current[hudStackRef.current.length - 1] : null;
             if (topScreenForJump) jumpClosingIds.push(topScreenForJump);
             if (topHudForJump) jumpClosingIds.push(topHudForJump);
             let jumpScreenOutDuration = 0;
             if (jumpClosingIds.length > 0) {
-                setClosingScreens(prev => {
-                    const next = new Set(prev);
-                    jumpClosingIds.forEach(id => next.add(id));
-                    return next;
-                });
                 for (const id of jumpClosingIds) {
                     const s = project.uiScreens[id];
                     if (s && s.transitionOut !== 'none') {
                         const dur = s.transitionOutDuration ?? s.transitionDuration ?? 300;
+                        markScreenClosing(id, dur);          // paired un-flag (was leaking)
                         jumpScreenOutDuration = Math.max(jumpScreenOutDuration, dur);
                     }
                 }
@@ -13901,14 +13980,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 uiDirtyVariableIdsRef.current.clear();
             };
 
-            // Mark topmost HUD screen as closing so its transitionOut plays before the jump completes
-            const topHudForJTL = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+            /* Mark the topmost HUD screen as closing so its transitionOut plays before the jump.
+             * Reads the REF, not the `hudStack` closure: after a Close Screen action in the same
+             * click the closure still lists the screen that just went away, so the jump was
+             * always deferred ~300ms behind an animation nobody was watching — while the story,
+             * already un-blocked by the close, ran on ahead of it. */
+            const topHudForJTL = hudStackRef.current.length > 0 ? hudStackRef.current[hudStackRef.current.length - 1] : null;
             let jtlScreenOutDuration = 0;
             if (topHudForJTL) {
                 const s = project.uiScreens[topHudForJTL];
                 if (s && s.transitionOut !== 'none') {
                     jtlScreenOutDuration = s.transitionOutDuration ?? s.transitionDuration ?? 300;
-                    setClosingScreens(prev => new Set(prev).add(topHudForJTL));
+                    markScreenClosing(topHudForJTL, jtlScreenOutDuration);   // paired un-flag
                 }
             }
             if (jtlScreenOutDuration > 0) {
@@ -13938,11 +14021,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
              * screen if it happened to be shut. No target = the screen on top, which is the one the
              * button lives on in every normal case. */
             const explicit = (action as any).targetScreenId as VNID | undefined;
-            const topmost = hudStackRef.current[hudStackRef.current.length - 1]
-                ?? screenStackRef.current[screenStackRef.current.length - 1];
-            const targetId = explicit || topmost;
-            runtimeDebugLog('CloseScreen action triggered:', targetId, explicit ? '(chosen)' : '(topmost)');
-            if (targetId) closeOpenScreen(targetId, executeUIAction);
+            const targetId = resolveCloseTarget({
+                explicit,
+                ownerScreenId: opts?.ownerScreenId,
+                hudStack: hudStackRef.current,
+                screenStack: screenStackRef.current,
+            });
+            runtimeDebugLog('CloseScreen action triggered:', targetId,
+                explicit ? '(chosen)' : opts?.ownerScreenId ? '(this button\'s screen)' : '(topmost)');
+            // A silent no-op here used to look like a dead button — say so while authoring.
+            if (!targetId || !closeOpenScreen(targetId, executeUIAction)) {
+                devNotify('A "Close Screen" button tried to close a screen that isn\'t open.', 'warning');
+            }
         } else if (action.type === UIActionType.SetFullscreen) {
             // Set the SETTING, not the browser directly — the effect above carries it out, so the
             // settings checkbox and this action can never disagree about the current state.
@@ -15281,7 +15371,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             >
                 {sceneGlitch && <StageGlitchFilterDef effect={sceneGlitch} id="vnfx-scene-glitch" />}
                 <div style={panZoomStyle}>
-                    <div className={`w-full h-full ${shakeClass} z-10`} style={{ ...shakeIntensityStyle, backgroundColor: effBgColor }}>
+                    {/* The backdrop colour is a POSITIONED plane, not this wrapper's own
+                        background. As an in-flow block background it painted AFTER every
+                        negative-z child (CSS paints negative descendants before in-flow block
+                        backgrounds), so any element the author sent below 0 was drawn and then
+                        covered by it. Same pixels, just early enough in the paint order. */}
+                    <div className={`w-full h-full ${shakeClass} z-10`} style={{ ...shakeIntensityStyle }}>
+                        {effBgColor && <div className="absolute inset-0" style={{ zIndex: STAGE_BACKDROP_LAYER, backgroundColor: effBgColor }} />}
                         {effBgUrl && (() => {
                             const bgMedia = effBgIsVideo ? (
                                 <TrimmedVideo
@@ -15305,7 +15401,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             // overlays (rendered just below at z0, later in DOM) always sit above it
                             // — multi-plane LAYERING is done via stacked backgrounds (below), which
                             // keeps fades working regardless of any stack layers.
-                            return <div className="absolute inset-0 overflow-hidden" style={{ zIndex: 0, ...dnBgFilterStyle, ...sceneGlitchFilterStyle }}>{inner}</div>;
+                            return <div className="absolute inset-0 overflow-hidden" style={{ zIndex: DEFAULT_BACKGROUND_LAYER, ...dnBgFilterStyle, ...sceneGlitchFilterStyle }}>{inner}</div>;
                         })()}
                         {/* render background transition visuals here so characters render above them */}
                         {playerState?.uiState.transitionElement}
@@ -15333,7 +15429,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     default: return `dissolve-in ${dur}s forwards`; // fade / cross-fade / dissolve
                                 }
                             })();
-                            return <div key={plane.commandId} className="absolute inset-0 overflow-hidden" style={{ zIndex: plane.layer ?? 0, backgroundColor: plane.color, animation: anim, ...dnBgFilterStyle, ...sceneGlitchFilterStyle }}>{planeInner}</div>;
+                            return <div key={plane.commandId} className="absolute inset-0 overflow-hidden" style={{ zIndex: plane.layer ?? DEFAULT_BACKGROUND_LAYER, backgroundColor: plane.color, animation: anim, ...dnBgFilterStyle, ...sceneGlitchFilterStyle }}>{planeInner}</div>;
                         })}
                         {/* Day/night BACKGROUND grade tint — above the background/planes/movie, below characters. */}
                         {dnBg && dnBg.overlayColor !== 'transparent' && (
@@ -15692,24 +15788,31 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             if (dnSpriteTint && !char.isVideo) contentEffectStyle.isolation = 'isolate';
                             const hasContentEffect = combinedFilter || combinedFilterAnimation || flickerAnimation || (!!dnSpriteTint && !char.isVideo);
                             
-                            // Spin/Tilt + move/pivot: the animated adjustment for the layer behind
-                            // img index, decomposed into transform pieces. Order is load-bearing:
+                            // Spin/Tilt + Squash/Stretch + move/pivot: the animated adjustment for
+                            // the layer behind img index, decomposed into transform pieces. Order is
+                            // load-bearing:
                             //   translate (move, STAGE axes — leftmost = parent frame)
-                            //   → authored box transform → rotate (about the track's pivot).
-                            // The move offset is authored in % of the CHARACTER FRAME; CSS translate %
-                            // is relative to the ELEMENT, so it's rescaled by the box size.
-                            const layerAnimParts = (index: number): { pre: string; rot: string; origin?: string } => {
+                            //   → authored box transform → rotate → scale (both about the pivot).
+                            // Scale is INNERMOST so the squash happens in the piece's local axes and
+                            // the rotation turns the already-squashed piece. The move offset is
+                            // authored in % of the CHARACTER FRAME; CSS translate % is relative to
+                            // the ELEMENT, so it's rescaled by the box size.
+                            const layerAnimParts = (index: number): { pre: string; rot: string; scl: string; origin?: string } => {
                                 const lid = animLayerIds?.[index];
                                 const a = lid != null && animRot ? animRot[lid] : undefined;
-                                if (!a) return { pre: '', rot: '' };
+                                if (!a) return { pre: '', rot: '', scl: '' };
                                 const box = char.imageBoxes?.[index];
                                 const bw = box?.width || 100;
                                 const bh = box?.height || 100;
+                                const hasScale = a.sx !== undefined && (a.sx !== 1 || a.sy !== 1);
                                 return {
                                     pre: (a.dx || a.dy) ? `translate(${((a.dx / bw) * 100).toFixed(2)}%, ${((a.dy / bh) * 100).toFixed(2)}%) ` : '',
                                     rot: (a.deg !== undefined && a.deg !== 0) ? `rotate(${a.deg.toFixed(2)}deg) ` : '',
+                                    scl: hasScale ? `scale(${(a.sx ?? 1).toFixed(3)}, ${(a.sy ?? 1).toFixed(3)}) ` : '',
                                     // Custom pivot only when set off-centre — the default stays the box
-                                    // centre, matching the authored Pose Studio rotation contract.
+                                    // centre, matching the authored Pose Studio rotation contract. The
+                                    // pivot anchors BOTH the spin and the squash (feet pivot = the
+                                    // piece squashes into the ground, real squash-and-stretch).
                                     origin: (a.pivotX !== 50 || a.pivotY !== 50) ? `${a.pivotX}% ${a.pivotY}%` : undefined,
                                 };
                             };
@@ -15719,11 +15822,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 const p = layerAnimParts(index);
                                 // Pivot alone changes nothing — and returning `transform: ''` here
                                 // would CLEAR the authored box transform, so bail unless we have
-                                // an actual translate/rotate to compose.
-                                if (!p.pre && !p.rot) return {};
+                                // an actual translate/rotate/scale to compose.
+                                if (!p.pre && !p.rot && !p.scl) return {};
                                 const boxTf = layerBoxTransform(char.imageBoxes?.[index]);
                                 const style: React.CSSProperties = {
-                                    transform: `${p.pre}${boxTf ? boxTf + ' ' : ''}${p.rot}`.trim(),
+                                    transform: `${p.pre}${boxTf ? boxTf + ' ' : ''}${p.rot}${p.scl}`.trim(),
                                     transition: 'transform 40ms linear',
                                 };
                                 if (p.origin) style.transformOrigin = p.origin;
@@ -15810,10 +15913,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                                 WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
                                                 WebkitMaskPosition: 'center', maskPosition: 'center',
                                                 ...boxStyle,
-                                                // Spin/Tilt + move ride between the box transform and the glitch push,
-                                                // so an adjusted layer's ghost keeps hugging its silhouette.
+                                                // Spin/Tilt + Squash/Stretch + move ride between the box transform and
+                                                // the glitch push, so an adjusted layer's ghost keeps hugging its silhouette.
                                                 ...(layerAnimParts(index).origin ? { transformOrigin: layerAnimParts(index).origin } : {}),
-                                                transform: `${layerAnimParts(index).pre}${boxTf ? boxTf + ' ' : ''}${layerAnimParts(index).rot}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + 0.015 * Math.max(0.2, Math.min(3, g.rimSize))).toFixed(3)})`,
+                                                transform: `${layerAnimParts(index).pre}${boxTf ? boxTf + ' ' : ''}${layerAnimParts(index).rot}${layerAnimParts(index).scl}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + 0.015 * Math.max(0.2, Math.min(3, g.rimSize))).toFixed(3)})`,
                                             }} />
                                             );
                                         });
@@ -15851,9 +15954,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                                 WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
                                                 WebkitMaskPosition: 'center', maskPosition: 'center',
                                                 ...boxStyle,
-                                                // Spin/Tilt + move compose here too (see the rim ghosts above).
+                                                // Spin/Tilt + Squash/Stretch + move compose here too (see the rim ghosts above).
                                                 ...(layerAnimParts(index).origin ? { transformOrigin: layerAnimParts(index).origin } : {}),
-                                                transform: `${layerAnimParts(index).pre}${boxTf ? boxTf + ' ' : ''}${layerAnimParts(index).rot}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + (0.035 + ci * 0.012) * rim).toFixed(3)})`,
+                                                transform: `${layerAnimParts(index).pre}${boxTf ? boxTf + ' ' : ''}${layerAnimParts(index).rot}${layerAnimParts(index).scl}translate(${(dir[0] * push).toFixed(1)}px, ${(dir[1] * push).toFixed(1)}px) scale(${(1 + (0.035 + ci * 0.012) * rim).toFixed(3)})`,
                                             }} />
                                             );
                                         });
@@ -15938,10 +16041,22 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             const spriteReady = !!char.isVideo || !char.imageUrls?.length
                                 || char.imageUrls.every(u => vnLoadedImages.has(u));
 
+                            // Whole-character motion (the Move whole character lane): one translate on
+                            // an inner wrapper moves EVERY copy (layers, base art, tint masks, ghosts)
+                            // together. The wrapper div is UNCONDITIONAL — motion starting/stopping only
+                            // changes a style; a conditional wrapper would remount every <img> and
+                            // re-trigger the atomic-paint hold. Percent of the character frame, which
+                            // this wrapper IS, so no rescale. Ephemeral: stage position never changes.
+                            const charMotion = animRot?.['__char'];
                             // Wrap with filter/flicker effects (+ the atomic-paint hold)
                             let wrappedContent = (
                                 <div className="w-full h-full relative" style={{ ...contentEffectStyle, ...(spriteReady ? {} : { visibility: 'hidden' as const }) }}>
-                                    {spriteContent}
+                                    <div className="w-full h-full relative" style={charMotion ? {
+                                        transform: `translate(${charMotion.dx.toFixed(2)}%, ${charMotion.dy.toFixed(2)}%)`,
+                                        transition: 'transform 40ms linear',
+                                    } : undefined}>
+                                        {spriteContent}
+                                    </div>
                                 </div>
                             );
 
@@ -17703,16 +17818,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
                 {/* Scene exit transition overlay */}
                 {sceneTransitionFading && (
-                    <div 
+                    <div
+                        key={sceneTransitionPhase}
                         className={`absolute inset-0 pointer-events-none z-50 ${
-                            sceneTransitionType === 'fade' ? 'bg-black transition-base transition-dissolve' :
-                            sceneTransitionType === 'dissolve' ? 'bg-black transition-base transition-dissolve' :
-                            sceneTransitionType === 'iris-out' ? 'bg-black transition-base transition-iris-out' :
-                            sceneTransitionType === 'wipe-right' ? 'bg-black transition-base transition-wipe-right' :
-                            sceneTransitionType === 'slide-left' ? 'bg-black transition-base transition-slide-out-left' :
-                            'bg-black'
+                            // Reveal half (colored fades only): the cover fades back OUT after the swap.
+                            sceneTransitionPhase === 'opening' ? 'transition-base transition-fade-out' :
+                            sceneTransitionType === 'fade' ? 'transition-base transition-dissolve' :
+                            sceneTransitionType === 'dissolve' ? 'transition-base transition-dissolve' :
+                            sceneTransitionType === 'iris-out' ? 'transition-base transition-iris-out' :
+                            sceneTransitionType === 'wipe-right' ? 'transition-base transition-wipe-right' :
+                            sceneTransitionType === 'slide-left' ? 'transition-base transition-slide-out-left' :
+                            ''
                         }`}
-                        style={{ animationDuration: `${sceneTransitionDuration}s` }}
+                        style={{ animationDuration: `${sceneTransitionDuration}s`, backgroundColor: sceneTransitionColor || '#000000' }}
                     />
                 )}
                 {/* Author-made custom scene transition (curtain close → scene swap → curtain open).

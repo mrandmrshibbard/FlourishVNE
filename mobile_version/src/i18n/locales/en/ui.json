@@ -81,7 +81,8 @@
     "playCharacterAnimation": "Play Character Animation",
     "setLanguage": "Set Language",
     "setFullscreen": "Set Full Screen",
-    "closeScreen": "Close Screen"
+    "closeScreen": "Close Screen",
+    "hideImage": "Hide Picture (in scene)"
   },
   "actionsList": {
     "actions": "Actions",
@@ -343,7 +344,14 @@
     "buttonColor": "Button Color",
     "overlayColor": "Overlay / Backdrop Color",
     "mousePointer": "Mouse Pointer",
-    "mousePointerDesc": "Custom cursors for the whole game"
+    "mousePointerDesc": "Custom cursors for the whole game",
+    "groupNameMentions": "Character name mentions",
+    "nameMentionsHint": "When a character’s name is mentioned inside dialogue, show the name in that character’s own style. Nicknames count — the name a character currently goes by is the one that lights up.",
+    "nameMentionsOn": "Style mentioned character names",
+    "nameMentionsColor": "Use their name color",
+    "nameMentionsFont": "Use their font (when they have one)",
+    "nameMentionsBold": "Make the name bold",
+    "nameMentionsGlossary": "If a name is also a Glossary term, the Glossary look and tooltip win."
   },
   "elementInspector": {
     "propsTitle": "Properties",
@@ -1070,7 +1078,12 @@
     "closeThisScreen": "The screen this button is on",
     "groupVideos": "Videos",
     "groupBackgrounds": "Backgrounds",
-    "groupImages": "Images"
+    "groupImages": "Images",
+    "imageToHide": "Picture to hide",
+    "selectImage": "Select a picture…",
+    "unnamedImage": "Untitled image",
+    "inScene": "in the story",
+    "noPictures": "No pictures yet — add a picture to a screen, or a Show Image command to a scene."
   },
   "hc": {
     "hotSpot": "Hot Spot",

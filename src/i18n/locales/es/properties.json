@@ -132,7 +132,7 @@
     "color": "Color",
     "animation": "Animación",
     "letStoryContinue": "Dejar que la historia continúe",
-    "letStoryContinueHint": "El siguiente comando empieza de inmediato: ideal para que un personaje aparezca mientras se escribe el diálogo."
+    "letStoryContinueHint": "El siguiente comando empieza de inmediato — ideal para que un personaje aparezca mientras se escribe el diálogo. Para que varios comandos ocurran A LA VEZ (como tres imágenes ocultándose juntas), actívalo en cada uno de ellos excepto el último."
   },
   "text": {
     "text": "Texto",
@@ -297,7 +297,8 @@
     "allSounds": "Todos los efectos de sonido",
     "fadeOutSec": "Desvanecer (s)",
     "fadeOutHint": "0 = detener al instante",
-    "shaping": "Ajuste de sonido"
+    "shaping": "Ajuste de sonido",
+    "crossfadeHint": "Con un fundido configurado, cambiar de canción hace un fundido cruzado: la canción anterior se desvanece mientras la nueva aparece, sin corte brusco."
   },
   "movie": {
     "video": "Vídeo",
@@ -338,7 +339,9 @@
   "jump": {
     "targetScene": "Escena de destino",
     "transition": "Transición de escena",
-    "transitionHint": "Solo para este salto: sustituye la transición de salida de los Ajustes de escena."
+    "transitionHint": "Solo para este salto: sustituye la transición de salida de los Ajustes de escena.",
+    "fadeColor": "Color del fundido",
+    "fadeColorHint": "Solo para este salto — la pantalla se funde a través de este color, y con cualquier color que no sea negro también reaparece desde él."
   },
   "wait": {
     "waitMode": "Modo de espera",
@@ -354,7 +357,8 @@
     "removeItem": "Quitar objeto",
     "untilCondition": "Hasta que se cumpla una condición (en vivo)",
     "conditionHint": "Avanza en cuanto se cumpla (se comprueba continuamente).",
-    "quantity": "Cantidad necesaria"
+    "quantity": "Cantidad necesaria",
+    "conditionEmptyWarning": "Añade al menos una condición: sin ninguna, esta Espera se omite al instante."
   },
   "screen": {
     "intensity": "Intensidad: {{value}}",
@@ -1035,5 +1039,9 @@
   },
   "screenFx": {
     "density": "Densidad"
+  },
+  "flow": {
+    "autoSaveSlot": "Ranura de guardado",
+    "autoSaveHint": "Guarda la partida en silencio en este punto — sin menú, la historia continúa. La ranura 0 es la ranura especial Continuar: el botón Continuar de la pantalla de título la carga."
   }
 }

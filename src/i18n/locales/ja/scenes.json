@@ -70,7 +70,9 @@
     "dayNightCycle": "サイクルに従う",
     "dayNightFixed": "時刻を固定",
     "dayNightOff": "色補正なし",
-    "dayNightFixedHour": "固定する時刻（0〜24）"
+    "dayNightFixedHour": "固定する時刻（0〜24）",
+    "fadeColor": "フェードの色",
+    "fadeColorHint": "画面はこの色を経てフェードします。黒は定番の切り替え、白は柔らかく夢見心地 — 黒以外の色では、シーンがその色からフェードインもします。"
   },
   "expandCommands": "コマンドを表示",
   "collapseCommands": "コマンドを隠す",

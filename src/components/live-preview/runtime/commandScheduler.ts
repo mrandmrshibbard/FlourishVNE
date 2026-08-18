@@ -12,6 +12,9 @@ export interface CommandSignature {
  */
 export class CommandScheduler {
     private lastProcessed: CommandSignature | null = null;
+    /** Bumped on every scene change. Callbacks captured in the old scene compare against the
+     *  epoch they were created in, so they can't act on the new scene (see `isStaleEpoch`). */
+    private epoch = 0;
 
     /**
      * Determines whether the supplied command should execute. Returns false if
@@ -41,6 +44,26 @@ export class CommandScheduler {
      */
     reset(): void {
         this.lastProcessed = null;
+        this.epoch++;
+    }
+
+    /** The epoch a callback should capture when it is created. */
+    currentEpoch(): number {
+        return this.epoch;
+    }
+
+    /**
+     * True when the scene has changed since `epoch` was captured.
+     *
+     * Why this exists: `advance()` closures capture an ABSOLUTE command index from the scene
+     * they were created in, and their only protection used to be `alreadyAdvancedPast(index)` —
+     * which `reset()` disarms completely on every scene change. A leftover timer or listener
+     * from the old scene (a plain Wait, an overlay fade callback, an async command finishing)
+     * would then "advance" the NEW scene to the old scene's index + 1, silently skipping every
+     * command before it. Epoch-stamping makes those callbacks self-void instead.
+     */
+    isStaleEpoch(epoch: number): boolean {
+        return epoch !== this.epoch;
     }
 
     /**

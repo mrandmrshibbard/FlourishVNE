@@ -111,7 +111,7 @@
     "noExpressions": "Sem expressões",
     "narrator": "Narrador",
     "letStoryContinue": "Deixar a história continuar",
-    "letStoryContinueHint": "O próximo comando começa imediatamente — ótimo para um personagem surgindo enquanto o diálogo digita.",
+    "letStoryContinueHint": "O próximo comando começa imediatamente — ótimo para um personagem surgir enquanto o diálogo é digitado. Para que vários comandos aconteçam JUNTOS (como três imagens sumindo de uma vez), ative isto em cada um deles, exceto o último.",
     "none": "Nenhum",
     "expression": "Expressão",
     "position": "Posição",
@@ -313,7 +313,8 @@
     "allSounds": "Todos os efeitos sonoros",
     "fadeOutSec": "Esmaecer (s)",
     "fadeOutHint": "0 = parar instantaneamente",
-    "shaping": "Ajuste do som"
+    "shaping": "Ajuste do som",
+    "crossfadeHint": "Com um fade definido, trocar de música faz um crossfade: a música antiga some enquanto a nova surge, sem corte seco."
   },
   "movie": {
     "video": "Vídeo",
@@ -354,7 +355,9 @@
   "jump": {
     "targetScene": "Cena de Destino",
     "transition": "Transição de cena",
-    "transitionHint": "Só para este salto — substitui a transição de saída definida nas Configurações da Cena."
+    "transitionHint": "Só para este salto — substitui a transição de saída definida nas Configurações da Cena.",
+    "fadeColor": "Cor do esmaecimento",
+    "fadeColorHint": "Só para este salto — a tela esmaece através desta cor e, com qualquer cor que não seja preto, a cena também reaparece a partir dela."
   },
   "sceneTransitionSelect": {
     "useSceneSetting": "Usar a configuração da cena",
@@ -380,7 +383,8 @@
     "removeItem": "Remover item",
     "untilCondition": "Até uma condição ser verdadeira (ao vivo)",
     "conditionHint": "Avança assim que isto for atendido (verificado continuamente).",
-    "quantity": "Quantidade necessária"
+    "quantity": "Quantidade necessária",
+    "conditionEmptyWarning": "Adicione pelo menos uma condição — sem nenhuma, esta Espera é ignorada instantaneamente."
   },
   "screen": {
     "intensity": "Intensidade: {{value}}",
@@ -1051,5 +1055,9 @@
   },
   "screenFx": {
     "density": "Densidade"
+  },
+  "flow": {
+    "autoSaveSlot": "Espaço de salvamento",
+    "autoSaveHint": "Salva o jogo silenciosamente neste ponto — sem menu, a história continua. O espaço 0 é o espaço especial Continuar: o botão Continuar da tela de título o carrega."
   }
 }

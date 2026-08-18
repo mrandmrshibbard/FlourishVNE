@@ -45,3 +45,18 @@ companion_app/proj-*/
 /deep_audit.md
 /redundancy_verification.md
 /CHARACTER_SYSTEM_REVAMP_PLAN.md
+
+# Personal stress-test material (never commit, never ship).
+# The source game moved from public/ to the repo root (it was being packaged into the desktop
+# app and blew the installer past the NSIS limit). Both locations stay listed: .gitignore does
+# NOT keep anything out of a BUILD — that is package.json build.files — and these paths are
+# a commercial game that must never be committed or shipped.
+/public/OurLife/
+/public/OurLife-Step1-Build-Spec.md
+/OurLife/
+/OurLife-Step1-Build-Spec.md
+/ourlife-out/
+# Converter fixtures must stay text-only (counts/identifiers, never game content).
+/tools/renpy-convert/fixtures/**/*.png
+/tools/renpy-convert/fixtures/**/*.jpg
+/tools/renpy-convert/fixtures/**/*.ogg

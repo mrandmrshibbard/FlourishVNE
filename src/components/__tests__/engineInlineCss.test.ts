@@ -14,7 +14,14 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'LivePreview.tsx'), 'utf8');
+// The engine's rendering source is LivePreview.tsx PLUS every module its game-facing UI was
+// extracted into (the choice renderer moved to components/choice/ — its keyframes and
+// animation references must stay under this contract or the test goes silently vacuous).
+const ENGINE_SOURCE_FILES = [
+    path.join(__dirname, '..', 'LivePreview.tsx'),
+    path.join(__dirname, '..', 'choice', 'ChoiceButtonsView.tsx'),
+];
+const src = ENGINE_SOURCE_FILES.map(p => fs.readFileSync(p, 'utf8')).join('\n');
 
 /** Every inline <style> template-literal block in the file. */
 function styleBlocks(code: string): string[] {

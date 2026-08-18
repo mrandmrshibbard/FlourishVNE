@@ -132,7 +132,7 @@
     "color": "Couleur",
     "animation": "Animation",
     "letStoryContinue": "Laisser l'histoire continuer",
-    "letStoryContinueHint": "La commande suivante démarre aussitôt — parfait pour faire apparaître un personnage pendant que le dialogue s'écrit."
+    "letStoryContinueHint": "La commande suivante démarre tout de suite — idéal pour un personnage qui apparaît pendant que le dialogue s’écrit. Pour que plusieurs commandes se produisent EN MÊME TEMPS (comme trois images qui disparaissent ensemble), activez-le sur chacune d’elles sauf la dernière."
   },
   "text": {
     "text": "Texte",
@@ -297,7 +297,8 @@
     "allSounds": "Tous les effets sonores",
     "fadeOutSec": "Fondu de sortie (s)",
     "fadeOutHint": "0 = arrêt instantané",
-    "shaping": "Réglage sonore"
+    "shaping": "Réglage sonore",
+    "crossfadeHint": "Avec un fondu défini, changer de musique fait un fondu enchaîné : l’ancienne musique s’efface pendant que la nouvelle monte, sans coupure brutale."
   },
   "movie": {
     "video": "Vidéo",
@@ -338,7 +339,9 @@
   "jump": {
     "targetScene": "Scène cible",
     "transition": "Transition de scène",
-    "transitionHint": "Uniquement pour ce saut — remplace la transition de sortie définie dans les Réglages de scène."
+    "transitionHint": "Uniquement pour ce saut — remplace la transition de sortie définie dans les Réglages de scène.",
+    "fadeColor": "Couleur du fondu",
+    "fadeColorHint": "Uniquement pour ce saut — l’écran passe par cette couleur, et avec toute couleur autre que le noir, la scène réapparaît aussi depuis celle-ci."
   },
   "wait": {
     "waitMode": "Mode d'attente",
@@ -354,7 +357,8 @@
     "removeItem": "Supprimer l'objet",
     "untilCondition": "Jusqu'à ce qu'une condition soit vraie (en direct)",
     "conditionHint": "Avance dès que c'est rempli (vérifié en continu).",
-    "quantity": "Quantité requise"
+    "quantity": "Quantité requise",
+    "conditionEmptyWarning": "Ajoutez au moins une condition — sans aucune, cette Attente est ignorée immédiatement."
   },
   "screen": {
     "intensity": "Intensité : {{value}}",
@@ -1035,5 +1039,9 @@
   },
   "screenFx": {
     "density": "Densité"
+  },
+  "flow": {
+    "autoSaveSlot": "Emplacement de sauvegarde",
+    "autoSaveHint": "Sauvegarde la partie en silence à ce point — pas de menu, l’histoire continue. L’emplacement 0 est l’emplacement spécial Continuer : le bouton Continuer de l’écran titre le charge."
   }
 }

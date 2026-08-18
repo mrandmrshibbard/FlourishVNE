@@ -89,6 +89,8 @@ export function defaultActionForType(type: UIActionType, project: VNProject): VN
         case UIActionType.ShowElement:
         case UIActionType.HideElement:
             return { ...base, targetElementId: '' };
+        case UIActionType.HideImage:
+            return { ...base, targetCommandId: '' };
         case UIActionType.ChangeImage:
             return { ...base, targetElementId: '', newImageId: '' as VNID };
         case UIActionType.PlayAnimation:

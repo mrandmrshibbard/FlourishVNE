@@ -150,6 +150,12 @@ export enum UIActionType {
     ShowElement = 'ShowElement',
     /** Hides a target element (fades it out + makes it click-through). Counterpart to ShowElement. */
     HideElement = 'HideElement',
+    /** Hides a picture the STORY put on screen with a Show Image command — the scene-side
+     *  counterpart to HideElement (which only reaches UI-screen elements). Lets a screen button
+     *  or hot-spot dismiss scene artwork, which previously needed a Hide Image command and so
+     *  could only happen at a fixed point in the script. Targets the Show Image command itself,
+     *  exactly like the Hide Image command does. */
+    HideImage = 'HideImage',
     /** Close an open screen and nothing else. Authors were using Toggle Screen as a "close",
      *  which also OPENS the screen when it happens to be shut, and made the engine guess whether
      *  the story should move on. This says what it means. */
@@ -290,6 +296,9 @@ export interface ChangeCharacterAction extends BaseUIAction { type: UIActionType
 export interface PlayCharacterAnimationAction extends BaseUIAction { type: UIActionType.PlayCharacterAnimation; characterId: VNID; animationId?: VNID | null; }
 export interface ShowElementAction extends BaseUIAction { type: UIActionType.ShowElement; targetElementId: VNID; }
 export interface HideElementAction extends BaseUIAction { type: UIActionType.HideElement; targetElementId: VNID; }
+/** `targetCommandId` = the Show Image command whose picture should go away (same targeting the
+ *  Hide Image command uses). Transition/duration are optional; absent = the engine's instant hide. */
+export interface HideImageAction extends BaseUIAction { type: UIActionType.HideImage; targetCommandId: VNID; transition?: string; duration?: number; }
 export interface CallCommonEventAction extends BaseUIAction { type: UIActionType.CallCommonEvent; commonEventId: VNID; arguments?: Record<VNID, string | number | boolean>; }
 export interface GiveItemAction extends BaseUIAction { type: UIActionType.GiveItem; itemId: VNID; quantity?: number; }
 export interface UseItemAction extends BaseUIAction { type: UIActionType.UseItem; itemId: VNID; }
@@ -310,4 +319,4 @@ export interface SetTimeOfDayAction extends BaseUIAction { type: UIActionType.Se
 /** Clear the palette→UI restyle applied by a coloring mini game. */
 export interface ClearUiPaletteAction extends BaseUIAction { type: UIActionType.ClearUiPalette; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | PlayMusicAction | StopMusicAction | SaveSlotsPageAction | ShowSpotlightAction | HideSpotlightAction | ShowFlashlightAction | HideFlashlightAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ChangePoseAction | ChangeCharacterAction | PlayCharacterAnimationAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | OpenPhoneAppAction | ShowMapAction | ShowMiniGameAction | StartTimerAction | StopTimerAction | SetTimeOfDayAction | ClearUiPaletteAction | StopSoundAction | PlayVideoAction | SetLanguageAction | SetFullscreenAction | CloseScreenAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | PlayMusicAction | StopMusicAction | SaveSlotsPageAction | ShowSpotlightAction | HideSpotlightAction | ShowFlashlightAction | HideFlashlightAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ChangePoseAction | ChangeCharacterAction | PlayCharacterAnimationAction | ShowElementAction | HideElementAction | HideImageAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction | ShowPhoneContactsAction | OpenPhoneAppAction | ShowMapAction | ShowMiniGameAction | StartTimerAction | StopTimerAction | SetTimeOfDayAction | ClearUiPaletteAction | StopSoundAction | PlayVideoAction | SetLanguageAction | SetFullscreenAction | CloseScreenAction;

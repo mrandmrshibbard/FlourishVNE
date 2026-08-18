@@ -7,7 +7,7 @@ const BUILTINS = new Set<string>(['fade', 'dissolve', 'iris-out', 'wipe-right', 
 
 export type ResolvedSceneTransition =
     | { kind: 'instant' }
-    | { kind: 'builtin'; type: BuiltinSceneTransition; duration: number }
+    | { kind: 'builtin'; type: BuiltinSceneTransition; duration: number; color?: string }
     | { kind: 'custom'; def: VNCustomTransition };
 
 /** Whether one half of a custom transition actually has something to show. */
@@ -33,8 +33,9 @@ export function transitionHalfDuration(half: VNCustomTransition['close'] | undef
  */
 export function resolveSceneTransition(
     override: string | undefined | null,
-    scene: Pick<VNScene, 'outTransition' | 'outTransitionDuration'> | undefined | null,
+    scene: Pick<VNScene, 'outTransition' | 'outTransitionDuration' | 'outTransitionColor'> | undefined | null,
     customTransitions: Record<VNID, VNCustomTransition> | undefined | null,
+    colorOverride?: string | null,
 ): ResolvedSceneTransition {
     const choice: string = (override && override !== 'scene-default')
         ? override
@@ -42,6 +43,8 @@ export function resolveSceneTransition(
     // The override carries its own meaning for duration only when it's a builtin; the scene's
     // configured duration still applies (there is no per-jump duration field — keep it simple).
     const duration = scene?.outTransitionDuration ?? 0.5;
+    // Fade color: the jump's own override beats the scene's setting; absent = classic black.
+    const color = colorOverride || scene?.outTransitionColor || undefined;
 
     if (choice === 'instant') return { kind: 'instant' };
     if (choice.startsWith('custom:')) {
@@ -49,8 +52,8 @@ export function resolveSceneTransition(
         if (def && (def.close?.assetId || def.close?.frameIds?.length || def.open?.assetId || def.open?.frameIds?.length)) {
             return { kind: 'custom', def };
         }
-        return { kind: 'builtin', type: 'fade', duration };
+        return { kind: 'builtin', type: 'fade', duration, color };
     }
-    if (BUILTINS.has(choice)) return { kind: 'builtin', type: choice as BuiltinSceneTransition, duration };
-    return { kind: 'builtin', type: 'fade', duration };
+    if (BUILTINS.has(choice)) return { kind: 'builtin', type: choice as BuiltinSceneTransition, duration, color };
+    return { kind: 'builtin', type: 'fade', duration, color };
 }

@@ -8,7 +8,7 @@ import { VNTypingBlip } from '../../../features/character/types';
 import { CommandContext, CommandResult } from './types';
 import { resolveCommandCharacterId, resolvePlayerCharacterName } from '../../../utils/playerCharacter';
 import { resolveCharacterDisplayName } from '../../../utils/variableInterpolation';
-import { smartJoin, DEFAULT_PAUSE_MS } from '../dialogueTextCodes';
+import { smartJoin, DEFAULT_PAUSE_MS, processDialogueText } from '../dialogueTextCodes';
 
 /**
  * Handle dialogue command
@@ -104,14 +104,32 @@ const freshDialogue = (
     command: DialogueCommand,
     context: CommandContext,
     r: { playerName: string | null; char: any; resolvedCharacterId: string | null; voiceAudioId: string | null; textEffect: any; blip: VNTypingBlip | null }
-) => ({
-    text: command.text,
+) => {
     // Names may hold {Variable} tokens — resolved AT SPEAK TIME (the backlog keeps
     // this snapshot: a line spoken by "???" stays "???" after the reveal). A name
     // resolving to empty falls through to 'Narrator' → the name box hides.
-    characterName: r.playerName
-        || resolveCharacterDisplayName(r.char?.name, context.runtimeVariables ?? context.playerState.variables, context.project)
-        || 'Narrator',
+    // Names may ALSO hold inline [wave]…[/wave] effect tags: processed like dialogue
+    // text (tags parsed from the RAW string, each run interpolated separately so a
+    // nickname's length can't break span coordinates). characterName stays the CLEAN
+    // text, so the backlog/history never show tags. Player-entered names are typed by
+    // the player — never tag-processed.
+    const vars = context.runtimeVariables ?? context.playerState.variables;
+    let characterName: string;
+    let nameEffectSpans: ReturnType<typeof processDialogueText>['effectSpans'] | undefined;
+    if (r.playerName) {
+        characterName = r.playerName;
+    } else {
+        const processed = processDialogueText(r.char?.name || '', s => resolveCharacterDisplayName(s, vars, context.project) || '');
+        characterName = processed.cleanText;
+        nameEffectSpans = processed.effectSpans.length ? processed.effectSpans : undefined;
+    }
+    return {
+    text: command.text,
+    characterName: characterName || 'Narrator',
+    ...(nameEffectSpans ? { nameEffectSpans } : {}),
+    // Whole-name effect: the character's Name effect setting (name-box counterpart of
+    // textEffect). Absent when unset — untouched projects' dialogue state is byte-identical.
+    ...(r.char?.nameTextEffect ? { nameTextEffect: r.char.nameTextEffect } : {}),
     characterColor: r.char?.color || '#FFFFFF',
     characterId: r.resolvedCharacterId || null,
     voiceAudioId: r.voiceAudioId,
@@ -124,4 +142,5 @@ const freshDialogue = (
     showTimer: command.showTimer,
     blip: r.blip,
     noPunctuationPauses: command.noPunctuationPauses,
-});
+    };
+};

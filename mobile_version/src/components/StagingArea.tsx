@@ -113,6 +113,11 @@ import TrimmedVideo from './ui/TrimmedVideo';
 import { canvasPointPick, useCanvasPointPick } from '../utils/canvasPointPick';
 import { useCommandRadial } from './inspector/CommandRadialContext';
 import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform, cssFontFamily } from '../utils/styleUtils';
+import ChoiceButtonsView, { SingleChoiceButton } from './choice/ChoiceButtonsView';
+
+/** Mirrors the engine's DEFAULT_BACKGROUND_LAYER: backgrounds paint below the layer range so
+ *  negative layers remain visible (they used to hide under a background sitting at 0). */
+const STAGING_BACKGROUND_LAYER = -1000;
 import { PolygonShapeSVG, PolygonVertexEditor, PolygonTraceOverlay } from './interactive-elements/HotSpotDrawTools';
 import { subscribeTrace, TraceTarget } from './interactive-elements/hotspotTraceBus';
 import { GradientText } from './ui/GradientText';
@@ -789,7 +794,9 @@ const StagingArea: React.FC<{
                     // {Variable} names preview resolved, same variables view the text preview uses.
                     // Editor stage preview is static: strip [pause] codes; prefix appended parts
                     // with "…" so the author sees it continues the previous line.
-                    dialogue = { characterName: resolveCharacterDisplayName(char?.name, currentVariables, project) || 'Narrator', characterColor: char?.color || '#FFFFFF', characterId: currentCommand.characterId || null, text: `${(currentCommand as any).append ? '… ' : ''}${stripDialogueTextCodes(currentCommand.text)}` };
+                    // Names may hold [wave]…[/wave] effect tags too — strip them like the text
+                    // (the editor stage preview is static; the real effect shows in Test Play).
+                    dialogue = { characterName: resolveCharacterDisplayName(stripDialogueTextCodes(char?.name || ''), currentVariables, project) || 'Narrator', characterColor: char?.color || '#FFFFFF', characterId: currentCommand.characterId || null, text: `${(currentCommand as any).append ? '… ' : ''}${stripDialogueTextCodes(currentCommand.text)}` };
                     break;
                 case CommandType.Choice:
                     choices = currentCommand.options.filter(opt => evaluateConditions(opt.conditions, currentVariables));
@@ -1441,31 +1448,8 @@ const StagingArea: React.FC<{
     const nameboxOffsetY = project.ui.nameboxOffsetY ?? 0;
     const nameboxSizeMode = project.ui.nameboxSizeMode ?? 'stretch';
 
-    // Resolve choice button image URL
-    const choiceButtonImageUrl = project.ui.choiceButtonImage 
-        ? (project.images[project.ui.choiceButtonImage.id]?.imageUrl || project.backgrounds[project.ui.choiceButtonImage.id]?.imageUrl)
-        : null;
-
-    // Resolve choice button border image URL
-    const choiceBorderImageUrl = project.ui.choiceButtonBorderImage
-        ? (project.images[project.ui.choiceButtonBorderImage.id]?.imageUrl || project.backgrounds[project.ui.choiceButtonBorderImage.id]?.imageUrl)
-        : null;
-    const choiceBorderPadding = project.ui.choiceBorderPadding ?? 8;
-
-    // Choice button layout settings
-    const choiceWidth = project.ui.choiceButtonWidth || 0;
-    const choiceHeight = project.ui.choiceButtonHeight || 0;
-    const choicePadding = project.ui.choiceButtonPadding ?? 16;
-
-    // New choice appearance settings
-    const choiceSizeMode = project.ui.choiceButtonSizeMode ?? 'stretch';
-    const choiceSlice = project.ui.choiceButtonSlice ?? 15;
-    const choiceColor = project.ui.choiceButtonColor ?? '#1e293b';
-    const choiceOpacity = project.ui.choiceButtonOpacity ?? 90;
-    const choiceBorderRadius = project.ui.choiceButtonBorderRadius ?? 8;
-
+    // Choice chrome now resolves inside the shared renderer (components/choice/) — no local copies.
     const hasCustomDialogueImage = dialogueBoxImageUrl || dialogueBorderImageUrl;
-    const hasCustomChoiceImage = choiceButtonImageUrl || choiceBorderImageUrl;
 
     // Input box settings
     const inputBoxImageUrl = project.ui.inputBoxImage
@@ -1502,7 +1486,6 @@ const StagingArea: React.FC<{
     const nameboxBgStyle: React.CSSProperties = nameboxImageUrl
         ? { ...buildImageBackgroundStyle(nameboxImageUrl, nameboxSizeMode), borderRadius: s(nameboxBorderRadius) }
         : { backgroundColor: hexToRgba(nameboxColor, nameboxOpacity), borderRadius: s(nameboxBorderRadius) };
-    const choiceBgColor = hexToRgba(choiceColor, choiceOpacity);
 
     /* ── Percentage-based layout rects (matching InGameUIEditor) ── */
     const gameW = project.gameResolution?.width || 1920;
@@ -1526,11 +1509,6 @@ const StagingArea: React.FC<{
     const nameHPct = project.ui.nameboxHeight ?? 5;
     const nameXPct = project.ui.nameboxX ?? (dialogueXPct + nameboxOffsetX * 100 / gameW);
     const nameYPct = project.ui.nameboxY ?? (dialogueYPct - nameHPct - nameboxOffsetY * 100 / gameH);
-
-    const choiceWPct = choiceWidth ? (choiceWidth * 100 / gameW) : 30;
-    const choiceHPct = choiceHeight ? (choiceHeight * 100 / gameH) : 25;
-    const choiceXPct = project.ui.choiceButtonX ?? (50 - choiceWPct / 2);
-    const choiceYPct = project.ui.choiceButtonY ?? 35;
 
     // Input box layout rect
     const inputBoxWidth = project.ui.inputBoxWidth || 0;
@@ -1653,7 +1631,9 @@ const StagingArea: React.FC<{
                             paddingLeft: textPadLeft ? s(textPadLeft) : undefined,
                             paddingRight: textPadRight ? s(textPadRight) : undefined,
                         }}>
-                            <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
+                            {/* Runtime parity: the engine wraps with wordBreak NORMAL — break-word
+                                changed line counts inside the fixed-height box vs gameplay. */}
+                            <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'normal' as const}}>
                                 <GradientText style={extractTextGradientStyle(project.ui.dialogueTextFont)}>{interpolatedText}</GradientText>
                             </p>
                         </div>
@@ -1663,92 +1643,42 @@ const StagingArea: React.FC<{
         );
     };
 
+    // Choice buttons render through THE shared engine renderer (components/choice/) so the
+    // staging canvas cannot drift from gameplay — staging gains hover/video/border-art and
+    // file-backed asset resolution for free. Only the free-layout EDIT path stays local:
+    // ResizableDraggable owns position/size and writes back per-option x/y/width/height.
     const renderChoiceMenu = (choices: NonNullable<StageState['choices']>) => {
         const layout = stageState.choiceLayout;
 
-        // One preview button, applying per-option appearance overrides (art/color/radius/fontSize/text)
-        // with fallback to the global choice style — mirrors the runtime ChoiceMenu.
-        const resolveOptImg = (a?: { type: 'image' | 'video'; id: VNID } | null): string | null =>
-            (a && a.type !== 'video') ? (project.images[a.id]?.imageUrl || project.backgrounds[a.id]?.imageUrl || null) : null;
-        const renderBtn = (opt: ChoiceOption, fill: boolean) => {
-            const text = interpolateVariables(opt.text, currentVariables, project);
-            const baseImg = resolveOptImg(opt.image) || choiceButtonImageUrl;
-            const bg = opt.backgroundColor ? hexToRgba(opt.backgroundColor, choiceOpacity) : choiceBgColor;
-            const radius = opt.borderRadius ?? choiceBorderRadius;
-            const hasImg = !!(baseImg || choiceBorderImageUrl);
-            return (
-                <button className="relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]"
-                    style={{
-                        borderRadius: s(radius),
-                        ...(fill ? { height: '100%' } : {}),
-                        ...(baseImg
-                            ? { ...buildImageBackgroundStyle(baseImg, choiceSizeMode, choiceSlice), backgroundColor: bg }
-                            : !hasImg
-                                ? { backgroundColor: bg, border: '1px solid rgba(148,163,184,0.3)', boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)' }
-                                : {}),
-                        padding: `${s(choicePadding)} ${s(choicePadding * 2)}`,
-                        ...(!fill && choiceHeight ? { height: s(choiceHeight) } : {}),
-                        ...fontSettingsToStyle(project.ui.choiceTextFont),
-                        ...(opt.fontSize ? { fontSize: s(opt.fontSize) } : {}),
-                        ...(opt.textColor ? { color: opt.textColor } : {}),
-                        textAlign: (project.ui.choiceTextFont?.align || 'center') as any,
-                        wordBreak: 'break-word' as const,
-                        overflowWrap: 'break-word' as const,
-                        cursor: 'pointer',
-                    }}>
-                    <GradientText style={extractTextGradientStyle(project.ui.choiceTextFont)}>{text}</GradientText>
-                </button>
-            );
-        };
-
-        // ── Free layout: each option positioned by x/y/width/height. Drag + resize on the canvas
-        //    when this Choice command is the one being edited (selected). ──
         if (layout === 'free') {
             const scene = project.scenes[activeSceneId];
             const editCmd = (selectedCommandIndex != null && (scene?.commands[selectedCommandIndex] as any)?.type === CommandType.Choice && (scene?.commands[selectedCommandIndex] as any)?.id === stageState.choiceCommandId)
                 ? (scene!.commands[selectedCommandIndex] as ChoiceCommand) : null;
-            const opts = editCmd ? editCmd.options : choices;
-            const updateOpt = (i: number, u: { x: number; y: number; width: number; height: number }) => {
-                if (!editCmd || selectedCommandIndex == null) return;
-                const newOptions = editCmd.options.map((o, idx) => idx === i ? { ...o, x: u.x, y: u.y, width: u.width, height: u.height } : o);
-                dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: activeSceneId, commandIndex: selectedCommandIndex, command: { ...editCmd, options: newOptions } } });
-            };
-            return (
-                <div className="absolute inset-0 z-30">
-                    {opts.map((opt, i) => {
-                        const bx = opt.x ?? (34 + i * 2), by = opt.y ?? (40 + i * 12), bw = opt.width ?? 25, bh = opt.height ?? 9;
-                        if (editCmd && stageSize.width > 0) {
+            if (editCmd && stageSize.width > 0) {
+                const updateOpt = (i: number, u: { x: number; y: number; width: number; height: number }) => {
+                    if (selectedCommandIndex == null) return;
+                    const newOptions = editCmd.options.map((o, idx) => idx === i ? { ...o, x: u.x, y: u.y, width: u.width, height: u.height } : o);
+                    dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: activeSceneId, commandIndex: selectedCommandIndex, command: { ...editCmd, options: newOptions } } });
+                };
+                return (
+                    <div className="absolute inset-0 z-30">
+                        {editCmd.options.map((opt, i) => {
+                            const bx = opt.x ?? (34 + i * 2), by = opt.y ?? (40 + i * 12), bw = opt.width ?? 25, bh = opt.height ?? 9;
                             return (
                                 <ResizableDraggable key={opt.id} x={bx} y={by} width={bw} height={bh} anchorX={0} anchorY={0}
                                     parentSize={stageSize} isSelected={true} onSelect={() => {}} onUpdate={u => updateOpt(i, u)}
                                     label={`Choice ${i + 1}`}>
-                                    {renderBtn(opt, true)}
+                                    <SingleChoiceButton project={project} projectUI={project.ui} option={opt} variables={currentVariables} />
                                 </ResizableDraggable>
                             );
-                        }
-                        return <div key={opt.id} style={{ position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%` }}>{renderBtn(opt, true)}</div>;
-                    })}
-                </div>
-            );
+                        })}
+                    </div>
+                );
+            }
+            return <ChoiceButtonsView project={project} projectUI={project.ui} options={choices} variables={currentVariables} layout="free" interactive={false} />;
         }
 
-        // ── Vertical (default) / Horizontal stack ──
-        const horizontal = layout === 'horizontal';
-        return (
-            <div className={`absolute z-30 flex ${horizontal ? 'flex-row flex-wrap gap-3' : 'flex-col'} items-center justify-center`}
-                 style={{ left: `${choiceXPct}%`, top: `${choiceYPct}%`, width: `${choiceWPct}%`, height: `${choiceHPct}%` }}>
-                {choices.map((opt) => (
-                    <div key={opt.id}
-                         className={horizontal ? '' : 'mb-3'}
-                         style={{
-                             ...(horizontal ? {} : { width: '100%' }),
-                             ...(choiceBorderImageUrl ? { ...buildImageBackgroundStyle(choiceBorderImageUrl, choiceSizeMode, choiceSlice), padding: s(choiceBorderPadding), borderRadius: s(choiceBorderRadius) } : {}),
-                         }}>
-                        {renderBtn(opt, false)}
-                    </div>
-                ))}
-            </div>
-        );
+        return <ChoiceButtonsView project={project} projectUI={project.ui} options={choices} variables={currentVariables} layout={layout} interactive={false} />;
     };
 
     // Draggable markers for positioning the lights of a selected PlaceLights command on the scene.
@@ -1933,9 +1863,11 @@ const StagingArea: React.FC<{
                             </div>
                         </div>
                     )}
+                    {/* Runtime parity: the background sits BELOW the whole authorable layer range,
+                        so an element sent below 0 stays visible instead of hiding under it. */}
                     {stageState.backgroundUrl && (stageState.backgroundIsVideo
-                        ? <TrimmedVideo key={`stage-bg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={stageState.backgroundUrl} autoPlay loop muted trimStart={stageState.backgroundTrimStart} trimEnd={stageState.backgroundTrimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" style={dnBg ? { filter: dnBg.filter } : undefined} />
-                        : <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" style={dnBg ? { filter: dnBg.filter } : undefined} />
+                        ? <TrimmedVideo key={`stage-bg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={stageState.backgroundUrl} autoPlay loop muted trimStart={stageState.backgroundTrimStart} trimEnd={stageState.backgroundTrimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" style={{ zIndex: STAGING_BACKGROUND_LAYER, ...(dnBg ? { filter: dnBg.filter } : {}) }} />
+                        : <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" style={{ zIndex: STAGING_BACKGROUND_LAYER, ...(dnBg ? { filter: dnBg.filter } : {}) }} />
                     )}
                     {/* Day/night background grade preview (tint), above the background, below characters. */}
                     {dnBg && dnBg.overlayColor !== 'transparent' && (
@@ -1949,7 +1881,7 @@ const StagingArea: React.FC<{
                     {(stageState.backgroundStack || []).map(plane => {
                         if (!plane.url && !plane.color) return null;
                         return (
-                            <div key={plane.commandId} className="absolute inset-0 overflow-hidden" style={{ zIndex: plane.layer ?? 0, backgroundColor: plane.color }}>
+                            <div key={plane.commandId} className="absolute inset-0 overflow-hidden" style={{ zIndex: plane.layer ?? STAGING_BACKGROUND_LAYER, backgroundColor: plane.color }}>
                                 {plane.url && (plane.isVideo
                                     ? <TrimmedVideo key={`stage-bgplane-${plane.commandId}-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={plane.url} autoPlay loop muted trimStart={plane.trimStart} trimEnd={plane.trimEnd} playsInline className="absolute inset-0 w-full h-full object-cover" style={plane.parallaxDepth ? { transform: 'scale(1.15)', transformOrigin: 'center' } : undefined} />
                                     : <img src={plane.url} alt={t('hc.backgroundLayer', 'background layer')} className="absolute inset-0 w-full h-full object-cover" style={plane.parallaxDepth ? { transform: 'scale(1.15)', transformOrigin: 'center' } : undefined} />
@@ -2237,10 +2169,15 @@ const StagingArea: React.FC<{
                                      left: `${displayX}%`,
                                      top: `${displayY}%`,
                                      ...(ce ? CE_OUTLINE_STYLE : {}),
-                                     // While resizing, show explicit live size (in %); otherwise honor the stored px
-                                     // size, and "Fit to content" treats width/height as a max bound around the art.
+                                     // While resizing, the LIVE style must use the SAME sizing semantics as the
+                                     // released state — for "Fit to content" that's auto size under a max bound.
+                                     // Using an explicit live width/height here made the outline follow the drag
+                                     // while the art stayed natural-clamped, then everything snapped back on
+                                     // release: the classic "resize doesn't stick" feel.
                                      ...(isResizing && overlayResizeSize
-                                         ? { width: `${overlayResizeSize.width}%`, height: `${overlayResizeSize.height}%` }
+                                         ? (o.fitToContent
+                                             ? { width: 'auto', height: 'auto', maxWidth: `${overlayResizeSize.width}%`, maxHeight: `${overlayResizeSize.height}%` }
+                                             : { width: `${overlayResizeSize.width}%`, height: `${overlayResizeSize.height}%` })
                                          : o.fitToContent
                                              ? { width: 'auto', height: 'auto', maxWidth: `${pxToPercentWidth(o.width)}%`, maxHeight: `${pxToPercentHeight(o.height)}%` }
                                              : { width: `${pxToPercentWidth(o.width)}%`, height: `${pxToPercentHeight(o.height)}%` }),

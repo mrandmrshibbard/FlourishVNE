@@ -1,7 +1,7 @@
 {
   "name": "flourish-visual-novel-engine",
   "private": true,
-  "version": "4.2.0",
+  "version": "4.2.5",
   "description": "Flourish Visual Novel Engine",
   "author": "Memento_Morii",
   "type": "module",
@@ -27,6 +27,8 @@
     "dist": "npm run stage:build-tools && npm run build:full && electron-builder --win --x64",
     "i18n:check": "node scripts/i18n-check.cjs",
     "test": "vitest run",
+    "convert": "esbuild tools/renpy-convert/bin.ts --bundle --platform=node --format=esm --packages=external --outfile=node_modules/.cache/renpy-convert.mjs && node node_modules/.cache/renpy-convert.mjs",
+    "convert:test": "vitest run --config tools/renpy-convert/vitest.config.ts",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -67,7 +69,11 @@
       "dist/**/*",
       "electron/**/*",
       "public/**/*",
-      "package.json"
+      "package.json",
+      "!public/OurLife/**/*",
+      "!dist/OurLife/**/*",
+      "!public/OurLife-Step1-Build-Spec.md",
+      "!dist/OurLife-Step1-Build-Spec.md"
     ],
     "extraResources": [
       {

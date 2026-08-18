@@ -157,6 +157,7 @@ export function getCommandGroups(command: VNCommand | null | undefined): Inspect
         case CommandType.TintScreen:
         case CommandType.PanZoomScreen:
         case CommandType.ResetScreenEffects:
+        case CommandType.AutoSave:
         case CommandType.FlashScreen:
         case CommandType.Lightning:
         case CommandType.Flashlight:

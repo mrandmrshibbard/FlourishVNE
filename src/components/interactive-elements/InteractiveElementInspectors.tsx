@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
 import { OrientationFields } from '../inspector/fields';
+import { LayerControl } from '../inspector/LayerControl';
 import {
     VNHotSpot,
     VNHotZoneElement,
@@ -338,6 +339,11 @@ export const HotSpotProperties: React.FC<{
                 wedge, because hot spots route to THIS panel and never reach ElementGroupFields. */}
             <OrientationFields rotation={(spot as any).rotation} flipX={(spot as any).flipX} flipY={(spot as any).flipY}
                 onChange={patch => typedOnUpdate(patch as any)} />
+
+            {/* Layer — same story as rotation/flip above: hot spots already carry a layer all the
+                way through to the renderer, but this panel never offered a control, so it was
+                reachable only from the right-click radial. */}
+            <LayerControl value={(spot as any).layer} onChange={n => typedOnUpdate({ layer: n } as any)} />
 
             {spot.trigger === 'drag-drop' && (
                 <div className="space-y-2 rounded-md border border-[var(--border-subtle)] p-2 bg-[var(--bg-primary)]/40">
@@ -991,6 +997,9 @@ export const InteractiveElementProperties: React.FC<{
                     elements, so without these the docked inspector had no way to rotate one. */}
                 <OrientationFields rotation={(typedElement as any).rotation} flipX={(typedElement as any).flipX} flipY={(typedElement as any).flipY}
                     onChange={patch => typedOnUpdate(patch as any)} />
+                {/* Layer — same reason: the runtime has always honoured it for these elements,
+                    but this panel offered no control, so it was radial-menu-only. */}
+                <LayerControl value={(typedElement as any).layer} onChange={n => typedOnUpdate({ layer: n } as any)} />
             </div>
 
             <div>

@@ -91,18 +91,20 @@ export function handleHideText(
   TweenManager.cancelForTarget(command.targetCommandId, 'text');
 
   if (command.transition && command.transition !== 'instant') {
-    // mark overlay as hiding so render picks up hide class
-    const updated = overlays.map((o) =>
-      o.id === command.targetCommandId
-        ? { ...o, transition: command.transition, duration: command.duration, action: 'hide' as const }
-        : o
-    );
-    
     const duration = (command.duration ?? 0.5) * 1000 + 100;
-    
+
     return {
       advance: false,
-      stagePatch: () => ({ textOverlays: updated }),
+      // Mark the overlay as hiding INSIDE the patch, against the LATEST stage — building the
+      // list from this handler's stale closure made parallel Hide commands clobber each
+      // other's hide flags (three async hides → only the last one actually faded).
+      stagePatch: (prev) => ({
+        textOverlays: prev.textOverlays.map((o) =>
+          o.id === command.targetCommandId
+            ? { ...o, transition: command.transition, duration: command.duration, action: 'hide' as const }
+            : o
+        ),
+      }),
       delay: duration,
       callback: () => {
         setPlayerState((inner) =>
@@ -213,17 +215,19 @@ export function handleHideImage(
   TweenManager.cancelForTarget(command.targetCommandId, 'image');
 
   if (command.transition && command.transition !== 'instant') {
-    const updated = overlays.map((o) =>
-      o.id === command.targetCommandId
-        ? { ...o, transition: command.transition, duration: command.duration, action: 'hide' as const }
-        : o
-    );
-    
     const duration = (command.duration ?? 0.5) * 1000 + 100;
-    
+
     return {
       advance: false,
-      stagePatch: () => ({ imageOverlays: updated }),
+      // Patch against the LATEST stage (see handleHideText) — stale-closure lists made
+      // parallel hides undo each other's fade flags.
+      stagePatch: (prev) => ({
+        imageOverlays: prev.imageOverlays.map((o) =>
+          o.id === command.targetCommandId
+            ? { ...o, transition: command.transition, duration: command.duration, action: 'hide' as const }
+            : o
+        ),
+      }),
       delay: duration,
       callback: () => {
         setPlayerState((inner) =>
@@ -454,22 +458,24 @@ export function handleHideButton(
   TweenManager.cancelForTarget(command.targetCommandId, 'button');
 
   if (command.transition && command.transition !== 'instant') {
-    const updated = overlays.map((o) =>
-      o.id === command.targetCommandId
-        ? {
-            ...o,
-            transition: command.transition,
-            duration: command.duration || 0.3,
-            action: 'hide' as const,
-          }
-        : o
-    );
-    
     const duration = (command.duration ?? 0.3) * 1000 + 100;
-    
+
     return {
       advance: false,
-      stagePatch: () => ({ buttonOverlays: updated }),
+      // Patch against the LATEST stage (see handleHideText) — stale-closure lists made
+      // parallel hides undo each other's fade flags.
+      stagePatch: (prev) => ({
+        buttonOverlays: prev.buttonOverlays.map((o) =>
+          o.id === command.targetCommandId
+            ? {
+                ...o,
+                transition: command.transition,
+                duration: command.duration || 0.3,
+                action: 'hide' as const,
+              }
+            : o
+        ),
+      }),
       delay: duration,
       callback: () => {
         setPlayerState((inner) =>

@@ -164,6 +164,11 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
             const command = { type, color: '#FFFFFF', duration: 0.5 };
             return command;
         }
+        case CommandType.AutoSave: {
+            // Slot 0 = the Continue slot (same slot Quit-to-Title writes).
+            const command = { type, slotNumber: 0 };
+            return command;
+        }
         case CommandType.Lightning: {
             const command = { type, color: '#EAF2FF', intensity: 0.9, duration: 0.7, flashes: 2 as const, thunderSfxId: null, thunderDelay: 0.6 };
             return command;
