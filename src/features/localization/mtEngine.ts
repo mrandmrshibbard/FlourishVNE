@@ -19,14 +19,33 @@ export function modelFor(from: string, to: string): string | null {
 /**
  * Language pairs we advertise. Helsinki publishes hundreds, but only the ones actually converted to
  * ONNX under the `Xenova` account will load — offering a pair that 404s on download is a worse
- * experience than not offering it, so this list stays conservative and English-sourced.
+ * experience than not offering it, so both lists below were checked one model at a time against
+ * the Hugging Face API rather than assumed.
  */
 const SUPPORTED_FROM_EN = ['es', 'fr', 'de', 'it', 'pt', 'ru', 'uk', 'ja', 'zh', 'ar', 'nl', 'pl', 'tr', 'fi', 'sv', 'cs', 'hi', 'id', 'vi', 'ko'];
 
+/**
+ * Languages we can translate INTO English.
+ *
+ * An author whose game is written in another language (the report was German) previously got no
+ * machine drafting at all — the gate was `from === 'en'` — which is exactly the author who needs
+ * the help most, since the editor itself is English.
+ *
+ * 🔴 `pt` is deliberately absent: `Xenova/opus-mt-pt-en` is the one model in this set that does
+ * not resolve (the API returns 401), unlike its en→pt counterpart. Verified per model, not
+ * guessed — do not "complete" this list by symmetry with SUPPORTED_FROM_EN.
+ */
+const SUPPORTED_TO_EN = ['es', 'fr', 'de', 'it', 'ru', 'uk', 'ja', 'zh', 'ar', 'nl', 'pl', 'tr', 'fi', 'sv', 'cs', 'hi', 'id', 'vi', 'ko'];
+
 export function canMachineTranslate(from: string, to: string): boolean {
     const base = (code: string) => (code || '').split('-')[0].toLowerCase();
-    if (base(from) !== 'en') return false;             // v1: English source only
-    return SUPPORTED_FROM_EN.includes(base(to));
+    const source = base(from), target = base(to);
+    if (!source || !target || source === target) return false;
+    if (source === 'en') return SUPPORTED_FROM_EN.includes(target);
+    if (target === 'en') return SUPPORTED_TO_EN.includes(source);
+    // Neither side is English. Helsinki has few direct pairs, and pivoting through English would
+    // compound two lots of machine error — better unoffered than quietly poor.
+    return false;
 }
 
 export interface ModelProgress {

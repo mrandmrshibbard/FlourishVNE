@@ -41,9 +41,27 @@ describe('which pairs we offer', () => {
         expect(canMachineTranslate('en', 'xx')).toBe(false);
     });
 
-    it('says no when the game is not written in English — v1 is English-sourced', () => {
+    it('offers translating INTO English, so a non-English-written game gets drafts too', () => {
+        // The report was a German-written game that wanted an English translation.
+        expect(canMachineTranslate('de', 'en')).toBe(true);
+        expect(canMachineTranslate('es', 'en')).toBe(true);
+        expect(canMachineTranslate('ja', 'en')).toBe(true);
+        // Region suffixes drop to the base language on the SOURCE side too.
+        expect(canMachineTranslate('zh-TW', 'en')).toBe(true);
+    });
+
+    it('🔴 keeps pt→en OFF: that one model does not resolve, unlike en→pt', () => {
+        // Verified against the Hugging Face API per model — the set is NOT symmetric, and
+        // "completing" it by symmetry would fail after a 40MB download instead of up front.
+        expect(canMachineTranslate('pt', 'en')).toBe(false);
+        expect(canMachineTranslate('pt-BR', 'en')).toBe(false);
+        expect(canMachineTranslate('en', 'pt')).toBe(true);
+        expect(canMachineTranslate('en', 'pt-BR')).toBe(true);
+    });
+
+    it('says no when neither side is English — pivoting would compound machine error', () => {
         expect(canMachineTranslate('ja', 'es')).toBe(false);
-        expect(canMachineTranslate('es', 'en')).toBe(false);
+        expect(canMachineTranslate('de', 'fr')).toBe(false);
     });
 
     it('says no to translating a language into itself', () => {

@@ -60,16 +60,24 @@ export function offeredLanguages(project: VNProject): { code: string; name: stri
     return offered;
 }
 
+/**
+ * Every language's name in ITSELF (endonyms) - the one list the whole feature shares.
+ *
+ * Exported so the Localization panel builds its "add a language" catalogue from the same data
+ * that names the in-game picker's default entry; two hand-kept copies of this map is how the
+ * editor and the shipped game would come to disagree about what a language is called.
+ */
+export const LANGUAGE_NAMES: Record<string, string> = {
+    en: 'English', es: 'Español', fr: 'Français', de: 'Deutsch', it: 'Italiano',
+    pt: 'Português', 'pt-BR': 'Português (Brasil)', ru: 'Русский', uk: 'Українська',
+    ja: '日本語', ko: '한국어', 'zh-CN': '简体中文', 'zh-TW': '繁體中文', zh: '中文',
+    ar: 'العربية', pl: 'Polski', tr: 'Türkçe', nl: 'Nederlands',
+};
+
 /** A readable name for the language the game was written in, since authors never name it. */
 function sourceLanguageName(project: VNProject): string {
     const source = (project as any).localization?.sourceLanguage || 'en';
-    const known: Record<string, string> = {
-        en: 'English', es: 'Español', fr: 'Français', de: 'Deutsch', it: 'Italiano',
-        pt: 'Português', 'pt-BR': 'Português (Brasil)', ru: 'Русский', uk: 'Українська',
-        ja: '日本語', ko: '한국어', 'zh-CN': '简体中文', 'zh-TW': '繁體中文', zh: '中文',
-        ar: 'العربية', pl: 'Polski', tr: 'Türkçe', nl: 'Nederlands',
-    };
-    return known[source] || source;
+    return LANGUAGE_NAMES[source] || source;
 }
 
 /** How the player picks: one button each, or a single dropdown. */

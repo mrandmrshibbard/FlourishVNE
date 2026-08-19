@@ -146,6 +146,8 @@
     "mtFailed": "The translator could not be started.",
     "mtAccuracyWarning": "⚠ Machine translation is often inaccurate. It gets tone, names and idioms wrong, and can state the opposite of what was meant. It is HIGHLY recommended that someone who speaks the language reviews every line before you publish.",
     "mtStandingWarningTitle": "{{count}} lines in {{language}} were written by a machine and have not been checked.",
-    "mtStandingWarning": "Machine translation regularly gets tone, names and idioms wrong, and sometimes states the opposite of what was meant. It is HIGHLY recommended that you or a translator review every line before you publish. Use the \"Needs review\" filter, then mark each one \"Looks good\"."
+    "mtStandingWarning": "Machine translation regularly gets tone, names and idioms wrong, and sometimes states the opposite of what was meant. It is HIGHLY recommended that you or a translator review every line before you publish. Use the \"Needs review\" filter, then mark each one \"Looks good\".",
+    "sourceLanguage": "You write this game in",
+    "sourceLanguageHint": "The language your story is written in. Translations are made from this, and it is what players see before choosing another language."
   }
 }

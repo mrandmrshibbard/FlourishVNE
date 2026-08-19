@@ -23,7 +23,7 @@ import {
 import { collectTranslatableText } from '../features/localization/walkTranslatable';
 import {
     createLanguageScreen, addMissingLanguageButtons, createLanguageVariable, LanguagePickerStyle,
-    languagePickerStyle, setLanguagePickerStyle, removeLanguageFromScreen,
+    languagePickerStyle, setLanguagePickerStyle, removeLanguageFromScreen, LANGUAGE_NAMES,
 } from '../features/localization/languageScreen';
 import { describeTokens } from '../features/localization/tokenGuard';
 import { downloadBlob } from '../utils/gameBundler';
@@ -36,14 +36,14 @@ interface LocalizationPanelProps {
     onClose: () => void;
 }
 
-/** Names are written in the language itself — that's what a speaker of it looks for in a list. */
+/** Names are written in the language itself — that's what a speaker of it looks for in a list.
+ *  Built from the shared LANGUAGE_NAMES map (languageScreen.ts) so this list and the in-game
+ *  picker can never disagree about what a language is called. English is a full member: an author
+ *  who WRITES in German adds English as a translation like any other language. */
 const COMMON_LANGUAGES: { code: string; name: string }[] = [
-    { code: 'es', name: 'Español' }, { code: 'fr', name: 'Français' }, { code: 'de', name: 'Deutsch' },
-    { code: 'pt-BR', name: 'Português (Brasil)' }, { code: 'it', name: 'Italiano' }, { code: 'ru', name: 'Русский' },
-    { code: 'ja', name: '日本語' }, { code: 'ko', name: '한국어' }, { code: 'zh-CN', name: '简体中文' },
-    { code: 'zh-TW', name: '繁體中文' }, { code: 'ar', name: 'العربية' }, { code: 'pl', name: 'Polski' },
-    { code: 'tr', name: 'Türkçe' }, { code: 'nl', name: 'Nederlands' },
-];
+    'en', 'es', 'fr', 'de', 'pt-BR', 'it', 'ru', 'uk',
+    'ja', 'ko', 'zh-CN', 'zh-TW', 'ar', 'pl', 'tr', 'nl',
+].map(code => ({ code, name: LANGUAGE_NAMES[code] || code }));
 
 type Filter = 'all' | 'untranslated' | 'needsReview' | 'stale';
 
@@ -123,6 +123,41 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose }
     );
 
     const update = (next: any) => dispatch({ type: 'UPDATE_PROJECT', payload: { localization: next } });
+
+    /* ── The language the game is WRITTEN in ───────────────────────────────────────────────
+     * `sourceLanguage` always existed in the data; nothing ever set it, so every project was
+     * assumed English. An author writing in German could then never add English as a translation
+     * (it was "the source"), machine drafting refused to run, and the in-game picker's default
+     * said English. This control is the whole fix — everything downstream already read the field. */
+    const sourceLanguage = localization?.sourceLanguage || 'en';
+
+    /**
+     * Changing it rewrites `sourceLanguage` and keeps the language screen honest in ONE dispatch:
+     * the new source gets a button (it must always be offered — it's the way back), and the OLD
+     * source's button goes away unless it's also a translation language.
+     *
+     * Deliberately non-destructive: a code that already exists as a translation is filtered out
+     * of this picker instead, so no translated work can be orphaned by flipping a dropdown.
+     */
+    const changeSourceLanguage = (code: string) => {
+        if (!project || !code || code === sourceLanguage) return;
+        const base = localization || emptyLocalization();
+        const nextLocalization = { ...base, sourceLanguage: code };
+        const payload: any = { localization: nextLocalization };
+
+        if (existingScreen) {
+            // The helpers read the project's CURRENT source, so hand them one that already has
+            // the new value — removeLanguageFromScreen refuses to touch the current source.
+            const withNext: any = { ...project, localization: nextLocalization };
+            let screen = addMissingLanguageButtons(withNext, existingScreen);
+            const oldStillOffered = base.languages.some(l => l.code === sourceLanguage && l.enabled);
+            if (!oldStillOffered) screen = removeLanguageFromScreen(withNext, screen, sourceLanguage);
+            if (screen !== existingScreen) {
+                payload.uiScreens = { ...project.uiScreens, [existingScreen.id]: screen };
+            }
+        }
+        dispatch({ type: 'UPDATE_PROJECT', payload });
+    };
 
     /* ── Languages ─────────────────────────────────────────────────────────────────────── */
 
@@ -428,6 +463,27 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose }
 
                 {/* Languages */}
                 <div className="flex flex-wrap items-center gap-2 border-b border-slate-700 px-4 py-2">
+                    {/* The language the story itself is written in. Codes already added as
+                        translations are left out — remove the translation first; nothing here
+                        can delete translated work. */}
+                    <label className="flex items-center gap-1 text-xs text-slate-400"
+                        title={t('localizationPanel.sourceLanguageHint',
+                            'The language your story is written in. Translations are made from this, and it is what players see before choosing another language.')}>
+                        {t('localizationPanel.sourceLanguage', 'You write this game in')}
+                        <select value={sourceLanguage}
+                            aria-label={t('localizationPanel.sourceLanguage', 'You write this game in')}
+                            onChange={e => changeSourceLanguage(e.target.value)}
+                            className="rounded border border-slate-600 bg-slate-800 px-1.5 py-0.5 text-slate-100">
+                            {COMMON_LANGUAGES
+                                .filter(l => l.code === sourceLanguage || !languages.some(x => x.code === l.code))
+                                .map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+                            {/* A source set by hand to something off the common list still shows. */}
+                            {!COMMON_LANGUAGES.some(l => l.code === sourceLanguage) && (
+                                <option value={sourceLanguage}>{LANGUAGE_NAMES[sourceLanguage] || sourceLanguage}</option>
+                            )}
+                        </select>
+                    </label>
+                    <span className="h-4 w-px bg-slate-700" aria-hidden="true" />
                     {languages.map(lang => (
                         <div key={lang.code}
                             className={`flex items-center gap-1 rounded-full border px-3 py-1 text-sm ${lang.code === language ? 'border-emerald-500 bg-emerald-950/40 text-emerald-200' : 'border-slate-600 text-slate-300'}`}>
@@ -467,7 +523,8 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose }
                             onBlur={() => setAddingLanguage(false)}
                             className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100">
                             <option value="" disabled>{t('localizationPanel.chooseLanguage', 'Choose a language…')}</option>
-                            {COMMON_LANGUAGES.filter(l => !languages.some(x => x.code === l.code))
+                            {COMMON_LANGUAGES
+                                .filter(l => l.code !== sourceLanguage && !languages.some(x => x.code === l.code))
                                 .map(l => <option key={l.code} value={l.code}>{l.name} ({l.code})</option>)}
                         </select>
                     ) : (

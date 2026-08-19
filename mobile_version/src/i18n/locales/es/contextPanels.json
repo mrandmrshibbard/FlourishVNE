@@ -146,6 +146,8 @@
     "mtFailed": "No se pudo iniciar el traductor.",
     "mtAccuracyWarning": "⚠ La traducción automática suele ser inexacta. Se equivoca con el tono, los nombres y las expresiones, y puede decir lo contrario de lo que se quería decir. Se recomienda ENCARECIDAMENTE que alguien que hable el idioma revise cada línea antes de publicar.",
     "mtStandingWarningTitle": "{{count}} líneas en {{language}} las escribió una máquina y nadie las ha revisado.",
-    "mtStandingWarning": "La traducción automática se equivoca con frecuencia en el tono, los nombres y las expresiones, y a veces dice lo contrario de lo que se quería decir. Se recomienda ENCARECIDAMENTE que una persona que hable el idioma lea cada línea antes de publicar. Usa el filtro «Pendiente de revisión» y marca cada una como «Está bien»."
+    "mtStandingWarning": "La traducción automática se equivoca con frecuencia en el tono, los nombres y las expresiones, y a veces dice lo contrario de lo que se quería decir. Se recomienda ENCARECIDAMENTE que una persona que hable el idioma lea cada línea antes de publicar. Usa el filtro «Pendiente de revisión» y marca cada una como «Está bien».",
+    "sourceLanguage": "Escribes este juego en",
+    "sourceLanguageHint": "El idioma en el que está escrita tu historia. Las traducciones se hacen a partir de él, y es lo que ven los jugadores antes de elegir otro idioma."
   }
 }

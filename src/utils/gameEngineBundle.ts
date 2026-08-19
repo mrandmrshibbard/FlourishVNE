@@ -32903,7 +32903,7 @@ void main() {
     /**
      * Get version information
      */
-    version: "4.2.5",
+    version: "4.2.6",
     /**
      * Check if the engine is ready
      */

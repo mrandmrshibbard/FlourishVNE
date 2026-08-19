@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import {
     createLanguageScreen, offeredLanguages, languageButtonsToAdd,
     addMissingLanguageButtons, languageButtonLayout, createLanguageVariable, languagePickerStyle,
-    setLanguagePickerStyle, removeLanguageFromScreen,
+    setLanguagePickerStyle, removeLanguageFromScreen, LANGUAGE_NAMES,
 } from '../languageScreen';
 import { UIActionType } from '../../../types/shared';
 import { createDefaultUIScreens } from '../../../constants';
@@ -48,6 +48,27 @@ describe('which languages the screen offers', () => {
     it('never lists the original language twice', () => {
         const p = project([{ code: 'en', name: 'English', enabled: true }]);
         expect(offeredLanguages(p).map(l => l.code)).toEqual(['en']);
+    });
+
+    it('a German-written game with an English translation offers Deutsch FIRST', () => {
+        // The reported case: the author writes in German and translates to English. The picker's
+        // default entry must be the language the base content is actually in.
+        const p = project([{ code: 'en', name: 'English', enabled: true }], 'de');
+        expect(offeredLanguages(p)).toEqual([
+            { code: 'de', name: 'Deutsch' },
+            { code: 'en', name: 'English' },
+        ]);
+    });
+});
+
+describe('the shared language-name list', () => {
+    it('is exported so the panel and the in-game picker cannot disagree', () => {
+        // The panel builds its catalogue from these codes; a missing name would ship a raw code.
+        for (const code of ['en', 'es', 'fr', 'de', 'pt-BR', 'it', 'ru', 'uk', 'ja', 'ko', 'zh-CN', 'zh-TW', 'ar', 'pl', 'tr', 'nl']) {
+            expect(LANGUAGE_NAMES[code], `no display name for ${code}`).toBeTruthy();
+        }
+        expect(LANGUAGE_NAMES.en).toBe('English');
+        expect(LANGUAGE_NAMES.de).toBe('Deutsch');
     });
 });
 
